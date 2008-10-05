@@ -2812,7 +2812,7 @@ void wscmCReadEvalPrintLoop (void) {
 */
 void wscmStringReadEvalPrintLoop (void) {
 	yy_scan_string (
-"(let ~ ((FILE:SCM.SCM (open \"/home/world/wscm/scm.scm\")))\
+"(let ~ ((FILE:SCM.SCM (open \"scm.scm\")))\
     (if (eof-object? (eval (read FILE:SCM.SCM)))\
         (send \"\r\nbye.\r\n\" stdout)\
         (~ FILE:SCM.SCM)))");
