@@ -105,10 +105,23 @@
 
 ;; Serializing
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+
 (define (integer->char i) (vector-ref characters i))
 
 (define NEWLINE (integer->char 10))
 (define RETURN (integer->char 13))
+(define CHAR-CTRL-@ (integer->char 0))
+(define CHAR-CTRL-F (integer->char 6))
+(define CHAR-CTRL-G (integer->char 7))
+(define CHAR-CTRL-H (integer->char 8))
+(define CHAR-CTRL-I (integer->char 9))
+(define CHAR-CTRL-K (integer->char 11))
+(define CHAR-CTRL-L (integer->char 12))
+(define CHAR-CTRL-Q (integer->char 17))
+(define CHAR-CTRL-ESC (integer->char 27))
+(define CHAR-CTRL-_ (integer->char 31))
+(define CHAR-CTRL-? (integer->char 63))
 
 (define (newline) (display NEWLINE))
 (define (return)  (display RETURN))

@@ -81,7 +81,7 @@
  (define (ggoto y x)
    (if (or (!= y GY)
            (!= x GX))
-     (begin (send "[" stdout)
+     (begin (send "\e[" stdout)
             (display (+ y 1))
             (send ";" stdout)
             (display (+ x 1))
@@ -162,7 +162,7 @@
        (begin (set! CurX (- CurX 1))
               (set! needToScroll #f)
               (putc c)
-              (display #\)
+              (display CHAR-CTRL-H) 
               (set! needToScroll #f)
               (set! CurX (- CurX 1)))))
    (define (scrollUp)
@@ -216,7 +216,7 @@
            (gx (+ CurX X0)))
        (if (eq? c NEWLINE) (newline)
        (if (eq? c RETURN) (return)
-       (if (eq? c #\) (display #\)
+       (if (eq? c CHAR-CTRL-G) (display c)
        (begin
          ; Display char to terminal.
          (if (eq? self (vector-vector-ref WindowMask gy gx))
