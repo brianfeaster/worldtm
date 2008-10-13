@@ -55,6 +55,8 @@
 
  (define GCOLOR #f)
 
+ (define GCURSOR-VISIBLE #t)
+
  (define Height (cdr (terminal-size)))
  (define Width  (car (terminal-size)))
 
@@ -67,6 +69,10 @@
    (if (!= GCOLOR c)
      (begin (set! GCOLOR c)
             (display (integer->colorstring c)))))
+
+ (define (gtoggle-cursor)
+   (display (if GCURSOR-VISIBLE "\e[?25l" "\e[?25h"))
+   (set! GCURSOR-VISIBLE (not GCURSOR-VISIBLE)))
 
  (define (gputc c)
    (display c)
@@ -131,12 +137,13 @@
                          (make-vector-vector WHeight WWidth ())))
    ; 2d alpha-channel table.
    (define ALPHA (make-vector-vector WHeight WWidth #t))
-   (define CURSOR-VISIBLE #t) ; Unimplemented
+   (define CURSOR-VISIBLE #t)
    (define ENABLED #t)
    (define topRow 0) ; For horizontal scrolling.
    (define CurY 0)
    (define CurX 0)
    (define needToScroll #f) ; For bottom right character printing.
+   (define (cursor-visible s) (set! CURSOR-VISIBLE s))
    (define (goto y x)
      (set! needToScroll #f)
      (set! CurY y)
@@ -212,6 +219,7 @@
        (set! COLOR ocolor)))
    (define (putchar c)
      (if needToScroll (begin (set! needToScroll #f) (return) (newline)))
+     (if (!= GCURSOR-VISIBLE CURSOR-VISIBLE) (gtoggle-cursor))
      (let ((gy (+ CurY Y0))
            (gx (+ CurX X0)))
        (if (eq? c NEWLINE) (newline)
