@@ -560,6 +560,9 @@ c))
     0 (- (Terminal 'Width) (* MapSize 2))
     MapSize (* 2 MapSize)
 #x17 'NOREFRESH))
+
+((Window0 'cursor-visible) #f) ; Disable cursor in map window.
+
 ; Make Map window circular!
 (let ~ ((y 0)(x 0))
  (if (< y (Window0 'WHeight))
