@@ -175,11 +175,11 @@ c))
 ; Setting a cell outside the explicit stack range expands the actual vector
 ; and adjusts the start-height value.
 (define (field-ref z y x)
-(letrec ((column (vector-vector-ref FIELD
-                    (modulo y FieldDimension)
-                    (modulo x FieldDimension)))
-  (elements (columnRef column z)))
-(if (pair? elements) (car elements) elements)));1st in improper list of objs
+ (letrec ((column (vector-vector-ref FIELD
+                     (modulo y FieldDimension)
+                     (modulo x FieldDimension)))
+          (elements (columnRef column z)))
+   (if (pair? elements) (car elements) elements)));1st in improper list of objs
 
 (define (field-column y x)
 (vector-vector-ref FIELD (modulo y FieldDimension)
@@ -205,14 +205,14 @@ c))
           (fx (modulo x FieldDimension))
           (column (vector-vector-ref FIELD fy fx)))
   (vector-vector-set! FIELD fy fx
-  (columnSet column z (cons c (columnRef column z))))))
+     (columnSet column z (cons c (columnRef column z))))))
 
 (define (field-delete! z y x e)
  (letrec ((fy (modulo y FieldDimension))
           (fx (modulo x FieldDimension))
           (column (vector-vector-ref FIELD fy fx)))
   (vector-vector-set! FIELD fy fx
-  (columnSet column z (list-delete (columnRef column z) e)))))
+     (columnSet column z (list-delete (columnRef column z) e)))))
 
 
 
@@ -229,16 +229,17 @@ c))
 (field-set! 4 11 13 TV)
 (field-set! 4 17 13 CHAIR)
 
-(let ~ ((x 10))
-   (field-set! 4 10 x BRICK)
-   (field-set! 4 20 x BRICK)
-   (if (!= x 20) (~ (+ x 1))))
+(define (build-brick-room zz yy xx)
+ (let ~ ((i 0))
+    (field-set! zz yy        (+ xx i) BRICK)
+    (field-set! zz (+ yy 10) (+ 1 xx i) BRICK)
+    (field-set! zz (+ 1 yy i)  xx       BRICK)
+    (field-set! zz (+ yy i) (+ xx 10) BRICK)
+    (if (!= i 9) (~ (+ i 1)))))
 
-(let ~ ((y 10))
-   (field-set! 4 y 10 BRICK)
-   (field-set! 4 y 20 BRICK)
-   (if (!= y 20) (~ (+ y 1))))
-
+(build-brick-room 5 10 10)
+(build-brick-room 6 10 10)
+(build-brick-room 5 22 25)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Canvas
@@ -506,12 +507,18 @@ c))
 (viewportReset (avatar 'y) (avatar 'x)))))
 
 (define (walk dir)
- ((avatar 'walk) dir)
- ((ipc 'qwrite) `(move ,(avatar 'dna) ,@((avatar 'gps))))
+; (if (not (eq? BRICK (field-ref (avatar 'z) (avatar 'y) (avatar 'x))))
+;   (begin
+     ;(ConsoleDisplay (list (avatar 'z)":" (avatar 'y)":"(avatar 'x)"="))
+     ;(ConsoleDisplay (list (field-ref 4 15 15) "," (field-ref 4 14 18)))
+     ;(ConsoleDisplay (field-ref (avatar 'z) (avatar 'y) (avatar 'x)))
+     ;(ConsoleDisplay "\r\n")
+     ((avatar 'walk) dir)
+     ((ipc 'qwrite) `(move ,(avatar 'dna) ,@((avatar 'gps))))
  ; Popup a message to a new window temporarily.
  (if (eq? DOOROPEN (field-ref (avatar 'z) (avatar 'y) (avatar 'x)))
   ((lambda ()
-     (define Window4 ((Terminal 'WindowNew) 1 29 1 22 #x1b))
+     ;(define Window4 ((Terminal 'WindowNew) 1 29 1 22 #x1b))
      (define Window4Putc (Window4 'putc))
      (map Window4Putc (string->list "Are we having fun yet?"))
      (read-char stdin)
@@ -553,12 +560,12 @@ c))
 (define Window4SetColor (Window4 'set-color))
 
 ;; Map window
-(define MapSize (min 25 (min (- (Terminal 'Height) 1)
+(define MapSize (min 24 (min (- (Terminal 'Height) 1)
                              (/ (Terminal 'Width) 2))))
 (define Window0
   ((Terminal 'WindowNew)
-    0 (- (Terminal 'Width) (* MapSize 2))
-    MapSize (* 2 MapSize)
+    0 (- (Terminal 'Width) (* MapSize 2) 2)
+    (+ MapSize 1) (* 2 MapSize)
 #x17 'NOREFRESH))
 
 ((Window0 'cursor-visible) #f) ; Disable cursor in map window.
@@ -744,6 +751,8 @@ c))
  (if (eq? c #\w) (begin
                    ((Window5 'toggle))
                    ((Window0 'toggle)))
+ (if (eq? c #\W) (begin
+                   ((Window5 'toggle)))
  (if (eq? c #\t) (begin
                    (Window4Puts (string ">" (replTalk 'getBuffer)))
                    (set! state 'talk))
@@ -772,7 +781,7 @@ c))
    (let ((o (field-ref (avatar 'z) (avatar 'y) (avatar 'x))))
      (field-delete!  (avatar 'z) (avatar 'y) (avatar 'x) o)
      (avatar `(set! cell ,o)))
- (if (eq? c #\?) (help))))))))))))))))))))))))))))
+ (if (eq? c #\?) (help)))))))))))))))))))))))))))))
  state)
 
 (define wrepl (let ((state 'cmd))

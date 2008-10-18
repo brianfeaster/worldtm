@@ -2307,6 +2307,18 @@ void sysTime (void) {
 	DB("<--%s\n", __func__);
 }
 
+void catch_signal (int s) {
+	printf("caught signal %d", s);
+}
+void sysSignal (void) {
+/*
+	mem_vec_set(signals, sig, r2);
+*/
+	DB("-->%s\n", __func__);
+	if (wscmAssertArgumentCount(1, __func__)) return;
+	signal(*(u32*)pop(), catch_signal);
+	DB("<--%s\n", __func__);
+}
 /*******************************************************************************
  Initialization stuff.
 *******************************************************************************/
@@ -2729,6 +2741,7 @@ void wscmInitialize (void) {
 	wscmDefineSyscall (sysCloseSemaphore, "close-semaphore");
 	wscmDefineSyscall (sysSemaphoreDown, "semaphore-down");
 	wscmDefineSyscall (sysSemaphoreUp, "semaphore-up");
+	wscmDefineSyscall (sysSignal, "signal");
 
 	objNewInteger(42); wscmDefine ("y");
 	objNewInteger(69); wscmDefine ("x");

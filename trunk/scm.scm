@@ -231,6 +231,10 @@
      (begin (f (car l))
             (for-each f (cdr l)))))
 
+(define (vector-vector-ref v i1 i2)
+ (vector-ref (vector-ref v i1) i2))
+ 
+
 (define (vector-map fn v)
  (let ~ ((newv (make-vector (vector-length v)))
          (i 0))
