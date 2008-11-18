@@ -2308,8 +2308,17 @@ void sysTime (void) {
 }
 
 void catch_signal (int s) {
-	printf("caught signal %d", s);
+	//Create new thread by calling the function in global signal handler vector.
+	//Do something similar to compThread perhaps?
+	objNewSymbol ("SIGNAL-HANDLERS", 15);  r1=r0;  wscmTGEFind(); r0=car(r0);
+	r1 = memVectorObject(r0, s);
+	r0 = car(r1);
+	// Hack:  replace inital opcode with NOP since closure obj code expects the closure to be passed in via r0 as well.
+	memVectorSet(r0, 0, NOP);
+	memVectorSet(r0, 1, NOP);
+	wscmNewThread();
 }
+
 void sysSignal (void) {
 /*
 	mem_vec_set(signals, sig, r2);
@@ -2771,6 +2780,12 @@ void wscmInitialize (void) {
 	wscmCreateRepl();  wscmDefine("repl2");
 	r0=semaphores;  wscmDefine("semaphores");
 	r0=eof; wscmDefine("eof");
+
+	/* Signal handler vector */
+	i=32;
+	objNewVector(i);
+	while (i--) { memVectorSet(r0, i, null); }
+	wscmDefine("SIGNAL-HANDLERS");
 
 DB("INIT <--wscmInitialize()");
 }
