@@ -358,6 +358,8 @@
     (if (not (eof-object? ret)) (~)))))
 
 
+(vector-set! SIGNAL-HANDLERS 28 (lambda () (display (terminal-size)) (unthread)))
+(signal 28)
 ; If wscm is run with a command line argument that isn't a switch, then 
 ; assume it's a file to run otherwise begin the REPL.
 (if (and (> (vector-length argv) 1)
