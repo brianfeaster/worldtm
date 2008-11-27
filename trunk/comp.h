@@ -9,6 +9,7 @@ void compSetb (u32 flags);
 void compLambdaBody (u32 flags);
 void compLambda (u32 flags);
 void compAdd (u32 flags);
+void compVerifyVectorRef (void);
 void compVectorRef (u32 flags);
 void compVectorVectorRef (u32 flags);
 void compCons (u32 flags);

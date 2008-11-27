@@ -2268,6 +2268,7 @@ void sysSemaphoreDown (void) {
 	if (wscmAssertArgumentCountRange(1, 1, __func__)) return;
 	/* Store semaphore index in r0. */
 	sem = pop();
+	/* fprintf (stderr, "[sysSemaphoreDown %d]\n", *(u32*)sem); */
 	value = memVectorObject(semaphores, *(u32*)sem);
 	(*(int*)value)--;
 	if (*(int*)value < 0) {
@@ -2289,6 +2290,7 @@ void sysSemaphoreUp (void) {
 	DB("-->%s\n", __func__);
 	if (wscmAssertArgumentCountRange(1, 1, __func__)) return;
 	sem = pop();
+	/*fprintf (stderr, "[sysSemaphoreUp %d]\n", *(u32*)sem);*/
 	value = memVectorObject(semaphores, *(u32*)sem);
 	(*(int*)value)++;
 	if (*(int*)value < 1) {
@@ -2753,7 +2755,7 @@ void wscmInitialize (void) {
 	wscmDefineSyscall (sysSignal, "signal");
 
 	objNewInteger(42); wscmDefine ("y");
-	objNewInteger(69); wscmDefine ("x");
+	objNewInteger(1); wscmDefine ("x");
 
 	r1=(Obj)0;
 	objNewSymbol ("stdin", 5);
@@ -2871,11 +2873,10 @@ int main (int argc, char *argv[]) {
 	srandom(time(NULL));
 	wscmBindArgs(argc, argv);
 
-	/* Other ways of firing up a repl. */
-	//wscmCReadEvalPrintLoop();
-	//return 0;
+	/* Three ways of firing up a repl. */
 
-	wscmStringReadEvalPrintLoop();
+	//wscmCReadEvalPrintLoop(); /* REPL in C. */
+	wscmStringReadEvalPrintLoop(); /* REPL as inlined scheme. */
 	return 0;
 
 	/* Bind symbol 'in and assign the stdin port or the filename passed as arg
