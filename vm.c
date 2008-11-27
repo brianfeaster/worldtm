@@ -214,10 +214,12 @@ void vmVm (int cmd) {
 	r1=memVectorObject(r16, *(u32*)(ip+=4));//*((Obj*)r16 + *(u32*)(ip+=4));
 	goto **(void**)(ip+=4);
 	ldi20: OPDB("ldi20");
-	r2=memVectorObject(r0, *(u32*)(ip+=4));//*((Obj*)r0 + *(u32*)(ip+=4));
+	r2=//memVectorObject(r0, *(u32*)(ip+=4));
+		*((Obj*)r0 + *(u32*)(ip+=4));
 	goto **(void**)(ip+=4);
 	ldi22: OPDB("ldi22");
-	r2=memVectorObject(r2, *(u32*)(ip+=4));//*((Obj*)r2 + *(u32*)(ip+=4));
+	r2=//memVectorObject(r2, *(u32*)(ip+=4));
+		*((Obj*)r2 + *(u32*)(ip+=4));
 	goto **(void**)(ip+=4);
 	ldi40: OPDB("ldi40");
 	r4=memVectorObject(r0, *(u32*)(ip+=4));//*((Obj*)r0 + *(u32*)(ip+=4));

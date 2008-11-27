@@ -99,6 +99,7 @@ void memGarbageCollect (void);
 /* Debugging aids.
 */
 void memDebugObjectDump (Obj o);
+void memDebugDumpHeapHeaders (void);
 void memDebugDumpHeapStructures (void);
 
 

@@ -365,7 +365,7 @@ void memArraySet (Obj obj, u32 offset, u8 item) {
 		DB("ERROR memArraySet(obj %08x offset %x item %08x) Invalid offset.",
 		    obj, offset, item);
 		memError();
-	}else
+	}
 	#endif
 	*((u8*)obj+offset)=item;
 }
@@ -385,7 +385,7 @@ void memVectorSet (Obj obj, u32 offset, Obj item) {
 		DB ("ERROR memVectorSet(obj %08x offset %x item %08x) Invalid offset.",
 		    obj, offset, item);
 		memError();
-	} else
+	}
 	#endif
 	*((Obj*)obj+offset)=item;
 }
@@ -402,7 +402,7 @@ void memStackPush (Obj obj, Obj item) {
 	} else if (STACK_LENGTH <= memStackLength(obj)) {
 		DB ("ERROR memStackPush(obj %08x item %08x) Stack overflow.", obj, item);
 		memError();
-	} else
+	}
 	#endif
 	*++(*(Obj**)obj)=item;
 }
@@ -421,7 +421,7 @@ void memStackSet (Obj obj, u32 topOffset, Obj item) {
 	} else if (topOffset<0 || memStackLength(obj)<=topOffset) {
 		DB ("ERROR memStackSet(obj %08x topOffset %x item %08x) Invalid offset. memStackLength(obj)=>%x", obj, topOffset, item, memStackLength(obj));
 		memError();
-	} else
+	}
 	#endif
 	*(*(Obj**)obj-topOffset)=item;
 }
@@ -477,7 +477,8 @@ Obj memVectorObject (Obj obj, u32 offset) {
 		    obj, offset);
 		memError();
 	} else if (!memIsObjectVector(obj)) {
-		DB ("ERROR memVectorObject(obj %08x offset %x) Not vector class.",
+		DB ("ERROR memVectorObject(obj [%08x] %08x offset %x) Not vector class.",
+			memObjectDescriptor(obj),
 		   obj, offset);
 		memError();
 	} else if (offset<0 || memObjectLength(obj)<=offset ) {
@@ -811,7 +812,7 @@ DB("   collecting and compacting mutated old object references...");
 	memResetHeap(&heapNew);
 
 	if (memPostGarbageCollect) memPostGarbageCollect();
-	//memDebugDumpHeapStructures();
+//	memDebugDumpHeapHeaders();
 	DB("<--memGarbageCollect");
 }
 
@@ -850,42 +851,47 @@ void memDebugObjectDump (Obj o) {
   }
 }
 
+void memDebugDumpHeapHeaders (void) {
+	fprintf (stderr, "\n       Static    Old    Current    New\n");
+	fprintf (stderr, "Start %08x %08x %08x %08x\n",
+	        (unsigned)heapStatic.start,  (unsigned)heapOld.start,
+	        (unsigned)heap.start,  (unsigned)heapNew.start);
+	fprintf (stderr, "Next  %08x %08x %08x %08x\n",
+	        (unsigned)heapStatic.next,  (unsigned)heapOld.next,
+	        (unsigned)heap.next,  (unsigned)heapNew.next);
+	fprintf (stderr, "last  %08x %08x %08x %08x\n",
+	        (unsigned)heapStatic.last,  (unsigned)heapOld.last,
+	        (unsigned)heap.last,  (unsigned)heapNew.last);
+	fprintf (stderr, "Blocks  %6lx   %6lx   %6lx   %6lx\n",
+	        heapStatic.blockCount,  heapOld.blockCount,
+	        heap.blockCount,        heapNew.blockCount);
+	fprintf (stderr, "Bytes   %6x   %6x   %6x   %6x\n",
+	        heapStatic.last-heapStatic.start,  heapOld.last-heapOld.start,
+	        heap.last-heap.start,              heapNew.last-heapNew.start);
+	fprintf (stderr, "Finalizer %4lx   %6lx   %6lx   %6lx\n",
+	        heapStatic.finalizerCount,  heapOld.finalizerCount,
+	        heap.finalizerCount,        heapNew.finalizerCount);
+	fprintf (stderr, "   -0-      -1-      -2-      -3-      -4-      -5-      -6-     -7-\n");
+	fprintf (stderr, "%08x %08x %08x %08x %08x %08x %08x %08x\n",
+	        (unsigned)r0, (unsigned)r1, (unsigned)r2, (unsigned)r3,
+	        (unsigned)r4, (unsigned)r5, (unsigned)r6, (unsigned)r7);
+	fprintf (stderr, "%08x %08x %08x %08x %08x %08x %08x %08x\n",
+	        (unsigned)r8, (unsigned)r9, (unsigned)ra, (unsigned)rb,
+	        (unsigned)rc, (unsigned)rd, (unsigned)re, (unsigned)rf);
+	fprintf (stderr, "   -8-      -9-      -a-      -b-      -c-      -d-      -e-      -f-\n");
+	fprintf (stderr, "%08x %08x %08x %08x %08x %08x %08x %08x\n",
+	        (unsigned)r10, (unsigned)r11, (unsigned)r12, (unsigned)r13,
+	        (unsigned)r14, (unsigned)r15, (unsigned)r16, (unsigned)r17);
+	fprintf (stderr, "%08x %08x %08x %08x %08x %08x %08x %08x\n",
+	        (unsigned)r18, (unsigned)r19, (unsigned)r1a, (unsigned)r1b,
+	        (unsigned)r1c, (unsigned)r1d, (unsigned)r1e, (unsigned)r1f);
+}
+
 void memDebugDumpHeapStructures (void) {
  Obj o;
 	DB("-->memDebugDumpHeapStructures()");
-	printf ("\n       Static    Old    Current    New\n");
-	printf ("Start %08x %08x %08x %08x\n",
-	        (unsigned)heapStatic.start,  (unsigned)heapOld.start,
-	        (unsigned)heap.start,  (unsigned)heapNew.start);
-	printf ("Next  %08x %08x %08x %08x\n",
-	        (unsigned)heapStatic.next,  (unsigned)heapOld.next,
-	        (unsigned)heap.next,  (unsigned)heapNew.next);
-	printf ("last  %08x %08x %08x %08x\n",
-	        (unsigned)heapStatic.last,  (unsigned)heapOld.last,
-	        (unsigned)heap.last,  (unsigned)heapNew.last);
-	printf ("Blocks  %6lx   %6lx   %6lx   %6lx\n",
-	        heapStatic.blockCount,  heapOld.blockCount,
-	        heap.blockCount,        heapNew.blockCount);
-	printf ("Bytes   %6x   %6x   %6x   %6x\n",
-	        heapStatic.last-heapStatic.start,  heapOld.last-heapOld.start,
-	        heap.last-heap.start,              heapNew.last-heapNew.start);
-	printf ("Finalizer %4lx   %6lx   %6lx   %6lx\n",
-	        heapStatic.finalizerCount,  heapOld.finalizerCount,
-	        heap.finalizerCount,        heapNew.finalizerCount);
-	printf ("   -0-      -1-      -2-      -3-      -4-      -5-      -6-     -7-\n");
-	printf ("%08x %08x %08x %08x %08x %08x %08x %08x\n",
-	        (unsigned)r0, (unsigned)r1, (unsigned)r2, (unsigned)r3,
-	        (unsigned)r4, (unsigned)r5, (unsigned)r6, (unsigned)r7);
-	printf ("%08x %08x %08x %08x %08x %08x %08x %08x\n",
-	        (unsigned)r8, (unsigned)r9, (unsigned)ra, (unsigned)rb,
-	        (unsigned)rc, (unsigned)rd, (unsigned)re, (unsigned)rf);
-	printf ("   -8-      -9-      -a-      -b-      -c-      -d-      -e-      -f-\n");
-	printf ("%08x %08x %08x %08x %08x %08x %08x %08x\n",
-	        (unsigned)r10, (unsigned)r11, (unsigned)r12, (unsigned)r13,
-	        (unsigned)r14, (unsigned)r15, (unsigned)r16, (unsigned)r17);
-	printf ("%08x %08x %08x %08x %08x %08x %08x %08x\n",
-	        (unsigned)r18, (unsigned)r19, (unsigned)r1a, (unsigned)r1b,
-	        (unsigned)r1c, (unsigned)r1d, (unsigned)r1e, (unsigned)r1f);
+
+	memDebugDumpHeapHeaders();
 
 	/* DUMP EACH HEAP OBJECT */
 	printf ("----STATIC HEAP----");
@@ -915,6 +921,8 @@ void memDebugDumpHeapStructures (void) {
 		memDebugObjectDump (o);
 		o += memObjectSize(o);
 	}
+	printf ("\n----DONE DUMPING HEAP STRUCTURES----\n");
+	fflush(stdout);
 /*
 	// Dump raw words from this heap.
 	o =heapNew.start;
@@ -952,8 +960,9 @@ void memInitialize (fp preGC, fp postGC) {
 
 void memError (void) {
 	fprintf (stderr, "\nHalted on error.  Want a Heap dump (y/n)?");
-	memDebugDumpHeapStructures();
+	//memDebugDumpHeapStructures();
 	if (getchar()=='y') memDebugDumpHeapStructures();
+	*(int*)0 = 1;
 	exit(-1);
 }
 

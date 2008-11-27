@@ -59,9 +59,9 @@
 
 (define AIR 0)        (cell-set! AIR        (glyphNew #x00 CHAR-CTRL-@ #x00 CHAR-CTRL-@))
 (define DIRT  1)      (cell-set! DIRT       (glyphNew #x03 #\. #x03 #\.))
-(define GRASS 2)      (cell-set! GRASS      (glyphNew #x02 #\, #x02 #\,))
+(define GRASS 2)      (cell-set! GRASS      (glyphNew #x03 #\, #x02 #\,))
 (define XX 3)         (cell-set! XX         (glyphNew #x0f #\X #x0f #\X))
-(define BRICK 4)      (cell-set! BRICK      (glyphNew #x01 #\[ #x01 #\]))
+(define BRICK 4)      (cell-set! BRICK      (glyphNew #x19 #\[ #x19 #\]))
 (define STONE 5)      (cell-set! STONE      (glyphNew #x07 #\[ #x07 #\]))
 (define DOORCLOSED 6) (cell-set! DOORCLOSED (glyphNew #x09 #\- #x09 #\-))
 (define DOOROPEN 7)   (cell-set! DOOROPEN   (glyphNew #x09 #\| #x09 #\ ))
@@ -163,7 +163,7 @@ c))
  (vector-vector-map! 
    (lambda (i)
     ;(if (random-bool 2) (vector 2 XX GRASS AIR) (vector 2 XX DIRT  AIR))
-    (vector 2 XX GRASS AIR))
+    (vector 2 XX DIRT  AIR))
   (make-vector-vector FieldDimension FieldDimension ())))
 
 ;(vector-vector-map! (lambda (i) (display "\r\n") (display i) i) FIELD)
@@ -224,7 +224,12 @@ c))
 ;(field-set! 8 16 17 STONE) (field-set! 8 16 18 STONE) (field-set! 8 16 19 STONE)
 ;(field-set! 8 17 17 STONE) (field-set! 8 17 18 STONE) (field-set! 8 17 19 STONE)
 
-(field-set! 4 14 18 HELP)
+;(field-set! 4 14 18 HELP)
+;(field-set! 4 14 19 HELP)
+;(field-set! 4 14 20 HELP)
+;(field-set! 4 14 21 HELP)
+;(field-set! 4 14 22 HELP)
+(field-set! 4 14 23 HELP)
 
 (field-set! 4 11 13 TV)
 (field-set! 4 17 13 CHAIR)
@@ -309,14 +314,13 @@ c))
  (set! PortW (/ (Window0 'WWidth) 2))
  (set! PortY (- y (/ PortH 2)))     ; Center Viewport around Avatar.
  (set! PortX (- x (/ PortW 2)))
- (semaphore-down ViewportSemaphore)
  ((Window0 'home))
- (let dumpGlyphs ((y 0) (x 0))
+ (let ~dumpGlyphs ((y 0) (x 0))
   (if (!= y PortH) (if (= x PortW)
-    (dumpGlyphs (++ y) 0)
+    (~dumpGlyphs (++ y) 0)
     (begin
      (Window0PutGlyph (canvasCellRef (+ PortY y) (+ PortX x)))
-     (dumpGlyphs y (++ x))))))
+     (~dumpGlyphs y (++ x))))))
  ; DEBUG: Plot column
  ((Window5 'home))
  (let ~ ((z 11))
@@ -330,7 +334,7 @@ c))
            (Window5SetColor (glyphColor1 c))
            (Window5Putc (glyphChar1 c)))))
   (if (> z -6) (~ (- z 1))))
- (semaphore-up ViewportSemaphore))
+)
 
 (define (viewportRender gy gx)
  ; The cell position and viewport position (upper left corner) are on a torus
@@ -397,7 +401,7 @@ c))
 ;;
 (define (Avatar name) ; Inherits Entity
  ((Entity (random) name
-   4 15 15
+   4 14 17
    (glyphNew #x0f (string-ref name 0)
              #x0f (string-ref name 1)))
   `(let ()
@@ -445,6 +449,7 @@ c))
 ;; Call this 'move.  Entites move.  Back to the original ways?
 ;; was 'avatar
 (define (move dna z y x)
+ (semaphore-down ViewportSemaphore)
  (let ((entity (entitiesGet dna))
        (thisIsMe (and #t (= dna (avatar 'dna)))))
   (if (null? entity)
@@ -470,18 +475,20 @@ c))
         ;(ConsoleDisplay (display->string ((avatar 'look))))
         ;(ConsoleDisplay "\r")
         ;(displayl "\c28H\c0m" (field-column (avatar 'y) (avatar 'x)) "\cK" )
-        ))))))
+        )))))
+ (semaphore-up ViewportSemaphore)
+)
 
 (define (voice dna z y x level text)
-(let ((entity (entitiesGet dna)))
-(ConsoleDisplay "\r\n")
-(ConsoleSetColor #x0e)
-(if (null? entity)
-(ConsoleDisplay "???>")
-(ConsoleDisplay (entity 'name)))
-(ConsoleSetColor #x06)
-(ConsoleDisplay " ")
-(ConsoleDisplay text)))
+ (let ((entity (entitiesGet dna)))
+   (ConsoleDisplay "\r\n")
+   (ConsoleSetColor #x0e)
+   (if (null? entity)
+     (ConsoleDisplay "???>")
+     (ConsoleDisplay (entity 'name)))
+   (ConsoleSetColor #x06)
+   (ConsoleDisplay " ")
+   (ConsoleDisplay text)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Keyboard Input
@@ -501,10 +508,10 @@ c))
 
 ; BF: Should this be a thread?  At least move somewhere else.
 (define (refreshIfBeyondViewport)
-(let ((y (modulo (- (avatar 'y) PortY) FieldDimension));Normalize avatar position.
-(x (modulo (- (avatar 'x) PortX) FieldDimension)))
-(if (or (<= PortW x) (<= PortH y))
-(viewportReset (avatar 'y) (avatar 'x)))))
+ (let ((y (modulo (- (avatar 'y) PortY) FieldDimension));Normalize avatar position.
+   (x (modulo (- (avatar 'x) PortX) FieldDimension)))
+   (if (or (<= PortW x) (<= PortH y))
+     (viewportReset (avatar 'y) (avatar 'x)))))
 
 (define (walk dir)
 ; (if (not (eq? BRICK (field-ref (avatar 'z) (avatar 'y) (avatar 'x))))
@@ -560,7 +567,7 @@ c))
 (define Window4SetColor (Window4 'set-color))
 
 ;; Map window
-(define MapSize (min 24 (min (- (Terminal 'Height) 1)
+(define MapSize (min 20 (min (- (Terminal 'Height) 1)
                              (/ (Terminal 'Width) 2))))
 (define Window0
   ((Terminal 'WindowNew)
@@ -656,17 +663,21 @@ c))
 ((Window3 'delete)))))
 
 (define HelpWindow ((Terminal 'WindowNew) 5 20 10 30 #x21))
+
 (map (lambda (x) ((HelpWindow 'alpha) 0 x #f))
      '(0 1 2 3 4 5 6 7 8 20 21 22 23 24 25 26 27 28 29))
+
 ((HelpWindow 'goto) 0 0)
 ((HelpWindow 'puts) "         )) Help! ((")
 ((HelpWindow 'set-color) #x20)
 ((HelpWindow 'puts) "\r\n? = toggle help window\r\nt = talk\r\nesc = exit talk\r\nw = toggle map\r\nq = quit\r\nhjkl = move")
 ((HelpWindow 'toggle))
+
 (define (help)
-  (HelpWindow '(set! Y0 2))
-  (HelpWindow '(set! Y1 (+ Y0 WHeight)))
- ((HelpWindow 'toggle)))
+ ; (HelpWindow '(set! Y0 2))
+ ; (HelpWindow '(set! Y1 (+ Y0 WHeight)))
+  ((HelpWindow 'toggle)))
+
 (ConsoleSetColor #x0b)
 (ConsoleDisplay "\r\nSee http://code.google.com/p/worldtm")
 (ConsoleDisplay "\r\nHit ? to toggle the help window")
@@ -857,6 +868,23 @@ c))
 ;(thread (welcome))
 ;(ConsoleDisplay "\r\nWelcome to World")
 ;(display "\e[?25h")
+
+; Screen redraw signal handler.
+(vector-set! SIGNAL-HANDLERS 28 (lambda ()
+  (ConsoleDisplay "\r\n" (terminal-size))
+  ; Resize overall terminal size.
+  (Terminal '(set! Height (cdr (terminal-size))))
+  (Terminal '(set! Width  (car (terminal-size))))
+  ; Move map over.
+  ((Window0 'toggle))
+  ;(Window0 '(WindowMaskReset Y0 X0 Y1 X1))
+  (Window0 '(set! X0 (- (Terminal 'Width) (* MapSize 2) 2)))
+  (Window0 '(set! X1 (+ X0 WWidth)))
+  ((Window0 'toggle))
+  ((Console 'repaint))
+  (unthread)))
+(signal 28)
+
 (wrepl)
 (display "\e[0m\r\n\e[?25h")
 (quit)

@@ -447,6 +447,27 @@ void compLambda (u32 flags) {
 	DB("<--%s", __func__);
 }
 
+void compVerifyVectorRef (void) {
+	if (*(int*)r0 < 0 || memObjectLength(r1) <= *(int*)r0) {
+		fprintf (stderr, "ERROR::out of bounds:  (vector-ref ");
+		wscmWrite(r1, 0, 2);
+		fprintf (stderr, " ");
+		wscmWrite(r0, 0, 2);
+		fprintf (stderr, ")");
+		*(int*)0 = 0;
+	}
+}
+
+void compVerifyVectorSetB (void) {
+	if (*(int*)r2 < 0 || memObjectLength(r1) <= *(int*)r2) {
+		fprintf (stderr, "ERROR::out of bounds:  (vector-set! ");
+		wscmWrite(r1, 0, 2); fprintf (stderr, "  ");
+		wscmWrite(r2, 0, 2); fprintf (stderr, "  ");
+		wscmWrite(r0, 0, 2); fprintf (stderr, ")");
+		*(int*)0 = 0;
+	}
+}
+
 void compVectorRef (u32 flags) {
 	DB("-->%s", __func__);
 	push(car(cddr(expr))); /* Save index expression. */
@@ -457,11 +478,12 @@ void compVectorRef (u32 flags) {
 		/* Load static integer value into register. */
 		asm(LDI00); asm(*(s32*)expr);
 	} else {
-		/* Load object's integer value into register. */
 		asm(PUSH0);
 		compExpression(flags & ~TAILCALL);
-		asm(LDI20); asm(0);
 		asm(POP1);
+		asm(SYSI); asm(compVerifyVectorRef);
+		/* Load object's integer value into register. */
+		asm(LDI20); asm(0); // This fails runtime type check.
 		asm(LD012);
 	}
 	DB("<--%s", __func__);
@@ -485,11 +507,13 @@ void compVectorVectorRef (u32 flags) {
 	compExpression(flags & ~TAILCALL);
 
 	asmAsm (
-		LDI20, 0, /* Load 1st index object integer value into register. */
 		POP1,     /* Restore vector. */
+		SYSI, compVerifyVectorRef,
+		LDI20, 0, /* Load 1st index object integer value into register. */
 		LD012,    /* Index the vector. */
 		MV10,     /* Move the sub-vector into r1. */
 		POP0,     /* Restore 2nd index object. */
+		SYSI, compVerifyVectorRef,
 		LDI20, 0, /* Load 2nd index object integer value into register. */
 		LD012,    /* Index the sub-vector. */
 		END
@@ -516,6 +540,7 @@ void compVectorSetb (u32 flags) {
 	asmAsm (
 		POP2,       /* Pop offset object. */
 		POP1,       /* Pop vector object. */
+		SYSI, compVerifyVectorSetB,
 		LDI22, 0,   /* Load offset object's integer value into register. */
 		ST012,      /* Store new-value object in vector. */
 		END
@@ -544,8 +569,9 @@ void compVectorVectorSetb (u32 flags) {
 	compExpression(flags & ~TAILCALL);
 
 	asmAsm (
-		LDI20, 0, /* Load 1st index object integer value into register. */
 		POP1,     /* Restore vector. */
+		SYSI, compVerifyVectorRef,
+		LDI20, 0, /* Load 1st index object integer value into register. */
 		LD012,    /* Index the vetor. */
 		PUSH0,    /* Save sub-vector. */
 		END
@@ -557,6 +583,7 @@ void compVectorVectorSetb (u32 flags) {
 	asmAsm (
 		POP1,       /* Pop vector object. */
 		POP2,       /* Pop offset object. */
+		SYSI, compVerifyVectorSetB,
 		LDI22, 0,   /* Load offset object's integer value into register. */
 		ST012,      /* Store new-value object in vector. */
 		END
