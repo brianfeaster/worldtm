@@ -291,6 +291,12 @@ void compLambdaBody (u32 flags) {
 	push(asmstack);
 	memNewStack(); asmstack=r0;
 
+	asmAsm(
+		BRA, 4,
+		expr,
+		END
+	);
+
 	/* Emit code that extends stack-stored arguments (Free variables can be
 	   statically compiled?  r2 is assumed to hold the environment to be
 	   extended, r1 the argument count, r3 the formal arguments. */
@@ -449,11 +455,18 @@ void compLambda (u32 flags) {
 
 void compVerifyVectorRef (void) {
 	if (*(int*)r0 < 0 || memObjectLength(r1) <= *(int*)r0) {
+		sleep(1);
+		sleep(5);
 		fprintf (stderr, "ERROR::out of bounds:  (vector-ref ");
 		wscmWrite(r1, 0, 2);
 		fprintf (stderr, " ");
 		wscmWrite(r0, 0, 2);
 		fprintf (stderr, ")");
+		/* Dump the current code block */
+		r0=code; vmDebugDump();
+		printf ("\nIP %x", ip);
+		wscmDumpEnv(env);
+		fflush(stdout);
 		*(int*)0 = 0;
 	}
 }
@@ -1298,6 +1311,8 @@ void compSyntaxRulesHelper (void) {
 	DB("   <--wscmSyntaxRulesHelper");
 }
 
+/* Experimenal code.  Not sure if is very useful now.
+*/ 
 void compSyntaxRules (void) {
 	DB("-->wscmSyntaxRules <= ");
 	DBE wscmWrite (expr, 0, 2);
@@ -1678,9 +1693,15 @@ int compExpression (u32 flags) {
 int compCompile (void) {
  int ret;
 	DB("-->%s", __func__);
-	//env = tge;                 /* We'll be using a pseudo env (r16=r17). */
+	//env = tge;               /* We'll be using a pseudo env (r16=r17). */
 	expr = r0;                 /* Move expression to expr (r18). */
-	CompError = 0;                 /* Clear error flag. */
+	push(expr);						/* Keep track of expression (for debuggin). */
+	asmAsm ( /* Keep track of original expression for debuggin. */
+		BRA, 4,
+		expr,
+		END
+	);
+	CompError = 0;             /* Clear error flag. */
 	/* START the compilation process with empty flags. */
 	ret = compExpression(0);
 	fprintf (stderr, "ret=%d", ret);

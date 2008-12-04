@@ -105,7 +105,9 @@ void asmNewCode (void) {
  int len;
 	memNewVector(TCODE, len=memStackLength(asmstack));
 	memcpy(r0, asmstack+4, len*4);
-	*(Obj*)asmstack = asmstack; /* Reset opcode stack. */
+	// Reset assembly stack by setting the first entry to
+	// the stack itself (points to itself).
+	*(Obj*)asmstack = asmstack;
 }
 
 void asmInitialize (fp intHandler, fp preGC, fp postGC, fp1 objDumper) {

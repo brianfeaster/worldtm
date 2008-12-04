@@ -630,6 +630,7 @@ void memGarbageCollect (void) {
  Obj newObj;
  long  i, len;
 	DB("-->memGarbageCollect()");
+	//fprintf (stderr, "-->memGarbageCollect()");
 	//memDebugDumpHeapStructures();
 	//fprintf (stderr, "\a");
 
@@ -813,6 +814,7 @@ DB("   collecting and compacting mutated old object references...");
 
 	if (memPostGarbageCollect) memPostGarbageCollect();
 //	memDebugDumpHeapHeaders();
+	//fprintf (stderr, "<--memGarbageCollect()");
 	DB("<--memGarbageCollect");
 }
 

@@ -1778,3 +1778,26 @@ Want to be able to parse the following:
 (define [() s (s . ()) (s . *) (s * . s)]
 
 Am really parsing trees:  (s . [* () s])
+
+
+Fri Nov 28 08:51:49 PST 2008
+
+Recently added vector bounds checking at the assembly level.  Trying to track
+down a crash that occurs when windows are toggling while other windows are
+printing.  I don't get much information from the normal debugger or dumps.
+I plan to add to every compiled code block the originating scheme expression.
+
+
+
+Fri Nov 28 22:01:44 PST 2008
+
+
+This window bug is a pain.  When I hit ctrl-l to refresh the screen and quickly
+move, I can get the map window to render incorrectly.  Seems somehow when
+I refresh a window and also try and draw to it things get out of whack.
+Specifically the window's idea of where the cursor is.  This seems so because
+the map window will start to scroll what it's drawing.
+
+There's a lot of mutation going on in the window class.  I should localize
+it.  Specifically not set! the cursor position everywhere.  Instead each
+function should keep a copy for itself then set it at the end.
