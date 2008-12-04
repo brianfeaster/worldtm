@@ -1,3 +1,7 @@
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Concerns
+; redrawing while scrolling up conflict with 'toprow' variable.
+
 ;;-----------------------------------------------------------------------------
 ;; Escape Sequence Stuff
 ;;
@@ -45,99 +49,88 @@
 ;; Escape Sequence Stuff
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; Terminal of Windows Class
+;; Terminal of Windows Class v2
 ;;
 (define (Terminal)
-
  (define self (lambda (msg) (eval msg)))
-
- (define TerminalSemaphore (open-semaphore 1))
- (define TerminalWindowSemaphore (open-semaphore 1))
-
- (define GCOLOR #f)
-
- (define GCURSOR-VISIBLE #t)
-
- (define Height (cdr (terminal-size)))
- (define Width  (car (terminal-size)))
-
+ (define TCOLOR #f)
+ (define TCURSOR-VISIBLE #t)
+ (define THeight (cdr (terminal-size)))
+ (define TWidth  (car (terminal-size)))
  (define GY -1) ; Global cursor positions.
  (define GX -1)
-
  (define WINDOWS ()) ; List of window objects.
+ (define TerminalSemaphore (open-semaphore 1))
+ ; 2D cache of visible window objects.  () is base
+ ; window which is never drawn on.
+ (define WindowMask (make-vector-vector THeight TWidth ()))
 
- (define (gset-color c)
-   (if (!= GCOLOR c)
-     (begin (set! GCOLOR c)
-            (display (integer->colorstring c)))))
-
- (define (gtoggle-cursor)
-   (display (if GCURSOR-VISIBLE "\e[?25l" "\e[?25h"))
-   (set! GCURSOR-VISIBLE (not GCURSOR-VISIBLE)))
-
- (define (gputc c)
-   (display c)
+ (define (gputc char color y x)
+   (semaphore-down TerminalSemaphore)
+   ; Set color.
+   (if (!= TCOLOR color) (begin
+     (set! TCOLOR color)
+     (display (integer->colorstring color))))
+   ; Set cursor location.
+   (if (or (!= y GY) (!= x GX)) (begin
+     (send "\e[" stdout)
+     (display (+ y 1))
+     (send ";" stdout)
+     (display (+ x 1))
+     (send "H" stdout)
+     (set! GY y) (set! GX x)))
+   ; Draw character.
+   (display char)
+   ; Update cursor.
    (set! GX (+ 1 GX))
-   (if (>= GX Width)
+   (if (>= GX TWidth)
        (begin
          (set! GX 0)
          (set! GY (+ 1 GY))
-         (if (>= GY Height)
-             (set! GY (- Height 1))))))
+         (if (>= GY THeight)
+             (set! GY (- THeight 1)))))
+   (semaphore-up TerminalSemaphore))
 
- (define (ggoto y x)
-   (if (or (!= y GY)
-           (!= x GX))
-     (begin (send "\e[" stdout)
-            (display (+ y 1))
-            (send ";" stdout)
-            (display (+ x 1))
-            (send "H" stdout)
-            (set! GY y) (set! GX x)))
- )
+ (define (tcursor-visible)
+   (display (if TCURSOR-VISIBLE "\e[?25l" "\e[?25h"))
+   (set! TCURSOR-VISIBLE (not TCURSOR-VISIBLE)))
 
- (define (TopmostWindow y x)
+ (define (TopmostWindow gy gx)
+ ; Return first window object in window list that is visible at this location.
    (let ~ ((w WINDOWS))
      (if (null? w) ()
-     (if (((car w) 'InsideWindow?) y x) (car w)
+     (if (((car w) 'InsideWindow?) gy gx) (car w)
      (~ (cdr w))))))
-
- ; 2D cache of visible window objects.  () is base window which is never drawn
- ; on;
- (define WindowMask (make-vector-vector Height Width ()))
 
  ; Reset the terminal's window mask.
  (define (WindowMaskReset y0 x0 y1 x1)
-  (semaphore-down TerminalWindowSemaphore)
-  (let ~ ((y y0) (x x0))
-    (if (< y y1) (if (= x x1) (~ (+ y 1) x0)
-      (let ((topwin (TopmostWindow y x)))         ; Get top win at global pos
-        (if (not (null? topwin)) (begin
-          (vector-vector-set! WindowMask y x topwin); Cache it
-          ((topwin 'globalRefresh) y x)
-        ))        ; Redraw win's cell at global pos
-        (~ y (+ x 1))))))
-  (semaphore-up TerminalWindowSemaphore))
+  (let ~ ((gy y0) (gx x0))
+    (if (< gy y1) (if (= gx x1) (~ (+ gy 1) x0)
+      (let ((topwin (TopmostWindow gy gx)))         ; Get top win at global pos
+        (vector-vector-set! WindowMask gy gx topwin); Cache it
+        (or (null? topwin)
+            ((topwin 'globalRefresh) gy gx))        ; Redraw cell at global pos
+        (~ gy (+ gx 1)))))))
 
  (define (WindowMaskDump)
   (let ~ ((w WINDOWS))
-   (or (null? w) (begin (display ((car w) 'ID))
-                        (~ (cdr w)))))
-  (sleep 2)
+    (or (null? w) (begin (display ((car w) 'ID))
+                         (~ (cdr w)))))
   (newline)
-  (vector-map (lambda (v) (newline)(vector-map (lambda (v) (display (if (null? v) 0 (v 'ID)))) v))
-              WindowMask)
-  (sleep 2))
+  (vector-map
+     (lambda (v)
+        (newline)
+        (vector-map (lambda (v) (display (if (null? v) 0 (v 'ID)))) v))
+     WindowMask))
 
  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
  ;; Window subclass.
  ;;
- (define (WindowNew Y0 X0 WHeight WWidth COLOR . switches)
+ (define (WindowNew Y0 X0 WWidth WHeight COLOR . switches)
    (define self (lambda (msg) (eval msg)))
-   (define WindowSemaphore (open-semaphore 1))
    (define ID (+ 1 (length WINDOWS)))
-   (define Y1 (+ Y0 WHeight))
    (define X1 (+ X0 WWidth))
+   (define Y1 (+ Y0 WHeight))
    ; 2d vector of cell descriptors #(color char)
    (define DESC
      (vector-vector-map! (lambda (x) (vector COLOR #\ ))
@@ -151,14 +144,11 @@
    (define CurX 0)
    (define needToScroll #f) ; For bottom right character printing.
    (define (cursor-visible s) (set! CURSOR-VISIBLE s))
+   (define WindowSemaphore (open-semaphore 1))
    (define (goto y x)
-     ;(display `(goto , y ,x))
-     (semaphore-down WindowSemaphore)
      (set! needToScroll #f)
      (set! CurY y)
-     (set! CurX x)
-     (semaphore-up WindowSemaphore)
-   )
+     (set! CurX x))
    (define (set-color c) (set! COLOR c))
    (define (InsideWindow? gy gx)
      (and ENABLED
@@ -169,10 +159,7 @@
           (vector-vector-ref ALPHA (- gy Y0) (- gx X0))))
    (define (home) (goto 0 0))
    (define (return)
-     (semaphore-down WindowSemaphore)
-     (set! CurX 0)
-     (semaphore-up WindowSemaphore)
-   )
+     (set! CurX 0))
    (define (newline)
      (set! CurY (+ 1 CurY))
      (if (>= CurY WHeight) (begin
@@ -181,20 +168,14 @@
            (set! needToScroll #f))))
    (define (backspace c)
      (if (and (< 0 CurX) (< CurX WWidth))
-       (begin (semaphore-down WindowSemaphore)
-              (set! CurX (- CurX 1))
+       (begin (set! CurX (- CurX 1))
               (set! needToScroll #f)
-              (semaphore-up WindowSemaphore)
               (putc c)
               (display CHAR-CTRL-H) 
-              (semaphore-down WindowSemaphore)
               (set! needToScroll #f)
-              (set! CurX (- CurX 1))
-              (semaphore-up WindowSemaphore)
-       )))
+              (set! CurX (- CurX 1)))))
    (define (scrollUp)
      ; Clear top-row which is to become the bottom row.
-     ;(display 'scrollUp)
      (let ~ ((x 0))
         (if (< x WWidth)
           (let ((desc (vector-vector-ref DESC topRow x)))
@@ -202,108 +183,66 @@
             (vector-set! desc 1 #\ )
             (~ (+ x 1)))))
      (set! topRow (modulo (+ topRow 1) WHeight))
-     ; Repaint window.
-     ;(semaphore-down WindowSemaphore)
-     (let ((originalY CurY)(originalX CurX))
-       (repaint)
-       (set! CurY originalY)
-       (set! CurX originalX))
-     ;(semaphore-up WindowSemaphore)
-   )
+     ; Refresh window.
+     (repaint))
    (define (repaint)
-     ;(display `(repaint))
-     ;(semaphore-down WindowSemaphore)
-     (let ((originalColor COLOR)
-           (originalY CurY)
-           (originalX CurX))
-       (home)
-       (let ~ ((y 0) (x 0))
-         (if (< y WHeight) (if (>= x WWidth) (~ (+ y 1) 0)
-           (let((desc (vector-vector-ref DESC (modulo (+ y topRow) WHeight) x)))
-             (if (eq? self (vector-vector-ref WindowMask (+ y Y0) (+ x X0)))
-                 (begin
-                   (ggoto (+ y Y0) (+ x X0))
-                   (gset-color (vector-ref desc 0))
-                   (gputc (vector-ref desc 1))))
-             (~ y (+ x 1))))))
-       (set! COLOR originalColor)
-       (set! CurY originalY)
-       (set! CurX originalX))
-     ;(semaphore-up WindowSemaphore)
-   )
-   ; Repaint char given global coordinate.
+     (let ~ ((y 0) (x 0))
+       (if (< y WHeight) (if (>= x WWidth) (~ (+ y 1) 0)
+         (let ((desc (vector-vector-ref DESC (modulo (+ y topRow) WHeight) x)))
+           (if (eq? self (vector-vector-ref WindowMask (+ y Y0) (+ x X0)))
+               (gputc (vector-ref desc 1)
+                      (vector-ref desc 0)
+                      (+ y Y0) (+ x X0)))
+           (~ y (+ x 1)))))))
+   ; Repaint char given global coordinate.  Does not mutate window
+   ; state.  Modulo the Y coordinate due to horizontal scrolling.
    (define (globalRefresh gy gx)
-     ;(display 'globalRefresh)
-     ;(semaphore-down WindowSemaphore)
-     (let ((y (- gy Y0))
-           (x (- gx X0))
-           (oy CurY)
-           (ox CurX)
-           (ocolor COLOR))
-       ;(semaphore-up WindowSemaphore)
-       (goto y x)
-       (let ((desc (vector-vector-ref DESC (modulo (+ y topRow) WHeight) x)))
-         (set-color (vector-ref desc 0))
-         (putchar (vector-ref desc 1)))
-       ;(semaphore-down WindowSemaphore)
-       (set! CurY oy)
-       (set! CurX ox)
-       (set! COLOR ocolor)
-       ;(semaphore-up WindowSemaphore)
-      ))
+     (let ((desc (vector-vector-ref DESC
+                   (modulo (+ (- gy Y0) topRow) WHeight)
+                   (- gx X0))))
+       (gputc (vector-ref desc 1)
+                (vector-ref desc 0)
+                gy gx)))
    (define (putchar c)
-     ;(display `(putchar ,c))
      (if needToScroll (begin (set! needToScroll #f) (return) (newline)))
-     (if (!= GCURSOR-VISIBLE CURSOR-VISIBLE) (gtoggle-cursor))
+     (if (!= TCURSOR-VISIBLE CURSOR-VISIBLE) (tcursor-visible))
      (let ((gy (+ CurY Y0))
            (gx (+ CurX X0)))
        (if (eq? c NEWLINE) (newline)
        (if (eq? c RETURN) (return)
        (if (eq? c CHAR-CTRL-G) (display c)
        (begin
+         (semaphore-down WindowSemaphore)
          ; Display char to terminal.
          (if (eq? self (vector-vector-ref WindowMask gy gx))
-           (begin
-             (semaphore-down TerminalSemaphore)
-             (ggoto gy gx)
-             (gset-color COLOR)
-             (gputc c)
-             (semaphore-up TerminalSemaphore)))
+             (gputc c COLOR gy gx))
          ; Cache color and char to buffer.
-         ;(display `((,CurY , CurX) (,Y0 ,X0) (,WHeight ,WWidth)) stderr)
-         ;(display "\n" stderr)
-         (let ((desc (vector-vector-ref DESC (modulo (+ CurY topRow) WHeight)
-                                             CurX)))
-           (vector-set! desc 0 COLOR)
-           (vector-set! desc 1 c))
+         (if (< CurX WWidth) (begin
+           (let ((desc (vector-vector-ref DESC (modulo (+ CurY topRow) WHeight)
+                                               CurX)))
+             (vector-set! desc 0 COLOR)
+             (vector-set! desc 1 c))
          ; Advance cursor.
-         ;(semaphore-down WindowSemaphore)
          (set! CurX (+ 1 CurX))
-         ;(semaphore-up WindowSemaphore)
          (if (>= CurX WWidth)
            (if (= CurY (- WHeight 1))
                (set! needToScroll #t)
-               (begin (return) (newline)))))))))
-   )
-   (define (putc c)
-     (semaphore-down TerminalWindowSemaphore)
-     (putchar c)
-     (semaphore-up TerminalWindowSemaphore)
-   )
+               (begin 
+                 (return)
+                 (newline))))))
+         (semaphore-up WindowSemaphore)))))))
+   (define putc putchar)
    (define (puts str)
-     (semaphore-down TerminalWindowSemaphore)
-     (map putchar (string->list str))
-     (semaphore-up TerminalWindowSemaphore)
-   )
+     (map putchar (string->list str)))
    (define (toggle)
      (set! ENABLED (not ENABLED))
      (WindowMaskReset Y0 X0 Y1 X1))
    (define (delete)
     (set! WINDOWS
       (let ~ ((l WINDOWS))
-        (if (null? l) l
-        (if (= (car WINDOWS) self) (cdr WINDOWS)
-        (cons (car WINDOWS) (~ (cdr (WINDOWS))))))))
+        (if (null? l) ()
+        (if (eq? (car l) self) (cdr l)
+        (cons (car l) (~ (cdr l)))))))
     (WindowMaskReset Y0 X0 Y1 X1))
    ; Create transparent 'pixel'.
    (define (alpha y x a)
@@ -324,23 +263,27 @@
 (rem
 (define term (Terminal))
 
-;(define w3 ((term 'WindowNew) 0 0 29 80 #x07))
+;(define w3 ((term 'WindowNew) 0 0 80 29 #x07))
 
-(define w1 ((term 'WindowNew) 4 18 10 20 #x2e))
+(define w1 ((term 'WindowNew) 4 18 20 20 #x2e))
 (define w1put (w1 'putc))
 (define w1puts (w1 'puts))
 
-(define w2 ((term 'WindowNew) 5 19 10 14 #x1b))
+(define w2 ((term 'WindowNew) 5 19 14 10 #x1b))
 (define w2put (w2 'putc))
 (define w2puts (w2 'puts))
 
 (w1puts 'window1)
 (w2puts 'WINDOW2)
 (sleep 1000)
+;((w1 'delete))
+;(quit)
 
 (thread (let ~ () ((w1 'putc) #\1) (~)))
+(sleep 4000)
 (thread (let ~ () ((w2 'toggle)) (~)))
-(sleep 8000)
+;((w1 'delete))
+(sleep 4000)
 (quit)
 
 (rem

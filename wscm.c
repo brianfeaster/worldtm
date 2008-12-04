@@ -2039,6 +2039,8 @@ void sysIllegalOperator (void) {
 		wscmWrite (memStackObject(stack, i), 0, 2);
 	}
 	write(2, ")", 1);
+	r0=code;
+	vmDebugDump();
 	/* No need to pop stack since calling error continuation. */
 	r0=nullstr;
 	r1 = (Obj)1;
@@ -2218,6 +2220,11 @@ void sysCompile (void) {
 	expr=r0;
 	push(env);
 	CompError=0;
+	asmAsm ( /* Keep track of original expression for debuggin. */
+		BRA, 4,
+		expr,
+		END
+	);
 	if (compExpression(0))
 	{
 		wscmError();

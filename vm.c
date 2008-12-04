@@ -604,8 +604,9 @@ void vmDebugDump (void) {
 		else if (*ip==SYSI)  {printf ("sysi "); vmObjectDumper(*++ip);}
 		else if (*ip==SYS0)  {printf ("sys$0");}
 		else if (*ip==QUIT)  {printf ("quit");}
-		else printf ("???%08x", *ip);
+		else {printf ("???%08x", *ip); vmObjectDumper(*ip);}
 		ip++;
+		fflush(stdout);
 	}
 }
 
