@@ -126,7 +126,7 @@
  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
  ;; Window subclass.
  ;;
- (define (WindowNew Y0 X0 WWidth WHeight COLOR . switches)
+ (define (WindowNew Y0 X0 WHeight WWidth COLOR . switches)
    (define self (lambda (msg) (eval msg)))
    (define ID (+ 1 (length WINDOWS)))
    (define X1 (+ X0 WWidth))
@@ -204,24 +204,24 @@
                 (vector-ref desc 0)
                 gy gx)))
    (define (putchar c)
+     (semaphore-down WindowSemaphore)
      (if needToScroll (begin (set! needToScroll #f) (return) (newline)))
      (if (!= TCURSOR-VISIBLE CURSOR-VISIBLE) (tcursor-visible))
+
+     (if (eq? c NEWLINE) (newline)
+     (if (eq? c RETURN) (return)
+     (if (eq? c CHAR-CTRL-G) (display c)
      (let ((gy (+ CurY Y0))
            (gx (+ CurX X0)))
-       (if (eq? c NEWLINE) (newline)
-       (if (eq? c RETURN) (return)
-       (if (eq? c CHAR-CTRL-G) (display c)
        (begin
-         (semaphore-down WindowSemaphore)
-         ; Display char to terminal.
+         ; Send character to terminal only if window location is visible.
          (if (eq? self (vector-vector-ref WindowMask gy gx))
              (gputc c COLOR gy gx))
          ; Cache color and char to buffer.
-         (if (< CurX WWidth) (begin
-           (let ((desc (vector-vector-ref DESC (modulo (+ CurY topRow) WHeight)
-                                               CurX)))
-             (vector-set! desc 0 COLOR)
-             (vector-set! desc 1 c))
+         (let ((desc (vector-vector-ref DESC (modulo (+ CurY topRow) WHeight)
+                                             CurX)))
+           (vector-set! desc 0 COLOR)
+           (vector-set! desc 1 c))
          ; Advance cursor.
          (set! CurX (+ 1 CurX))
          (if (>= CurX WWidth)
@@ -229,8 +229,8 @@
                (set! needToScroll #t)
                (begin 
                  (return)
-                 (newline))))))
-         (semaphore-up WindowSemaphore)))))))
+                 (newline)))))))))
+     (semaphore-up WindowSemaphore))
    (define putc putchar)
    (define (puts str)
      (map putchar (string->list str)))
@@ -263,13 +263,13 @@
 (rem
 (define term (Terminal))
 
-;(define w3 ((term 'WindowNew) 0 0 80 29 #x07))
+;(define w3 ((term 'WindowNew) 0 0 29 80 #x07))
 
 (define w1 ((term 'WindowNew) 4 18 20 20 #x2e))
 (define w1put (w1 'putc))
 (define w1puts (w1 'puts))
 
-(define w2 ((term 'WindowNew) 5 19 14 10 #x1b))
+(define w2 ((term 'WindowNew) 5 19 10 14 #x1b))
 (define w2put (w2 'putc))
 (define w2puts (w2 'puts))
 

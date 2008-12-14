@@ -2323,8 +2323,8 @@ void catch_signal (int s) {
 	r1 = memVectorObject(r0, s);
 	r0 = car(r1);
 	// Hack:  replace inital opcode with NOP since closure obj code expects the closure to be passed in via r0 as well.
-	memVectorSet(r0, 0, NOP);
-	memVectorSet(r0, 1, NOP);
+	memVectorSet(r0, 3, NOP);
+	memVectorSet(r0, 4, NOP);
 	wscmNewThread();
 }
 
