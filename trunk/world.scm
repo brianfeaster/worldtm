@@ -6,7 +6,7 @@
 
 (define Console ((Terminal 'WindowNew)
  0 0
- (Terminal 'TWidth) (- (Terminal 'THeight) 1)
+ (- (Terminal 'THeight) 1) (Terminal 'TWidth)
  #x0f))
 (define ConsolePutc (Console 'putc))
 (define ConsolePuts (Console 'puts))
@@ -59,7 +59,7 @@
 
 (define AIR 0)        (cell-set! AIR        (glyphNew #x00 CHAR-CTRL-@ #x00 CHAR-CTRL-@))
 (define DIRT  1)      (cell-set! DIRT       (glyphNew #x03 #\. #x03 #\.))
-(define GRASS 2)      (cell-set! GRASS      (glyphNew #x03 #\, #x02 #\,))
+(define GRASS 2)      (cell-set! GRASS      (glyphNew #x02 #\, #x02 #\,))
 (define XX 3)         (cell-set! XX         (glyphNew #x0f #\X #x0f #\X))
 (define BRICK 4)      (cell-set! BRICK      (glyphNew #x19 #\[ #x19 #\]))
 (define STONE 5)      (cell-set! STONE      (glyphNew #x07 #\[ #x07 #\]))
@@ -67,10 +67,12 @@
 (define DOOROPEN 7)   (cell-set! DOOROPEN   (glyphNew #x09 #\| #x09 #\ ))
 (define SIGN 8)       (cell-set! SIGN       (glyphNew #x4b #\| #x0b #\)))
 (define AVATAR 9)     (cell-set! AVATAR     (glyphNew #x0f #\/ #x0f #\\))
-(define HELP 10)      (cell-set! HELP       (glyphNew #x79 #\? #x78 #\?))
+(define HELP 10)      (cell-set! HELP       (glyphNew #x21 #\? #x21 #\?))
 (define CONSTRUCT 11) (cell-set! CONSTRUCT  (glyphNew #x77 #\  #x77 #\ ))
 (define TV   12)      (cell-set! TV         (glyphNew #x30 #\[ #x30 #\]))
 (define CHAIR 13)     (cell-set! CHAIR      (glyphNew #x19 #\P #x19 #\o))
+(define SNAKE 14)     (cell-set! SNAKE      (glyphNew #x6b #\O #x6b #\o))
+(define KITTY 15)     (cell-set! KITTY      (glyphNew #x07 #\= #x07 #\^))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -163,7 +165,7 @@ c))
  (vector-vector-map! 
    (lambda (i)
     ;(if (random-bool 2) (vector 2 XX GRASS AIR) (vector 2 XX DIRT  AIR))
-    (vector 2 XX DIRT  AIR))
+    (vector 2 XX 	CONSTRUCT  AIR))
   (make-vector-vector FieldDimension FieldDimension ())))
 
 ;(vector-vector-map! (lambda (i) (display "\r\n") (display i) i) FIELD)
@@ -174,25 +176,22 @@ c))
 ; above are assumed to be the lowest and higest specified cells in the vector.
 ; Setting a cell outside the explicit stack range expands the actual vector
 ; and adjusts the start-height value.
-(define (field-ref z y x)
- (letrec ((column (vector-vector-ref FIELD
-                     (modulo y FieldDimension)
-                     (modulo x FieldDimension)))
-          (elements (columnRef column z)))
-   (if (pair? elements) (car elements) elements)));1st in improper list of objs
-
 (define (field-column y x)
 (vector-vector-ref FIELD (modulo y FieldDimension)
                          (modulo x FieldDimension)))
 
+(define (field-ref z y x)
+ (letrec ((column   (field-column y x))
+          (elements (columnRef column z)))
+   (if (pair? elements) (car elements) elements)));1st in improper list of objs
+
+
 ; Scan down map column starting at z for first visibile cell.  Return height.
 ; BF:  What should this return if z is below the bottom most explicit cell?
 (define (field-ref-top z y x)
- (letrec ((column (vector-vector-ref FIELD
-                       (modulo y FieldDimension)
-                       (modulo x FieldDimension)))
-          (top (columnHeightTop column)) ;1st implicit top cell in column
-          (bot (columnHeightBottom column)));1st implicit bottom cell in column
+ (letrec ((column (field-column y x))
+          (top    (columnHeightTop column)) ;1st implicit top cell in column
+          (bot    (columnHeightBottom column)));1st implicit bottom cell in col
  ; Adjust the z coor down to the first explicit cell in the column
  (let findNonAir ((z (if (>= z top) (set! z (- top 1)))))
    (if (or (not (eq? (columnRef column z) AIR))
@@ -215,36 +214,6 @@ c))
      (columnSet column z (list-delete (columnRef column z) e)))))
 
 
-
-;(field-set! 6 16 16 BRICK) (field-set! 6 16 17 BRICK) (field-set! 6 16 18 BRICK)
-;(field-set! 6 17 16 BRICK) (field-set! 6 17 17 BRICK) (field-set! 6 17 18 BRICK)
-;(field-set! 6 18 16 BRICK) (field-set! 6 18 17 BRICK) (field-set! 6 18 18 BRICK)
-
-;(field-set! 8 15 17 STONE) (field-set! 8 15 18 STONE) (field-set! 8 15 19 STONE)
-;(field-set! 8 16 17 STONE) (field-set! 8 16 18 STONE) (field-set! 8 16 19 STONE)
-;(field-set! 8 17 17 STONE) (field-set! 8 17 18 STONE) (field-set! 8 17 19 STONE)
-
-(field-set! 4 14 18 HELP)
-(field-set! 4 14 19 HELP)
-(field-set! 4 14 20 HELP)
-(field-set! 4 14 21 HELP)
-(field-set! 4 14 22 HELP)
-(field-set! 4 14 23 HELP)
-
-(field-set! 4 11 13 TV)
-(field-set! 4 17 13 CHAIR)
-
-(define (build-brick-room zz yy xx)
- (let ~ ((i 0))
-    (field-set! zz yy        (+ xx i) BRICK)
-    (field-set! zz (+ yy 10) (+ 1 xx i) BRICK)
-    (field-set! zz (+ 1 yy i)  xx       BRICK)
-    (field-set! zz (+ yy i) (+ xx 10) BRICK)
-    (if (!= i 9) (~ (+ i 1)))))
-
-(build-brick-room 5 10 10)
-(build-brick-room 6 10 10)
-(build-brick-room 5 22 25)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Canvas
@@ -349,7 +318,8 @@ c))
  (let ((y (modulo (- gy PortY) FieldDimension)) ; Normalize avatar position.
        (x (modulo (- gx PortX) FieldDimension)))
   (and (< y PortH) (< x PortW)
-    (WinMapPutGlyph (canvasCellRef gy  gx) y (* x 2)))))
+    (WinMapPutGlyph (canvasCellRef gy gx) y (* x 2)))))
+
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -396,7 +366,7 @@ c))
 ;;
 (define (Avatar name) ; Inherits Entity
  ((Entity (random) name
-   4 14 17
+   5 15 14
    (glyphNew #x0f (string-ref name 0)
              #x0f (string-ref name 1)))
   `(let ()
@@ -420,10 +390,10 @@ c))
      (move))
     (define (look)
       (let ((loc (gps)))
-      (move)
-      (let ((c (cell-ref (field-ref z y x))))
-        (apply setLoc loc)
-        c)))
+        (move)
+        (let ((c (cell-ref (field-ref z y x))))
+          (apply setLoc loc)
+          c)))
     (define cell BRICK)
     self) ))
 
@@ -524,14 +494,17 @@ c))
      ((WinTemp 'delete)))))
  (if (eq? HELP (field-ref (avatar 'z) (avatar 'y) (avatar 'x)))
      (help))
+ (if (eq? SNAKE (field-ref (avatar 'z) (avatar 'y) (avatar 'x)))
+     (thread (snake-random)))
+ (if (eq? KITTY (field-ref (avatar 'z) (avatar 'y) (avatar 'x)))
+     (thread (spawnKitty)))
  ; Dump our coordinates.
- ((WinStatus 'goto) 0 0)
+ ((WinStatus 'puts) "\r\n")
  ((WinStatus 'puts) (number->string (avatar 'z)))
- ((WinStatus 'puts) ":")
+ ((WinStatus 'puts) " ")
  ((WinStatus 'puts) (number->string (avatar 'y)))
- ((WinStatus 'puts) ":")
- ((WinStatus 'puts) (number->string (avatar 'x)))
- ((WinStatus 'puts) "  "))
+ ((WinStatus 'puts) " ")
+ ((WinStatus 'puts) (number->string (avatar 'x))))
 
 ;(define (fortune)
 ; (let ~ (( dv8 (open-socket "dv8.org" 80)))
@@ -553,7 +526,7 @@ c))
 ;; Input Window
 (define WinInput
  ((Terminal 'WindowNew)
-  (- (Terminal 'THeight) 1) 0 (- (Terminal 'TWidth) 2) 1 #x4a))
+  (- (Terminal 'THeight) 1) 0 1 (- (Terminal 'TWidth) 1) #x4a))
 (define WinInputPutc (WinInput 'putc))
 (define WinInputPuts (WinInput 'puts))
 (define WinInputSetColor (WinInput 'set-color))
@@ -564,8 +537,8 @@ c))
 (define WinMap
   ((Terminal 'WindowNew)
     0 (- (Terminal 'TWidth) (* MapSize 2) 2)
-    (* 2 MapSize) (+ MapSize 1)
-#x17 'NOREFRESH))
+    (+ MapSize 1) (* 2 MapSize)
+    #x17 'NOREFRESH))
 
 ((WinMap 'cursor-visible) #f) ; Disable cursor in map window.
 
@@ -592,7 +565,7 @@ c))
 
 
 ;; Map column debug window
-(define WinColumn ((Terminal 'WindowNew) 0 (- (Terminal 'TWidth) 2) 2 18 #x5b))
+(define WinColumn ((Terminal 'WindowNew) 1 (- (Terminal 'TWidth) 2) 18 2 #x5b))
 (define WinColumnPutc (WinColumn 'putc))
 (define WinColumnPuts (WinColumn 'puts))
 (define WinColumnSetColor (WinColumn 'set-color))
@@ -600,61 +573,63 @@ c))
 (define (welcome)
  (define WinMarquee
   ((Terminal 'WindowNew)
-    4 (- (/ (Terminal 'TWidth) 2) 11)
-    22 1
-    #x00))
- ((WinMap 'cursor-visible) #f) ; Disable cursor in map window.
+    2 (- (/ (Terminal 'TWidth) 1) 32)
+    3 22
+    #x0f))
+ (define WinMarqueePuts (WinMarquee 'puts))
  (define WinMarqueePutc (WinMarquee 'putc))
  (define WinMarqueeSetColor (WinMarquee 'set-color))
- (WinMarqueeSetColor #x0f)
- (map WinMarqueePutc (string->list "[                    ]"))
- ;(map WinMarqueePutc (string->list "|                  |"))
- ;(map WinMarqueePutc (string->list " ------------------ "))
- (let ~~ ((i 0))
-   (if (= i 20) (set! i 0))
-   ((WinMarquee 'goto) 0 1)
-   (sleep 800)
+ ((WinMarquee 'cursor-visible) #f) ; Disable cursor in map window.
+ (WinMarqueePuts "+--------------------+")
+ (WinMarqueePuts "|                    |")
+ (WinMarqueePuts "+--------------------+")
+ (let ~~ ((i -5))
+   ((WinMarquee 'goto) 1 1)
+   (sleep 200) ; Delay
    (let ~ ((j 0))
-     (WinMarqueeSetColor (vector-ref #(07 07 07 07 07 07 07 07
-                                       07 07 07
-                                       9  11 10 12 13 15 15 15 15)
-                                     (modulo (+ i j) 20)))
-     (WinMarqueePutc (vector-ref #(#\W #\e #\l #\c #\o #\m #\e #\ 
-                                   #\t #\o #\ 
-                                   #\W #\o #\r #\l #\d #\  #\  #\  #\ )
-                                 (modulo (+ i j) 20)))
-     (if (< j 19) (~ (+ j 1))))
-   (if (< i 5)
-       (~~ (+ i 1))
-       ((WinMarquee 'delete)))))
+     (WinMarqueeSetColor (vector-ref #(07 07 07 07 07 07 07 07   07 07 07
+                                       9  11 10 12 13 15 15 15 15 15)
+                                     (modulo (+ i j) 21)))
+     (WinMarqueePutc (vector-ref #(#\W #\e #\l #\c #\o #\m #\e #\   #\t #\o #\ 
+                                   #\W #\o #\r #\l #\d #\  #\  #\  #\  #\ )
+                                 (modulo (+ i j) 21)))
+     (if (< j 19) (~ (+ j 1)))) ; Marquee area width
+   (if (< i 60) ; Msg scroll count
+       (~~ (+ i 1))))
+ ((WinMarquee 'delete)))
 
-(define (snake y x)
+(define (snake y x delay)
  (define Window3 ((Terminal 'WindowNew) y x 3 3 #x6b))
- (define Window3Putc (Window3 'putc))
  (define Window3Puts (Window3 'puts))
- (define Window3SetColor (Window3 'set-color))
+ ((Window3 'alpha) 1 1 #f) ; Transparent window location.
+ ((Window3 'cursor-visible) #f)
  (let ~ ((m 0))
-  ((Window3 'home)) (Window3Puts "oO ") (Window3Puts ".  ") (Window3Puts ".  ")
-  (sleep 500)
-  ((Window3 'home)) (Window3Puts ".oO") (Window3Puts ".  ") (Window3Puts "   ")
-  (sleep 500)
-  ((Window3 'home)) (Window3Puts "..o") (Window3Puts "  O") (Window3Puts "   ")
-  (sleep 500)
-  ((Window3 'home)) (Window3Puts " ..") (Window3Puts "  o") (Window3Puts "  O")
-  (sleep 500)
-  ((Window3 'home)) (Window3Puts "  .") (Window3Puts "  .") (Window3Puts " Oo")
-  (sleep 500)
-  ((Window3 'home)) (Window3Puts "   ") (Window3Puts "  .") (Window3Puts "Oo.")
-  (sleep 500)
-  ((Window3 'home)) (Window3Puts "   ") (Window3Puts "O  ") (Window3Puts "o..")
-  (sleep 500)
-  ((Window3 'home)) (Window3Puts "O  ") (Window3Puts "o  ") (Window3Puts ".. ")
-  (sleep 500)
-  (if (< m 2)
-    (~ (+ m 1))
-    ((Window3 'delete)))))
+   ((Window3 'home)) (Window3Puts "oO ") (Window3Puts ".  ") (Window3Puts ".  ")
+   (sleep delay)
+   ((Window3 'home)) (Window3Puts ".oO") (Window3Puts ".  ") (Window3Puts "   ")
+   (sleep delay)
+   ((Window3 'home)) (Window3Puts "..o") (Window3Puts "  O") (Window3Puts "   ")
+   (sleep delay)
+   ((Window3 'home)) (Window3Puts " ..") (Window3Puts "  o") (Window3Puts "  O")
+   (sleep delay)
+   ((Window3 'home)) (Window3Puts "  .") (Window3Puts "  .") (Window3Puts " Oo")
+   (sleep delay)
+   ((Window3 'home)) (Window3Puts "   ") (Window3Puts "  .") (Window3Puts "Oo.")
+   (sleep delay)
+   ((Window3 'home)) (Window3Puts "   ") (Window3Puts "O  ") (Window3Puts "o..")
+   (sleep delay)
+   ((Window3 'home)) (Window3Puts "O  ") (Window3Puts "o  ") (Window3Puts ".. ")
+   (sleep delay)
+   (if (< m 10) (~ (+ m 1)))) ; Loop 10 times
+ ((Window3 'delete)))))
 
-(define WinHelp ((Terminal 'WindowNew) 5 20 30 10 #x21))
+(define (snake-random)
+ (snake
+   (random (- (Terminal 'THeight) 3))
+   (random (- (Terminal 'TWidth) 3))
+   200))
+
+(define WinHelp ((Terminal 'WindowNew) 5 20 10 30 #x21))
 
 (map (lambda (x) ((WinHelp 'alpha) 0 x #f))
      '(0 1 2 3 4 5 6 7 8 20 21 22 23 24 25 26 27 28 29))
@@ -680,7 +655,7 @@ c))
 (define replTalk
  (let ((talkInput ""))
   (lambda (c)
-   (if (eq? c 'getBuffer) talkInput
+   (if (eq? c 'getBuffer) talkInput ; Return input buffer contents.
    ; backspace
    (if (or (eq? c CHAR-CTRL-H)
            (eq? c CHAR-CTRL-_)
@@ -709,11 +684,10 @@ c))
        ; Send talk chatter to IPC or evaluate expression
        (if (and (not (eq? "" talkInput))
                 (eq? #\: (string-ref talkInput 0)))
-           (begin (ConsoleDisplay talkInput)
-                  (ConsoleDisplay "\r\n=>")
-                  (ConsoleDisplay (eval (read-string (cdr-string talkInput))))
-                  (ConsoleDisplay "\r\n")
-                  (WinInputPuts "\r\n"))
+           (begin (ConsoleDisplay "\r\n")
+                  (ConsoleDisplay talkInput)
+                  (ConsoleDisplay "=>")
+                  (ConsoleDisplay (eval (read-string (cdr-string talkInput)))))
            ((ipc 'qwrite) (list 'voice (avatar 'dna) (avatar 'z) (avatar 'y) (avatar 'x) 10 talkInput)))
        (WinInputPuts "\r\n>")
        (set! talkInput "")
@@ -748,10 +722,13 @@ c))
  (if (eq? c #\+) ((WinMap 'scrollUp))
  (if (eq? c #\a) (begin
                 ((WinMap 'alpha) (- (avatar 'y) PortY)
-                                  (* 2 (- (avatar 'x) PortX)) #f)
+                                 (* 2 (- (avatar 'x) PortX))
+                                 #f)
                 ((WinMap 'alpha) (- (avatar 'y) PortY)
-                                  (+ 1 (* 2 (- (avatar 'x) PortX))) #f))
+                                 (+ 1 (* 2 (- (avatar 'x) PortX)))
+                                 #f))
  (if (eq? c #\w) (begin
+                   ((WinStatus 'toggle))
                    ((WinColumn 'toggle))
                    ((WinMap 'toggle)))
  (if (eq? c #\W) (begin
@@ -775,10 +752,11 @@ c))
                           (glyphChar0 AVATAR)))
     (who))
  (if (eq? c CHAR-CTRL-_) (walk 4)
- (if (eq? c #\d) (begin
-   (field-set! (avatar 'z) (avatar 'y) (avatar 'x) (avatar 'cell))
-   (canvasRender (avatar 'y) (avatar 'x))
-   (viewportRender (avatar 'y) (avatar 'x)))
+ (if (eq? c #\d)
+    ((ipc 'qwrite) `(dropCell ,(avatar 'y) ,(avatar 'x) BRICK)) ; Send my plane out to IPC.
+   ;(field-set! (avatar 'z) (avatar 'y) (avatar 'x) (avatar 'cell))
+   ;(canvasRender (avatar 'y) (avatar 'x))
+   ;(viewportRender (avatar 'y) (avatar 'x)))
  (if (eq? c #\f) ((Terminal 'WindowMaskDump))
  (if (eq? c #\g)
    (let ((o (field-ref (avatar 'z) (avatar 'y) (avatar 'x))))
@@ -796,11 +774,15 @@ c))
     (wrepl))))))
 
 ;; Stats window
-(define WinStatus ((Terminal 'WindowNew) (WinMap 'Y0) (WinMap 'X0) 12 1 #x70))
+(define WinStatus ((Terminal 'WindowNew)
+   (WinMap 'Y0) (- (Terminal 'TWidth) 12)
+   1            12
+   #x43))
 
 ((ipc 'qwrite) '(who))
 ;((ipc 'qwrite) `(voice ,(avatar 'dna) ,@((avatar 'gps)) 10 "Hello World[tm]!"))
 (viewportReset (avatar 'y) (avatar 'x))
+
 
 ;; Walking kitty soldier
 (define (spawnKitty)
@@ -808,12 +790,14 @@ c))
           (dir->card (lambda (d) (vector-ref #(6 9 8 7 4 1 2 3) d)))
           (card->dir (lambda (c) (vector-ref #(0 5 6 7 4 0 0 3 2 1) c)))
           (happyVector (vector 0 0 0 0 0 0 0 0))
-          (dist (distance ((kitty 'gps)) ((avatar 'gps)))))
+          (dist 0))
+ ; Tell everyone who I am.
  ((ipc 'qwrite) `(entity ,(kitty 'dna) "kitty" ,@((kitty 'gps)) ,(glyphNew #x07 #\K #x0f #\a)))
- (thread (let ~ ((i 0))
+ (let ~ ((i 0)) ; Main loop
+   ; Distance from parent avatar
+   (set! dist (distance ((kitty 'gps)) ((avatar 'gps))))
    ; Neuron depletion.
-   (if (= i 10)
-     (begin (vector-map! (lambda (x) (/ x 2)) happyVector)  (set! i 0)))
+   (if (= i 10) (vector-map! (lambda (x) (/ x 2)) happyVector))
    ; Walk kitty quasi-randomly.
    ((kitty 'walk)
        (dir->card (letrec ((dir (card->dir (kitty 'dir)))
@@ -829,7 +813,6 @@ c))
             (if (= kd dist) -1
                             -2)))
           (vector-ref happyVector (card->dir (kitty 'dir)))))
-   (set! dist (distance ((kitty 'gps)) ((avatar 'gps))))
    ((ipc 'qwrite) `(move ,(kitty 'dna) ,@((kitty 'gps))))
 (rem
    ((Console 'goto) 10 0)
@@ -850,16 +833,48 @@ c))
    (ConsoleDisplay (vector-ref happyVector 7))
    (ConsoleDisplay "   ")
 )
-   (sleep 200)
+   (sleep 800)
    ;(if (equal? ((kitty 'gps))
    ;            ((avatar 'gps)))
    ;    ((ipc 'qwrite) `(voice ,(kitty 'dna) ,@((kitty 'gps)) 10 "Mrrreeeooowww!")))
-   (~ (+ i 1))))))
+   (or (= i 100) (~ (+ i 1)))))) ; spawnKitty
 
-(thread (snake 6 20))
+
+;(thread (snake 18 38 500))
+;(thread (snake 18 75 200))
+;(thread (snake 1 75 100))
 (thread (welcome))
 ;(ConsoleDisplay "\r\nWelcome to World")
 ;(display "\e[?25h")
+
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Drop some cells on the map
+(define (dropCell y x cell)
+ (let ((z (+ 1 (field-ref-top 1000 y x))))
+  (field-set! z y x cell)
+  (canvasRender y x)
+  (viewportRender y x)))
+
+(define (build-brick-room yy xx)
+ (let ~ ((i 0))
+    (sleep 5000)
+    (dropCell yy         (+ xx i)        BRICK)
+    (dropCell (+ yy 10)  (+ 10 xx (- i)) BRICK)
+    (dropCell (+ 10 yy (- i)) xx         BRICK)
+    (dropCell (+ yy i)   (+ xx 10)       BRICK)
+    (if (< i 9) (~ (+ i 1)))))
+
+(thread (build-brick-room 10 10)) ; Sleep since canvas hasn't been created yet
+
+(dropCell 13 17 HELP)
+(dropCell 16 18 SNAKE)
+(dropCell 19 16 KITTY)
+(dropCell 12 13 TV)
+(dropCell 17 13 CHAIR)
+
+
 
 ; Screen redraw signal handler.
 (vector-set! SIGNAL-HANDLERS 28 (lambda ()
@@ -876,6 +891,12 @@ c))
   ((Console 'repaint))
   (unthread)))
 (signal 28)
+
+;; Example on how to implement a signal handler.
+;; This will capture control C spaning a thread which just displays "hi".
+;(define (catch) (display 'hi) (unthread))
+;(vector-set! SIGNAL-HANDLERS 2 catch)
+;(signal 2)
 
 (wrepl)
 (display "\e[0m\r\n\e[?25h")
