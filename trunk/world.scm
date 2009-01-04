@@ -16,8 +16,7 @@
 (define (ConsoleWrite o)
   ((Console 'puts) (write->string o)))
 
-((Console 'goto) 0 ;(Console 'WHeight)
-                 0)
+((Console 'goto) 0 0) ;(Console 'WHeight)
 ;(ConsoleDisplay  "\r\nWelcome to World\r\n")
 ;(ConsoleDisplay  "\r\nEnter your name>\r\n")
 
@@ -879,16 +878,12 @@ c))
 ; Screen redraw signal handler.
 (vector-set! SIGNAL-HANDLERS 28 (lambda ()
   (ConsoleDisplay "\r\n" (terminal-size))
-  ; Resize overall terminal size.
-  (Terminal '(set! THeight (cdr (terminal-size))))
-  (Terminal '(set! TWidth  (car (terminal-size))))
-  ; Move map over.
-  ((WinMap 'toggle))
-  ;(WinMap '(WindowMaskReset Y0 X0 Y1 X1))
-  (WinMap '(set! X0 (- (Terminal 'TWidth) (* MapSize 2) 2)))
-  (WinMap '(set! X1 (+ X0 WWidth)))
-  ((WinMap 'toggle))
-  ((Console 'repaint))
+  ((Terminal 'ResetTerminal))
+  ((Console 'resize) (- (Terminal 'THeight) 1) (Terminal 'TWidth))
+  ((WinMap 'move) 0 (- (Terminal 'TWidth) (* MapSize 2) 2))
+  ((WinColumn 'move) 1 (- (Terminal 'TWidth) 2) )
+  ((WinStatus 'move) (WinMap 'Y0) (- (Terminal 'TWidth) 12))
+  ((WinInput 'move) (- (Terminal 'THeight) 1) 0)
   (unthread)))
 (signal 28)
 

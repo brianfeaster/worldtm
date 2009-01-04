@@ -55,15 +55,25 @@
  (define self (lambda (msg) (eval msg)))
  (define TCOLOR #f)
  (define TCURSOR-VISIBLE #t)
- (define THeight (cdr (terminal-size)))
- (define TWidth  (car (terminal-size)))
+ (define THeight 0)
+ (define TWidth  0)
  (define GY -1) ; Global cursor positions.
  (define GX -1)
  (define WINDOWS ()) ; List of window objects.
  (define TerminalSemaphore (open-semaphore 1))
+ (define WindowMask ())
+
  ; 2D cache of visible window objects.  () is base
- ; window which is never drawn on.
- (define WindowMask (make-vector-vector THeight TWidth ()))
+ ; window which is never drawn on.  Considering having
+ ; a default base window always in existence.
+ (define (ResetTerminal)
+  (set! THeight (cdr (terminal-size)))
+  (set! TWidth  (car (terminal-size)))
+  (set! WindowMask (make-vector-vector THeight TWidth ()))
+  (WindowMaskReset 0 0 (- THeight 1) (- TWidth 1)))
+
+ (define (InsideTerminal? y x)
+   (and (>= y 0) (>= x 0) (< y THeight) (< x TWidth)))
 
  (define (gputc char color y x)
    (semaphore-down TerminalSemaphore)
@@ -105,12 +115,14 @@
  ; Reset the terminal's window mask.
  (define (WindowMaskReset y0 x0 y1 x1)
   (let ~ ((gy y0) (gx x0))
-    (if (< gy y1) (if (= gx x1) (~ (+ gy 1) x0)
-      (let ((topwin (TopmostWindow gy gx)))         ; Get top win at global pos
-        (vector-vector-set! WindowMask gy gx topwin); Cache it
-        (or (null? topwin)
-            ((topwin 'globalRefresh) gy gx))        ; Redraw cell at global pos
-        (~ gy (+ gx 1)))))))
+    (if (<= gy y1) (if (> gx x1) (~ (+ gy 1) x0) (begin
+      (if (InsideTerminal? gy gx) (begin
+       (let ((topwin (TopmostWindow gy gx)))         ; Get top win at global pos
+         (vector-vector-set! WindowMask gy gx topwin); Cache it
+         (if (null? topwin)
+             (gputc #\# #x08 gy gx)
+             ((topwin 'globalRefresh) gy gx)))))     ; Redraw cell at global pos
+      (~ gy (+ gx 1)))))))
 
  (define (WindowMaskDump)
   (let ~ ((w WINDOWS))
@@ -129,8 +141,8 @@
  (define (WindowNew Y0 X0 WHeight WWidth COLOR . switches)
    (define self (lambda (msg) (eval msg)))
    (define ID (+ 1 (length WINDOWS)))
-   (define X1 (+ X0 WWidth))
    (define Y1 (+ Y0 WHeight))
+   (define X1 (+ X0 WWidth))
    ; 2d vector of cell descriptors #(color char)
    (define DESC
      (vector-vector-map! (lambda (x) (vector COLOR #\ ))
@@ -189,10 +201,11 @@
      (let ~ ((y 0) (x 0))
        (if (< y WHeight) (if (>= x WWidth) (~ (+ y 1) 0)
          (let ((desc (vector-vector-ref DESC (modulo (+ y topRow) WHeight) x)))
-           (if (eq? self (vector-vector-ref WindowMask (+ y Y0) (+ x X0)))
-               (gputc (vector-ref desc 1)
-                      (vector-ref desc 0)
-                      (+ y Y0) (+ x X0)))
+           (and (InsideTerminal? (+ y Y0) (+ x X0))
+                (eq? self (vector-vector-ref WindowMask (+ y Y0) (+ x X0)))
+                (gputc (vector-ref desc 1)
+                       (vector-ref desc 0)
+                       (+ y Y0) (+ x X0)))
            (~ y (+ x 1)))))))
    ; Repaint char given global coordinate.  Does not mutate window
    ; state.  Modulo the Y coordinate due to horizontal scrolling.
@@ -200,9 +213,7 @@
      (let ((desc (vector-vector-ref DESC
                    (modulo (+ (- gy Y0) topRow) WHeight)
                    (- gx X0))))
-       (gputc (vector-ref desc 1)
-                (vector-ref desc 0)
-                gy gx)))
+       (gputc (vector-ref desc 1) (vector-ref desc 0) gy gx)))
    (define (putchar c)
      (semaphore-down WindowSemaphore)
      (if needToScroll (begin (set! needToScroll #f) (return) (newline)))
@@ -215,8 +226,9 @@
            (gx (+ CurX X0)))
        (begin
          ; Send character to terminal only if window location is visible.
-         (if (eq? self (vector-vector-ref WindowMask gy gx))
-             (gputc c COLOR gy gx))
+         (and (InsideTerminal? gy gx)
+              (eq? self (vector-vector-ref WindowMask gy gx))
+              (gputc c COLOR gy gx))
          ; Cache color and char to buffer.
          (let ((desc (vector-vector-ref DESC (modulo (+ CurY topRow) WHeight)
                                              CurX)))
@@ -237,6 +249,33 @@
    (define (toggle)
      (set! ENABLED (not ENABLED))
      (WindowMaskReset Y0 X0 Y1 X1))
+   ; Create transparent 'pixel'.
+   (define (alpha y x a)
+     (vector-vector-set! ALPHA y x a)
+     (WindowMaskReset (+ y Y0) (+ x X0) (+ y Y0 1) (+ x X0 1)))
+   (define (move y x)
+     (let ((oEnabled ENABLED))
+       (set! ENABLED #f)
+       (WindowMaskReset Y0 X0 Y1 X1) ; Undraw window
+       (set! Y0 y)
+       (set! X0 x)
+       (set! Y1 (+ Y0 WHeight))
+       (set! X1 (+ X0 WWidth))
+       (set! ENABLED oEnabled))
+     (if ENABLED (WindowMaskReset Y0 X0 Y1 X1))) ; Redraw window
+   (define (resize h w)
+     (let ((oEnabled ENABLED))
+       (set! ENABLED #f)
+       (WindowMaskReset Y0 X0 Y1 X1) ; Undraw window
+       (set! WHeight h)
+       (set! WWidth w)
+       (set! Y1 (+ Y0 WHeight))
+       (set! X1 (+ X0 WWidth))
+       (set! ALPHA (make-vector-vector WHeight WWidth #t))
+       (set! DESC (vector-vector-map! (lambda (x) (vector COLOR #\ ))
+                                      (make-vector-vector WHeight WWidth ())))
+       (set! ENABLED oEnabled))
+     (if ENABLED (WindowMaskReset Y0 X0 Y1 X1))) ; Redraw window
    (define (delete)
     (set! WINDOWS
       (let ~ ((l WINDOWS))
@@ -244,10 +283,6 @@
         (if (eq? (car l) self) (cdr l)
         (cons (car l) (~ (cdr l)))))))
     (WindowMaskReset Y0 X0 Y1 X1))
-   ; Create transparent 'pixel'.
-   (define (alpha y x a)
-     (vector-vector-set! ALPHA y x a)
-     (WindowMaskReset (+ y Y0) (+ x X0) (+ y Y0 1) (+ x X0 1)))
 
    (set! WINDOWS (cons self WINDOWS))
    (WindowMaskReset Y0 X0 Y1 X1)
@@ -256,56 +291,8 @@
  ;; Window subclass.
  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
+ (ResetTerminal)
  self)
 ;;
 ;; Terminal of Windows Class
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-(rem
-(define term (Terminal))
-
-;(define w3 ((term 'WindowNew) 0 0 29 80 #x07))
-
-(define w1 ((term 'WindowNew) 4 18 20 20 #x2e))
-(define w1put (w1 'putc))
-(define w1puts (w1 'puts))
-
-(define w2 ((term 'WindowNew) 5 19 10 14 #x1b))
-(define w2put (w2 'putc))
-(define w2puts (w2 'puts))
-
-(w1puts 'window1)
-(w2puts 'WINDOW2)
-(sleep 1000)
-;((w1 'delete))
-;(quit)
-
-(thread (let ~ () ((w1 'putc) #\1) (~)))
-(sleep 4000)
-(thread (let ~ () ((w2 'toggle)) (~)))
-;((w1 'delete))
-(sleep 4000)
-(quit)
-
-(rem
-((term 'WindowMaskDump))
-(display (w1 'self)) (display (w1 'ID))(newline)
-(display (w2 'self)) (display (w2 'ID))(newline)
-(quit))
-
-(thread (let ~ ((i 5))
-  (w1put #\a) (sleep 500)
-  (w1put #\b) (sleep 500)
-  (w1put #\c) (sleep 500)
-  (if (> i 0) (~ (- i 1)))))
-
-(let ~ ((i 5))
- (w2puts "Long Live Donut       \r\n") 
- (w2puts " Long Live Donut1     \r\n")
- (w2puts "  Long Live Donut2    \r\n")
- (w2puts "   Long Live Donut3   \r\n")
- (w2puts "    Long Live Donut4  \r\n")
- (w2puts "     Long Live Donut5 \r\n")
- (w2puts "      Long Live Donut6\r\n")
- (if (> i 0) (~ (- i 1))))
-
-)
