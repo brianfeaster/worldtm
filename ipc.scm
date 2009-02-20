@@ -143,21 +143,3 @@
  (lookForParent)
 
 (lambda (c) (eval c)))
-
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; Regtest
-;;
-(rem
-(printl "Instantiating" " ipc")
-(define ipc (Ipc displayl))
-
-(printl "My Port:" (ipc 'MyPort))
-(printl "Peers:" (ipc 'Peers))
-
-(thread (let ~ ((e (read stdin))) ((ipc 'qwrite) e) (~ (read stdin))))
-
-(let ~ ()
- (printl "MAIN: ((ipc 'read))=>" ((ipc 'qread)))
- (~))
-)

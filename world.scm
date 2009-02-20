@@ -301,8 +301,7 @@ c))
            (WinColumnPutc (glyphChar0 c))
            (WinColumnSetColor (glyphColor1 c))
            (WinColumnPutc (glyphChar1 c)))))
-  (if (> z -6) (~ (- z 1))))
-)
+  (if (> z -6) (~ (- z 1)))))
 
 (define (viewportRender gy gx)
  ; The cell position and viewport position (upper left corner) are on a torus
@@ -414,24 +413,23 @@ c))
 ;; was 'avatar
 (define (move dna z y x)
  (let ((entity (entitiesGet dna))
-       (thisIsMe (and #t (= dna (avatar 'dna)))))
+       (thisIsMe (= dna (avatar 'dna))))
   (if (null? entity)
-      (begin
-        (ConsoleDisplay "\r\nERROR: move: unknown avatar:" dna)
-        (entitiesSet dna "??" z y x (glyphNew #x19 #\? #x19 #\?))
-        ((ipc 'qwrite) '(who)))
-      (begin
-       ; Move from here
-       (field-delete! (entity 'z) (entity 'y) (entity 'x) dna)
-       (if (>= (entity 'z) (canvasCellHeightRef (entity 'y) (entity 'x)))
-           (begin
-            (canvasRender (entity 'y) (entity 'x))
-            (or thisIsMe (viewportRender (entity 'y) (entity 'x)))))
-       ; Place here
-       ((entity 'setLoc) z y x)
-       (field-set! z y x dna)
-       (if (>= (entity 'z) (canvasCellHeightRef y x)) (begin
-         (canvasRender y x)
+    (begin
+      (ConsoleDisplay "\r\nERROR: move: unknown avatar:" dna)
+      (entitiesSet dna "??" z y x (glyphNew #x19 #\? #x19 #\?))
+      ((ipc 'qwrite) '(who)))
+    (begin
+      ; Move from here
+      (field-delete! (entity 'z) (entity 'y) (entity 'x) dna)
+      (if (>= (entity 'z) (canvasCellHeightRef (entity 'y) (entity 'x))) (begin
+        (canvasRender (entity 'y) (entity 'x))
+        (or thisIsMe (viewportRender (entity 'y) (entity 'x)))))
+      ; Place here
+      ((entity 'setLoc) z y x)
+      (field-set! z y x dna)
+      (if (>= (entity 'z) (canvasCellHeightRef y x)) (begin
+        (canvasRender y x)
         (or thisIsMe (viewportRender y x))))
       (if thisIsMe (begin
         (viewportReset (avatar 'y) (avatar 'x))
@@ -718,7 +716,7 @@ c))
  (if (eq? c #\u) (walk 9)
  (if (eq? c #\}) (walk 5)
  (if (eq? c #\{) (walk 0)
- (if (eq? c #\+) ((WinMap 'scrollUp))
+ (if (eq? c #\S) ((WinMap 'scrollUp))
  (if (eq? c #\a) (begin
                 ((WinMap 'alpha) (- (avatar 'y) PortY)
                                  (* 2 (- (avatar 'x) PortX))
@@ -761,7 +759,18 @@ c))
    (let ((o (field-ref (avatar 'z) (avatar 'y) (avatar 'x))))
      (field-delete!  (avatar 'z) (avatar 'y) (avatar 'x) o)
      (avatar `(set! cell ,o)))
- (if (eq? c #\?) (help)))))))))))))))))))))))))))))
+ (if (eq? c #\?) (help)
+ (if (eq? c #\-) (begin
+                  ((WinMap 'resize)
+                     (+ -1 (WinMap 'WHeight))
+                     (+ -2 (WinMap 'WWidth)))
+                  (rem ConsoleDisplay (WinMap 'WHeight) " " (WinMap 'WWidth)))
+ (if (eq? c #\+) (begin
+                  ((WinMap 'resize)
+                     (+ 1 (WinMap 'WHeight))
+                     (+ 2 (WinMap 'WWidth)))
+                  (rem ConsoleDisplay (WinMap 'WHeight) " " (WinMap 'WWidth)))
+))))))))))))))))))))))))))))))
  state)
 
 (define wrepl (let ((state 'cmd))
@@ -883,6 +892,7 @@ c))
   ((WinMap 'move) 0 (- (Terminal 'TWidth) (* MapSize 2) 2))
   ((WinColumn 'move) 1 (- (Terminal 'TWidth) 2) )
   ((WinStatus 'move) (WinMap 'Y0) (- (Terminal 'TWidth) 12))
+  ((WinInput 'resize) 1 (- (Terminal 'TWidth) 1))
   ((WinInput 'move) (- (Terminal 'THeight) 1) 0)
   (unthread)))
 (signal 28)
