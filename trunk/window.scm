@@ -245,7 +245,7 @@
      (semaphore-up WindowSemaphore))
    (define putc putchar)
    (define (puts str)
-     (map putchar (string->list str)))
+     (for-each putchar (string->list str)))
    (define (toggle)
      (set! ENABLED (not ENABLED))
      (WindowMaskReset Y0 X0 Y1 X1))

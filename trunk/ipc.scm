@@ -20,7 +20,7 @@
  (define LastPort  (+ FirstPort PortCount -1))
  (define MyPort FirstPort)
  (define MyIncommingSocket
-   (let findAvailablePort ()
+   (let findAvailablePort~ ()
     (let ((s (open-socket MyPort)))
      (if (eof-object? s)
          (begin
@@ -28,7 +28,7 @@
            (if (= PortCount (- MyPort FirstPort))
                (begin (display "ERROR: Ipc: exceeded maximum port")
                       (quit))
-               (findAvailablePort)))
+               (findAvailablePort~)))
          s))))
  (define ParentSocket ())
  (define Peers ()) ; Peers are #(socket (queue) queue-semaphore)
