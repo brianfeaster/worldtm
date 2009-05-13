@@ -227,7 +227,7 @@
         (map f (cdr x)))))
 
 (define (for-each f l)
- (if (not (null? l))
+ (if (null? l) ()
      (begin (f (car l))
             (for-each f (cdr l)))))
 
