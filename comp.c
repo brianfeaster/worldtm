@@ -19,6 +19,7 @@ void wscmNewThread (void);
 void sysWrite (void);
 void sysIllegalOperator (void);
 void sysCreateContinuation (void);
+void wscmDumpEnv (Obj o);
 
 /* Has compiler encountered an error?
 */

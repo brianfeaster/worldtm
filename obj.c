@@ -23,7 +23,7 @@ Obj null, nullvec, nullstr, false, true, eof,
     spairp, svectorp, sstringp, sportp, sappend, seofobjectp,
     sthread, slet, sletrec,
     seval, sapply, scallcc, ssyntaxrules, seof,
-    snot, sadd, ssub, smul, sdiv, characters;
+    snot, sadd, ssub, smul, sdiv, characters, signalhandlers;
 
 
 
@@ -304,17 +304,15 @@ void objDump (Obj a, int fd) {
 			break;
 		case TPAIR :
 			write (fd, "(", 1);
-			//len = sprintf(buff, "(%08x.%08x)", *(u32*)a, *((u32*)a+1));
 			objDump(memVectorObject(a, 0), fd);
 			write (fd, " . ", 3);
 			objDump(memVectorObject(a, 1), fd);
-			//write(fd, buff, len);
 			write (fd, ")", 1);
 			break;
 		case TVECTOR :
 			write (fd, "#(", 2);
 			for (i=0; i<memObjectLength(a); i++) {
-				i && write (fd, " ", 1);
+				if (i) write (fd, " ", 1);
 				len = sprintf(buff, "%x", *((u32*)a+i));
 				write(fd, buff, len);
 			}
@@ -378,8 +376,10 @@ void objGCPost (void) {
 		if (objCallerPostGarbageCollect) objCallerPostGarbageCollect ();
 }
 
+extern void wscmDisplay (Obj a, long islist, int fd);
 void objObjectDumper (Obj o) {
-	objDump (o, 1);
+	//objDump (o, 1); // This modules version of write.
+	wscmDisplay (o, 0, 1); // WSCMs version of display.
 }
  
 
@@ -454,6 +454,7 @@ DB("INIT    initializing memory module");
 	objNewSymbolStatic("connecting");   sconnecting = r0;
 	objNewSymbolStatic("open");         sopen = r0;
 	objNewSymbolStatic("closed");       sclosed = r0;
+	objNewSymbolStatic("SIGNALHANDLERS");  signalhandlers=r0;
 
 	/* Table of character objects.  The 257th is the EOF character. */
 	memNewStaticVector(TVECTOR, 257);   characters = r0;
@@ -514,11 +515,11 @@ int objmain (void) {
 		BRA, ADDR, "top",
 		END
 	);
+	asmCompile(0);
 	asmNewCode();
 	vmDebugDump();
 	code=r0;  ip=0;  vmRun();
 	memGarbageCollect();
-	return 0;
 	memDebugDumpHeapStructures();
 	goto done;
 	memStackPush(stack, r0);

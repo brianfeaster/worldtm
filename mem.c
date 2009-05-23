@@ -1,4 +1,6 @@
 #define DEBUG 0
+#define DEBUG_ASSERT 0
+#define VALIDATE_HEAP 0
 #define DB_MODULE "MEM "
 /* Generational garbage collector based on mem.c.
    Two sets of objects, old and young,  will be maintained.  Normally, the
@@ -46,12 +48,12 @@ void memError (void);
 */
 
 /* Byte size of a Linux virtual memory block.  Resolution of mmap. */
-const u32 BLOCK_BYTE_SIZE         = 0x1000; //   4Kb 0x001000   2^12
+const u32 BLOCK_BYTE_SIZE         = 0x1000; //     4Kb 0x001000 2^12
 
 const u32 HEAP_STATIC_BLOCK_COUNT = 0x002;  //     8Kb 0x002000 2^13
 const u32 HEAP_BLOCK_COUNT        = 0x400;  //   4Mb   0x400000 2^22
 //const u32 HEAP_INCREMENT_COUNT   = 0x040; //   256Kb 0x040000 2^18
-//const u32 HEAP_DECREMENT_COUNT   = 0x004; //    16Kb 0x004000 2^14
+//const u32 HEAP_DECREMENT_COUNT   = 0x010; //    16Kb 0x018000 2^16
 const u32 STACK_LENGTH           = 0x02000; //     8Kb 0x002000 2^13
 
 u32 garbageCollectionCount = 0;
@@ -91,58 +93,62 @@ void memInitializeHeap (Heap *h, long blockCount) {
 	h->last = h->start + bytes; /* Last pointer is exclusive. */
 	h->blockCount = blockCount;
 	h->finalizerCount=0;
+	DB ("   %08x...%08x  %08x", h->start, h->last, bytes);
 	DB ("<--memInitializeHeap()");
 }
 
 /* Unallocate blockCount from tail part of object linux-memory. */
-void memShrinkHeap (Heap *heap, long blockCount) {
+void memShrinkHeap (Heap *h, long blockCount) {
  int newBlockCount;
-	DB ("-->memShrinkHeap()");
-	if (blockCount < 1 || blockCount > heap->blockCount) return;
-	newBlockCount = heap->blockCount - blockCount;
-	if (munmap(heap->start+newBlockCount*BLOCK_BYTE_SIZE, blockCount*BLOCK_BYTE_SIZE))
-		fprintf (stderr, "\aWARNING: memShrinkHeap() can't shrink *heap region");
-	heap->last = heap->start + newBlockCount * BLOCK_BYTE_SIZE;
-	heap->blockCount = newBlockCount;
+	DB ("-->memShrinkHeap(%s)", h==&heapOld?"old":h==&heap?"heap":h==&heapNew?"new":"???");
+	if (0 < blockCount && blockCount <= h->blockCount) {
+		newBlockCount = h->blockCount - blockCount;
+		DB ("   range %08x..%08x", h->start+newBlockCount*BLOCK_BYTE_SIZE, blockCount*BLOCK_BYTE_SIZE);
+		if (munmap(h->start+newBlockCount*BLOCK_BYTE_SIZE, blockCount*BLOCK_BYTE_SIZE-1))
+			fprintf (stderr, "\aWARNING: memShrinkHeap() can't shrink *heap region");
+		h->last = h->start + newBlockCount * BLOCK_BYTE_SIZE;
+		h->blockCount = newBlockCount;
+	}
 	DB ("<--memShrinkHeap()");
 }
 
 /* Release heap's blocks back to Linux.
 */
-void memFreeHeap (Heap *heap) {
-	DB ("-->memFreeHeap()");
-	memShrinkHeap (heap, heap->blockCount);
+void memFreeHeap (Heap *h) {
+	DB ("-->memFreeHeap(%s)", h==&heapOld?"old":h==&heap?"heap":h==&heapNew?"new":"???");
+	memShrinkHeap (h, h->blockCount);
 	DB ("<--memFreeHeap()");
 }
 
 /* Reset heap so that it appears empty again.  Called after a heap structure
    is moved into another.
  */
-void memResetHeap (Heap *heap) {
-	DB ("-->memResetHeap()");
-	heap->next = heap->start = heap->last = (void*)0;
-	heap->blockCount = heap->finalizerCount = 0;
+void memResetHeap (Heap *h) {
+	DB ("-->memResetHeap(%s)", h==&heapOld?"old":h==&heap?"heap":h==&heapNew?"new":"???");
+	h->next = h->start = h->last = (void*)0;
+	h->blockCount = h->finalizerCount = 0;
 	DB ("<--memResetHeap()");
 }
 
 
 
-/* A 'type' is an 32 bit byte composed of a 1 bit 'class' and 7 bit 'id'.  The
-   lower 24 bits are unused.
+/* A 'Type' is an 32 bit byte composed of a 1 bit 'class' and 7 bit 'id'.  The
+   upper 24 bits are unused.
 
-                type:  [-|-------][-------- -------- --------]
-                      class   id              unused
+                Type:  [-------- -------- --------][-|-------]
+                                  unused            class  id
 
-   A 'descriptor' is a 32 bit word composed of an 8 bit 'type' or'ed with
-   a 24 bit 'count'.
-                descriptor:  [--------][-------- -------- --------]
+   A 'Descriptor' is a 32 bit word composed of an 8 bit 'type' shifted and
+   or'ed with a 24 bit 'count'.
+
+                Descriptor:  [--------][-------- -------- --------]
                                 type               size
 */
 typedef u32 Descriptor;
 
 /* Create a descriptor given 'type' and 'length' values. */
 Descriptor memMakeDescriptor (Type type, u32 length) {
-	return type | length;
+	return (type<<24) | length;
 }
 
 
@@ -156,7 +162,7 @@ Descriptor memObjectDescriptor (Obj o) {
 /* Get object's 'type'.
 */
 Type memObjectType (Obj o) {
-	return memObjectDescriptor(o) & 0xff000000;
+	return memObjectDescriptor(o)>>24;
 }
 
 /* Get object's 'length'.
@@ -167,20 +173,15 @@ u32 memObjectLength (Obj o) {
 
 
 
-/* Is object an array class? */
-int memIsObjectArray (Obj o)  { return !(memObjectDescriptor(o) & 0x80000000); }
+/* Is object an array or vector base type class? */
+int memIsObjectArray (Obj o) { return !(memObjectType(o) & TBASEVECTOR); }
+int memIsObjectVector (Obj o) { return memObjectType(o) & TBASEVECTOR; }
 
-/* Is object a vector class? */
-int memIsObjectVector (Obj o) { return memObjectDescriptor(o) & 0x80000000; }
-
-/* Is object a finalizer? */
-int memIsObjectFinalizer (Obj o) { return memObjectType(o) == 0xfc000000; }
-
-int memIsObjectPointer (Obj o) { return memObjectType(o) == 0xfd000000; }
-
-int memIsObjectStack (Obj o) { return memObjectType(o) == 0xfe000000; }
-
-int memIsObjectShadow (Obj o) { return memObjectType(o) == 0xff000000; }
+/* Is object a special type? */
+int memIsObjectFinalizer (Obj o) { return memObjectType(o) == TFINALIZER; }
+int memIsObjectPointer (Obj o) { return memObjectType(o) == TPOINTER; }
+int memIsObjectStack (Obj o) { return memObjectType(o) == TSTACK; }
+int memIsObjectShadow (Obj o) { return memObjectType(o) == TSHADOW; }
 
 
 
@@ -241,6 +242,7 @@ Obj *(mutatedOldObjects[0x400])={0};
 u32 NewDesiredObjectSize=0; /* Size of object desired just before this GC. */
 
 void memNewObject (Descriptor desc, u32 byteSize) {
+ int i;
 	DB("-->memNewObject(desc %08x, byteSize %d)", desc, byteSize);
 	*(Descriptor*)(heap.next) = desc; /* Set descriptor. */
 	r0 = heap.next + sizeof(Descriptor); /* Set r0 to object memory location. */
@@ -253,7 +255,8 @@ void memNewObject (Descriptor desc, u32 byteSize) {
 		NewDesiredObjectSize = byteSize;
 		memGarbageCollect();
 		memNewObject(desc, byteSize);
-	}
+	} else {
+		for (i=0; i<byteSize-4; ++i) { ((u8*)r0)[i] = 0x00; } } // BF: CLEAR OUT MEMORY
 	DB("<--memNewObject()");
 }
 
@@ -350,7 +353,7 @@ int memIsObjectValid  (Obj o) {
 /* Object mutators.
 */
 void memArraySet (Obj obj, u32 offset, u8 item) {
-	#if DEBUG
+	#if DEBUG_ASSERT
 	if(!(memIsObjectInHeap(&heap, obj)
 	      || memIsObjectInHeap(&heapOld, obj)
 	      || memIsObjectInHeap(&heapStatic, obj))) {
@@ -371,7 +374,7 @@ void memArraySet (Obj obj, u32 offset, u8 item) {
 }
 
 void memVectorSet (Obj obj, u32 offset, Obj item) {
-	#if DEBUG
+	#if DEBUG_ASSERT
 	if (!(memIsObjectInHeap(&heap, obj) || memIsObjectInHeap(&heapOld, obj)
 	      || memIsObjectInHeap(&heapStatic, obj))) {
 		DB ("ERROR memVectorSet(obj %08x offset %x item %08x) Invalid object.",
@@ -391,7 +394,7 @@ void memVectorSet (Obj obj, u32 offset, Obj item) {
 }
 
 void memStackPush (Obj obj, Obj item) {
-	#if DEBUG
+	#if DEBUG_ASSERT
 	if (!(memIsObjectInHeap(&heap, obj) || memIsObjectInHeap(&heapOld, obj)
 	      || memIsObjectInHeap(&heapStatic, obj))) {
 		DB ("ERROR memStackPush(obj %08x item %08x) Invalid object.", obj, item);
@@ -408,7 +411,7 @@ void memStackPush (Obj obj, Obj item) {
 }
 
 void memStackSet (Obj obj, u32 topOffset, Obj item) {
-	#if DEBUG
+	#if DEBUG_ASSERT
 	if (!(memIsObjectInHeap(&heap, obj) || memIsObjectInHeap(&heapOld, obj)
 	      || memIsObjectInHeap(&heapStatic, obj))) {
 		DB ("ERROR memStackSet(obj %08x topOffset %x item %08x) Invalid object.",
@@ -427,7 +430,7 @@ void memStackSet (Obj obj, u32 topOffset, Obj item) {
 }
 
 Obj  memStackPop (Obj obj) {
-	#if DEBUG
+	#if DEBUG_ASSERT
 	if (!(memIsObjectInHeap(&heap, obj)
 	      || memIsObjectInHeap(&heapOld, obj)
 	      || memIsObjectInHeap(&heapStatic, obj))) {
@@ -449,7 +452,7 @@ Obj  memStackPop (Obj obj) {
 /* Object accessors.
  */
 u8 memArrayObject (Obj obj, u32 offset) {
-	#if DEBUG
+	#if DEBUG_ASSERT
 	if (!(memIsObjectInHeap(&heap, obj)
 	      || memIsObjectInHeap(&heapOld, obj)
 	      || memIsObjectInHeap(&heapStatic, obj))) {
@@ -470,8 +473,9 @@ u8 memArrayObject (Obj obj, u32 offset) {
 }
 
 Obj memVectorObject (Obj obj, u32 offset) {
-	#if DEBUG
-	if (!(memIsObjectInHeap(&heap, obj) || memIsObjectInHeap(&heapOld, obj)
+	#if DEBUG_ASSERT
+	if (!(memIsObjectInHeap(&heap, obj)
+	      || memIsObjectInHeap(&heapOld, obj)
 	      || memIsObjectInHeap(&heapStatic, obj))) {
 		DB ("ERROR memVectorObject(obj %08x offset %x) Invalid object.",
 		    obj, offset);
@@ -491,7 +495,7 @@ Obj memVectorObject (Obj obj, u32 offset) {
 }
 
 Obj memStackObject (Obj obj, u32 topOffset) {
-	#if DEBUG
+	#if DEBUG_ASSERT
 	if (!(memIsObjectInHeap(&heap, obj)
 	      || memIsObjectInHeap(&heapOld, obj)
 	      || memIsObjectInHeap(&heapStatic, obj))) {
@@ -514,7 +518,7 @@ Obj memStackObject (Obj obj, u32 topOffset) {
 /* Number of elements pushed onto stack.
 */
 int memStackLength (Obj obj) {
-	#if DEBUG
+	#if DEBUG_ASSERT
 	if (!(memIsObjectInHeap(&heap, obj)
 	      || memIsObjectInHeap(&heapOld, obj)
 	      || memIsObjectInHeap(&heapStatic, obj)
@@ -625,13 +629,22 @@ void memObjectCopyToHeapNew (Obj *obj) {
 
 fp memPreGarbageCollect  = 0,
    memPostGarbageCollect = 0;
+char memGCFlag=0;
 
 void memGarbageCollect (void) {
  Obj newObj;
  long  i, len;
+
+	if (memGCFlag != 0) {
+		fprintf (stderr, "\n\aERROR: memGarbageCollect() memGCFlag==%d\n", memGCFlag);
+		exit(-1);
+	}
+	memGCFlag=1;
+#if VALIDATE_HEAP
+	memValidateHeapStructures();
+#endif
 	DB("-->memGarbageCollect()");
-	//fprintf (stderr, "-->memGarbageCollect()");
-	//memDebugDumpHeapStructures();
+//	fprintf (stderr, "-->memGarbageCollect() %c\n", GarbageCollectionMode==GC_MODE_YOUNG?'y':'o');
 	//fprintf (stderr, "\a");
 
 	if (memPreGarbageCollect) memPreGarbageCollect();
@@ -656,7 +669,7 @@ void memGarbageCollect (void) {
 	   one (collect over young and old).
 	*/
 	memInitializeHeap (&heapNew, heapOld.blockCount + HEAP_BLOCK_COUNT
-	           + (NewDesiredObjectSize+BLOCK_BYTE_SIZE-1)/BLOCK_BYTE_SIZE);
+	           + (NewDesiredObjectSize+BLOCK_BYTE_SIZE)/BLOCK_BYTE_SIZE);
 
 	/* Reset the global variable that specifies how many were needed. */
 	NewDesiredObjectSize=0;
@@ -804,7 +817,7 @@ DB("   collecting and compacting mutated old object references...");
 		}
 	}
 
-	if (garbageCollectionCount%5 == 0)
+	if (garbageCollectionCount%50 == 0)
 		GarbageCollectionMode = GC_MODE_OLD;
 
 	/* Reset empty young heap...the bigger this is the fewwer GC's occuring.
@@ -814,7 +827,18 @@ DB("   collecting and compacting mutated old object references...");
 
 	if (memPostGarbageCollect) memPostGarbageCollect();
 //	memDebugDumpHeapHeaders();
-	//fprintf (stderr, "<--memGarbageCollect()");
+//	fprintf (stderr, "<--memGarbageCollect()\n");
+
+	if (memGCFlag != 1) fprintf (stderr, "\n\aWARNING: objGCPost() memGCFlag==%d", memGCFlag);
+	memGCFlag=0;
+
+#if VALIDATE_HEAP
+	memValidateHeapStructures();
+#endif
+
+//printf ("[count %d  heapOld %08x  heap %08x(%08x)  heapNew %08x  count %x]\n", garbageCollectionCount, heapOld.start, heap.start, heap.last-heap.start, heapNew.start, heapNew.blockCount);
+	//memDebugDumpHeapStructures();
+
 	DB("<--memGarbageCollect");
 }
 
@@ -889,6 +913,87 @@ void memDebugDumpHeapHeaders (void) {
 	        (unsigned)r1c, (unsigned)r1d, (unsigned)r1e, (unsigned)r1f);
 }
 
+void memValidateObject (Obj o) {
+ Obj oo, op;
+ int valid=1;
+ int i;
+	
+	if ((memIsObjectInHeap(&heapOld, oo)
+		  || memIsObjectInHeap(&heap, oo)
+		  || memIsObjectInHeap(&heapStatic, oo))
+		 && memObjectLength(o)
+		 && memIsObjectVector(o)) {
+		if (memIsObjectPointer(o)) {
+			oo = memVectorObject(o, 1);
+			op = memVectorObject(o, 0);
+			/* Verify pointer is into an object in the current heap. */
+			if (!memIsObjectInHeap(&heap, oo)) {
+				fprintf (stderr, "ERROR memValidateObject() pointer is to invalid object.\n");
+				valid=0;
+			}
+			/* Verify pointer is within object */
+			if (!((oo <= op)	
+			      && (op < oo + memObjectSize(oo) - sizeof(Descriptor)))) {
+				fprintf (stderr, "ERROR memValidateObject() pointer is out of object range.\n");
+				valid=0;
+			}
+		} else if (memIsObjectStack(o)) {
+			op = memVectorObject(o, 0);
+			if (!(o <= op
+			      && (op < o + memObjectSize(o) - sizeof(Descriptor)))) {
+				fprintf (stderr, "ERROR memValidateObject() stack %08x out of bounds. ptr:%08x  end:%08x\n", o, o, op, o + memObjectSize(o) - sizeof(Descriptor));
+				valid=0;
+			}
+		} else if (memIsObjectShadow(o))
+			fprintf (stderr, "ERROR memValidateObject() found shadow.\n");
+		else if (memIsObjectFinalizer(o))
+			fprintf (stderr, "ERROR memValidateObject() found finalizer.\n");
+		else if (memIsObjectVector(o))
+			for (i=0; i<memObjectLength(o); i++) {
+				oo = memVectorObject(o, i);
+				if (!(memIsObjectInHeap(&heapOld, oo) || memIsObjectInHeap(&heap, oo) || memIsObjectInHeap(&heapStatic, oo)) && oo > (Obj)0xffff) {
+					fprintf (stderr, "ERROR memValidateObject() vector object %08x[%d]=%08x invalid.\n", o, i, oo);
+					valid=0;
+				}
+			}
+	}
+	if (!valid) {
+		fprintf (stderr, "ERROR memValidateObject() found bad object %08x.\n", o);
+		memDebugObjectDump (o);
+		memDebugDumpHeapStructures();
+		for (i=10; i; i--) {
+			printf ("\n");
+			fprintf (stderr, "\n");
+		}
+		exit(-1);
+	}
+}
+
+void memValidateHeapStructures (void) {
+ Obj o;
+	fprintf(stderr, "-->memValidateHeapStructures()");
+
+	// Static Heap
+	o = heapStatic.start + sizeof(Descriptor);
+	while (o<heapStatic.next) {
+		memValidateObject (o);
+		o += memObjectSize(o);
+	}
+
+	o = heapOld.start + sizeof(Descriptor);
+	while (o<heapOld.next) {
+		memValidateObject (o);
+		o += memObjectSize(o);
+	}
+
+	o = heap.start + sizeof(Descriptor);
+	while (o<heap.next) {
+		memValidateObject (o);
+		o += memObjectSize(o);
+	}
+	fprintf(stderr, "<--memValidateHeapStructures()");
+}
+
 void memDebugDumpHeapStructures (void) {
  Obj o;
 	DB("-->memDebugDumpHeapStructures()");
@@ -952,8 +1057,8 @@ void memInitialize (fp preGC, fp postGC) {
 		if (postGC) memPostGarbageCollect = postGC;
 		memInitializeHeap (&heapStatic, HEAP_STATIC_BLOCK_COUNT);
 		/* Create bogus old heap so things work properly. */
-		memInitializeHeap (&heapOld,    1);
 		memInitializeHeap (&heap,       HEAP_BLOCK_COUNT);
+		memInitializeHeap (&heapOld,    1);
 		GarbageCollectionMode = GC_MODE_OLD;
 		DB("<--memInitialize");
 	}
@@ -975,18 +1080,17 @@ int memmain (void) {
 
 	memNewArray(TSYMBOL, 8); r1=r0;
 	memNewArray(TINTEGER, 4); r2=r0;
-	memNewVector(TPAIR, 1); r3=r0;
+	memNewVector(TPAIR, 2); r3=r0;
 	memNewStack(); rf=r0;
 	memStackPush(rf, r1);
 	memStackPush(rf, r2);
 	memStackPush(rf, r3);
+	memStackPush(rf, rf);
 	memVectorSet(r3, 0, r1);
 	memVectorSet(r3, 1, r2);
-	memDebugDumpHeapStructures();
 	memGarbageCollect();
 	memDebugDumpHeapStructures();
 	memGarbageCollect();
-	memDebugDumpHeapStructures();
 	goto ret;
 
 	memVectorSet(r9, 1, r2);

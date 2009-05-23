@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <math.h>   /* sqrt() */
 #include <unistd.h>
+#include <limits.h>
 #include <fcntl.h>  /* fcntl() */
 #include <stdlib.h> /* random() */
 #include <unistd.h> /* write() */
@@ -223,7 +224,7 @@ void wscmWrite (Obj a, long islist, int fd) {
 			write(fd, buff, len);	
 			break;
 	 	case TPAIR:
-			islist || write (fd, "(", 1);
+			if (!islist) write (fd, "(", 1);
 			wscmWrite(car(a), 0, fd);
 			if (TPAIR == memObjectType(cdr(a))) {
 				write (fd, " ", 1);
@@ -234,12 +235,12 @@ void wscmWrite (Obj a, long islist, int fd) {
 					wscmWrite(cdr(a), 0, fd);
 				}
 			}
-      	islist || write (fd, ")", 1);
+      	if (!islist) write (fd, ")", 1);
 			break;
 		case TVECTOR:
 			ok += (write (fd, "#(", 2) < 1);
 			for (i=0; i<memObjectLength(a); i++) {
-				i && (ok += write (fd, " ", 1) < 1);
+				if (i) (ok += write (fd, " ", 1) < 1);
 				wscmWrite(memVectorObject(a, i), 0, fd);
 			}
 			ok += (write (fd, ")", 1) < 1);
@@ -334,7 +335,7 @@ void wscmDisplay (Obj a, long islist, int fd) {
 			write(fd, buff, len);	
 			break;
 	 	case TPAIR:
-			islist || write (fd, "(", 1);
+			if (!islist) write (fd, "(", 1);
 			wscmDisplay(car(a), 0, fd);
 			if (TPAIR == memObjectType(cdr(a))) {
 				write (fd, " ", 1);
@@ -345,12 +346,12 @@ void wscmDisplay (Obj a, long islist, int fd) {
 					wscmDisplay(cdr(a), 0, fd);
 				}
 			}
-      	islist || write (fd, ")", 1);
+      	if (!islist) write (fd, ")", 1);
 			break;
 		case TVECTOR:
 			write (fd, "#(", 2);
 			for (i=0; i<memObjectLength(a); i++) {
-				i && write (fd, " ", 1);
+				if (i) write (fd, " ", 1);
 				wscmDisplay(memVectorObject(a, i), 0, fd);
 			}
 			write (fd, ")", 1);
@@ -393,7 +394,7 @@ void wscmDisplay (Obj a, long islist, int fd) {
 			write(fd, "]", 1);
 			break;
 	 	default:
-			len = sprintf(buff, "#???<%x>", a);
+			len = sprintf(buff, "#<%x>", a);
 			write(fd, buff, len);
 	}
 }
@@ -1315,6 +1316,7 @@ void wscmInterruptHandler (void) {
 	/* If just a single thread in existence, leave it alone and just continue
 	   on. */
 	if ((int)memVectorObject(threads, 0) != 1 || !wscmIsQueueEmpty(sleeping)) {
+		// TODO: BF: If signal queue not empty..spawn signal hander threads.
 		wscmUnRun();
 		wscmSchedule();
 	}
@@ -2316,16 +2318,22 @@ void sysTime (void) {
 	DB("<--%s\n", __func__);
 }
 
+int catchSignalFlag=0;
+
 void catch_signal (int s) {
-	//Create new thread by calling the function in global signal handler vector.
-	//Do something similar to compThread perhaps?
-	objNewSymbol ("SIGNAL-HANDLERS", 15);  r1=r0;  wscmTGEFind(); r0=car(r0);
-	r1 = memVectorObject(r0, s);
-	r0 = car(r1);
-	// Hack:  replace inital opcode with NOP since closure obj code expects the closure to be passed in via r0 as well.
-	memVectorSet(r0, 3, NOP);
-	memVectorSet(r0, 4, NOP);
-	wscmNewThread();
+	if (catchSignalFlag==0 && memGCFlag==0) {
+		catchSignalFlag=1;
+		//Create new thread by calling the function in global signal handler vector.
+		//Do something similar to compThread perhaps?
+		r1=signalhandlers;  wscmTGEFind(); r0=car(r0);
+		r1 = memVectorObject(r0, s);
+		r0 = car(r1);
+		// Hack:  replace inital opcode with NOP since closure obj code expects the closure to be passed in via r0 as well.
+		memVectorSet(r0, 3, NOP);
+		memVectorSet(r0, 4, NOP);
+		wscmNewThread();
+		catchSignalFlag=0;
+	}
 }
 
 void sysSignal (void) {
@@ -2794,7 +2802,7 @@ void wscmInitialize (void) {
 	i=32;
 	objNewVector(i);
 	while (i--) { memVectorSet(r0, i, null); }
-	wscmDefine("SIGNAL-HANDLERS");
+	wscmDefine("SIGNALHANDLERS");
 
 DB("INIT <--wscmInitialize()");
 }

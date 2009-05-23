@@ -22,18 +22,6 @@
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; IPC stuff
-(load "ipc.scm")
-
-; Create ipc object with an debug message output port.
-;(define ipc (Ipc ConsoleDisplay))
-(define ipc (Ipc (lambda x ())))
-
-; Always read and evaluate everything from IPC.
-(thread  (let ~ () (eval ((ipc 'qread))) (~)))
-
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Glyphs - Two characters including their color.
 ;;
 (define glyphNew vector)
@@ -599,6 +587,21 @@ c))
 (define WinColumnPuts (WinColumn 'puts))
 (define WinColumnSetColor (WinColumn 'set-color))
 
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; IPC stuff
+(load "ipc.scm")
+
+; Create ipc object with an debug message output port.
+;(define ipc (Ipc ConsoleDisplay))
+(define ipc (Ipc (lambda x ())))
+
+; Always read and evaluate everything from IPC.
+(thread  (let ~ () (eval ((ipc 'qread))) (~)))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; stuff
 (define (welcome)
  (define WinMarquee
   ((Terminal 'WindowNew)
@@ -666,7 +669,7 @@ c))
 ((WinHelp 'goto) 0 0)
 ((WinHelp 'puts) "         )) Help! ((")
 ((WinHelp 'set-color) #x20)
-((WinHelp 'puts) "\r\n? = toggle help window\r\nt = talk\r\nesc = exit talk\r\nw = toggle map\r\n+ = increase map size\r\n- = decrease map size\r\nq = quit\r\nhjkl = move")
+((WinHelp 'puts) "\r\n? = toggle help window\r\nt = talk\r\nesc = exit talk\r\nw = toggle map\r\n+ = increase map size\r\n- = decrease map siz\r\n+ = increase map size\r\n- = decrease map sizee\r\nq = quit\r\nhjkl = move")
 ((WinHelp 'toggle))
 
 (define (help)
@@ -887,7 +890,7 @@ c))
    ;(if (equal? ((kitty 'gps))
    ;            ((avatar 'gps)))
    ;    ((ipc 'qwrite) `(voice ,(kitty 'dna) ,@((kitty 'gps)) 10 "Mrrreeeooowww!")))
-   (if (= i 100)
+   (if (= i 10)
        ((ipc 'qwrite) `(die ,(kitty 'dna))) ; kill entity
        (~ (+ i 1)))))) ; spawnKitty
 
@@ -895,7 +898,7 @@ c))
 ;(thread (snake 18 38 500))
 ;(thread (snake 18 75 200))
 ;(thread (snake 1 75 100))
-(thread (welcome))
+;(thread (welcome))
 ;(ConsoleDisplay "\r\nWelcome to World")
 ;(display "\e[?25h")
 
@@ -940,19 +943,29 @@ c))
 (dropCell 17 13 CHAIR)
 
 
-
-; Screen redraw signal handler.
-(vector-set! SIGNAL-HANDLERS 28 (lambda ()
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Screen redraw signal handler
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+(define (handle-terminal-resize)
   (ConsoleDisplay "\r\n" (terminal-size))
   ((Terminal 'ResetTerminal))
   ((Console 'resize) (- (Terminal 'THeight) 1) (Terminal 'TWidth))
-  ((WinMap 'move) 0 (- (Terminal 'TWidth) (* MapSize 2) 2))
+  ((WinMap 'move) 0 (- (Terminal 'TWidth) (WinMap 'WWidth) 2))
   ((WinColumn 'move) 1 (- (Terminal 'TWidth) 2) )
   ((WinStatus 'move) (WinMap 'Y0) (- (Terminal 'TWidth) 12))
   ((WinInput 'resize) 1 (- (Terminal 'TWidth) 1))
-  ((WinInput 'move) (- (Terminal 'THeight) 1) 0)
+  ((WinInput 'move) (- (Terminal 'THeight) 1) 0))
+
+(define sig28Semaphore (open-semaphore 1))
+
+(vector-set! SIGNALHANDLERS 28 (lambda ()
+  (semaphore-down sig28Semaphore)
+  (handle-terminal-resize)
+  (semaphore-up sig28Semaphore)
   (unthread)))
+
 (signal 28)
+
 
 ;; Example on how to implement a signal handler.
 ;; This will capture control C spaning a thread which just displays "hi".
@@ -966,6 +979,7 @@ c))
    (viewportReset (avatar 'y) (avatar 'x))
    (~)))
 
+(define (fun) (thread (let ~ () (for-each (lambda (x) (walk x) (sleep 200)) '(6 6 6 6 8 8 8 8 4 4 4 4 2 2 2 2)) (sleep 500) (~))))
 
 ((ipc 'qwrite) (list 'voice (avatar 'dna) (avatar 'z) (avatar 'y) (avatar 'x) 100 "*PUSH* *SQUIRT* *SPANK* *WAAAAAAAAA*"))
 (wrepl)
