@@ -26,8 +26,8 @@
 
 
 
-/* Type declarations representing the number of bits for unsigned, signed and
-   real types.  These are true for my i386 based Linux.
+/* C Type declarations representing the number of bits for unsigned, signed
+   and real types.  These are true for my i386 based Linux.
  */
 typedef unsigned char       u8;
 typedef unsigned short      u16;
@@ -48,30 +48,33 @@ typedef void               (*fp2) (void *a, void *b);
 
 
 
-/* Object types.  Byte with highest bit signifying a memory vector object.
-   The lower 24 bits are used in descriptors for the object length.
+/* Scheme object types.  Byte with highest bit signifying a memory vector
+   object.  The lower 24 bits are used in descriptors for the object length
+   either number of bytes in the array or the vector size.
  */
-#define  TFALSE         0x01000000
-#define  TTRUE          0x02000000
-#define  TNULL          0x03000000
-#define  TNULLVEC       0x04000000
-#define  TNULLSTR       0x05000000
-#define  TEOF           0x06000000
-#define  TCHAR          0x07000000
-#define  TSTRING        0x08000000
-#define  TSYMBOL        0x09000000
-#define  TINTEGER       0x0a000000
-#define  TLONG          0x0b000000
-#define  TREAL          0x0c000000
+#define  TBASEARRAY     0x00
+#define  TFALSE         0x01
+#define  TTRUE          0x02
+#define  TNULL          0x03
+#define  TNULLVEC       0x04
+#define  TNULLSTR       0x05
+#define  TEOF           0x06
+#define  TCHAR          0x07
+#define  TSTRING        0x08
+#define  TSYMBOL        0x09
+#define  TINTEGER       0x0a
+#define  TLONG          0x0b
+#define  TREAL          0x0c
 
-#define  TPAIR          0x81000000
-#define  TVECTOR        0x82000000
-#define  TCLOSURE       0x83000000
-#define  TCONTINUATION  0x84000000
-#define  TCODE          0x85000000
-#define  TPORT          0x86000000
-#define  TSOCKET        0x87000000
-#define  TSYSCALL       0x88000000
+#define  TBASEVECTOR    0x80
+#define  TPAIR          0x81
+#define  TVECTOR        0x82
+#define  TCLOSURE       0x83
+#define  TCONTINUATION  0x84
+#define  TCODE          0x85
+#define  TPORT          0x86
+#define  TSOCKET        0x87
+#define  TSYSCALL       0x88
 
 
 

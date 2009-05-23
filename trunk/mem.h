@@ -36,10 +36,10 @@ typedef u32 Type;
 /* Reserved object type constants.  8 bit field with the top bit representing
    a 1 for vector and 0 for array.
 */
-#define TFINALIZER  0xfc000000
-#define TPOINTER    0xfd000000
-#define TSTACK      0xfe000000
-#define TSHADOW     0xff000000
+#define TFINALIZER  0xfc
+#define TPOINTER    0xfd
+#define TSTACK      0xfe
+#define TSHADOW     0xff
 
 
 
@@ -52,17 +52,18 @@ extern Obj r0,  r1,  r2,  r3,  r4,  r5,  r6,  r7,
            r10, r11, r12, r13, r14, r15, r16, r17,
            r18, r19, r1a, r1b, r1c, r1d, r1e, r1f;
 
+extern char memGCFlag; // Flag set if in the middle of a GC.
 
 
 /* Object Creators that store new object in r0.
 */
-void memNewStatic   (Type t, u32 byteLength);
+void memNewStatic      (Type t, u32 byteLength);
 void memNewStaticVector(Type t, u32 byteLength);
-void memNewArray    (Type t, u32 byteLength);
-void memNewVector   (Type t, u32 objLength);
-void memNewFinalizer(void);
-void memNewPointer  (void);
-void memNewStack    (void);
+void memNewArray       (Type t, u32 byteLength);
+void memNewVector      (Type t, u32 objLength);
+void memNewFinalizer   (void);
+void memNewPointer     (void);
+void memNewStack       (void);
 
 
 
@@ -82,11 +83,11 @@ Obj  memStackPop  (Obj stack);
 */
 Type memObjectType   (Obj obj);
 u32  memObjectLength (Obj obj);
-int  memStackLength (Obj obj);
+int  memStackLength  (Obj obj);
 
 u8   memArrayObject  (Obj obj, u32 offset);
 Obj  memVectorObject (Obj obj, u32 offset);
-Obj  memStackObject (Obj obj, u32 topOffset);
+Obj  memStackObject  (Obj obj, u32 topOffset);
 
 
 
@@ -100,6 +101,8 @@ void memGarbageCollect (void);
 */
 void memDebugObjectDump (Obj o);
 void memDebugDumpHeapHeaders (void);
+void memValidateObject (Obj o);
+void memValidateHeapStructures (void);
 void memDebugDumpHeapStructures (void);
 
 

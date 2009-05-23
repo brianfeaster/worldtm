@@ -1,4 +1,5 @@
 #define DEBUG 0
+#define VALIDATE 1
 #define DB_MODULE "VM "
 #include "debug.h"
 #include <stdio.h>
@@ -31,6 +32,7 @@ CALL block inst
 RET (saved block/inst)
 */
 
+void memDebugDumpHeapHeaders (void);
 
 fp vmCallerPreGarbageCollect = 0,
    vmCallerPostGarbageCollect = 0;
@@ -238,16 +240,55 @@ void vmVm (int cmd) {
 	ld012: OPDB("ld012"); r0=*((Obj*)r1 + (u32)r2);  goto **(void**)(ip+=4);
 
 	/* Store r0 -> *(r1 + immediate). */
-	sti01:OPDB("sti01"); *((Obj*)r1 + *(u32*)(ip+=4))=r0; goto **(void**)(ip+=4);
-	sti016:OPDB("sti016"); *((Obj*)r16 + *(u32*)(ip+=4))=r0; goto **(void**)(ip+=4);
-	sti20:OPDB("sti20"); *((Obj*)r0 + *(u32*)(ip+=4))=r2; goto **(void**)(ip+=4);
-	sti21:OPDB("sti21"); *((Obj*)r1 + *(u32*)(ip+=4))=r2; goto **(void**)(ip+=4);
-	sti30:OPDB("sti30"); *((Obj*)r0 + *(u32*)(ip+=4))=r3; goto **(void**)(ip+=4);
-	sti40:OPDB("sti40"); *((Obj*)r0 + *(u32*)(ip+=4))=r4; goto **(void**)(ip+=4);
-	sti50:OPDB("sti50"); *((Obj*)r0 + *(u32*)(ip+=4))=r5; goto **(void**)(ip+=4);
+	sti01:OPDB("sti01");
+#if VALIDATE
+		if (!(0 <= *(u32*)(ip+4) && *(u32*)(ip+4) < memObjectLength(r1))) fprintf (stderr, "[ERROR opcode sti01 %d < %d", memObjectLength(r1), *(u32*)(ip+4));
+#endif
+		*((Obj*)r1 + *(u32*)(ip+=4))=r0; goto **(void**)(ip+=4);
+	sti016:OPDB("sti016");
+#if VALIDATE
+		if (!(0 <= *(u32*)(ip+4) && *(u32*)(ip+4) < memObjectLength(r16))) fprintf (stderr, "[ERROR opcode sti016 %d < %d", memObjectLength(r16), *(u32*)(ip+4));
+#endif
+		*((Obj*)r16 + *(u32*)(ip+=4))=r0; goto **(void**)(ip+=4);
+	sti20:OPDB("sti20");
+#if VALIDATE
+		if (!(0 <= *(u32*)(ip+4) && *(u32*)(ip+4) < memObjectLength(r0))) fprintf (stderr, "[ERROR opcode sti20 %d < %d", memObjectLength(r0), *(u32*)(ip+4));
+#endif
+		*((Obj*)r0 + *(u32*)(ip+=4))=r2; goto **(void**)(ip+=4);
+	sti21:OPDB("sti21");
+#if VALIDATE
+		if (!(0 <= *(u32*)(ip+4) && *(u32*)(ip+4) < memObjectLength(r1))) fprintf (stderr, "[ERROR opcode sti21 %d < %d", memObjectLength(r1), *(u32*)(ip+4));
+#endif
+		*((Obj*)r1 + *(u32*)(ip+=4))=r2; goto **(void**)(ip+=4);
+	sti30:OPDB("sti30");
+#if VALIDATE
+		if (!(0 <= *(u32*)(ip+4) && *(u32*)(ip+4) < memObjectLength(r0))) fprintf (stderr, "[ERROR opcode sti30 %d < %d", memObjectLength(r0), *(u32*)(ip+4));
+#endif
+		*((Obj*)r0 + *(u32*)(ip+=4))=r3; goto **(void**)(ip+=4);
+	sti40:OPDB("sti40");
+#if VALIDATE
+		if (!(0 <= *(u32*)(ip+4) && *(u32*)(ip+4) < memObjectLength(r0))) fprintf (stderr, "[ERROR opcode sti40 %d < %d", memObjectLength(r0), *(u32*)(ip+4));
+#endif
+		*((Obj*)r0 + *(u32*)(ip+=4))=r4; goto **(void**)(ip+=4);
+	sti50:OPDB("sti50");
+#if VALIDATE
+		if (!((0 <= *(u32*)(ip+4)) && (*(u32*)(ip+4) < memObjectLength(r0)))) {
+			fprintf (stderr, "[ERROR opcode sti50 %08x < %08x]\n", memObjectLength(r0), *(u32*)(ip+4));
+			//vmPreGarbageCollect();
+			//r0 = code;
+			//vmDebugDump();
+			//return;
+			//vmPostGarbageCollect();
+		}
+#endif
+		*((Obj*)r0 + *(u32*)(ip+=4))=r5; goto **(void**)(ip+=4);
 
 	/* Store r0 -> *(r1 + r2). */
-	st012: OPDB("st012"); *((Obj*)r1 + (u32)r2) = r0;  goto **(void**)(ip+=4);
+	st012: OPDB("st012");
+#if VALIDATE
+		if (!(0 <= r2 &&  (int)r2 < memObjectLength(r1))) fprintf (stderr, "[ERROR opcode st012 %d < %d", memObjectLength(r1), r2);
+#endif
+		*((Obj*)r1 + (u32)r2) = r0;  goto **(void**)(ip+=4);
 	st201: OPDB("st201"); *((Obj*)r0 + (u32)r1) = r2;  goto **(void**)(ip+=4);
 
 	/* Push register using local stack pointer. */
@@ -505,6 +546,7 @@ void vmInitialize (fp intHandler, fp preGC, fp postGC, fp1 objDumper) {
 
 void vmDebugDump (void) {
  Obj *ip=r0;
+	memDebugDumpHeapHeaders();
 	while (ip < ((Obj*)r0 + memObjectLength(r0))) {
 		printf ("\n%04x ", ip-(Obj*)r0);
 		if (*ip == NOP)      {printf("nop");}
@@ -604,7 +646,10 @@ void vmDebugDump (void) {
 		else if (*ip==SYSI)  {printf ("sysi "); vmObjectDumper(*++ip);}
 		else if (*ip==SYS0)  {printf ("sys$0");}
 		else if (*ip==QUIT)  {printf ("quit");}
-		else {printf ("???%08x", *ip); vmObjectDumper(*ip);}
+		else {
+			printf ("??? %08x ", *ip);
+			vmObjectDumper(*ip);
+		}
 		ip++;
 		fflush(stdout);
 	}
