@@ -1,5 +1,5 @@
 #define DEBUG 0
-#define DEBUG_ASSERT 0
+#define DEBUG_ASSERT 1
 #define VALIDATE_HEAP 0
 #define DB_MODULE "MEM "
 /* Generational garbage collector based on mem.c.
