@@ -282,6 +282,7 @@
         (if (null? l) ()
         (if (eq? (car l) self) (cdr l)
         (cons (car l) (~ (cdr l)))))))
+    (close-semaphore WindowSemaphore)
     (WindowMaskReset Y0 X0 Y1 X1))
 
    (set! WINDOWS (cons self WINDOWS))
