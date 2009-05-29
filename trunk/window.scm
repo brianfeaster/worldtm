@@ -159,8 +159,8 @@
    (define WindowSemaphore (open-semaphore 1))
    (define (goto y x)
      (set! needToScroll #f)
-     (set! CurY y)
-     (set! CurX x))
+     (set! CurY (min y (- WHeight 1)))
+     (set! CurX (min x (- WWidth 1))))
    (define (set-color c) (set! COLOR c))
    (define (InsideWindow? gy gx)
      (and ENABLED
@@ -252,30 +252,55 @@
    ; Create transparent 'pixel'.
    (define (alpha y x a)
      (vector-vector-set! ALPHA y x a)
-     (WindowMaskReset (+ y Y0) (+ x X0) (+ y Y0 1) (+ x X0 1)))
+     (if ENABLED (WindowMaskReset (+ y Y0) (+ x X0) (+ y Y0 1) (+ x X0 1))))
    (define (move y x)
-     (let ((oEnabled ENABLED))
-       (set! ENABLED #f)
-       (WindowMaskReset Y0 X0 Y1 X1) ; Undraw window
+     (let ((oY0 Y0)
+           (oX0 X0)
+           (oY1 Y1)
+           (oX1 X1))
+       (semaphore-down WindowSemaphore)
        (set! Y0 y)
        (set! X0 x)
        (set! Y1 (+ Y0 WHeight))
        (set! X1 (+ X0 WWidth))
-       (set! ENABLED oEnabled))
-     (if ENABLED (WindowMaskReset Y0 X0 Y1 X1))) ; Redraw window
+       (if ENABLED (WindowMaskReset (min oY0 Y0) (min oX0 X0) (max oY1 Y1) (max oX1 X1))) ; Redraw window
+       (semaphore-up WindowSemaphore)))
    (define (resize h w)
-     (let ((oEnabled ENABLED))
-       (set! ENABLED #f)
-       (WindowMaskReset Y0 X0 Y1 X1) ; Undraw window
+     (let ((oY1 Y1)
+           (oX1 X1))
+       (semaphore-down WindowSemaphore)
        (set! WHeight h)
        (set! WWidth w)
        (set! Y1 (+ Y0 WHeight))
        (set! X1 (+ X0 WWidth))
+       (set! CurY (min CurY (- WHeight 1))) ; Make sure cursor is not out of bounds.
+       (set! CurX (min CurX (- WWidth 1)))
        (set! ALPHA (make-vector-vector WHeight WWidth #t))
        (set! DESC (vector-vector-map! (lambda (x) (vector COLOR #\ ))
                                       (make-vector-vector WHeight WWidth ())))
-       (set! ENABLED oEnabled))
-     (if ENABLED (WindowMaskReset Y0 X0 Y1 X1))) ; Redraw window
+       (if ENABLED (WindowMaskReset Y0 X0 (max oY1 Y1) (max oX1 X1))) ; Redraw window
+       (semaphore-up WindowSemaphore)))
+   (define (moveresize y x h w)
+     (let ((oY0 Y0)
+           (oX0 X0)
+           (oY1 Y1)
+           (oX1 X1))
+       (semaphore-down WindowSemaphore)
+       (set! Y0 y)
+       (set! X0 x)
+       (set! WHeight h)
+       (set! WWidth w)
+       (set! Y1 (+ Y0 WHeight))
+       (set! X1 (+ X0 WWidth))
+       (set! CurY (min CurY (- WHeight 1))) ; Make sure cursor is not out of bounds.
+       (set! CurX (min CurX (- WWidth 1)))
+       (set! ALPHA (make-vector-vector WHeight WWidth #t))
+       (set! DESC (vector-vector-map! (lambda (x) (vector COLOR #\ ))
+                                      (make-vector-vector WHeight WWidth ())))
+       (if ENABLED (WindowMaskReset
+                      (min oY0 Y0) (min oX0 X0) ; Redraw window
+                      (max oY1 Y1) (max oX1 X1)))
+       (semaphore-up WindowSemaphore)))
    (define (delete)
     (set! WINDOWS
       (let ~ ((l WINDOWS))

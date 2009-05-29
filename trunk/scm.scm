@@ -119,6 +119,7 @@
 (define CHAR-CTRL-L (integer->char #x0c))
 (define RETURN      (integer->char #x0d))
 (define CHAR-CTRL-Q (integer->char #x11))
+(define CHAR-CTRL-W (integer->char #x17))
 (define CHAR-CTRL-ESC (integer->char #x1b))
 (define CHAR-CTRL-_ (integer->char #x1f))
 (define CHAR-CTRL-? (integer->char #x7f))
