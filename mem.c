@@ -918,9 +918,9 @@ void memValidateObject (Obj o) {
  int valid=1;
  int i;
 	
-	if ((memIsObjectInHeap(&heapOld, oo)
-		  || memIsObjectInHeap(&heap, oo)
-		  || memIsObjectInHeap(&heapStatic, oo))
+	if ((memIsObjectInHeap(&heapOld, o)
+		  || memIsObjectInHeap(&heap, o)
+		  || memIsObjectInHeap(&heapStatic, o))
 		 && memObjectLength(o)
 		 && memIsObjectVector(o)) {
 		if (memIsObjectPointer(o)) {

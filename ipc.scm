@@ -14,8 +14,8 @@
 ;; Ipc Object:
 ;;
 ;; The Ipc object when instantiated will attempt to connect to existing
-(define (Ipc Display)
- (define FirstPort 7155)
+(define (Ipc Display . port)
+ (define FirstPort (if (null? port) 7155 (car port)))
  (define PortCount 50) ; Only allow 50 Worldlians per server
  (define LastPort  (+ FirstPort PortCount -1))
  (define MyPort FirstPort)
@@ -25,7 +25,7 @@
      (if (eof-object? s)
          (begin
            (set! MyPort (+ 1 MyPort))
-           (if (= PortCount (- MyPort FirstPort))
+           (if (= MyPort LastPort)
                (begin (display "ERROR: Ipc: exceeded maximum port")
                       (quit))
                (findAvailablePort~)))
@@ -57,6 +57,7 @@
    (set! Peers (cons peer Peers)))
 
  (define PeersSemaphore (open-semaphore 1))
+
  (define (peersDelete peer)
    (semaphore-down PeersSemaphore)
    (set! Peers (list-delete Peers peer))
@@ -65,7 +66,8 @@
  ; Spawn two threads that propogate any incomming messages on this
  ; socket as well as send out any queued messages.
  (define (spawnCommunicators s)
-   (Display "\r\n\aSpawning communicator on:" s)
+  (Display "\r\n\aSpawning communicator on:" s "\r\n")
+  (or (eof-object? s) (begin
    (display "'World1.0\r\n" s)
    ; Create a peer: #(socket '(queue) queue-semaphore)
    (let ((peer (vector s (list 'empty) (open-semaphore 0))))
@@ -73,7 +75,7 @@
      ;(printl "Peers list now:" Peers)
      ; Read from peer and re-send to every other peer.
      ;(printl "spawning reader")
-     (thread (let reader ((e (read (vector-ref peer 0))))
+     (thread (let reader~ ((e (read (vector-ref peer 0))))
        ;(printl "Communicator: reader: received:" e)
        ;(printl "Appending original peers list:"Peers)
        ;(printl "Appending to peers:"(list-delete Peers peer))
@@ -93,9 +95,9 @@
                 (list-delete Peers peer))
            ; Add message to my local IO queue
            (msgQueueAdd e)
-           (reader (read (vector-ref peer 0)))))))
+           (reader~ (read (vector-ref peer 0)))))))
      ; Write to peer anything in its queue.
-     (thread (let writer ()
+     (thread (let writer~ ()
        (if (vector-ref peer 0)
          (begin
            (semaphore-down (vector-ref peer 2))
@@ -103,7 +105,7 @@
                   (vector-ref peer 0))
            (send " " (vector-ref peer 0))
            (vector-set! peer 1 (cdr (vector-ref peer 1)))
-           (writer)))))))
+           (writer~)))))))))
 
  ; Connect to first existing peer listening on a port below mine.
  (define (lookForParent)
@@ -114,6 +116,7 @@
      (begin 
        (Display "No parents and I'm not the first port!  Attempting to move incomming socket...\r\n")
        (let ((s (open-socket FirstPort)))
+         (Display "open-socket " FirstPort "=>" s "\r\n")
          (if (eof-object? s)
              (begin (Display "First port unavailable...attempting to find a parent again...\r\n")
                     (lookForParent))
@@ -134,9 +137,10 @@
  ; Have already created a local socket but not yet accepted any connections.
  ; Fire up thread that accepts incomming streams.
  (thread
-   (let acceptChildren ()
+   (let acceptChildren~ ()
+     (Display "acceptChildren~\r\n")
      (spawnCommunicators (open-stream MyIncommingSocket))
-     (acceptChildren)))
+     (acceptChildren~)))
 
  (Display "My IPC listener port:" MyPort "\r\n")
 
