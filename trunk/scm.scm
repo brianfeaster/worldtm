@@ -261,6 +261,9 @@
           (~~ (+ y 1) 0))))
     vv)))                      ; Return vector-vector done.
 
+(define (vector-rnd v)
+ (vector-ref v (random (vector-length v))))
+
 (define (list . x) x)
 
 (define (append l t)

@@ -278,8 +278,7 @@ c))
  (set! PortX (- x (/ PortW 2)))
  ;((WinMap 'home))
  (let ~dumpGlyphs ((y 0) (x 0))
-  (if (!= y PortH) (if (= x PortW)
-    (~dumpGlyphs (++ y) 0)
+  (if (!= y PortH) (if (= x PortW) (~dumpGlyphs (++ y) 0)
     (begin
      (WinMapPutGlyph (canvasCellRef (+ PortY y) (+ PortX x)) y (* x 2))
      (~dumpGlyphs y (++ x))))))
@@ -340,6 +339,9 @@ c))
 ; Association list of entites to their DNA values.
 (define EntityDB ())
 
+; Create a default "nobody" entity.
+(define nobody (Entity 42 "nobody" 0 0 0 (glyphNew #x07 #\n #x07 #\o)))
+
 ; Update or create and add a new entity to the entity database.
 (define (entitiesSet dna name z y x glyph)
  (let ((ent (assv dna EntityDB)))
@@ -352,7 +354,7 @@ c))
 (define (entitiesGet dna)
  (let ((e (assv dna EntityDB)))
    (if (null? e)
-       ()
+       nobody
        (cdr e))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -397,7 +399,8 @@ c))
 ;; Incomming IPC messages 
 ;;
 (define (entity dna name z y x glyph)
- (entitiesSet dna name z y x glyph))
+ (entitiesSet dna name z y x glyph)
+ (move dna z y x))
  ;(ConsoleSetColor #x0e)
  ;;(ConsoleDisplay name))
  ;(ConsoleSetColor #x07)
@@ -414,12 +417,16 @@ c))
 
 ;; Call this 'move.  Entites move.  Back to the original ways?
 ;; was 'avatar
+(define alwaysScroll #f)
 (define (move dna z y x)
- (let ((entity (entitiesGet dna))
-       (thisIsMe (= dna (avatar 'dna))))
+ (letrec ((entity (entitiesGet dna))
+          (thisIsMe (= dna (avatar 'dna)))
+          (shouldScroll (and thisIsMe
+           (or alwaysScroll (< 5 (distance (list 0 (entity 'y) (entity 'x))
+                                           (list 0 (+ PortY (/ PortH 2)) (+ PortX (/ PortW 2)))))))))
   (if (null? entity)
     (begin
-      (ConsoleDisplay "\r\nERROR: move: unknown avatar:" dna)
+      ;(ConsoleDisplay "\r\nERROR: move: unknown avatar:" dna)
       (entitiesSet dna "??" z y x (glyphNew #x19 #\? #x19 #\?))
       ((ipc 'qwrite) '(who)))
     (begin
@@ -427,14 +434,14 @@ c))
       (field-delete! (entity 'z) (entity 'y) (entity 'x) dna)
       (if (>= (entity 'z) (canvasCellHeightRef (entity 'y) (entity 'x))) (begin
         (canvasRender (entity 'y) (entity 'x))
-        (or thisIsMe (viewportRender (entity 'y) (entity 'x)))))
+        (or shouldScroll (viewportRender (entity 'y) (entity 'x)))))
       ; Place here
       ((entity 'setLoc) z y x)
       (field-set! z y x dna)
       (if (>= (entity 'z) (canvasCellHeightRef y x)) (begin
         (canvasRender y x)
-        (or thisIsMe (viewportRender y x))))
-      (if thisIsMe (begin
+        (or shouldScroll (viewportRender y x))))
+      (if shouldScroll (begin
         (viewportReset (avatar 'y) (avatar 'x))
         ;(ConsoleDisplay (display->string ((avatar 'look))))
         ;(ConsoleDisplay "\r")
@@ -516,7 +523,7 @@ c))
  (if (eq? SNAKE (field-ref (avatar 'z) (avatar 'y) (avatar 'x)))
      (thread (snake-random)))
  (if (eq? KITTY (field-ref (avatar 'z) (avatar 'y) (avatar 'x)))
-     (thread (spawnKitty)))
+     (thread (spawnKittehs)))
  ; Dump our coordinates.
  ((WinStatus 'puts) "\r\n")
  ((WinStatus 'puts) (number->string (avatar 'z)))
@@ -540,7 +547,6 @@ c))
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Get the wheels in motion
 ;;
-;; Message window
 
 ;; Input Window
 (define WinInput
@@ -551,13 +557,15 @@ c))
 (define WinInputSetColor (WinInput 'set-color))
 
 ;; Map window
-(define MapSize (min 20 (min (- (Terminal 'THeight) 1)
-                             (/ (Terminal 'TWidth) 2))))
+
+; Initial map size is 20 or terminal width/height.
 (define WinMap
+ (let ((MapSize (min 20 (min (- (Terminal 'THeight) 1)
+                             (/ (Terminal 'TWidth) 2)))))
   ((Terminal 'WindowNew)
     0 (- (Terminal 'TWidth) (* MapSize 2) 2)
     (+ MapSize 0) (* 2 MapSize)
-    #x17 'NOREFRESH))
+    #x17 'NOREFRESH)))
 
 ((WinMap 'cursor-visible) #f) ; Disable cursor in map window.
 
@@ -594,7 +602,7 @@ c))
   (WinMapPutc     (glyphChar0 glyph))
   (WinMapSetColor (glyphColor1 glyph))
   (WinMapPutc     (glyphChar1 glyph))
-  (semaphore-up MapWindowSemaphore)))
+  (semaphore-up MapWindowSemaphore))
 
 
 ;; Map column debug window
@@ -646,6 +654,22 @@ c))
        (~~ (+ i 1))))
  ((WinMarquee 'delete)))
 
+(define (loading y x)
+ (define WinLoading ((Terminal 'WindowNew) y x 3 23 #x4a))
+ ((WinLoading 'cursor-visible) #f)
+ ((WinLoading 'puts) "+----L-O-A-D-I-N-G----+")
+ ((WinLoading 'puts) "|                     |")
+ ((WinLoading 'puts) "+---------------------+")
+ ((WinLoading 'goto) 1 1)
+ ((WinLoading 'set-color) #x70)
+ (let ~~ ((i 0))
+  (if (< i 21) (begin
+    ((WinLoading 'putc) #\ )
+    (sleep 100)
+    (~~ (+ i 1)))))
+ (sleep 100)
+ ((WinLoading 'delete)))
+
 (define (snake y x delay)
  (define Window3 ((Terminal 'WindowNew) y x 3 3 #x6b))
  (define Window3Puts (Window3 'puts))
@@ -669,7 +693,7 @@ c))
    ((Window3 'home)) (Window3Puts "O  ") (Window3Puts "o  ") (Window3Puts ".. ")
    (sleep delay)
    (if (< m 10) (~ (+ m 1)))) ; Loop 10 times
- ((Window3 'delete)))))
+ ((Window3 'delete)))
 
 (define (snake-random)
  (snake
@@ -685,7 +709,7 @@ c))
 ((WinHelp 'goto) 0 0)
 ((WinHelp 'puts) "         )) Help! ((")
 ((WinHelp 'set-color) #x20)
-((WinHelp 'puts) "\r\n? = toggle help window\r\nt = talk\r\nesc = exit talk\r\nw = toggle map\r\n> = increase map size\r\n< = decrease map size\r\nq = quit\r\nhjkl = move")
+((WinHelp 'puts) "\r\n? = toggle help window\r\nt = talk\r\nesc = exit talk\r\nw = toggle map\r\n> = increase map size\r\n< = decrease map size\r\nq = quit\r\nhjkl = move\r\n^F = change color")
 ((WinHelp 'toggle))
 
 (define (help)
@@ -699,6 +723,45 @@ c))
 (ConsoleDisplay "\r\n\r\n   *** Welcome to the construct. ***")
 
 
+(viewportReset (avatar 'y) (avatar 'x))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Drop some cells on the map
+(define (dropCell y x cell)
+ (let ((z (+ 1 (field-ref-top 1000 y x))))
+  (field-set! z y x cell)
+  (canvasRender y x)
+  (viewportRender y x)))
+
+(define (build-brick-room yy xx)
+ (let ~ ((i 0))
+    ;(sleep 1000)
+    (dropCell yy         (+ xx i)        BRICK)
+    (dropCell (+ yy 10)  (+ 10 xx (- i)) BRICK)
+    (dropCell (+ 10 yy (- i)) xx         BRICK)
+    (dropCell (+ yy i)   (+ xx 10)       BRICK)
+    (if (< i 9) (~ (+ i 1)))))
+
+
+(define (build-island yy xx radius)
+ (let ~ ((y (- radius))(x (- radius)))
+  (if (< y radius)
+  (if (= x radius) (~ (+ y 1) (- radius))
+   (begin
+    (if (> radius (sqrt (+ (^2 y) (^2 x))))
+        (dropCell (+ y yy) (+ x xx) SAND))
+    (~ y (+ x 1)) )))))
+
+(build-island 15 15 7) 
+(dropCell 13 17 HELP)
+(dropCell 16 18 SNAKE)
+(dropCell 19 16 KITTY)
+(dropCell 12 13 TV)
+(dropCell 17 13 CHAIR)
+(build-island 4 28 4) 
+(build-island 20 30 5)
+
+(build-brick-room 15 35)
 
 (define replTalk
  (let ((talkInput ""))
@@ -767,6 +830,7 @@ c))
  (if (eq? c #\u) (walk 9)
  (if (eq? c #\+) (walk 5)
  (if (eq? c #\-) (walk 0)
+ (if (eq? c #\s) (begin (set! alwaysScroll (not alwaysScroll)) (ConsoleDisplay "\r\nalwaysScroll " alwaysScroll))
  (if (eq? c #\S) ((WinMap 'scrollUp))
  (if (eq? c #\a) (begin
                 ((WinMap 'alpha) (- (avatar 'y) PortY)
@@ -806,7 +870,7 @@ c))
    ;(field-set! (avatar 'z) (avatar 'y) (avatar 'x) (avatar 'cell))
    ;(canvasRender (avatar 'y) (avatar 'x))
    ;(viewportRender (avatar 'y) (avatar 'x)))
- (if (eq? c #\f) ((Terminal 'WindowMaskDump))
+;(if (eq? c #\f) ((Terminal 'WindowMaskDump))
  (if (eq? c #\g)
    (let ((o (field-ref (avatar 'z) (avatar 'y) (avatar 'x))))
      (field-delete!  (avatar 'z) (avatar 'y) (avatar 'x) o)
@@ -850,13 +914,15 @@ c))
    1            12
    #x43))
 
+;(viewportReset (avatar 'y) (avatar 'x))
 ((ipc 'qwrite) '(who))
 ;((ipc 'qwrite) `(voice ,(avatar 'dna) ,@((avatar 'gps)) 10 "Hello World[tm]!"))
-(viewportReset (avatar 'y) (avatar 'x))
 
 
 ;; Walking kitty soldier
-(define (spawnKitty)
+(define kittehDie #f)
+(define (spawnKitty . cycles)
+ (set! cycles (if (null? cycles) 60 (car cycles))) ; Set max cycles
  (letrec ((kitty (Avatar "Kat"))
           (dir->card (lambda (d) (vector-ref #(6 9 8 7 4 1 2 3) d)))
           (card->dir (lambda (c) (vector-ref #(0 5 6 7 4 0 0 3 2 1) c)))
@@ -904,14 +970,18 @@ c))
    (ConsoleDisplay (vector-ref happyVector 7))
    (ConsoleDisplay "   ")
 )
-   (sleep 800)
+   (sleep 100)
    ;(if (equal? ((kitty 'gps))
    ;            ((avatar 'gps)))
    ;    ((ipc 'qwrite) `(voice ,(kitty 'dna) ,@((kitty 'gps)) 10 "Mrrreeeooowww!")))
-   (if (= i 10)
+   (if (or kittehDie (> i (+ cycles (random 30))))
        ((ipc 'qwrite) `(die ,(kitty 'dna))) ; kill entity
        (~ (+ i 1)))))) ; spawnKitty
 
+(define (spawnKittehs)
+ (loading 10 35)
+ (vector-map! (lambda (x) (thread (x))) (make-vector (random 30) spawnKitty)))
+ 
 
 ;(thread (snake 18 38 500))
 ;(thread (snake 18 75 200))
@@ -922,63 +992,24 @@ c))
 
 
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; Drop some cells on the map
-(define (dropCell y x cell)
- (let ((z (+ 1 (field-ref-top 1000 y x))))
-  (field-set! z y x cell)
-  (canvasRender y x)
-  (viewportRender y x)))
-
-(define (build-brick-room yy xx)
- (let ~ ((i 0))
-    (sleep 1000)
-    (dropCell yy         (+ xx i)        BRICK)
-    (dropCell (+ yy 10)  (+ 10 xx (- i)) BRICK)
-    (dropCell (+ 10 yy (- i)) xx         BRICK)
-    (dropCell (+ yy i)   (+ xx 10)       BRICK)
-    (if (< i 9) (~ (+ i 1)))))
-
-;(thread (build-brick-room 10 10)) ; Sleep since canvas hasn't been created yet
-
-(define (build-island yy xx radius)
- (let ~ ((y (- radius))(x (- radius)))
-  (if (< y radius)
-  (if (= x radius) (~ (+ y 1) (- radius))
-   (begin
-    (if (> radius (sqrt (+ (^2 y) (^2 x))))
-        (dropCell (+ y yy) (+ x xx) SAND))
-    (~ y (+ x 1)) )))))
-
-                     (build-island 4 28 4) 
-(build-island 15 15 7) 
-                        (build-island 20 30 5)
-
-(dropCell 13 17 HELP)
-(dropCell 16 18 SNAKE)
-(dropCell 19 16 KITTY)
-(dropCell 12 13 TV)
-(dropCell 17 13 CHAIR)
-
-
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Screen redraw signal handler
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-(define (handle-terminal-resize)
+(define (handleTerminalResize)
   (ConsoleDisplay "\r\n" (terminal-size))
   ((Terminal 'ResetTerminal))
-  ((Console 'resize) (- (Terminal 'THeight) 1) (Terminal 'TWidth))
-  ((WinMap 'move) 0 (- (Terminal 'TWidth) (WinMap 'WWidth) 2))
-  ((WinColumn 'move) 1 (- (Terminal 'TWidth) 2) )
-  ((WinStatus 'move) (WinMap 'Y0) (- (Terminal 'TWidth) 12))
+  ((Console 'resize)  (- (Terminal 'THeight) 1) (Terminal 'TWidth))
+  ((WinMap 'move)     0 (- (Terminal 'TWidth) (WinMap 'WWidth) 2))
+  ((WinColumn 'move)  1 (- (Terminal 'TWidth) 2) )
+  ((WinStatus 'move)  (WinMap 'Y0) (- (Terminal 'TWidth) 12))
   ((WinInput 'resize) 1 (- (Terminal 'TWidth) 1))
-  ((WinInput 'move) (- (Terminal 'THeight) 1) 0))
+  ((WinInput 'move)   (- (Terminal 'THeight) 1) 0))
 
 (define sig28Semaphore (open-semaphore 1))
 
 (vector-set! SIGNALHANDLERS 28 (lambda ()
   (semaphore-down sig28Semaphore)
-  (handle-terminal-resize)
+  (handleTerminalResize)
   (semaphore-up sig28Semaphore)
   (unthread)))
 
@@ -1020,13 +1051,28 @@ c))
                      "desperate")))
    (sleep (random 500))
    ((ipc 'qwrite) cmd) (sleep 500)
-   ((ipc 'qwrite) cmd) (sleep 500))))
+   ((ipc 'qwrite) cmd) (sleep 500)))
 
-((ipc 'qwrite) (list 'voice (avatar 'dna) (avatar 'z) (avatar 'y) (avatar 'x) 100 "*PUSH* *SQUIRT* *SPANK* *WAAAAAAAAA*"))
+((ipc 'qwrite)
+   (list 'voice (avatar 'dna) (avatar 'z) (avatar 'y) (avatar 'x) 100
+     (vector-rnd
+       #("*PUSH* *SQUIRT* *SPANK* *WAAAAAAAAA*"
+         "*All Worldlians Want to Be Borned*"
+         "*Happy Birthday*"
+     ))))
+
+(define (sayByeBye)
+ ((ipc 'qwrite) `(die ,(avatar 'dna))) ; Kill avatar's entity
+ ((ipc 'qwrite) (list 'voice (avatar 'dna) (avatar 'z) (avatar 'y) (avatar 'x) 100 "*POOF*"))
+ (sleep 500)); wait for ipc to flush
+
+; Catch the terminal hangup signal so that normal
+; shutdown can occur.
+(vector-set! SIGNALHANDLERS 1 (lambda () (sleep 1000)))
+(signal 1)
+
 (wrepl)
-((ipc 'qwrite) `(die ,(avatar 'dna))) ; Kill avatar's entity
-((ipc 'qwrite) (list 'voice (avatar 'dna) (avatar 'z) (avatar 'y) (avatar 'x) 100 "*POOF*"))
-(sleep 500); wait for ipc to flush
+(sayByeBye)
 (displayl "\e[" (Terminal 'THeight) "H\r\n\e[0m\e[?25h")
 (quit)
 
