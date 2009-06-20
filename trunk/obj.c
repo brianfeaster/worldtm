@@ -23,7 +23,7 @@ Obj null, nullvec, nullstr, false, true, eof,
     spairp, svectorp, sstringp, sportp, sappend, seofobjectp,
     sthread, slet, sletrec,
     seval, sapply, scallcc, ssyntaxrules, seof,
-    snot, sadd, ssub, smul, sdiv, characters, signalhandlers;
+    snot, sadd, ssub, smul, sdiv, slogand, characters, signalhandlers;
 
 
 
@@ -122,7 +122,7 @@ void objCopyReal (void) {
 
 /* Create new string copying len bytes from str to object in r0.
 */
-void objNewString (char *str, int len) {
+void objNewString (u8 *str, int len) {
    memNewArray(TSTRING, len);
    if (str) memcpy(r0, str, len);
 }
@@ -440,6 +440,7 @@ DB("INIT    initializing memory module");
 	objNewSymbolStatic("-");            ssub = r0;
 	objNewSymbolStatic("*");            smul = r0;
 	objNewSymbolStatic("/");            sdiv = r0;
+	objNewSymbolStatic("logand");       slogand = r0;
 	objNewSymbolStatic("rem");          srem = r0;
 	objNewSymbolStatic("running");      srunning = r0;
 	objNewSymbolStatic("ready");        sready = r0;

@@ -38,35 +38,51 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Cells - For now cells are just glyphs...eventually smarter objects.
 ;;
-(define CELLS (make-vector 128 ))
+(define CELLS (make-vector 256 (glyphNew #x1b #\? #x31 #\?)))
 (define (cell-ref i)
-  (if (> i 65535)
+  (if (> i 255)
     ((entitiesGet i) 'glyph)
     (vector-ref CELLS i)))
 (define (cell-set! i c) (vector-set! CELLS i c))
 
-(define AIR 0)        (cell-set! AIR        (glyphNew #x00 CHAR-CTRL-@ #x00 CHAR-CTRL-@))
-(define DIRT  1)      (cell-set! DIRT       (glyphNew #x03 #\, #x03 #\,))
-(define GRASS 2)      (cell-set! GRASS      (glyphNew #x02 #\, #x02 #\,))
-(define XX 3)         (cell-set! XX         (glyphNew #x0f #\X #x0f #\X))
-(define BRICK 4)      (cell-set! BRICK      (glyphNew #x19 #\[ #x19 #\]))
-(define STONE 5)      (cell-set! STONE      (glyphNew #x07 #\[ #x07 #\]))
-(define DOORCLOSED 6) (cell-set! DOORCLOSED (glyphNew #x09 #\- #x09 #\-))
-(define DOOROPEN 7)   (cell-set! DOOROPEN   (glyphNew #x09 #\| #x09 #\ ))
-(define SIGN 8)       (cell-set! SIGN       (glyphNew #x4b #\| #x0b #\)))
-(define AVATAR 9)     (cell-set! AVATAR     (glyphNew #x0f #\/ #x0f #\\))
-(define HELP 10)      (cell-set! HELP       (glyphNew #x21 #\? #x21 #\?))
-(define CONSTRUCT 11) (cell-set! CONSTRUCT  (glyphNew #x77 #\  #x77 #\ ))
-(define TV   12)      (cell-set! TV         (glyphNew #x30 #\[ #x30 #\]))
-(define CHAIR 13)     (cell-set! CHAIR      (glyphNew #x19 #\P #x19 #\o))
-(define SNAKE 14)     (cell-set! SNAKE      (glyphNew #x6b #\O #x6b #\o
+(define WATER0 0)     (cell-set! WATER0     (glyphNew #x04 #\/ #x04 #\\
+                                                    #(#x04 #\\ #x04 #\/)))
+(define WATER1 1)     (cell-set! WATER1     (glyphNew #x04 #\~ #x04 #\~))
+(define WATER2 2)     (cell-set! WATER2     (glyphNew #x0c #\~ #x0c #\~))
+(define POISON 3)     (cell-set! POISON     (glyphNew #x04 #\. #x02 #\.))
+(define GRASS 4)      (cell-set! GRASS      (glyphNew #x02 #\. #x02 #\.))
+(define BUSHES 5)     (cell-set! BUSHES     (glyphNew #x02 #\o #x02 #\o))
+(define FOREST 6)     (cell-set! FOREST     (glyphNew #x02 #\O #x02 #\O))
+(define HILLS 7)      (cell-set! HILLS      (glyphNew #x07 #\^ #x07 #\^))
+(define MNTS 8)       (cell-set! MNTS       (glyphNew #x0f #\/ #x0f #\\))
+(define DUNGEON 9)    (cell-set! DUNGEON    (glyphNew #x08 #\[ #x08 #\]))
+(define TOWN 10)      (cell-set! TOWN       (glyphNew #x29 #\[ #x29 #\]))
+(define CONSTRUCT 11) (cell-set! CONSTRUCT  (glyphNew #x1b #\? #x31 #\a))
+(define TOWN2 12)     (cell-set! TOWN2      (glyphNew #x23 #\[ #x23 #\]))
+(define BRIT1 13)     (cell-set! BRIT1      (glyphNew #x09 #\I #x09 #\I))
+(define BRIT2 14)     (cell-set! BRIT2      (glyphNew #x07 #\[ #x07 #\]))
+(define BRIT3 15)     (cell-set! BRIT3      (glyphNew #x09 #\I #x09 #\I))
+(define SAND 17)      (cell-set! SAND       (glyphNew #x1b #\? #x31 #\b))
+(define STONE 18)     (cell-set! STONE      (glyphNew #x07 #\[ #x07 #\]))
+(define BRICK 19)     (cell-set! BRICK      (glyphNew #x19 #\[ #x19 #\]))
+(define DIRT  20)     (cell-set! DIRT       (glyphNew #x03 #\, #x03 #\,))
+(define XX 21)        (cell-set! XX         (glyphNew #x70 #\  #x70 #\ ))
+(define BRIDGE 23)    (cell-set! BRIDGE     (glyphNew #x03 #\= #x03 #\=))
+(define CELLB 29)     (cell-set! CELLB      (glyphNew #x1b #\? #x31 #\c))
+(define SHRINE 30)    (cell-set! SHRINE     (glyphNew #x06 #\[ #x06 #\]))
+(define CELLD 61)     (cell-set! CELLD      (glyphNew #x1b #\? #x31 #\d))
+(define FIRE2 70)     (cell-set! FIRE2      (glyphNew #x01 #\^ #x01 #\^))
+(define FIRE  76)     (cell-set! FIRE       (glyphNew #x09 #\^ #x09 #\^))
+(define HELP  77)     (cell-set! HELP       (glyphNew #x1b #\? #x1b #\?))
+(define CHAIR 78)     (cell-set! CHAIR      (glyphNew #x19 #\P #x19 #\o))
+(define SNAKE 79)     (cell-set! SNAKE      (glyphNew #x6b #\O #x6b #\o
                                                     #(#x6b #\o #x6b #\O)))
-(define KITTY 15)     (cell-set! KITTY      (glyphNew #x07 #\M #x07 #\e
+(define KITTY 80)     (cell-set! KITTY      (glyphNew #x07 #\M #x07 #\e
                                                     #(#x07 #\o #x07 #\w)))
-(define WATER 16)     (cell-set! WATER      (glyphNew #x04 #\~ #x04 #\^
-                                                    #(#x04 #\^ #x04 #\~)))
-(define SAND 17)      (cell-set! SAND       (glyphNew #x03 #\. #x03 #\,))
+(define AIR 127)      (cell-set! AIR        (glyphNew #x00 CHAR-CTRL-@ #x00 CHAR-CTRL-@))
 
+; Ultime cells
+;(0:34014 1:10336 2:1933 3:666 4:7159 5:4924 6:2304 7:2328 8:1745 9:7 10:7 11:3 12:4 13:1 14:1 15:1 23:17 29:1 30:7 61:1 70:7 76:70)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Column - Somewhat compact group of objects in one dimension.  Compressed
@@ -151,14 +167,15 @@ c))
 ;; Field - Maps will populate the field as if it were a local cache relative
 ;;         to the avatar's position.  Plan on creating a 2x2 cache.
 ;;
-(define FieldDimension 128) ; Field dimension
+(define FieldDimension 256) ; Field dimension
 
 ; Create default plane.
 (define FIELD
  (vector-vector-map! 
    (lambda (i)
     ;(if (random-bool 2) (vector 2 XX GRASS AIR) (vector 2 XX DIRT  AIR))
-    (vector 2 XX 	WATER  AIR AIR))
+    ;(vector 2 XX  WATER  AIR AIR))
+    (vector 0 XX AIR))
   (make-vector-vector FieldDimension FieldDimension ())))
 
 ;(vector-vector-map! (lambda (i) (display "\r\n") (display i) i) FIELD)
@@ -170,8 +187,8 @@ c))
 ; Setting a cell outside the explicit stack range expands the actual vector
 ; and adjusts the start-height value.
 (define (field-column y x)
-(vector-vector-ref FIELD (modulo y FieldDimension)
-                         (modulo x FieldDimension)))
+ (vector-vector-ref FIELD (modulo y FieldDimension)
+                          (modulo x FieldDimension)))
 
 (define (field-ref z y x)
  (letrec ((column   (field-column y x))
@@ -362,7 +379,8 @@ c))
 ;;
 (define (Avatar name) ; Inherits Entity
  ((Entity (random) name
-   6 19 14
+   4 106 90 
+   ;0 0 0 
    (glyphNew #x0f (string-ref name 0)
              #x0f (string-ref name 1)))
   `(let ()
@@ -511,7 +529,7 @@ c))
  ((avatar 'walk) dir)
  ((ipc 'qwrite) `(move ,(avatar 'dna) ,@((avatar 'gps))))
  ; Popup a message to a new window temporarily.
- (if (eq? DOOROPEN (field-ref (avatar 'z) (avatar 'y) (avatar 'x)))
+ (if (eq? BUSHES   (field-ref (avatar 'z) (avatar 'y) (avatar 'x)))
   ((lambda ()
      (define WinTemp ((Terminal 'WindowNew) 1 29 1 22 #x1b))
      (define WinTempPutc (WinTemp 'putc))
@@ -560,7 +578,7 @@ c))
 
 ; Initial map size is 20 or terminal width/height.
 (define WinMap
- (let ((MapSize (min 20 (min (- (Terminal 'THeight) 1)
+ (let ((MapSize (min 28 (min (- (Terminal 'THeight) 1)
                              (/ (Terminal 'TWidth) 2)))))
   ((Terminal 'WindowNew)
     0 (- (Terminal 'TWidth) (* MapSize 2) 2)
@@ -596,7 +614,7 @@ c))
   (semaphore-down MapWindowSemaphore)
   ((WinMap 'goto) y x)
   (if (and (= (vector-length glyph) 5) ; Animation hack.
-           (> (modulo (time) 10) 5))
+           (> (modulo (time) 2) 0))
       (set! glyph (vector-ref glyph 4)))
   (WinMapSetColor (glyphColor0 glyph))
   (WinMapPutc     (glyphChar0 glyph))
@@ -654,21 +672,30 @@ c))
        (~~ (+ i 1))))
  ((WinMarquee 'delete)))
 
-(define (loading y x)
- (define WinLoading ((Terminal 'WindowNew) y x 3 23 #x4a))
- ((WinLoading 'cursor-visible) #f)
- ((WinLoading 'puts) "+----L-O-A-D-I-N-G----+")
- ((WinLoading 'puts) "|                     |")
- ((WinLoading 'puts) "+---------------------+")
- ((WinLoading 'goto) 1 1)
- ((WinLoading 'set-color) #x70)
- (let ~~ ((i 0))
-  (if (< i 21) (begin
-    ((WinLoading 'putc) #\ )
-    (sleep 100)
-    (~~ (+ i 1)))))
- (sleep 100)
- ((WinLoading 'delete)))
+(define (makeProgressBar y x title)
+ (let ((win ((Terminal 'WindowNew) y x 3 22 #x4a))
+       (pos 0))
+  ((win 'cursor-visible) #f)
+  ((win 'puts) "+--------------------+")
+  ((win 'puts) "|                    |")
+  ((win 'puts) "+--------------------+")
+  ((win 'goto) 0 2) ((win 'puts) title)
+  ((win 'goto) 1 1) ((win 'set-color) #x70)
+  (lambda ()
+   (if (= pos 20)
+    (begin
+     ((win 'delete))
+     #f)
+    (begin
+     ((win 'putc) #\ )
+     (set! pos (+ pos 1))
+     #t)))))
+
+(define (loading y x title)
+ (let ((loadingbar (makeProgressBar y x "P R O G R E S S")))
+   (let ~ ()
+     (sleep 200)
+     (if (loadingbar) (~)))))
 
 (define (snake y x delay)
  (define Window3 ((Terminal 'WindowNew) y x 3 3 #x6b))
@@ -731,7 +758,13 @@ c))
  (let ((z (+ 1 (field-ref-top 1000 y x))))
   (field-set! z y x cell)
   (canvasRender y x)
-  (viewportRender y x)))
+  (viewportRender y x)
+  ))
+
+(define (setCell z y x cell)
+  (field-set! z y x cell)
+  (canvasRender y x)
+  (viewportRender y x))
 
 (define (build-brick-room yy xx)
  (let ~ ((i 0))
@@ -752,16 +785,49 @@ c))
         (dropCell (+ y yy) (+ x xx) SAND))
     (~ y (+ x 1)) )))))
 
-(build-island 15 15 7) 
-(dropCell 13 17 HELP)
-(dropCell 16 18 SNAKE)
-(dropCell 19 16 KITTY)
-(dropCell 12 13 TV)
-(dropCell 17 13 CHAIR)
-(build-island 4 28 4) 
-(build-island 20 30 5)
+; Mapping from Ultima4 map file byte index to (y x) World[tm] coordinates.
+;  y = (+ (modulo (/ i 32) 32) (* (/ i 8192) 32))
+;  x = (+ (modulo i 32) (* (modulo (/ i 1024) 8) 32))
 
-(build-brick-room 15 35)
+; Mapping from World[tm] (y x) corrdinates to Ultima4 map file byte index.
+; i = (+ (modulo x 32) (* (/ x 32) 1024) (* (modulo y 32) 32) (* (/ y 32) 8192))
+
+(define (build-ultima-world4)
+ (let ((fd (open "ultima4.map"))
+       (bar (makeProgressBar 5 30 "Britannia 4")))
+  (let ~ ((i 0))
+     (or (= i 65536) (begin
+      (if (= 0 (modulo i (/ 65536 20))) (bar))
+      (setCell 2
+               (+ (modulo (/ i 32) 32) (* (/ i 8192) 32))
+               (+ (modulo i 32) (* (modulo (/ i 1024) 8) 32))
+               (+ 0 (read-char fd))) ; Hack to convert char to integer
+      (~ (+ i 1)))))))
+
+(define (build-ultima-world5)
+ (let ((fdm (open "ultima5.map"))
+       (fdi (open "ultima5.ovl"))
+       (bar (makeProgressBar 1 30 "Britannia 4")))
+ (let ~ ((y 0) (x 0)) (if (< y 256) (if (= x 256) (~ (+ y 1) 0) (begin
+   (if (and (= x 255) (= 0 (modulo y 12))) (bar)) ; Progress bar
+   (let ((index (begin (seek fdi (+ (/ x 16) (* (/ y 16) 16)))
+                       (+ 0 (read-char fdi)))))
+    (setCell 2 y x 
+      (if (= 255 index) WATER1 (begin
+        (seek fdm (+ (* index 256) (modulo x 16) (* (modulo y 16) 16)))
+        (+ 0 (read-char fdm))))))
+   (~ y (+ x 1))))))))
+
+(thread (build-ultima-world4))
+;(build-island 15 15 7) 
+;(dropCell 13 17 HELP)
+;(dropCell 16 18 SNAKE)
+;(dropCell 19 16 KITTY)
+;(dropCell 12 13 TV)
+;(dropCell 17 13 CHAIR)
+;(build-island 4 28 4) 
+;(build-island 20 30 5)
+;(build-brick-room 15 35)
 
 (define replTalk
  (let ((talkInput ""))
@@ -787,8 +853,8 @@ c))
             (begin
              ((avatar `setNameGlyph)
                 (substring talkInput 11 strLen)
-                (glyphNew #x0f (string-ref talkInput 11)
-                          #x0f (string-ref talkInput (if (> strLen 12) 12 11))))
+                (glyphNew (glyphColor0 (avatar 'glyph)) (string-ref talkInput 11)
+                          (glyphColor1 (avatar 'glyph)) (string-ref talkInput (if (> strLen 12) 12 11))))
              (thread (begin (sleep 500) (who))))))
        ; Toggle help window if certain phrase entered
        (if (string=? "?" talkInput) (help))
