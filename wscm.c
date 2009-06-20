@@ -770,7 +770,7 @@ ret:
    Otherwise will block if exactly (string-length r2) bytes aren't read yet.
 */
 void wscmRecv (void) {
- char buffer[0x1000];
+ u8 buffer[0x2000];
  int ret, len;
 	DB("SYS -->wscmRecv <= ");
 	//DBE wscmWrite(r1, 0, 1);
@@ -1778,6 +1778,16 @@ void sysDiv (void) {
 	DB("<--%s", __func__);
 }
 
+void sysLogAnd (void) {
+ s32 a, b;
+	DB("-->%s", __func__);
+	if (wscmAssertArgumentCount(2, __func__)) return;
+	a = *(s32*)pop();
+	b = *(s32*)pop();
+	objNewInteger(a&b);
+	DB("<--%s", __func__);
+}
+
 void sysSqrt (void) {
 	DB("-->%s", __func__);
 	if (wscmAssertArgumentCountRange(1, 1, __func__)) return;
@@ -2027,6 +2037,17 @@ void sysSend (void) {
 			wscmSchedule();
 		}
 	}
+	DB("<--%s", __func__);
+}
+
+void sysSeek (void) {
+ /* TODO: Harden this syscall. */
+ int fd, offset;
+	DB("-->%s", __func__);
+	if (wscmAssertArgumentCount(2, __func__)) return;
+	offset = *(s32*)pop(); /* Offset */
+	fd=*(int*)pop(); /* Descriptor. */
+	lseek(fd, offset, SEEK_SET);
 	DB("<--%s", __func__);
 }
 
@@ -2739,6 +2760,7 @@ void wscmInitialize (void) {
 	wscmDefineSyscall (sysAdd, "+");
 	wscmDefineSyscall (sysMul, "*");
 	wscmDefineSyscall (sysDiv, "/");
+	wscmDefineSyscall (sysLogAnd, "logand");
 	wscmDefineSyscall (sysSqrt, "sqrt");
 	wscmDefineSyscall (sysRemainder, "remainder");
 	wscmDefineSyscall (sysModulo, "modulo");
@@ -2756,6 +2778,7 @@ void wscmInitialize (void) {
 	wscmDefineSyscall (sysUnreadChar, "unread-char");
 	wscmDefineSyscall (sysReadString, "read-string");
 	wscmDefineSyscall (sysSend, "send");
+	wscmDefineSyscall (sysSeek, "seek");
 	wscmDefineSyscall (sysTerminalSize, "terminal-size");
 	wscmDefineSyscall (sysStringRef, "string-ref");
 	wscmDefineSyscall (sysStringSetB, "string-set!");

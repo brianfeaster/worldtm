@@ -17,7 +17,7 @@ extern Obj null, nullvec, nullstr, false, true, eof,
        snullp, spairp, svectorp, sstringp, sportp, sappend,
        seofobjectp, sthread, slet, sletrec, seval, sapply, scallcc,
        ssyntaxrules, seof,
-       snot, sadd, ssub, smul, sdiv, characters,
+       snot, sadd, ssub, smul, sdiv, slogand, characters,
        signalhandlers;
 
 
@@ -34,7 +34,7 @@ void objCopyInteger (void);
 void objNewReal     (r32 x);
 void objCopyReal    (void);
 
-void objNewString  (char *str, int len);
+void objNewString  (u8 *str, int len);
 void objCopyString  (void);
 void objNewSymbol  (char *str, int len);
 void objNewSyscall (fp f);

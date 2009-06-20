@@ -488,6 +488,7 @@ Obj memVectorObject (Obj obj, u32 offset) {
 	} else if (offset<0 || memObjectLength(obj)<=offset ) {
 		DB ("ERROR memVectorObject(obj %08x offset %x) Invalid index.",
 		    obj, offset);
+		//r0=code; vmDebugDump();  // Debug dump the code object.
 		memError();
 	}
 	#endif
