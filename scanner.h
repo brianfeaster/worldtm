@@ -29,15 +29,15 @@
 #define SREAL    FINALSTATE|PUSHBACK|0x10
 #define SINTEGER FINALSTATE|PUSHBACK|0x11
 
-extern char yytext[];
-extern int yyleng;
+extern u8  yytext[];
+extern Num yyleng;
 
-int parseString (char *str);
+Num parseString (u8* str);
 void yyrestart(int fd);
-void yy_scan_string(char *buff);
-void yy_scan_bytes(char *buff, int len);
-u32 transition (u32 ch, u32 state);
-int yylex (void);
+void yy_scan_string(u8 *buff);
+void yy_scan_bytes(u8 *buff, Num len);
+Num transition (Num ch, Num state);
+Num yylex (void);
 void yyparse (void);
 
 #endif

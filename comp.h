@@ -1,24 +1,24 @@
 #ifndef _COMP_H
 #define _COMP_H
 
-void compEval (u32 flags);
+void compEval (Num flags);
 void compSelfEvaluating (void);
 void compVariableReference (void);
-void compDefine (u32 flags);
-void compSetb (u32 flags);
-void compLambdaBody (u32 flags);
-void compLambda (u32 flags);
-void compAdd (u32 flags);
+void compDefine (Num flags);
+void compSetb (Num flags);
+void compLambdaBody (Num flags);
+void compLambda (Num flags);
+void compAdd (Num flags);
 void compVerifyVectorRef (void);
-void compVectorRef (u32 flags);
-void compVectorVectorRef (u32 flags);
-void compCons (u32 flags);
-void compBegin (u32 flags);
+void compVectorRef (Num flags);
+void compVectorVectorRef (Num flags);
+void compCons (Num flags);
+void compBegin (Num flags);
 void compQuote (void);
-void compIf (u32 flags);
+void compIf (Num flags);
 void compSyntaxRules (void);
-void compCombination (u32 flags);
-int  compExpression (u32 flags);
-int compCompile (void);
+void compCombination (Num flags);
+Int compExpression (Num flags);
+Int compCompile (void);
 
 #endif

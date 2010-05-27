@@ -356,15 +356,16 @@
 (define (repl)
   (display (cons "MSG:" (call/cc (lambda (c) (vector-set! ERRORS (tid) c) WELCOME-MESSAGE))))
   (let ~ ()
-  (display "\nwscm>")
-  (let ((ret (read stdin)))
-    (display (eval ret))
-    (if (not (eof-object? ret)) (~)))))
+    (display "\nwscm>")
+    (let ((ret (read stdin)))
+      (display (eval ret))
+      (if (not (eof-object? ret)) (~)))))
 
 (define gc garbage-collect)
 
 (vector-set! SIGNALHANDLERS 28 (lambda () (display (terminal-size)) (unthread)))
 (signal 28)
+
 ; If wscm is run with a command line argument that isn't a switch, then 
 ; assume it's a file to run otherwise begin the REPL.
 (if (and (> (vector-length argv) 1)

@@ -10,7 +10,10 @@
 
 #include <unistd.h> /* For write(). */
 
-#define OPDB(s) DBE fprintf(stderr,"\n%08x:%04x " s, code, ((Obj*)ip-(Obj*)code))
+/* Debg dump the current opcode
+*/
+#define OPDB(s) DBE fprintf(stderr,"\n"OBJ":"HEX" " s, code, ((Obj*)ip-(Obj*)code))
+//#define OPDB(s) DBE fprintf(stderr,"\n"OBJ":"HEX" " s, code+8*((Obj*)ip-(Obj*)code), ((Obj*)ip-(Obj*)code))
 
 
 /* Conditional Branch   - Immediate/Relative  near/far
@@ -34,44 +37,32 @@ RET (saved block/inst)
 
 void memDebugDumpHeapHeaders (void);
 
-fp vmCallerPreGarbageCollect = 0,
-   vmCallerPostGarbageCollect = 0;
+Func vmCallerPreGarbageCollect = 0,
+     vmCallerPostGarbageCollect = 0;
 
 int vmGCCount=0;
 
 void vmPreGarbageCollect (void) {
-	DB("VM -->vmPreGarbageCollect");
+	DB("::vmPreGarbageCollect  ip "OBJ"  code"OBJ, ip, code);
 	if (vmGCCount++ == 0) {
 		if (vmCallerPreGarbageCollect) vmCallerPreGarbageCollect();
 		/* Only convert ip to offset if it's a pointer (big number larger pointing
-			into the code object).  Multiply by four to force opcode offset (not
+			into the code object).  Multiply by eight to force opcode offset (not
 			byte). */
-		if (ip >= code) ip = (Obj)((ip - code)/4);
-		DB("VM <--vmPreGarbageCollect");
+		if (ip >= code) ip = (Obj)((ip - code)/8);
+		DB("  --vmPreGarbageCollect  ip "OBJ"  code"OBJ, ip, code);
 	}
 }
 void vmPostGarbageCollect (void) {
-	DB("VM -->vmPostGarbageCollect");
+	DB("::vmPostGarbageCollect  ip "OBJ"  code"OBJ, ip, code);
 	if (vmGCCount-- == 1) {
 		if (vmCallerPostGarbageCollect) vmCallerPostGarbageCollect();
 		/* Only convert ip to pointer if it's an offset (low number below the
 			code's address). */
-		if (ip < code) ip = code + ((int)ip)*4;
-		DB("VM <--vmPostGarbageCollect");
+		if (ip < code) ip = code + ((Int)ip)*8;
+		DB("  --vmPostGarbageCollect  ip "OBJ"  code"OBJ, ip, code);
 	}
 }
-
-/* Default Object serializer
- */
-void vmObjectDumperDefault (Obj o) {
- static char buff[80];
- int len;
-	len = sprintf (buff, "%08x", o);
-	write (1, buff, len);
-}
-
-void (*vmObjectDumper)(Obj o) = vmObjectDumperDefault;
-
 
 
 /* This causes the machine to make a call to the interrupt handler.
@@ -86,7 +77,7 @@ void vmSigAlarmReset (void) {
 	ualarm(10*1000,0); /* 10 miliseconds (100 tics/sec)*/
 }
 
-fp vmCallerInterruptHandler = 0;
+Func vmCallerInterruptHandler = 0;
 
 void vmInterruptHandler (void) {
 	DB("VM -->vmInterruptHandler <= %08x %08x", code, ip);
@@ -107,7 +98,7 @@ void vmInterruptHandler (void) {
 
 #define INIT 0
 #define RUN  1
-void vmVm (int cmd) {
+void vmVm (Int cmd) {
 	/* Initialize the opcodes.  Really we're just assigning a bunch of global
 		label pointers the jump addresses of all the opcode implementations in
 		this function. */
@@ -135,8 +126,8 @@ void vmVm (int cmd) {
 		PUSH4=&&push4; PUSH7=&&push7;   PUSH15=&&push15; PUSH16=&&push16;
       PUSH1D=&&push1d; PUSH1E=&&push1e;
 
-		POP0=&&pop0;   POP1=&&pop1;     POP2=&&pop2;     POP3=&&pop3;
-		POP4=&&pop4;   POP7=&&pop7; POP15=&&pop15;  POP1D=&&pop1d; POP1E=&&pop1e;
+		POP0=&&pop0;    POP1=&&pop1;   POP2=&&pop2;   POP3=&&pop3;  POP4=&&pop4;  POP7=&&pop7;
+		POP15=&&pop15;  POP1D=&&pop1d; POP1E=&&pop1e;
 
 		ADDI0=&&addi0; ADDI1=&&addi1; ADD10=&&add10; MUL10=&&mul10;
 
@@ -146,8 +137,9 @@ void vmVm (int cmd) {
 		BRTI0=&&brti0; BNTI0=&&bnti0;
 		BRA=&&bra;
 
-		J0=&&j0;       JAL0=&&jal0;   RET=&&ret;
-		J2=&&j2;       JAL2=&&jal2;
+		J0=&&j0;      J2=&&j2;
+		JAL0=&&jal0;  JAL2=&&jal2;
+		RET=&&ret;
 
 		SYSI=&&sysi;   SYS0=&&sys0;   QUIT=&&quit;
 		return;
@@ -156,124 +148,130 @@ void vmVm (int cmd) {
  /* pc, after a syscall, could have it's code object move.  Find
     all opcodes that could possibly cause a GC.  Better to NOT EVER USE
     LOCAL C VARS.  DUHHH. */
-	/* Since registers are really void* and opcodes are u32 words, instruction
+	/* Since registers are really void* and opcodes are u64 words, instruction
 		addresses must be adjusted by 4 times.
 		void **pc = (void**)code + (int)ip;
 	*/
 
+	DB("Address: LDI00 = %p", LDI00);
+	DB("Address: BRA   = %p", BRA);
+	DB("Address: BRTI0 = %p", BRTI0);
+
+
 	/* Run machine code by jumping to first opcode (code=r13  ip=r1b). */
-	ip = code + (int)ip*4;
+	ip = code + (Int)ip*8;
+	DB("Starting VM:  ip="HEX"  code="HEX"  **ip="HEX, ip, code, *(void**)ip);
 	goto **(void**)ip;
 
 	/* NOP */
 	nop: OPDB("NOP");
-	goto **(void**)(ip+=4);
+	goto **(void**)(ip+=8);
 
 	/* Load immediate value into register. */
-	mvi0: OPDB("mvi0"); r0=*(Obj*)(ip+=4); goto **(void**)(ip+=4);
-	mvi1: OPDB("mvi1"); r1=*(Obj*)(ip+=4); goto **(void**)(ip+=4);
-	mvi2: OPDB("mvi2"); r2=*(Obj*)(ip+=4); goto **(void**)(ip+=4);
-	mvi3: OPDB("mvi3"); r3=*(Obj*)(ip+=4); goto **(void**)(ip+=4);
-	mvi4: OPDB("mvi4"); r4=*(Obj*)(ip+=4); goto **(void**)(ip+=4);
-	mvi5: OPDB("mvi5"); r5=*(Obj*)(ip+=4); goto **(void**)(ip+=4);
-	mvi6: OPDB("mvi6"); r6=*(Obj*)(ip+=4); goto **(void**)(ip+=4);
-	mvi7: OPDB("mvi7"); r7=*(Obj*)(ip+=4); goto **(void**)(ip+=4);
+	mvi0: OPDB("mvi0"); r0=*(Obj*)(ip+=8); goto **(void**)(ip+=8);
+	mvi1: OPDB("mvi1"); r1=*(Obj*)(ip+=8); goto **(void**)(ip+=8);
+	mvi2: OPDB("mvi2"); r2=*(Obj*)(ip+=8); goto **(void**)(ip+=8);
+	mvi3: OPDB("mvi3"); r3=*(Obj*)(ip+=8); goto **(void**)(ip+=8);
+	mvi4: OPDB("mvi4"); r4=*(Obj*)(ip+=8); goto **(void**)(ip+=8);
+	mvi5: OPDB("mvi5"); r5=*(Obj*)(ip+=8); goto **(void**)(ip+=8);
+	mvi6: OPDB("mvi6"); r6=*(Obj*)(ip+=8); goto **(void**)(ip+=8);
+	mvi7: OPDB("mvi7"); r7=*(Obj*)(ip+=8); goto **(void**)(ip+=8);
 
 	/* Copy regster to another. */
-	mv01: OPDB("mv01"); r0=r1; goto **(void**)(ip+=4);
-	mv02: OPDB("mv02"); r0=r2; goto **(void**)(ip+=4);
-	mv03: OPDB("mv03"); r0=r3; goto **(void**)(ip+=4);
-	mv04: OPDB("mv04"); r0=r4; goto **(void**)(ip+=4);
-	mv07: OPDB("mv07"); r0=r7; goto **(void**)(ip+=4);
-	mv016: OPDB("mv016"); r0=r16; goto **(void**)(ip+=4);
-	mv01c: OPDB("mv01c"); r0=r1c; goto **(void**)(ip+=4);
-	mv10: OPDB("mv10"); r1=r0; goto **(void**)(ip+=4);
-	mv13: OPDB("mv13"); r1=r3; goto **(void**)(ip+=4);
-	mv116: OPDB("mv116"); r1=r16; goto **(void**)(ip+=4);
-	mv20: OPDB("mv20"); r2=r0; goto **(void**)(ip+=4);
-	mv23: OPDB("mv23"); r2=r3; goto **(void**)(ip+=4);
-	mv30: OPDB("mv30"); r3=r0; goto **(void**)(ip+=4);
-	mv50: OPDB("mv50"); r5=r0; goto **(void**)(ip+=4);
-	mv416: OPDB("mv416"); r4=r16; goto **(void**)(ip+=4);
-	mv160: OPDB("mv160"); r16=r0; goto **(void**)(ip+=4);
-	mv162: OPDB("mv162"); r16=r2; goto **(void**)(ip+=4);
-	mv164: OPDB("mv164"); r16=r4; goto **(void**)(ip+=4);
+	mv01: OPDB("mv01"); r0=r1; goto **(void**)(ip+=8);
+	mv02: OPDB("mv02"); r0=r2; goto **(void**)(ip+=8);
+	mv03: OPDB("mv03"); r0=r3; goto **(void**)(ip+=8);
+	mv04: OPDB("mv04"); r0=r4; goto **(void**)(ip+=8);
+	mv07: OPDB("mv07"); r0=r7; goto **(void**)(ip+=8);
+	mv016: OPDB("mv016"); r0=r16; goto **(void**)(ip+=8);
+	mv01c: OPDB("mv01c"); r0=r1c; goto **(void**)(ip+=8);
+	mv10: OPDB("mv10"); r1=r0; goto **(void**)(ip+=8);
+	mv13: OPDB("mv13"); r1=r3; goto **(void**)(ip+=8);
+	mv116: OPDB("mv116"); r1=r16; goto **(void**)(ip+=8);
+	mv20: OPDB("mv20"); r2=r0; goto **(void**)(ip+=8);
+	mv23: OPDB("mv23"); r2=r3; goto **(void**)(ip+=8);
+	mv30: OPDB("mv30"); r3=r0; goto **(void**)(ip+=8);
+	mv50: OPDB("mv50"); r5=r0; goto **(void**)(ip+=8);
+	mv416: OPDB("mv416"); r4=r16; goto **(void**)(ip+=8);
+	mv160: OPDB("mv160"); r16=r0; goto **(void**)(ip+=8);
+	mv162: OPDB("mv162"); r16=r2; goto **(void**)(ip+=8);
+	mv164: OPDB("mv164"); r16=r4; goto **(void**)(ip+=8);
 
 	/* Load r2 <- *(r0 + immediate) */
 	ldi00: OPDB("ldi00");
-	r0=memVectorObject(r0, *(u32*)(ip+=4));//*((Obj*)r0 + *(u32*)(ip+=4));
-	goto **(void**)(ip+=4);
+	r0=memVectorObject(r0, *(Num*)(ip+=8));//*((Obj*)r0 + *(Num*)(ip+=8));
+	goto **(void**)(ip+=8);
 	ldi02: OPDB("ldi02");
-	r0=memVectorObject(r2, *(u32*)(ip+=4));//*((Obj*)r2 + *(u32*)(ip+=4));
-	goto **(void**)(ip+=4);
+	r0=memVectorObject(r2, *(Num*)(ip+=8));//*((Obj*)r2 + *(Num*)(ip+=8));
+	goto **(void**)(ip+=8);
 	ldi016: OPDB("ldi016");
-	r0=memVectorObject(r16, *(u32*)(ip+=4));//*((Obj*)r16 + *(u32*)(ip+=4));
-	goto **(void**)(ip+=4);
+	r0=memVectorObject(r16, *(Num*)(ip+=8));//*((Obj*)r16 + *(Num*)(ip+=8));
+	goto **(void**)(ip+=8);
 	ldi11: OPDB("ldi11");
-	r1=memVectorObject(r1, *(u32*)(ip+=4));//*((Obj*)r1 + *(u32*)(ip+=4));
-	goto **(void**)(ip+=4);
+	r1=memVectorObject(r1, *(Num*)(ip+=8));//*((Obj*)r1 + *(Num*)(ip+=8));
+	goto **(void**)(ip+=8);
 	ldi116: OPDB("ldi116");
-	r1=memVectorObject(r16, *(u32*)(ip+=4));//*((Obj*)r16 + *(u32*)(ip+=4));
-	goto **(void**)(ip+=4);
+	r1=memVectorObject(r16, *(Num*)(ip+=8));//*((Obj*)r16 + *(Num*)(ip+=8));
+	goto **(void**)(ip+=8);
 	ldi20: OPDB("ldi20");
-	r2=//memVectorObject(r0, *(u32*)(ip+=4));
-		*((Obj*)r0 + *(u32*)(ip+=4));
-	goto **(void**)(ip+=4);
+	r2=//memVectorObject(r0, *(Num*)(ip+=8));
+		*((Obj*)r0 + *(Num*)(ip+=8));
+	goto **(void**)(ip+=8);
 	ldi22: OPDB("ldi22");
-	r2=//memVectorObject(r2, *(u32*)(ip+=4));
-		*((Obj*)r2 + *(u32*)(ip+=4));
-	goto **(void**)(ip+=4);
+	r2=//memVectorObject(r2, *(Num*)(ip+=8));
+		*((Obj*)r2 + *(Num*)(ip+=8));
+	goto **(void**)(ip+=8);
 	ldi40: OPDB("ldi40");
-	r4=memVectorObject(r0, *(u32*)(ip+=4));//*((Obj*)r0 + *(u32*)(ip+=4));
-	goto **(void**)(ip+=4);
+	r4=memVectorObject(r0, *(Num*)(ip+=8));//*((Obj*)r0 + *(Num*)(ip+=8));
+	goto **(void**)(ip+=8);
 	ldi50: OPDB("ldi50");
-	r5=memVectorObject(r0, *(u32*)(ip+=4));//*((Obj*)r0 + *(u32*)(ip+=4));
-	goto **(void**)(ip+=4);
+	r5=memVectorObject(r0, *(Num*)(ip+=8));//*((Obj*)r0 + *(Num*)(ip+=8));
+	goto **(void**)(ip+=8);
 	ldi160: OPDB("ldi160");
-	r16=memVectorObject(r0, *(u32*)(ip+=4));//*((Obj*)r0 + *(u32*)(ip+=4));
-	goto **(void**)(ip+=4);
+	r16=memVectorObject(r0, *(Num*)(ip+=8));//*((Obj*)r0 + *(Num*)(ip+=8));
+	goto **(void**)(ip+=8);
 	ldi1616: OPDB("ldi1616");
-	r16=memVectorObject(r16, *(u32*)(ip+=4));//*((Obj*)r16 + *(u32*)(ip+=4));
-	goto **(void**)(ip+=4);
+	r16=memVectorObject(r16, *(Num*)(ip+=8));//*((Obj*)r16 + *(Num*)(ip+=8));
+	goto **(void**)(ip+=8);
 
 	/* Load value in register's address plus register offset into register. */
-	ld012: OPDB("ld012"); r0=*((Obj*)r1 + (u32)r2);  goto **(void**)(ip+=4);
+	ld012: OPDB("ld012"); r0=*((Obj*)r1 + (Num)r2);  goto **(void**)(ip+=8);
 
 	/* Store r0 -> *(r1 + immediate). */
 	sti01:OPDB("sti01");
 #if VALIDATE
-		if (!(0 <= *(u32*)(ip+4) && *(u32*)(ip+4) < memObjectLength(r1))) fprintf (stderr, "[ERROR opcode sti01 %d < %d", memObjectLength(r1), *(u32*)(ip+4));
+		if (!(0 <= *(Num*)(ip+8) && *(Num*)(ip+8) < memObjectLength(r1))) fprintf (stderr, "[ERROR opcode sti01 %d < %d", memObjectLength(r1), *(Num*)(ip+8));
 #endif
-		*((Obj*)r1 + *(u32*)(ip+=4))=r0; goto **(void**)(ip+=4);
+		*((Obj*)r1 + *(Num*)(ip+=8))=r0; goto **(void**)(ip+=8);
 	sti016:OPDB("sti016");
 #if VALIDATE
-		if (!(0 <= *(u32*)(ip+4) && *(u32*)(ip+4) < memObjectLength(r16))) fprintf (stderr, "[ERROR opcode sti016 %d < %d", memObjectLength(r16), *(u32*)(ip+4));
+		if (!(0 <= *(Num*)(ip+8) && *(Num*)(ip+8) < memObjectLength(r16))) fprintf (stderr, "[ERROR opcode sti016 %d < %d", memObjectLength(r16), *(Num*)(ip+8));
 #endif
-		*((Obj*)r16 + *(u32*)(ip+=4))=r0; goto **(void**)(ip+=4);
+		*((Obj*)r16 + *(Num*)(ip+=8))=r0; goto **(void**)(ip+=8);
 	sti20:OPDB("sti20");
 #if VALIDATE
-		if (!(0 <= *(u32*)(ip+4) && *(u32*)(ip+4) < memObjectLength(r0))) fprintf (stderr, "[ERROR opcode sti20 %d < %d", memObjectLength(r0), *(u32*)(ip+4));
+		if (!(0 <= *(Num*)(ip+8) && *(Num*)(ip+8) < memObjectLength(r0))) fprintf (stderr, "[ERROR opcode sti20 %d < %d", memObjectLength(r0), *(Num*)(ip+8));
 #endif
-		*((Obj*)r0 + *(u32*)(ip+=4))=r2; goto **(void**)(ip+=4);
+		*((Obj*)r0 + *(Num*)(ip+=8))=r2; goto **(void**)(ip+=8);
 	sti21:OPDB("sti21");
 #if VALIDATE
-		if (!(0 <= *(u32*)(ip+4) && *(u32*)(ip+4) < memObjectLength(r1))) fprintf (stderr, "[ERROR opcode sti21 %d < %d", memObjectLength(r1), *(u32*)(ip+4));
+		if (!(0 <= *(Num*)(ip+8) && *(Num*)(ip+8) < memObjectLength(r1))) fprintf (stderr, "[ERROR opcode sti21 %d < %d", memObjectLength(r1), *(Num*)(ip+8));
 #endif
-		*((Obj*)r1 + *(u32*)(ip+=4))=r2; goto **(void**)(ip+=4);
+		*((Obj*)r1 + *(Num*)(ip+=8))=r2; goto **(void**)(ip+=8);
 	sti30:OPDB("sti30");
 #if VALIDATE
-		if (!(0 <= *(u32*)(ip+4) && *(u32*)(ip+4) < memObjectLength(r0))) fprintf (stderr, "[ERROR opcode sti30 %d < %d", memObjectLength(r0), *(u32*)(ip+4));
+		if (!(0 <= *(Num*)(ip+8) && *(Num*)(ip+8) < memObjectLength(r0))) fprintf (stderr, "[ERROR opcode sti30 %d < %d", memObjectLength(r0), *(Num*)(ip+8));
 #endif
-		*((Obj*)r0 + *(u32*)(ip+=4))=r3; goto **(void**)(ip+=4);
+		*((Obj*)r0 + *(Num*)(ip+=8))=r3; goto **(void**)(ip+=8);
 	sti40:OPDB("sti40");
 #if VALIDATE
-		if (!(0 <= *(u32*)(ip+4) && *(u32*)(ip+4) < memObjectLength(r0))) fprintf (stderr, "[ERROR opcode sti40 %d < %d", memObjectLength(r0), *(u32*)(ip+4));
+		if (!(0 <= *(Num*)(ip+8) && *(Num*)(ip+8) < memObjectLength(r0))) fprintf (stderr, "[ERROR opcode sti40 %d < %d", memObjectLength(r0), *(Num*)(ip+8));
 #endif
-		*((Obj*)r0 + *(u32*)(ip+=4))=r4; goto **(void**)(ip+=4);
+		*((Obj*)r0 + *(Num*)(ip+=8))=r4; goto **(void**)(ip+=8);
 	sti50:OPDB("sti50");
 #if VALIDATE
-		if (!((0 <= *(u32*)(ip+4)) && (*(u32*)(ip+4) < memObjectLength(r0)))) {
-			fprintf (stderr, "[ERROR opcode sti50 %08x < %08x]\n", memObjectLength(r0), *(u32*)(ip+4));
+		if (!((0 <= *(Num*)(ip+8)) && (*(Num*)(ip+8) < memObjectLength(r0)))) {
+			fprintf (stderr, "[ERROR opcode sti50 %08x < %08x]\n", memObjectLength(r0), *(Num*)(ip+8));
 			//vmPreGarbageCollect();
 			//r0 = code;
 			//vmDebugDump();
@@ -281,57 +279,57 @@ void vmVm (int cmd) {
 			//vmPostGarbageCollect();
 		}
 #endif
-		*((Obj*)r0 + *(u32*)(ip+=4))=r5; goto **(void**)(ip+=4);
+		*((Obj*)r0 + *(Num*)(ip+=8))=r5; goto **(void**)(ip+=8);
 
 	/* Store r0 -> *(r1 + r2). */
 	st012: OPDB("st012");
 #if VALIDATE
-		if (!(0 <= r2 &&  (int)r2 < memObjectLength(r1))) fprintf (stderr, "[ERROR opcode st012 %d < %d", memObjectLength(r1), r2);
+		if (!(0 <= r2 &&  (Int)r2 < memObjectLength(r1))) fprintf (stderr, "[ERROR opcode st012 %d < %d", memObjectLength(r1), r2);
 #endif
-		*((Obj*)r1 + (u32)r2) = r0;  goto **(void**)(ip+=4);
-	st201: OPDB("st201"); *((Obj*)r0 + (u32)r1) = r2;  goto **(void**)(ip+=4);
+		*((Obj*)r1 + (Num)r2) = r0;  goto **(void**)(ip+=8);
+	st201: OPDB("st201"); *((Obj*)r0 + (Num)r1) = r2;  goto **(void**)(ip+=8);
 
 	/* Push register using local stack pointer. */
-	push0: OPDB("push0");  memStackPush(stack, r0);  goto **(void**)(ip+=4);
-	push1: OPDB("push1");  memStackPush(stack, r1);  goto **(void**)(ip+=4);
-	push2: OPDB("push2");  memStackPush(stack, r2);  goto **(void**)(ip+=4);
-	push3: OPDB("push3");  memStackPush(stack, r3);  goto **(void**)(ip+=4);
-	push4: OPDB("push4");  memStackPush(stack, r4);  goto **(void**)(ip+=4);
-	push7: OPDB("push7");  memStackPush(stack, r7);  goto **(void**)(ip+=4);
-	push15:OPDB("push15"); memStackPush(stack, r15); goto **(void**)(ip+=4);
-	push16:OPDB("push16"); memStackPush(stack, r16); goto **(void**)(ip+=4);
-	push1d:OPDB("push1d"); memStackPush(stack, r1d); goto **(void**)(ip+=4);
-	push1e:OPDB("push1e"); memStackPush(stack, r1e); goto **(void**)(ip+=4);
+	push0: OPDB("push0");  memStackPush(stack, r0);  goto **(void**)(ip+=8);
+	push1: OPDB("push1");  memStackPush(stack, r1);  goto **(void**)(ip+=8);
+	push2: OPDB("push2");  memStackPush(stack, r2);  goto **(void**)(ip+=8);
+	push3: OPDB("push3");  memStackPush(stack, r3);  goto **(void**)(ip+=8);
+	push4: OPDB("push4");  memStackPush(stack, r4);  goto **(void**)(ip+=8);
+	push7: OPDB("push7");  memStackPush(stack, r7);  goto **(void**)(ip+=8);
+	push15:OPDB("push15"); memStackPush(stack, r15); goto **(void**)(ip+=8);
+	push16:OPDB("push16"); memStackPush(stack, r16); goto **(void**)(ip+=8);
+	push1d:OPDB("push1d"); memStackPush(stack, r1d); goto **(void**)(ip+=8);
+	push1e:OPDB("push1e"); memStackPush(stack, r1e); goto **(void**)(ip+=8);
 
 
 	/* Pop into a register. */
-	pop0: OPDB("pop0");   r0 = memStackPop(stack);  goto **(void**)(ip+=4);
-	pop1: OPDB("pop1");   r1 = memStackPop(stack);  goto **(void**)(ip+=4);
-	pop2: OPDB("pop2");   r2 = memStackPop(stack);  goto **(void**)(ip+=4);
-	pop3: OPDB("pop3");   r3 = memStackPop(stack);  goto **(void**)(ip+=4);
-	pop4: OPDB("pop4");   r4 = memStackPop(stack);  goto **(void**)(ip+=4);
-	pop7: OPDB("pop7");   r7 = memStackPop(stack);  goto **(void**)(ip+=4);
-	pop15:OPDB("pop15"); r15 = memStackPop(stack);  goto **(void**)(ip+=4);
-	pop1d:OPDB("pop1d"); r1d = memStackPop(stack);  goto **(void**)(ip+=4);
-	pop1e:OPDB("pop1e"); r1e = memStackPop(stack);  goto **(void**)(ip+=4);
+	pop0: OPDB("pop0");   r0 = memStackPop(stack);  goto **(void**)(ip+=8);
+	pop1: OPDB("pop1");   r1 = memStackPop(stack);  goto **(void**)(ip+=8);
+	pop2: OPDB("pop2");   r2 = memStackPop(stack);  goto **(void**)(ip+=8);
+	pop3: OPDB("pop3");   r3 = memStackPop(stack);  goto **(void**)(ip+=8);
+	pop4: OPDB("pop4");   r4 = memStackPop(stack);  goto **(void**)(ip+=8);
+	pop7: OPDB("pop7");   r7 = memStackPop(stack);  goto **(void**)(ip+=8);
+	pop15:OPDB("pop15"); r15 = memStackPop(stack);  goto **(void**)(ip+=8);
+	pop1d:OPDB("pop1d"); r1d = memStackPop(stack);  goto **(void**)(ip+=8);
+	pop1e:OPDB("pop1e"); r1e = memStackPop(stack);  goto **(void**)(ip+=8);
 
 	/* Add immediate to r0. */
-	addi0: OPDB("addi0"); r0 += *(s32*)(ip+=4); goto **(void**)(ip+=4);
-	addi1: OPDB("addi1"); r1 += *(s32*)(ip+=4); goto **(void**)(ip+=4);
+	addi0: OPDB("addi0"); r0 += *(s32*)(ip+=8); goto **(void**)(ip+=8);
+	addi1: OPDB("addi1"); r1 += *(s32*)(ip+=8); goto **(void**)(ip+=8);
 
 	/* Mutate object r1 with (object r1 + object r0). */
-	add10: OPDB("add10"); *(s32*)r1 += *(s32*)r0; goto **(void**)(ip+=4);
-	mul10: OPDB("mul10"); *(s32*)r1 *= *(s32*)r0; goto **(void**)(ip+=4);
+	add10: OPDB("add10"); *(s32*)r1 += *(s32*)r0; goto **(void**)(ip+=8);
+	mul10: OPDB("mul10"); *(s32*)r1 *= *(s32*)r0; goto **(void**)(ip+=8);
 
 	blti1: OPDB("blti1");
-	if (r1<*(void**)(ip+=4)) {
-		ip+=4;
-		ip += *(int*)ip;
-		ip+=4;
+	if (r1<*(void**)(ip+=8)) {
+		ip += 8;
+		ip += *(Int*)ip;
+		ip += 8;
 		if (interrupt) vmInterruptHandler();
 		goto **(void**)(ip);
 	} else {
-		ip+=8;
+		ip += 16;
 		if (interrupt) vmInterruptHandler();
 		goto **(void**)(ip);
 	}
@@ -347,105 +345,105 @@ void vmVm (int cmd) {
 		end:
 	*/
 	beqi0: OPDB("beqi0");
-	if (r0==*(void**)(ip+=4)) {
-		ip+=4;
-		ip += *(int*)ip;
-		ip+=4;
+	if (r0==*(void**)(ip+=8)) {
+		ip += 8;
+		ip += *(Int*)ip;
+		ip += 8;
 		if (interrupt) vmInterruptHandler();
 		goto **(void**)(ip);
 	} else {
-		ip+=8;
+		ip += 2*8;
 		if (interrupt) vmInterruptHandler();
 		goto **(void**)(ip);
 	}
 
 	beqi1: OPDB("beqi1");
-	if (r1 == *(void**)(ip+=4)) {
-		ip += 4;
-		ip += *(int*)ip;
-		ip+=4;
+	if (r1 == *(Obj*)(ip+=8)) {
+		ip += 8;
+		ip += *(Int*)ip;
+		ip += 8;
 		if (interrupt) vmInterruptHandler();
 		goto **(void**)(ip);
 	} else {
-		ip+=8;
+		ip += 2*8;
 		if (interrupt) vmInterruptHandler();
 		goto **(void**)(ip);
 	}
 
 	beqi7: OPDB("beqi7");
-	if (r7 == *(void**)(ip+=4)) {
-		ip += 4;
-		ip += *(int*)ip;
-		ip+=4;
+	if (r7 == *(void**)(ip+=8)) {
+		ip += 8;
+		ip += *(Int*)ip;
+		ip += 8;
 		if (interrupt) vmInterruptHandler();
 		goto **(void**)(ip);
 	} else {
-		ip+=8;
+		ip += 2*8;
 		if (interrupt) vmInterruptHandler();
 		goto **(void**)(ip);
 	}
 
 	/* Jump to immediate2 if r0 not equal to immediate 1. */
 	bnei0: OPDB("bnei0");
-	if (r0 != *(void**)(ip+=4)) {
-		ip += 4;
-		ip += *(int*)ip;
-		ip+=4;
+	if (r0 != *(void**)(ip+=8)) {
+		ip += 8;
+		ip += *(Int*)ip;
+		ip += 8;
 		if (interrupt) vmInterruptHandler();
 		goto **(void**)(ip);
 	} else {
-		ip+=8;
+		ip += 2*8;
 		if (interrupt) vmInterruptHandler();
 		goto **(void**)(ip);
 	}
 
 	/* Jump to immediate2 if r1 not equal to immediate 1. */
-	bnei1: OPDB("bnei0");
-	if (r1!=*(void**)(ip+=4)) {
-		ip += 4;
-		ip += *(int*)ip;
-		ip+=4;
+	bnei1: OPDB("bnei1");
+	if (r1!=*(void**)(ip+=8)) {
+		ip += 8;
+		ip += *(Int*)ip;
+		ip +=8;
 		if (interrupt) vmInterruptHandler();
 		goto **(void**)(ip);
 	} else {
-		ip+=8;
+		ip += 2*8;
 		if (interrupt) vmInterruptHandler();
 		goto **(void**)(ip);
 	}
 
 	/* Jump to immediate 2 if r0's type equals to immediate 1. */
 	brti0: OPDB("brti0");
-	if (((u32)r0>0xfffff) && (memObjectType(r0))==*(u32*)(ip+=4)) {
-		ip += 4;
-		ip += *(int*)ip;
-		ip+=4;
+	if (((Num)r0>0xfffff) && (memObjectType(r0))==*(Num*)(ip+=8)) {
+		ip += 8;
+		ip += *(Int*)ip;
+		ip += 8;
 		if (interrupt) vmInterruptHandler();
 		goto **(void**)(ip);
 	} else {
-		ip+=8;
+		ip += 2*8;
 		if (interrupt) vmInterruptHandler();
 		goto **(void**)(ip);
 	}
 
 	/* Jump to immediate 2 if r0's type not equal to immediate 1. */
 	bnti0: OPDB("bnti0");
-	if (((u32)r0<0x100000) || (memObjectType(r0))!=*(u32*)(ip+=4)) {
-		ip += 4;
-		ip += *(int*)ip;
-		ip+=4;
+	if (((Num)r0<0x100000) || (memObjectType(r0))!=*(Num*)(ip+=8)) {
+		ip += 8;
+		ip += *(Int*)ip;
+		ip += 8;
 		if (interrupt) vmInterruptHandler();
 		goto **(void**)(ip);
 	} else {
-		ip+=8;
+		ip += 2*8;
 		if (interrupt) vmInterruptHandler();
 		goto **(void**)(ip);
 	}
 
 	/* Branch always. */
 	bra: OPDB("bra");
-	ip += 4;
-	ip += *(u32*)ip;
-	ip+=4;
+	ip += 8l;
+	ip += *(Num*)ip;
+	ip += 8l;
 	if (interrupt) vmInterruptHandler();
 	goto **(void**)(ip);
 
@@ -484,8 +482,8 @@ void vmVm (int cmd) {
 	ret: OPDB("ret");
 	env = retenv;
 	code = retcode;
-	ip = code + (int)retip;
-	ip+=4;
+	ip = code + (Int)retip;
+	ip += 8;
 	if (interrupt) vmInterruptHandler();
 	goto **(void**)(ip);
 
@@ -493,9 +491,9 @@ void vmVm (int cmd) {
 		the ip to next instruction right first so that the syscall runs with
 		the IP at the next instruction. */ 
 	sysi: OPDB("sysi");
-	ip+=8;
+	ip += (2*8);
 	vmPreGarbageCollect();
-	(*(void(**)(void))((Obj*)code+(int)ip-1))();
+	(*(void(**)(void))((Obj*)code+(Int)ip-1))();
 	vmPostGarbageCollect();
 	if (interrupt) vmInterruptHandler();
 	goto **(void**)ip;
@@ -504,7 +502,7 @@ void vmVm (int cmd) {
 		imediate field is passed to C function.  See sysi comment for other
 		information. */
 	sys0: OPDB("sys0");
-	ip+=4;
+	ip += 8;
 	vmPreGarbageCollect();
 	(*(void(*)(void))r0)();
 	vmPostGarbageCollect();
@@ -519,14 +517,31 @@ void vmVm (int cmd) {
    offset in immediate ip (r1b).
 */
 void vmRun (void) {
-	DB("VM -->vmRun <= %08x %04x", code, ip);
+	DB("VM -->vmRun <= "OBJ" "INT, code, ip);
 	vmVm (RUN);
 	DB("VM <--vmRun");
 }
 
 
+/* Default Object serializer
+ */
+void vmObjectDumperDefault (Obj o) {
+ static char buff[80], *p;
+ int len;
+	len = sprintf (buff, HEX, o);
+	write (1, buff, len);
 
-void vmInitialize (fp intHandler, fp preGC, fp postGC, fp1 objDumper) {
+	p = memObjString(o);
+	if (p) {
+		write (1, ":", 1);
+		write (1, p, strlen(p));
+	}
+}
+
+void (*vmObjectDumper)(Obj o) = vmObjectDumperDefault;
+
+
+void vmInitialize (Func intHandler, Func preGC, Func postGC, Func1 vmObjDumper) {
  static int shouldInitialize=1;
 	if (shouldInitialize) {
 		shouldInitialize=0;
@@ -534,7 +549,7 @@ void vmInitialize (fp intHandler, fp preGC, fp postGC, fp1 objDumper) {
 		if (intHandler) vmCallerInterruptHandler = intHandler;
 		if (preGC) vmCallerPreGarbageCollect = preGC;
 		if (postGC) vmCallerPostGarbageCollect = postGC;
-		if (objDumper) vmObjectDumper = objDumper;
+		if (vmObjDumper) vmObjectDumper = vmObjDumper;
 		memInitialize(&vmPreGarbageCollect, &vmPostGarbageCollect);
 		memNewStack(); stack = r0;
 		memNewStack(); asmstack = r0;
@@ -544,200 +559,115 @@ void vmInitialize (fp intHandler, fp preGC, fp postGC, fp1 objDumper) {
 	}
 }
 
-void vmDebugDump (void) {
- Obj *ip=r0;
-	memDebugDumpHeapHeaders();
-	while (ip < ((Obj*)r0 + memObjectLength(r0))) {
-		printf ("\n%04x ", ip-(Obj*)r0);
-		if (*ip == NOP)      {printf("nop");}
-		else if (*ip==MVI0)  {printf("mvi$0 "); vmObjectDumper(*++ip);}
-		else if (*ip==MVI1)  {printf("mvi$1 "); vmObjectDumper(*++ip);}
-		else if (*ip==MVI2)  {printf("mvi$2 "); vmObjectDumper(*++ip);}
-		else if (*ip==MVI3)  {printf("mvi$3 "); vmObjectDumper(*++ip);}
-		else if (*ip==MVI4)  {printf("mvi$4 "); vmObjectDumper(*++ip);}
-		else if (*ip==MVI5)  {printf("mvi$5 "); vmObjectDumper(*++ip);}
-		else if (*ip==MVI6)  {printf("mvi$6 "); vmObjectDumper(*++ip);}
-		else if (*ip==MVI7)  {printf("mvi$7 "); vmObjectDumper(*++ip);}
-		else if (*ip==MV01)  {printf("mv$0$1");}
-		else if (*ip==MV02)  {printf("mv$0$2");}
-		else if (*ip==MV03)  {printf("mv$0$3");}
-		else if (*ip==MV04)  {printf("mv$0$4");}
-		else if (*ip==MV07)  {printf("mv$0$7");}
-		else if (*ip==MV016) {printf("mv$0$16");}
-		else if (*ip==MV01C) {printf("mv$0$1c");}
-		else if (*ip==MV10)  {printf("mv$1$0");}
-		else if (*ip==MV13)  {printf("mv$1$3");}
-		else if (*ip==MV116) {printf("mv$1$16");}
-		else if (*ip==MV20)  {printf("mv$2$0");}
-		else if (*ip==MV23)  {printf("mv$2$3");}
-		else if (*ip==MV30)  {printf("mv$3$0");}
-		else if (*ip==MV50)  {printf("mv$5$0");}
-		else if (*ip==MV416) {printf("mv$4$16");}
-		else if (*ip==MV160) {printf("mv$16$0");}
-		else if (*ip==MV162) {printf("mv$16$2");}
-		else if (*ip==MV164) {printf("mv$16$4");}
-		else if (*ip==LDI00) {printf("ldi$0$0 "); vmObjectDumper(*++ip);}
-		else if (*ip==LDI02) {printf("ldi$0$2 "); vmObjectDumper(*++ip);}
-		else if (*ip==LDI016){printf("ldi$0$16 "); vmObjectDumper(*++ip);}
-		else if (*ip==LDI11) {printf("ldi$1$1 "); vmObjectDumper(*++ip);}
-		else if (*ip==LDI116){printf("ldi$1$16 "); vmObjectDumper(*++ip);}
-		else if (*ip==LDI20) {printf("ldi$2$0 "); vmObjectDumper(*++ip);}
-		else if (*ip==LDI22) {printf("ldi$2$2 "); vmObjectDumper(*++ip);}
-		else if (*ip==LDI40) {printf("ldi$4$0 "); vmObjectDumper(*++ip);}
-		else if (*ip==LDI50) {printf("ldi$5$0 "); vmObjectDumper(*++ip);}
-		else if (*ip==LDI160){printf("ldi$16$0 "); vmObjectDumper(*++ip);}
-		else if (*ip==LDI1616){printf("ldi$16$16 "); vmObjectDumper(*++ip);}
-		else if (*ip==LD012) {printf("ld0$1$2");}
-		else if (*ip==STI01) {printf("sti$0$1 "); vmObjectDumper(*++ip);}
-		else if (*ip==STI016){printf("sti$0$16 "); vmObjectDumper(*++ip);}
-		else if (*ip==STI20) {printf("sti$2$0 "); vmObjectDumper(*++ip);}
-		else if (*ip==STI21) {printf("sti$2$1 "); vmObjectDumper(*++ip);}
-		else if (*ip==STI30) {printf("sti$3$0 "); vmObjectDumper(*++ip);}
-		else if (*ip==STI40) {printf("sti$4$0 "); vmObjectDumper(*++ip);}
-		else if (*ip==STI50) {printf("sti$5$0 "); vmObjectDumper(*++ip);}
-		else if (*ip==ST012) {printf("st$0$1$2");}
-		else if (*ip==ST201) {printf("st$2$0$1");}
-		else if (*ip==PUSH0) {printf("push$0");}
-		else if (*ip==PUSH1) {printf("push$1");}
-		else if (*ip==PUSH2) {printf("push$2");}
-		else if (*ip==PUSH3) {printf("push$3");}
-		else if (*ip==PUSH4) {printf("push$4");}
-		else if (*ip==PUSH7) {printf("push$7");}
-		else if (*ip==PUSH15){printf("push$15");}
-		else if (*ip==PUSH16){printf("push$16");}
-		else if (*ip==PUSH1D){printf("push$1d");}
-		else if (*ip==PUSH1E){printf("push$1e");}
-		else if (*ip==POP0)  {printf("pop$0");}
-		else if (*ip==POP1)  {printf("pop$1");}
-		else if (*ip==POP2)  {printf("pop$2");}
-		else if (*ip==POP3)  {printf("pop$3");}
-		else if (*ip==POP4)  {printf("pop$4");}
-		else if (*ip==POP7)  {printf("pop$7");}
-		else if (*ip==POP15) {printf("pop$15");}
-		else if (*ip==POP1D) {printf("pop$1d");}
-		else if (*ip==POP1E) {printf("pop$1e");}
-		else if (*ip==ADDI0) {printf("addi$0 %d", *(ip+1)); ip++; }
-		else if (*ip==ADDI1) {printf("addi$1 %d", *(ip+1)); ip++; }
-		else if (*ip==ADD10) {printf("add$1$0"); }
-		else if (*ip==MUL10) {printf("mul$1$0"); }
-		else if (*ip==BLTI1) {printf("blti$1 %x %04x",
-									 *(ip+1), 3+ip-(Obj*)r0+(int)*(ip+2)/4); ip+=2;}
-		else if (*ip==BEQI0) {printf("beqi$0 %x %04x",
-									 *(ip+1), 3+ip-(Obj*)r0+(int)*(ip+2)/4); ip+=2;}
-		else if (*ip==BEQI1) {printf("beqi$1 %x %04x",
-									 *(ip+1), 3+ip-(Obj*)r0+(int)*(ip+2)/4); ip+=2;}
-		else if (*ip==BEQI7) {printf("beqi$7 %x %04x",
-									 *(ip+1), 3+ip-(Obj*)r0+(int)*(ip+2)/4); ip+=2;}
-		else if (*ip==BNEI0) {printf("bnei$0 %x %04x",
-									 *(ip+1), 3+ip-(Obj*)r0+(int)*(ip+2)/4); ip+=2;}
-		else if (*ip==BNEI1) {printf("bnei$1 %x %04x",
-									 *(ip+1), 3+ip-(Obj*)r0+(int)*(ip+2)/4); ip+=2;}
-		else if (*ip==BRTI0) {printf ("brti$0 %x %04x",
-									 *(ip+1), 3+ip-(Obj*)r0+(int)*(ip+2)/4); ip+=2;}
-		else if (*ip==BNTI0) {printf ("bnti$0 %08x %04x",
-									 *(ip+1), 3+ip-(Obj*)r0+(int)*(ip+2)/4); ip+=2;}
-		else if (*ip==BRA)   {printf ("bra %04x",
-									 2+ip-(Obj*)r0+(int)*(ip+1)/4); ip++;}
-		else if (*ip==J0)    {printf ("j$0");}
-		else if (*ip==J2)    {printf ("j$2");}
-		else if (*ip==JAL0)  {printf ("jal$0");}
-		else if (*ip==JAL2)  {printf ("jal$2");}
-		else if (*ip==RET)   {printf ("ret");}
-		else if (*ip==SYSI)  {printf ("sysi "); vmObjectDumper(*++ip);}
-		else if (*ip==SYS0)  {printf ("sys$0");}
-		else if (*ip==QUIT)  {printf ("quit");}
+
+void vmDebugDumpCode (Obj c) {
+ Obj *i=c;
+ Num asmLineNumber;
+	while (i < ((Obj*)c + memObjectLength(c))) { // Forcing pointer arithmatic.
+		asmLineNumber = i-(Obj*)c;
+		printf ("\n"OBJ"%s"HEX04" ", i, (i==ip || asmLineNumber==(Num)ip)?"*":" ", asmLineNumber);
+		if (*i == NOP)      {printf("nop");}
+		else if (*i==MVI0)  {printf("mvi$0 "); vmObjectDumper(*++i);}
+		else if (*i==MVI1)  {printf("mvi$1 "); vmObjectDumper(*++i);}
+		else if (*i==MVI2)  {printf("mvi$2 "); vmObjectDumper(*++i);}
+		else if (*i==MVI3)  {printf("mvi$3 "); vmObjectDumper(*++i);}
+		else if (*i==MVI4)  {printf("mvi$4 "); vmObjectDumper(*++i);}
+		else if (*i==MVI5)  {printf("mvi$5 "); vmObjectDumper(*++i);}
+		else if (*i==MVI6)  {printf("mvi$6 "); vmObjectDumper(*++i);}
+		else if (*i==MVI7)  {printf("mvi$7 "); vmObjectDumper(*++i);}
+		else if (*i==MV01)  {printf("mv$0$1 ");}
+		else if (*i==MV02)  {printf("mv$0$2 ");}
+		else if (*i==MV03)  {printf("mv$0$3 ");}
+		else if (*i==MV04)  {printf("mv$0$4 ");}
+		else if (*i==MV07)  {printf("mv$0$7 ");}
+		else if (*i==MV016) {printf("mv$0$16 ");}
+		else if (*i==MV01C) {printf("mv$0$1c ");}
+		else if (*i==MV10)  {printf("mv$1$0 ");}
+		else if (*i==MV13)  {printf("mv$1$3 ");}
+		else if (*i==MV116) {printf("mv$1$16 ");}
+		else if (*i==MV20)  {printf("mv$2$0 ");}
+		else if (*i==MV23)  {printf("mv$2$3 ");}
+		else if (*i==MV30)  {printf("mv$3$0 ");}
+		else if (*i==MV50)  {printf("mv$5$0 ");}
+		else if (*i==MV416) {printf("mv$4$16 ");}
+		else if (*i==MV160) {printf("mv$16$0 ");}
+		else if (*i==MV162) {printf("mv$16$2 ");}
+		else if (*i==MV164) {printf("mv$16$4 ");}
+		else if (*i==LDI00) {printf("ldi$0$0 "); vmObjectDumper(*++i);}
+		else if (*i==LDI02) {printf("ldi$0$2 "); vmObjectDumper(*++i);}
+		else if (*i==LDI016){printf("ldi$0$16 "); vmObjectDumper(*++i);}
+		else if (*i==LDI11) {printf("ldi$1$1 "); vmObjectDumper(*++i);}
+		else if (*i==LDI116){printf("ldi$1$16 "); vmObjectDumper(*++i);}
+		else if (*i==LDI20) {printf("ldi$2$0 "); vmObjectDumper(*++i);}
+		else if (*i==LDI22) {printf("ldi$2$2 "); vmObjectDumper(*++i);}
+		else if (*i==LDI40) {printf("ldi$4$0 "); vmObjectDumper(*++i);}
+		else if (*i==LDI50) {printf("ldi$5$0 "); vmObjectDumper(*++i);}
+		else if (*i==LDI160){printf("ldi$16$0 "); vmObjectDumper(*++i);}
+		else if (*i==LDI1616){printf("ldi$16$16 "); vmObjectDumper(*++i);}
+		else if (*i==LD012) {printf("ld0$1$2");}
+		else if (*i==STI01) {printf("sti$0$1 "); vmObjectDumper(*++i);}
+		else if (*i==STI016){printf("sti$0$16 "); vmObjectDumper(*++i);}
+		else if (*i==STI20) {printf("sti$2$0 "); vmObjectDumper(*++i);}
+		else if (*i==STI21) {printf("sti$2$1 "); vmObjectDumper(*++i);}
+		else if (*i==STI30) {printf("sti$3$0 "); vmObjectDumper(*++i);}
+		else if (*i==STI40) {printf("sti$4$0 "); vmObjectDumper(*++i);}
+		else if (*i==STI50) {printf("sti$5$0 "); vmObjectDumper(*++i);}
+		else if (*i==ST012) {printf("st$0$1$2 ");}
+		else if (*i==ST201) {printf("st$2$0$1 ");}
+		else if (*i==PUSH0) {printf("push$0 ");}
+		else if (*i==PUSH1) {printf("push$1 ");}
+		else if (*i==PUSH2) {printf("push$2 ");}
+		else if (*i==PUSH3) {printf("push$3 ");}
+		else if (*i==PUSH4) {printf("push$4 ");}
+		else if (*i==PUSH7) {printf("push$7 ");}
+		else if (*i==PUSH15){printf("push$15 ");}
+		else if (*i==PUSH16){printf("push$16 ");}
+		else if (*i==PUSH1D){printf("push$1d ");}
+		else if (*i==PUSH1E){printf("push$1e ");}
+		else if (*i==POP0)  {printf("pop$0 ");}
+		else if (*i==POP1)  {printf("pop$1 ");}
+		else if (*i==POP2)  {printf("pop$2 ");}
+		else if (*i==POP3)  {printf("pop$3 ");}
+		else if (*i==POP4)  {printf("pop$4 ");}
+		else if (*i==POP7)  {printf("pop$7 ");}
+		else if (*i==POP15) {printf("pop$15 ");}
+		else if (*i==POP1D) {printf("pop$1d ");}
+		else if (*i==POP1E) {printf("pop$1e ");}
+		else if (*i==ADDI0) {printf("addi$0 %d", *(i+1)); i++; }
+		else if (*i==ADDI1) {printf("addi$1 %d", *(i+1)); i++; }
+		else if (*i==ADD10) {printf("add$1$0 "); }
+		else if (*i==MUL10) {printf("mul$1$0 "); }
+		else if (*i==BLTI1) {printf("blti$1 %x %04x",
+									 *(i+1), 3+i-(Obj*)c+(Int)*(i+2)/8); i+=2;}
+		else if (*i==BEQI0) {printf("beqi$0 %x %04x",
+									 *(i+1), 3+i-(Obj*)c+(Int)*(i+2)/8); i+=2;}
+		else if (*i==BEQI1) {printf("beqi$1 %x %04x",
+									 *(i+1), 3+i-(Obj*)c+(Int)*(i+2)/8); i+=2;}
+		else if (*i==BEQI7) {printf("beqi$7 %x %04x",
+									 *(i+1), 3+i-(Obj*)c+(Int)*(i+2)/8); i+=2;}
+		else if (*i==BNEI0) {printf("bnei$0 %x %04x",
+									 *(i+1), 3+i-(Obj*)c+(Int)*(i+2)/8); i+=2;}
+		else if (*i==BNEI1) {printf("bnei$1 %x %04x",
+									 *(i+1), 3+i-(Obj*)c+(Int)*(i+2)/8); i+=2;}
+		else if (*i==BRTI0) {printf ("brti$0 %x %04x",
+									 *(i+1), 3+i-(Obj*)c+(Int)*(i+2)/8); i+=2;}
+		else if (*i==BNTI0) {printf ("bnti$0 %08x %04x",
+									 *(i+1), 3+i-(Obj*)c+(Int)*(i+2)/8); i+=2;}
+		else if (*i==BRA)   {printf ("bra %04x",
+									 2+i-(Obj*)c+(Int)*(i+1)/8); i++;}
+		else if (*i==J0)    {printf ("j$0 ");}
+		else if (*i==J2)    {printf ("j$2 ");}
+		else if (*i==JAL0)  {printf ("jal$0 ");}
+		else if (*i==JAL2)  {printf ("jal$2 ");}
+		else if (*i==RET)   {printf ("ret ");}
+		else if (*i==SYSI)  {printf ("sysi "); vmObjectDumper(*++i);}
+		else if (*i==SYS0)  {printf ("sys$0 ");}
+		else if (*i==QUIT)  {printf ("quit ");}
 		else {
-			printf ("??? %08x ", *ip);
-			vmObjectDumper(*ip);
+			printf ("??? "HEX" ", *i);
+			vmObjectDumper(*i);
 		}
-		ip++;
+		i++;
 		fflush(stdout);
 	}
-}
-
-
-/* Debugging: Syscalls.
-*/
-static void displayInteger (void) { printf ("%d", r1); }
-static void displayString (void) { printf ("%s", r1); }
-
-/* Debuggin: Registers eventually containing runable code.
-*/
-#define sub2 r10
-#define sub r11
-
-int vmmain (void) {
- int len;
-	setbuf(stdout, NULL);
-	vmInitialize(0, 0, 0, 0);
-
-	Obj helloWorld[] = {
-		PUSH1,
-		MVI1, "Hello World!\n",
-		MVI0, displayString,
-		SYS0,
-		POP1,
-		RET};
-   memNewVector(TCODE, (len=sizeof(helloWorld))/4);
-	memcpy(r0, helloWorld, len);
-	vmDebugDump();
-	sub2 = r0;
-
-
-	Obj printNumbers[] = {
-		SYSI, displayInteger,
-		BEQI1, (Obj)0, (Obj)(2*4),  /* Return if r1==0 */
-		BRA, (Obj)(1*4),
-		RET,
-	
-		PUSH1D,              /* Save return address */
-		PUSH1E,
-	
-		MVI0, sub2,
-		JAL0,
-		MV01,               /* r1-- */
-		ADDI0, (Obj)-1,
-		MV10,
-		MVI0, &sub,    /* Call another function. */
-		LDI00, 0,
-		JAL0,
-	
-		POP1E,               /* Restore return address */
-		POP1D,
-		RET};
-   memNewVector(TCODE, (len=sizeof(printNumbers))/4);
-	memcpy(r0, printNumbers, len);
-	vmDebugDump();
-	sub = r0;
-
-
-	Obj mainCode[] = {
-		MVI1, (Obj)11,
-		MVI0, sub,
-		JAL0,
-	
-		MVI2,  0,
-		MV02,
-		MV10,
-		SYSI, displayInteger, /* print r2 */
-		MVI1, "\r",
-		SYSI, displayString,
-		MV02,
-		ADDI0,  (Obj)1,
-		MV20,
-		BNEI0,  (Obj)0x8000,  (Obj)(-15*4),
-	
-		MVI1, "\n",
-		SYSI, displayString,
-		BRA,  (Obj)(-28*4)};
-   memNewVector(TCODE, (len=sizeof(mainCode))/4);
-	memcpy(r0, mainCode, len);
-	vmDebugDump();
-	code=r0;
-
-	memDebugDumpHeapStructures();
-	memGarbageCollect();
-	ip=0;
-	vmRun();
-	return 0;
 }

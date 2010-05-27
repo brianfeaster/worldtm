@@ -5,30 +5,24 @@
 #include <string.h>
 #include "asm.h"
 
-/* Push passed opcodes to assembly stack.  The final opcode must be QUIT.
-*/
+
 void asmAsm (Obj o,...) {
  Obj obj;
  va_list ap;
 	va_start(ap, o);
 	obj = o;
-DB("asmAsm: %04d:%08x", memStackLength(asmstack), obj);
 	while (obj!=END) {
+		DB("::%s "INT4":"OBJ, __func__, memStackLength(asmstack), obj);
 		memStackPush(asmstack, obj);
 		obj=va_arg(ap, Obj);
-DB("asmAsm: %04d:%08x", memStackLength(asmstack), obj);
 	}
 	va_end(ap);
 }
 
-/*
-   Inline assemble the asmstack.  For now it just takes care of
-	'label' and 'address' assembly opcodes.  They refer to branch locations
-	and branch points in the code.
-*/ 
-void asmCompile (int opcodeStart) {
- int j, i, opcodeEnd, opcodeWrite, labelCount=0, addrCount=0;
-DB("-->%s", __func__);
+
+void asmCompileAsmstack (Int opcodeStart) {
+ Int j, i, opcodeEnd, opcodeWrite, labelCount=0, addrCount=0;
+DB("::%s", __func__);
 	memStackPush(stack, r0);
 	memStackPush(stack, r1);
 	memStackPush(stack, r2);
@@ -47,13 +41,13 @@ DB("-->%s", __func__);
 	for (i=opcodeWrite; i<opcodeEnd; i++) {
 		r0 = memVectorObject(asmstack, i);
 		if (r0 == LABEL) {
-			DB("%x label %08x %s", opcodeWrite, r0, memVectorObject(asmstack, i+1));
+			DB(HEX4" label "OBJ" %s", opcodeWrite, r0, memVectorObject(asmstack, i+1));
 			/* Store label value. */
 			memVectorSet(r2, labelCount++, memVectorObject(asmstack, ++i));
 			/* Store opcode address. */
 			memVectorSet(r2, labelCount++, (Obj)opcodeWrite);
 		} else if (r0 == ADDR) {
-			DB("%x addr %08x", opcodeWrite, r0);
+			DB(HEX4" addr "OBJ, opcodeWrite, r0);
 			/* Store label value. */
 			memVectorSet(r3, addrCount++, memVectorObject(asmstack, ++i));
 			/* Store opcode address. */
@@ -69,7 +63,7 @@ DB("-->%s", __func__);
 
 	/* 'Pop' unused opcodes off stack leaving the freshly compiled code
 	   behind. */
-	*(Obj*)asmstack = asmstack + 4 * (opcodeWrite-1);
+	*(Obj*)asmstack = asmstack + 8 * (opcodeWrite-1);
 
 	/* Traverse address entries and resolve the branch offsets.
 	*/
@@ -79,9 +73,9 @@ DB("-->%s", __func__);
 			if (r0 == memVectorObject(r2, j)) {
 				/* Found label for this address. */
 				memVectorSet(asmstack,
-				             (int)memVectorObject(r3, i+1),
-				             (Obj)(4 * ((memVectorObject(r2, j+1)
-				                         - memVectorObject(r3, i+1)-1))));
+				             (Num)memVectorObject(r3, i+1),
+				             (Obj)(8 * (memVectorObject(r2, j+1)
+				                        - memVectorObject(r3, i+1)-1)));
 				break;
 			}
 		}
@@ -93,66 +87,32 @@ DB("-->%s", __func__);
 	r2 = memStackPop(stack);
 	r1 = memStackPop(stack);
 	r0 = memStackPop(stack);
-DB("<--%s", __func__);
+DB("  --%s", __func__);
 }
 
-/* Create code object from stack of opcodes.  Since stack and asmstack
-   objects are really just vectors, it's just a matter of copying all the
-   objects from the stack over to the asmstack vector.  Creates code object
-   in r0 based on assembly stack (r1a).
-*/
+
 void asmNewCode (void) {
- int len;
+ Int len;
+	DB("::%s", __func__);
 	memNewVector(TCODE, len=memStackLength(asmstack));
-	memcpy(r0, asmstack+4, len*4);
-	// Reset assembly stack by setting the first entry to
-	// the stack itself (points to itself).
+	memcpy(r0, asmstack+8, len*8);
+	/* Reset assembly stack by setting the first entry to
+	   the stack itself (points to itself). */
 	*(Obj*)asmstack = asmstack;
+	DB("  --%s", __func__);
 }
 
-void asmInitialize (fp intHandler, fp preGC, fp postGC, fp1 objDumper) {
- static int shouldInitialize=1;
+
+void asmInitialize (Func intHandler, Func preGC, Func postGC, Func1 vmObjDumper) {
+ static Int shouldInitialize=1;
 	if (shouldInitialize) {
 		shouldInitialize=0;
-		vmInitialize(intHandler, preGC, postGC, objDumper);
+		vmInitialize(intHandler, preGC, postGC, vmObjDumper);
 		LABEL = &LABEL;
 		ADDR = &ADDR;
 		END = &END;
 	}
 }
 
-/* Debugging: Syscalls.
-*/
-static void asmdisplayInteger (void) { printf ("%d", r1); }
-static void asmdisplayString (void) { printf ("%s", r1); }
 
-int asmmain (void) {
-	setbuf(stdout, NULL);
-	asmInitialize(0, 0, 0, 0);
-
-	asmAsm(
-		MVI1, "\r\n›1mWelcome to World!›m\r\n",
-		SYSI, asmdisplayString,
-		MVI0, (Obj)0,
-		LABEL, "main",
-		MV10,
-		LABEL, "loop", SYSI, asmdisplayInteger,
-		ADDI1, (Obj)1,
-		BEQI1, (Obj)10, ADDR, "cont",
-		BRA, ADDR, "loop",
-		LABEL, "cont",  MVI1, "\r\n",
-		SYSI, asmdisplayString,
-		ADDI0, (Obj)1,
-		BNEI0, (Obj)10, ADDR, "main",
-		LABEL, "done",
-		QUIT,
-		END
-	);
-	//memDebugObjectDump(asmstack);
-	asmCompile(0);
-	asmNewCode();
-	vmDebugDump();
-	code=r0;
-	vmRun();
-	return 0;
-}
+#undef DB_MODULE

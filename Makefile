@@ -1,6 +1,7 @@
 # Makefile for Wscheme.  It's simple.
 
-CFLAGS = -D_GNU_SOURCE -march=pentium -Wall -Wno-format -Wno-trigraphs -ggdb
+CFLAGS = -Wall -ggdb -Wno-format -Wno-trigraphs
+#CFLAGS = -D_GNU_SOURCE -march=pentium -Wall -Wno-format -Wno-trigraphs -ggdb
 # -Wall            -- Many warnings.
 # -Wno-format      -- Disable the annoying printf warnings.
 # -Wno-parentheses -- If it's valid C why bitch about it?
@@ -10,13 +11,18 @@ CFLAGS = -D_GNU_SOURCE -march=pentium -Wall -Wno-format -Wno-trigraphs -ggdb
 #                    -malign-double -mwide-multiply
 # -Werror -- Warnings prevent compilation.
 
-LDFLAGS = -lm -lcrypto
+LDFLAGS = -lm
 # -lm       Math library (probably trig functions).
 # -lcrypto  Crypto library for md5sum hash function.
 
-OBJS = scanner.o wscm.o comp.o obj.o asm.o vm.o mem.o
+MEMTOBJS  = memt.o         mem.o
+OBJTOBJS  = objt.o         mem.o obj.o vm.o asm.o
+VMTOBJS   = vmt.o          mem.o       vm.o
+ASMTOBJS  = asmt.o         mem.o obj.o vm.o asm.o
+WSCMTOBJS = wscmt.o wscm.o mem.o obj.o vm.o asm.o comp.o scanner.o
+WSCMOBJS  =         wscm.o mem.o obj.o vm.o asm.o comp.o scanner.o
 
-wscm: $(OBJS)
+wscm: $(WSCMOBJS)
 
 wscm.o: comp.h obj.h asm.h vm.h mem.h globals.h debug.h scanner.h
 
@@ -30,18 +36,46 @@ vm.o:                      vm.h mem.h globals.h debug.h
 
 mem.o:                          mem.h globals.h debug.h
 
-scanner.o:   obj.h mem.h globals.h
+scanner.o:     obj.h            mem.h globals.h         scanner.h
 
 build: globals.h debug.h mem.h vm.h asm.h obj.h comp.h scanner.h mem.c vm.c obj.c comp.c wscm.c scanner.c
 	cat globals.h debug.h mem.h vm.h asm.h obj.h comp.h scanner.h mem.c vm.c asm.c obj.c comp.c wscm.c scanner.c > f.c ; gcc $(CFLAGS) -O6 $(LDFLAGS) f.c -o wscm
 
+memt: $(MEMTOBJS)
+
+objt: $(OBJTOBJS)
+
+vmt: $(VMTOBJS)
+
+asmt: $(ASMTOBJS)
+
+wscmt: $(WSCMTOBJS)
+
+memtest: memt
+	./memt
+
+objtest: objt
+	./objt
+
+vmtest: vmt
+	./vmt
+
+asmtest: asmt
+	./asmt
+
+wscmtest: wscmt
+	./wscmt
+
+test: memtest objtest vmtest asmtest wscmtest
+
 linecount:
-	wc Makefile globals.h debug.h mem.h vm.h asm.h obj.h comp.h scanner.h mem.c vm.c asm.c obj.c comp.c wscm.c scanner.c world.scm
+	wc Makefile asm.c asm.h asmt.c comp.c comp.h debug.h globals.h mem.c mem.h memt.c obj.c obj.h objt.c scanner.c scanner.h vm.c vm.h vmt.c wscm.c wscmt.c
 
 upload-wscheme:
 	scp Makefile globals.h debug.h mem.h vm.h asm.h obj.h comp.h scanner.h mem.c vm.c asm.c obj.c comp.c wscm.c scanner.c worlda@dv8.org:v5
 
 upload-scm:
 	scp world.scm window.scm scm.scm worlda@dv8.org:v5
+
 clean:
-	rm $(OBJS) wscm
+	rm $(WSCMOBJS) wscm wscmt asmt vmt objt memt

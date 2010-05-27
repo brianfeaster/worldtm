@@ -51,7 +51,7 @@
 (define WATER2 2)     (cell-set! WATER2     (glyphNew #x0c #\~ #x0c #\~))
 (define POISON 3)     (cell-set! POISON     (glyphNew #x04 #\. #x02 #\.))
 (define GRASS 4)      (cell-set! GRASS      (glyphNew #x02 #\. #x02 #\.))
-(define BUSHES 5)     (cell-set! BUSHES     (glyphNew #x02 #\o #x02 #\o))
+(define BUSHES 5)     (cell-set! BUSHES     (glyphNew #x0a #\o #x0a #\o))
 (define FOREST 6)     (cell-set! FOREST     (glyphNew #x02 #\O #x02 #\O))
 (define HILLS 7)      (cell-set! HILLS      (glyphNew #x07 #\^ #x07 #\^))
 (define MNTS 8)       (cell-set! MNTS       (glyphNew #x0f #\/ #x0f #\\))
@@ -232,20 +232,19 @@ c))
 
 (define CANVAS (make-vector-vector CanvasDimension CanvasDimension ()))
 
+; TODO this takes a long time.  Why?
+(define timeStart (time))
 (let ~ ((y 0)(x 0))
- (if (!= y CanvasDimension)
-  (if (= x CanvasDimension)
-      (~ (+ y 1) 0)
-      ; Each canvas entry consists of a map cell, the cell height and
-      ; top most visible height.
-      (begin
-       (vector-vector-set! CANVAS y x 
-         (let ((top (field-ref-top 1000 y x)));What'll be higher than 1k?
-           (vector (cell-ref (field-ref top y x))
-                   top
-                   1000)))
-       (~ y (+ x 1))))
-  (ConsoleDisplay "Initialized Canvas")))
+ (if (!= y CanvasDimension) (if (= x CanvasDimension) (~ (+ y 1) 0) (begin
+  ; Each canvas entry consists of a map cell, the cell height and
+  ; top most visible height.
+   (vector-vector-set! CANVAS y x 
+     (let ((top (field-ref-top 1000 y x)));What'll be higher than 1k?
+       (vector (cell-ref (field-ref top y x))
+               top
+               1000)))
+   (~ y (+ x 1))))))
+(ConsoleDisplay "Initialized Canvas " (- (time) timeStart) " seconds")
 
 (define (canvasRender y x)
  (let ((top (field-ref-top 1000 y x)))
@@ -437,10 +436,11 @@ c))
 ;; was 'avatar
 (define alwaysScroll #f)
 (define (move dna z y x)
+ ;(ConsoleDisplay "\r" (list z y x (distance (list 0 (avatar 'y) (avatar 'x)) (list 0 (+ PortY (/ PortH 2)) (+ PortX (/ PortW 2))))))
  (letrec ((entity (entitiesGet dna))
           (thisIsMe (= dna (avatar 'dna)))
           (shouldScroll (and thisIsMe
-           (or alwaysScroll (< 5 (distance (list 0 (entity 'y) (entity 'x))
+           (or alwaysScroll (< 10 (distance (list 0 (avatar 'y) (avatar 'x))
                                            (list 0 (+ PortY (/ PortH 2)) (+ PortX (/ PortW 2)))))))))
   (if (null? entity)
     (begin
@@ -608,6 +608,36 @@ c))
 
 (circularize)
 
+(define deltaMoveTime (+ 1 (time)))
+
+(define (winMapSmaller)
+ (if (< 5 (WinMap 'WHeight)) (begin
+  ((WinMap 'toggle))
+  ((WinMap 'moveresize)
+     0 (- (Terminal 'TWidth) (WinMap 'WWidth) 0)
+     (+ -1 (WinMap 'WHeight))
+     (+ -2 (WinMap 'WWidth)))
+  (circularize)
+  (viewportReset (avatar 'y) (avatar 'x))
+  ((WinMap 'toggle)))))
+
+(define (winMapBigger)
+ (if (< (WinMap 'WHeight) (Terminal 'THeight)) (begin
+  ((WinMap 'toggle))
+  (if (< (time) deltaMoveTime)
+    ((WinMap 'moveresize) ; Full resize.
+       0 (- (Terminal 'TWidth) (WinMap 'WWidth))
+       (min (/ (Terminal 'TWidth) 2) (Terminal 'THeight))
+       (* 2 (min (/ (Terminal 'TWidth) 2) (Terminal 'THeight)))))
+    ((WinMap 'moveresize) ; Resize by one.
+       0 (- (Terminal 'TWidth) (WinMap 'WWidth) 4)
+       (+ 1 (WinMap 'WHeight))
+       (+ 2 (WinMap 'WWidth)))
+  (circularize)
+  (viewportReset (avatar 'y) (avatar 'x))
+  ((WinMap 'toggle))
+  (set! deltaMoveTime (+ 1 (time))))))
+
 (define WinMapSetColor (WinMap 'set-color))
 (define WinMapPutc (WinMap 'putc))
 (define (WinMapPutGlyph glyph y x)
@@ -762,6 +792,7 @@ c))
   ))
 
 (define (setCell z y x cell)
+  ;(if (or (< cell 0) (> cell 255)) (begin (display "shit") (quit)))
   (field-set! z y x cell)
   (canvasRender y x)
   (viewportRender y x))
@@ -792,7 +823,7 @@ c))
 ; Mapping from World[tm] (y x) corrdinates to Ultima4 map file byte index.
 ; i = (+ (modulo x 32) (* (/ x 32) 1024) (* (modulo y 32) 32) (* (/ y 32) 8192))
 
-(define (build-ultima-world4)
+(define (load-ultima-world4)
  (let ((fd (open "ultima4.map"))
        (bar (makeProgressBar 5 30 "Britannia 4")))
   (let ~ ((i 0))
@@ -804,7 +835,7 @@ c))
                (+ 0 (read-char fd))) ; Hack to convert char to integer
       (~ (+ i 1)))))))
 
-(define (build-ultima-world5)
+(define (load-ultima-world5)
  (let ((fdm (open "ultima5.map"))
        (fdi (open "ultima5.ovl"))
        (bar (makeProgressBar 1 30 "Britannia 4")))
@@ -818,7 +849,8 @@ c))
         (+ 0 (read-char fdm))))))
    (~ y (+ x 1))))))))
 
-(thread (build-ultima-world4))
+(thread (load-ultima-world4))
+;(load-ultima-world4)
 ;(build-island 15 15 7) 
 ;(dropCell 13 17 HELP)
 ;(dropCell 16 18 SNAKE)
@@ -828,6 +860,45 @@ c))
 ;(build-island 4 28 4) 
 ;(build-island 20 30 5)
 ;(build-brick-room 15 35)
+
+(define (tankTalk str) (thread (begin
+  (sleep 700)
+  (ConsoleSetColor #x0f)
+  (ConsoleDisplay "\r\nTank ")
+  (ConsoleSetColor #x07)
+  (ConsoleDisplay str))))
+
+(define tankHangupTime 0)
+(define tankIsListening #f)
+
+(define (tankStartListening)
+  (set! tankHangupTime (+ 10 (time)))
+  (tankTalk "Operator")
+  (if (not tankIsListening) (begin (thread (let ~ ()
+    (set! tankIsListening #t)
+    (sleep 12000)
+    (if (< (time) tankHangupTime)
+      (~)
+      (begin
+       (tankTalk "*CLICK*")
+       (set! tankIsListening #f))))))))
+
+(define (tankTheOperator talkInput)
+ (if (string=? talkInput "tank") (tankStartListening)
+ (let ((strLen (string-length talkInput)))
+  (if (and (> strLen 11)
+           (string=? "my name is " (substring talkInput 0 11)))
+     (begin
+      ((avatar `setNameGlyph)
+         (substring talkInput 11 strLen)
+         (glyphNew (glyphColor0 (avatar 'glyph)) (string-ref talkInput 11)
+                   (glyphColor1 (avatar 'glyph)) (string-ref talkInput (if (> strLen 12) 12 11))))
+      (thread (begin (sleep 500) (who)))))))
+ (if tankIsListening (begin
+   (if (string=? "load the jump program" talkInput) (tankTalk "I can't find the disk")
+   (if (string=? "load ultima4" talkInput) (thread (load-ultima-world4))
+   (if (string=? "load underworld" talkInput) (thread (load-ultima-underworld))
+   (if (string=? "load ultima5" talkInput) (thread (load-ultima-world5)))))))))
 
 (define replTalk
  (let ((talkInput ""))
@@ -846,16 +917,8 @@ c))
    (if (or (eq? c RETURN) 
            (eq? c NEWLINE))
      (begin
-       ; Set avatar's new name if certain phrase entered
-       (let ((strLen (string-length talkInput)))
-        (if (and (> strLen 11)
-                 (string=? "my name is " (substring talkInput 0 11)))
-            (begin
-             ((avatar `setNameGlyph)
-                (substring talkInput 11 strLen)
-                (glyphNew (glyphColor0 (avatar 'glyph)) (string-ref talkInput 11)
-                          (glyphColor1 (avatar 'glyph)) (string-ref talkInput (if (> strLen 12) 12 11))))
-             (thread (begin (sleep 500) (who))))))
+       ; Perform actions based on talk phrases.
+       (tankTheOperator talkInput)
        ; Toggle help window if certain phrase entered
        (if (string=? "?" talkInput) (help))
        ; Send talk chatter to IPC or evaluate expression
@@ -864,7 +927,10 @@ c))
            (begin (ConsoleDisplay "\r\n")
                   (ConsoleDisplay talkInput)
                   (ConsoleDisplay "=>")
-                  (ConsoleDisplay (eval (read-string (cdr-string talkInput)))))
+                  (ConsoleDisplay 
+                    (call/cc (lambda (c) ; Return here if an error occurs
+                       (vector-set! ERRORS (tid) c)
+                       (eval (read-string (cdr-string talkInput)))))))
            ((ipc 'qwrite) (list 'voice (avatar 'dna) (avatar 'z) (avatar 'y) (avatar 'x) 10 talkInput)))
        (WinInputPuts "\r\n>")
        (set! talkInput "")
@@ -897,14 +963,6 @@ c))
  (if (eq? c #\+) (walk 5)
  (if (eq? c #\-) (walk 0)
  (if (eq? c #\s) (begin (set! alwaysScroll (not alwaysScroll)) (ConsoleDisplay "\r\nalwaysScroll " alwaysScroll))
- (if (eq? c #\S) ((WinMap 'scrollUp))
- (if (eq? c #\a) (begin
-                ((WinMap 'alpha) (- (avatar 'y) PortY)
-                                 (* 2 (- (avatar 'x) PortX))
-                                 #f)
-                ((WinMap 'alpha) (- (avatar 'y) PortY)
-                                 (+ 1 (* 2 (- (avatar 'x) PortX)))
-                                 #f))
  (if (eq? c #\w) (begin
                    ((WinStatus 'toggle))
                    ((WinColumn 'toggle))
@@ -942,27 +1000,11 @@ c))
      (field-delete!  (avatar 'z) (avatar 'y) (avatar 'x) o)
      (avatar `(set! cell ,o)))
  (if (eq? c #\?) (help)
- (if (eq? c #\<) (begin
-                  ((WinMap 'toggle))
-                  ((WinMap 'moveresize)
-                     0 (- (Terminal 'TWidth) (WinMap 'WWidth) 0)
-                     (+ -1 (WinMap 'WHeight))
-                     (+ -2 (WinMap 'WWidth)))
-                  (circularize)
-                  (viewportReset (avatar 'y) (avatar 'x))
-                  ((WinMap 'toggle)))
- (if (eq? c #\>) (begin
-                  ((WinMap 'toggle))
-                  ((WinMap 'moveresize)
-                     0 (- (Terminal 'TWidth) (WinMap 'WWidth) 4)
-                     (+ 1 (WinMap 'WHeight))
-                     (+ 2 (WinMap 'WWidth)))
-                  (circularize)
-                  (viewportReset (avatar 'y) (avatar 'x))
-                  ((WinMap 'toggle)))
+ (if (eq? c #\<) (winMapSmaller)
+ (if (eq? c #\>) (winMapBigger)
  (if (eq? c #\z) (circularize)
  (if (eq? c #\Z) (circularize #t)
- (if (eq? c CHAR-CTRL-W) (walkForever))))))))))))))))))))))))))))))))))
+ (if (eq? c CHAR-CTRL-W) (walkForever))))))))))))))))))))))))))))))))
  state)
 
 (define wrepl (let ((state 'cmd))
