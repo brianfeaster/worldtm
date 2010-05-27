@@ -13,33 +13,22 @@
 #include "globals.h"
 
 
-
 /* This must be called before usage of this library.  Two functions are passed
    (or NULL for either) and are called before and after every GC.
+   It sets up the various heaps.  These include static, old and current the
+   current generational collector.
 */
-void memInitialize (fp preGC, fp postGC);
+void memInitialize (Func preGC, Func postGC);
 
 
 
-/* An object type.
+/* An object's 'type' and length type.  They are unioned to form a descriptor.
+   For the type, only the lower byte used so it can be used as a token in the
+   scanner.
 */
-typedef void* Obj;
-
-
-
-/* An object's 'type'.  A byte so it can be used as a scanned token type.
-*/
-typedef u32 Type;
-
-
-
-/* Reserved object type constants.  8 bit field with the top bit representing
-   a 1 for vector and 0 for array.
-*/
-#define TFINALIZER  0xfc
-#define TPOINTER    0xfd
-#define TSTACK      0xfe
-#define TSHADOW     0xff
+typedef Num Descriptor;
+typedef Num Type;       // Highest byte of descriptor.
+typedef Num LengthType; // Remaining bytes of descriptor.
 
 
 
@@ -55,12 +44,14 @@ extern Obj r0,  r1,  r2,  r3,  r4,  r5,  r6,  r7,
 extern char memGCFlag; // Flag set if in the middle of a GC.
 
 
+Num memArrayLengthToObjectSize  (LengthType length);
+
 /* Object Creators that store new object in r0.
 */
-void memNewStatic      (Type t, u32 byteLength);
-void memNewStaticVector(Type t, u32 byteLength);
-void memNewArray       (Type t, u32 byteLength);
-void memNewVector      (Type t, u32 objLength);
+void memNewStatic      (Type t, LengthType byteLength);
+void memNewStaticVector(Type t, LengthType objLength);
+void memNewArray       (Type t, LengthType byteLength);
+void memNewVector      (Type t, LengthType objLength);
 void memNewFinalizer   (void);
 void memNewPointer     (void);
 void memNewStack       (void);
@@ -71,10 +62,10 @@ void memNewStack       (void);
    collector might need to keep track of mutated vector objects in the 'old'
    heap.
 */
-void memArraySet  (Obj obj, u32 offset, u8  item);
-void memVectorSet (Obj obj, u32 offset, Obj item);
+void memArraySet  (Obj obj, Num offset, u8  item);
+void memVectorSet (Obj obj, Num offset, Obj item);
 void memStackPush (Obj stack, Obj item);
-void memStackSet  (Obj stack, u32 topOffset, Obj item);
+void memStackSet  (Obj stack, Num topOffset, Obj item);
 Obj  memStackPop  (Obj stack);
 
 
@@ -82,12 +73,12 @@ Obj  memStackPop  (Obj stack);
 /* Object selectors.
 */
 Type memObjectType   (Obj obj);
-u32  memObjectLength (Obj obj);
-int  memStackLength  (Obj obj);
+Num  memObjectLength (Obj obj);
+Int  memStackLength  (Obj obj);
 
-u8   memArrayObject  (Obj obj, u32 offset);
-Obj  memVectorObject (Obj obj, u32 offset);
-Obj  memStackObject  (Obj obj, u32 topOffset);
+u8   memArrayObject  (Obj obj, Num offset);
+Obj  memVectorObject (Obj obj, Num offset);
+Obj  memStackObject  (Obj obj, Num topOffset);
 
 
 
@@ -99,12 +90,19 @@ void memGarbageCollect (void);
 
 /* Debugging aids.
 */
-void memDebugObjectDump (Obj o);
 void memDebugDumpHeapHeaders (void);
+void memDebugDumpObject (Obj o);
+void memDebugDumpAll (void);
 void memValidateObject (Obj o);
 void memValidateHeapStructures (void);
-void memDebugDumpHeapStructures (void);
 
+char* memTypeString        (Type t);
+
+char* memObjString         (Obj obj);
+void  memObjStringRegister (Obj obj, char *str);
+/* Macro to associate register object addresses
+   and a string representation easier. */
+#define memObjStringSet(o) memObjStringRegister(o, #o);
 
 
 #endif

@@ -29,7 +29,7 @@ extern int interrupt;
 void vmSigAlarmReset (void);
 
 void vmRun (void);
-void vmInitialize (fp intHandler, fp preGC, fp postGC, fp1 objDumper);
-void vmDebugDump ();
+void vmInitialize (Func intHandler, Func preGC, Func postGC, Func1 vmObjDumper);
+void vmDebugDumpCode (Obj c);
 
 #endif

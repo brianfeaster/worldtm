@@ -2,7 +2,6 @@
 #define _GLOBALS_H
 
 
-
 /* Register aliases.
 */
 #define semaphores r9  /* WSCM: semaphore counters. */
@@ -25,57 +24,107 @@
 #define stack      r1f /* VM: Global stack used by VM. */
 
 
-
-/* C Type declarations representing the number of bits for unsigned, signed
-   and real types.  These are true for my i386 based Linux.
+/* C Type declarations representing the number of bits for unsigned, signed and
+   real types.  Currently these match the Linode virtual machines I'm hosted on.
  */
-typedef unsigned char       u8;
-typedef unsigned short      u16;
-typedef unsigned long       u32;
-typedef unsigned long long  u64;
-typedef long                s32;
-typedef long long           s64;
-typedef float               r32;
-typedef double              r64;
+typedef unsigned char  u8;
+typedef unsigned short u16;
+typedef unsigned int   u32;
+typedef unsigned long  u64;
 
+typedef char  s8;
+typedef short s16;
+typedef int   s32;
+typedef long  s64;
+
+typedef float       r32;
+typedef double      r64;
+typedef long double r128;
+
+
+/* Common types.
+*/
+typedef u8*   Str;
+typedef s64   Int;
+typedef u64   Num;
+typedef r64   Real;
+typedef void* Obj;
 
 
 /* Type declaration for functions.
 */
-typedef void               (*fp)  (void);
-typedef void               (*fp1) (void *a);
-typedef void               (*fp2) (void *a, void *b);
+typedef void (*Func)  (void);
+typedef void (*Func1) (Obj a);
+typedef void (*Func2) (Obj a, Obj b);
 
+
+/* Printf format strings for the above types.
+*/
+#define X8  "%x"
+#define X16 "%x"
+#define X32 "%x"
+#define X64 "%lx"
+
+#define U8  "%u"
+#define U16 "%u"
+#define U32 "%u"
+#define U64 "%lu"
+
+#define S8  "%d"
+#define S16 "%d"
+#define S32 "%d"
+#define S64 "%ld"
+
+#define INT   "%ld"
+#define INT4 "%4ld"
+
+#define NUM  "%lu"
+
+#define HEX     "%lx"
+#define HEX2   "%2lx"
+#define HEX02 "%02lx"
+#define HEX4   "%4lx"
+#define HEX04 "%04lx"
+
+#define REAL "%lf"
+
+/* Memory pointers seem to be in the 12 hex-digit
+   range so this is the usual format string length.  */
+#define OBJ  "%012lx"
+#define OBJ0 "%016lx"
 
 
 /* Scheme object types.  Byte with highest bit signifying a memory vector
-   object.  The lower 24 bits are used in descriptors for the object length
+   object.  The lower 56 bits are used in descriptors for the object length
    either number of bytes in the array or the vector size.
  */
-#define  TBASEARRAY     0x00
-#define  TFALSE         0x01
-#define  TTRUE          0x02
-#define  TNULL          0x03
-#define  TNULLVEC       0x04
-#define  TNULLSTR       0x05
-#define  TEOF           0x06
-#define  TCHAR          0x07
-#define  TSTRING        0x08
-#define  TSYMBOL        0x09
-#define  TINTEGER       0x0a
-#define  TLONG          0x0b
-#define  TREAL          0x0c
+#define TBASEARRAY     0x00
+#define TFALSE         0x01
+#define TTRUE          0x02
+#define TNULL          0x03
+#define TNULLVEC       0x04
+#define TNULLSTR       0x05
+#define TEOF           0x06
+#define TCHAR          0x07
+#define TSTRING        0x08
+#define TSYMBOL        0x09
+#define TINTEGER       0x0a
+#define TREAL          0x0b
 
-#define  TBASEVECTOR    0x80
-#define  TPAIR          0x81
-#define  TVECTOR        0x82
-#define  TCLOSURE       0x83
-#define  TCONTINUATION  0x84
-#define  TCODE          0x85
-#define  TPORT          0x86
-#define  TSOCKET        0x87
-#define  TSYSCALL       0x88
+#define TBASEVECTOR    0x80
+#define TPAIR          0x81
+#define TVECTOR        0x82
+#define TCLOSURE       0x83
+#define TCONTINUATION  0x84
+#define TCODE          0x85
+#define TPORT          0x86
+#define TSOCKET        0x87
+#define TSYSCALL       0x88
 
+#define TFINALIZER     0xfc
+#define TPOINTER       0xfd
+#define TSTACK         0xfe
+#define TSHADOW        0xff
 
 
 /* Compiler flags.  Make sure only 20 bits are used as garbage collector
@@ -84,6 +133,7 @@ typedef void               (*fp2) (void *a, void *b);
    in C land.
 */
 static const unsigned TAILCALL = 0x00080000;
+/*
 static const unsigned R8 =       0x00000100;
 static const unsigned R7 =       0x00000080;
 static const unsigned R6 =       0x00000040;
@@ -93,7 +143,10 @@ static const unsigned R3 =       0x00000008;
 static const unsigned R2 =       0x00000004;
 static const unsigned R1 =       0x00000002;
 static const unsigned R0 =       0x00000001;
+*/
 
 #define MAX_THREADS 1024
+
+#define ASSERT assert
 
 #endif

@@ -25,6 +25,7 @@ Obj null, nullvec, nullstr, false, true, eof,
     seval, sapply, scallcc, ssyntaxrules, seof,
     snot, sadd, ssub, smul, sdiv, slogand, characters, signalhandlers;
 
+int wscmDebug=0;
 
 
 /* This is a very popular hashing algorithm found online and in various texts.
@@ -88,30 +89,24 @@ void objListToVector (void) {
 		r0 = nullvec;
 }
 
-/* Creates a new u64 object in r0.
-*/
-void objNewLong (u64 i) {
-   memNewArray(TLONG, sizeof(u64));
-   *(u64*)r0 = i;
-}
 /* Creates a new integer object in r0.
 */
-void objNewInteger (s32 i) {
-   memNewArray(TINTEGER, sizeof(s32));
-   *(s32*)r0 = i;
+void objNewInt  (Int i) {
+   memNewArray(TINTEGER, sizeof(Int));
+   *(Int*)r0 = i;
 }
 /* Create and set object in r0 to immediate signed integer value in r1.
 */
 void objCopyInteger (void) {
-   memNewArray(TINTEGER, sizeof(s32));
-   *(s32*)r0 = *(s32*)r1;
+   memNewArray(TINTEGER, sizeof(Int));
+   *(Int*)r0 = *(Int*)r1;
 }
 
 /* Creates a new real object in r0.
 */
-void objNewReal (r32 x) {
-   memNewArray(TREAL, sizeof(r32));
-   *(r32*)r0 = x;
+void objNewReal (Real x) {
+   memNewArray(TREAL, sizeof(Real));
+   *(Real*)r0 = x;
 }
 /* Create and set object in r0 to immediate real value in r1.
 */
@@ -182,7 +177,7 @@ void objNewSymbolStatic (char *s) {
 	memcpy((char*)r0, s, len);
 }
 
-void objNewSyscall (fp f) {
+void objNewSyscall (Func f) {
    memNewArray(TSYSCALL, 1);
 	memVectorSet(r0, 0, f);
 }
@@ -204,10 +199,11 @@ void objNewVector (int len) {
    memNewVector(TVECTOR, len);
 }
 void objNewVector1 (void) {
-   memNewVector(TVECTOR, (int)r1);
+   memNewVector(TVECTOR, (LengthType)r1);
 }
 
-/* Create closure which is (<code> . <environment>)
+/* Create new closure in r0 which is (<code> . <environment>)
+   Code pased in r1.
 */
 void objNewClosure1Env (void) {
    memNewVector(TCLOSURE, 2);
@@ -254,10 +250,10 @@ void new_continuation(void) {
 
 
 void objDump (Obj a, int fd) {
- int len, i;
+ Int len, i;
  static char buff[128];
  char *c;
-	if ((unsigned)a < 0x100000) {
+	if ((Num)a < 0x100000) {
 		len = sprintf(buff, "#<%x>", a);
 		write(fd, buff, len);
 		return;
@@ -361,7 +357,7 @@ void push (Obj o) { memStackPush(stack, o);}
 Obj  pop  (void)  { return memStackPop(stack);}
 
 
-fp objCallerPreGarbageCollect = 0,
+Func objCallerPreGarbageCollect = 0,
    objCallerPostGarbageCollect = 0;
 
 int objGCCounter=0;
@@ -376,18 +372,19 @@ void objGCPost (void) {
 		if (objCallerPostGarbageCollect) objCallerPostGarbageCollect ();
 }
 
-extern void wscmDisplay (Obj a, long islist, int fd);
+//extern void wscmDisplay (Obj a, long islist, int fd);
 void objObjectDumper (Obj o) {
-	//objDump (o, 1); // This modules version of write.
-	wscmDisplay (o, 0, 1); // WSCMs version of display.
+	objDump (o, 1); // This modules version of write.
+	//wscmDisplay (o, 0, 1); // WSCMs version of display.
 }
  
 
-void objInitialize (fp intHandler) {
- int i;
+void objInitialize (Func intHandler) {
+ Int i;
 DB("INIT -->objInitialize() ");
 DB("INIT    initializing memory module");
 	asmInitialize(intHandler, objGCPre, objGCPost, objObjectDumper);
+	memInitialize(0, 0);
 	/* These primitive types are also external (display) strings. */
 	memNewStatic(TNULL, 2);    null=r0;    memcpy(r0, "()", 2);
 	/* This is a strange object with a descriptor and no content.
@@ -460,7 +457,7 @@ DB("INIT    initializing memory module");
 	/* Table of character objects.  The 257th is the EOF character. */
 	memNewStaticVector(TVECTOR, 257);   characters = r0;
 	for (i=0; i<256; i++) {
-		memNewStatic(TCHAR, 1);  *(int*)r0=i;
+		memNewStatic(TCHAR, 1);  *(Int*)r0=i;
 		memVectorSet(characters, i, r0);
 	}
 
@@ -470,69 +467,7 @@ DB("INIT    initializing memory module");
 	    is an invalid pointer to object (pointing to the character-vector's
 	    descriptor. Debugging... */
 	memNewStatic(TEOF, 4);              eof = r0;
-	*(int*)eof = 256;                   memVectorSet(characters, 256, eof);
+	*(Int*)eof = 256;                   memVectorSet(characters, 256, eof);
 
 DB("INIT <--objInitialize() ");
-}
-
-void helloWorld (void) {printf ("\nHello world!\n");}
-void displayInteger$0 (void) {printf ("%08x", *(s32*)r0); }
-void displayInteger$1 (void) {printf ("%08x", *(s32*)r1); }
-void displayString$0  (void) {write (1, r0, memObjectLength(r0)); }
-void displayString$1  (void) {write (1, r1, memObjectLength(r1)); }
-void displayCString   (void) {printf (r0); }
-
-int objmain (void) {
-	setbuf(stdout, 0);
-	DB("MAIN initializing");
-	objInitialize(0);
-	//objNewInteger(0xdeadbeef); memStackPush (stack, r0);
-	//objNewReal(1.3);  memStackPush (stack, r0);
-	//objNewReal(15.0); memStackPush (stack, r0);
-	/* Assemble a new program. */
-
-	objNewInteger(0xdeadbeef); r1=r0;
-	objNewInteger(0x00000001); r2=r0;
-
-	asmAsm(
-		SYSI, helloWorld,
-		MVI1, r1,
-		SYSI, objCopyInteger,
-		SYSI, displayInteger$0,
-		MVI0, "\n+",
-		SYSI, displayCString,
-		MVI0, r2,
-		SYSI, displayInteger$0,
-		ADD10,
-		MVI0, "\n=",
-		SYSI, displayCString,
-		SYSI, displayInteger$1,
-		LABEL, "top",
-		MVI0, r2,
-		ADD10,
-		MVI0, "\r",
-		SYSI, displayCString,
-		SYSI, displayInteger$1,
-		BRA, ADDR, "top",
-		END
-	);
-	asmCompile(0);
-	asmNewCode();
-	vmDebugDump();
-	code=r0;  ip=0;  vmRun();
-	memGarbageCollect();
-	memDebugDumpHeapStructures();
-	goto done;
-	memStackPush(stack, r0);
-	memGarbageCollect();
-	memStackPop(stack);
-	memStackPop(stack);
-	memStackPop(stack);
-	memGarbageCollect();
-	memGarbageCollect();
-	memGarbageCollect();
-	memGarbageCollect();
-done:
-	DB("MAIN done.\n");
-	return 0;
 }

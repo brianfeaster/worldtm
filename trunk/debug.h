@@ -1,6 +1,3 @@
-//#ifndef _DEBUG_H
-//#define _DEBUG_H
-
 #include <stdio.h>
 
 #if DEBUG
@@ -38,5 +35,3 @@
 #define DBE if(0)
 
 #endif
-
-//#endif
