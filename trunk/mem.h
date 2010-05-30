@@ -98,10 +98,10 @@ void memValidateHeapStructures (void);
 
 char* memTypeString        (Type t);
 
+/* Mechanism to associate a pointer address with a string.  A macro is
+   provided to associate a pointer addresses and its string representation. */
 char* memObjString         (Obj obj);
 void  memObjStringRegister (Obj obj, char *str);
-/* Macro to associate register object addresses
-   and a string representation easier. */
 #define memObjStringSet(o) memObjStringRegister(o, #o);
 
 

@@ -34,7 +34,7 @@ extern Num yyleng;
 
 Num parseString (u8* str);
 void yyrestart(int fd);
-void yy_scan_string(u8 *buff);
+void yy_scan_string(Str buff);
 void yy_scan_bytes(u8 *buff, Num len);
 Num transition (Num ch, Num state);
 Num yylex (void);

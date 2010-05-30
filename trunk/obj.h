@@ -22,7 +22,7 @@ extern Obj null, nullvec, nullstr, false, true, eof,
 
 extern int wscmDebug;
 
-unsigned hashpjw (char *s, int len);
+unsigned hashpjw (Str s, int len);
 int  objListLength (Obj o);
 int  objDoublyLinkedListLength (Obj o);
 void objListToVector (void);
@@ -34,9 +34,9 @@ void objCopyInteger (void);
 void objNewReal     (Real x);
 void objCopyReal    (void);
 
-void objNewString  (u8 *str, int len);
+void objNewString  (Str str, int len);
 void objCopyString  (void);
-void objNewSymbol  (char *str, int len);
+void objNewSymbol  (Str str, int len);
 void objNewSyscall (Func f);
 void objCons12   (void); /* New pair using r1 and r2 */
 void objCons23   (void);
