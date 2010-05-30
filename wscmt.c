@@ -2,6 +2,7 @@
 #define DB_MODULE "WSCMTEST "
 #include "debug.h"
 #include <stdio.h>
+#include <unistd.h>
 #include <stdlib.h>
 #include "scanner.h"
 #include "obj.h"
@@ -19,15 +20,6 @@ extern void vmVm(Int cmd);
 extern void wscmWrite (Obj a, long islist, Int fd);
 
 
-void wscmTestInitialize() {
-	/* Initialize obj, asm, and mem modules. */
-	objInitialize(NULL); /* Pass a NULL interrupt handler.
-	/* Create empty global environment list. */
-	objNewSymbol("TGE", 3);
-	r1=r0;  r2=null;  objCons12();  env=tge=r0;
-}
-
-
 /* Verify goto to an address pointer works.
 */
 void testGoto() {
@@ -40,30 +32,30 @@ void testGoto() {
 
 
 int main (void) {
-	//wscmTestInitialize();
-	wscmInitialize();
-	vmVm(0);
+	DB ("::%s", __func__);
 	setbuf(stdout, NULL);
-	yy_scan_string("(begin (fun '*) (display \"The end.\n\"))");
-	/* Infinite loop.
-	yy_scan_string("(let ~ () (~))");
-	*/
-	yyparse();
-	wscmWrite(r0, 0, 1);
-	compCompile();
-
+	printf("\e[25?l");
 	testGoto();
 
-	DB("Address: sysIllegalOperator = %p", sysIllegalOperator);
-	DB("Address: sysTGELookup = %p", sysTGELookup);
-	DB("Address: sysTGEMutate = %p", sysTGEMutate);
-	DB("Address: wscmError = %p", wscmError);
-	DB("Address: objNewClosure1Env = %p", objNewClosure1Env);
+	wscmInitialize();
+
+	// Expression to evaluate.
+	//yy_scan_string((Str)"(begin (display \"\n\") (fun '*) (display \"The end.\n\"))");
+	//yy_scan_string((Str)"(let ~ () (~))");
+	//yy_scan_string((Str)"(begin (display stdin) (display (cons '(you typed) (read stdin))))");
+	//yy_scan_string((Str)"(let ~ ((i 0)(e -9000)) (display i) (display \"\\r\")(if (= i e) i (~ (+ i 1) e)))");
+	yy_scan_string((Str)"(display (eval '(+ 1 2)))");
+	
+	yyparse(); //wscmWrite(r0, 0, 1);
+	compCompile();
 
 	// Fire up VM.
-	interrupt=0;
+	sleep(1); interrupt=0; /* Give the interrupt handler time to trigger so forcing it to 0 actually stays 0. */
 	code=r0; ip=0; vmRun();
+	memGarbageCollect();
 
-	memDebugDumpAll();
+	DBE memDebugDumpAll();
+	DBE vmDebugDumpCode(code);
+	DB ("  --%s", __func__);
 	return 0;
 }

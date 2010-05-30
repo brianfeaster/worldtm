@@ -93,13 +93,14 @@ DB("  --%s", __func__);
 
 void asmNewCode (void) {
  Int len;
-	DB("::%s", __func__);
+	DB("::" __func__);
 	memNewVector(TCODE, len=memStackLength(asmstack));
 	memcpy(r0, asmstack+8, len*8);
 	/* Reset assembly stack by setting the first entry to
 	   the stack itself (points to itself). */
 	*(Obj*)asmstack = asmstack;
-	DB("  --%s", __func__);
+	DBE vmDebugDumpCode(r0);
+	DB("  --" __func__);
 }
 
 

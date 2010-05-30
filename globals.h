@@ -44,6 +44,7 @@ typedef long double r128;
 
 /* Common types.
 */
+typedef u8    Chr;
 typedef u8*   Str;
 typedef s64   Int;
 typedef u64   Num;

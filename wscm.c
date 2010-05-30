@@ -1,4 +1,4 @@
-#define DEBUG 1
+#define DEBUG 0
 #define DB_MODULE "WSCM "
 #include "debug.h"
 
@@ -353,44 +353,40 @@ void wscmDisplay (Obj a, long islist, int fd) {
 			write (fd, ")", 1);
 			break;
 		case TCLOSURE:
-			len=sprintf (buff, "#CLOSURE<CODE %08x  ENV:%08x>", car(a), cdr(a));
+			len=sprintf (buff, "#CLOSURE<CODE "OBJ"  ENV:"OBJ">", car(a), cdr(a));
 			write(fd, buff, len);
 			break;
 		case TCONTINUATION:
 			break;
 		case TCODE:
-			len = sprintf(buff, "#CODE<%08x>", a);
+			len = sprintf(buff, "#CODE<"OBJ">", a);
 			write(fd, buff, len);
 			break;
 		case TPORT:
 		case TSOCKET:
 			write(fd, "#SOCKET<", 8);
-			wscmDisplay (memVectorObject(a, 0), 0, fd);
-			write(fd, " ", 1);
-			wscmDisplay (memVectorObject(a, 1), 0, fd);
-			write(fd, " ", 1);
-			wscmDisplay (memVectorObject(a, 2), 0, fd);
-			write(fd, " ", 1);
-			wscmDisplay (memVectorObject(a, 3), 0, fd);
-			write(fd, " ", 1);
+			wscmDisplay (memVectorObject(a, 0), 0, fd); write(fd, " ", 1);
+			wscmDisplay (memVectorObject(a, 1), 0, fd); write(fd, " ", 1);
+			wscmDisplay (memVectorObject(a, 2), 0, fd); write(fd, " ", 1);
+			wscmDisplay (memVectorObject(a, 3), 0, fd); write(fd, " ", 1);
 			wscmDisplay (memVectorObject(a, 4), 0, fd);
 			write(fd, ">", 1);
 			break;
 		case TSYSCALL:
-			i = sprintf(buff, "#SYSCALL<%08x>", a);
+			i = sprintf(buff, "#SYSCALL<"OBJ">", a);
 			write(fd, buff, i);
 			break;
 		case TSTACK :
-			len = sprintf(buff, "#[%x |", memStackLength(a));
+			len = sprintf(buff, "#["HEX" |", memStackLength(a));
 			write(fd, buff, len);
 			for (i=0; i<memStackLength(a); i++) {
-				len=sprintf(buff, " %x", memStackObject(a, memStackLength(a)-i-1));
+				len=sprintf(buff, " "HEX, memStackObject(a, memStackLength(a)-i-1));
 				write(fd, buff, len);
 			}
 			write(fd, "]", 1);
 			break;
 	 	default:
-			len = sprintf(buff, "#<%x>", a);
+			len = sprintf(buff, "#<"OBJ">", a);
 			write(fd, buff, len);
 	}
 }
@@ -1327,7 +1323,7 @@ void wscmError (void) {
  Int argument_count = (Int)r1;
 	DB("-->%s", __func__);
 	/* Look up error function/continuation in ERRORS vecvtor in TGE. */
-	objNewSymbol ("ERRORS", 6);  r1=r0;  wscmTGEFind();
+	objNewSymbol ((Str)"ERRORS", 6);  r1=r0;  wscmTGEFind();
 	/* Set the code register and IP:
 	     (car running) the thread
 	     (cdr thread) thread number
@@ -2190,7 +2186,7 @@ void sysTransition (void) {
 /* Deserializers:  String representation in r5, length r6 => new atom in r0. */
 void sysNewSymbol (void) {
 	DB("-->sysNewSymbol()");
-	objNewSymbol((char*)r5, (Int)r6);
+	objNewSymbol((Str)r5, (Int)r6);
 	DB("<--sysNewSymbol()");
 }
 void sysNewString (void) {
@@ -2237,7 +2233,7 @@ void sysCompile (void) {
 	push(env);
 	CompError=0;
 	asmAsm ( /* Keep track of original expression for debuggin. */
-		BRA, 4,
+		BRA, 8,
 		expr,
 		END
 	);
@@ -2379,11 +2375,11 @@ void sysToggleDebug (void) {
 /* Bind 'symbol in global environment and assign a syscall object
    created from 'function.
 */
-void wscmDefineSyscall (Func function, char *symbol) {
+void wscmDefineSyscall (Func function, char* symbol) {
 	DB("-->%s", __func__);
 	/* Create binding: (val . sym) */
 	objNewSyscall(function); r1=r0;
-	objNewSymbol(symbol, strlen(symbol)); r2=r0;
+	objNewSymbol((Str)symbol, strlen(symbol)); r2=r0;
 	objCons12();
 	/* Insert binding into TGE list:  (TGE (newVal . newSym) ...) */
 	r1=r0;
@@ -2397,10 +2393,10 @@ void wscmDefineSyscall (Func function, char *symbol) {
 /* Bind symbol, created from 'sym', in TGE and assign object in r0 to
    the location.
 */
-void wscmDefine(char *sym) {
+void wscmDefine (char* sym) {
 	DB("-->%s", __func__);
 	r1 = r0;
-	objNewSymbol(sym, strlen(sym)); r2=r0;
+	objNewSymbol((Str)sym, strlen(sym)); r2=r0;
 	objCons12();
 	/* Insert binding into TGE list:  (TGE (val . sym) . ...) */
 	r1=r0;  r2=cdr(tge);  objCons12();
@@ -2421,7 +2417,10 @@ void wscmCreateRead (void) {
 	   Uses -- r1:port object   r2:()  r3:used by recv
 	           r4:state   r5:token buffer   r6:token length   r7:is list bool.
 	*/
+	objNewString((Str)"Parser",6);
 	asmAsm (
+		BRA, 8l,
+		r0,
 		MVI4, 0l,             /* r4 <- Initial state. */
 		MVI6, 0l,             /* r6 <- initial yylength. */
 		LABEL, "scan",
@@ -2619,8 +2618,12 @@ void wscmCreateRead (void) {
 	/* r5 eventually gets a new token string buffer (copied from this) when the
 		following code runs. */
 	objNewString((u8*)"----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------", 640);
+	r2=r0;
+	objNewString((Str)"ParserMain",10);
 	asmAsm (
-		MVI1, r0, /* The string buffer. */
+		BRA, 8l,
+		r0,
+		MVI1, r2, /* The string buffer. */
 		SYSI, objCopyString,
 		MV50,
 		/* Initialize boolean to 'not parsing a list'. */
@@ -2645,11 +2648,11 @@ void wscmCreateRead (void) {
 */
 void wscmCreateRepl (void) {
 	DB("-->%s\n", __func__);
-	objNewSymbol ("\nVM>", 4);  r2=r0;
-	objNewSymbol ("in", 2);  r1=r0;  wscmTGEFind(); r3=car(r0);
-	objNewSymbol ("read", 4);  r1=r0;  wscmTGEFind();  r4=caar(r0);
-	objNewString ((u8*)"bye\n", 4);  r5=r0;
-	objNewString ((u8*)"Entering REPL\n", 14);  r6=r0;
+	objNewSymbol ((Str)"\nVM>", 4);  r2=r0;
+	objNewSymbol ((Str)"in", 2);  r1=r0;  wscmTGEFind(); r3=car(r0);
+	objNewSymbol ((Str)"read", 4);  r1=r0;  wscmTGEFind();  r4=caar(r0);
+	objNewString ((Str)"bye\n", 4);  r5=r0;
+	objNewString ((Str)"Entering REPL\n", 14);  r6=r0;
 	asmAsm (
 		MVI0, r6,
 		PUSH0,
@@ -2698,7 +2701,25 @@ void wscmCreateRepl (void) {
 
 void wscmInitialize (void) {
  Int i;
-	DB("INIT -->wscmInitialize()");
+	DB("::%s", __func__);
+
+	/* Register objects and pointer addresses with their
+	   C source names for object debug dumps. */
+	memObjStringSet(sysIllegalOperator);
+	memObjStringSet(sysTGELookup);
+	memObjStringSet(sysTGEMutate);
+	memObjStringSet(wscmError);
+	memObjStringSet(objNewClosure1Env);
+	memObjStringSet(objNewVector1);
+	memObjStringSet(wscmRecvBlock);
+	memObjStringSet(sysTransition);
+	memObjStringSet(objListToVector);
+	memObjStringSet(objCons12);
+	memObjStringSet(objCopyString);
+	memObjStringSet(sysDisplay);
+	memObjStringSet(sysCompile);
+	memObjStringSet(sysUnthread);
+
 	objInitialize(wscmInterruptHandler);
 
 	/* Create empty thread vector.  All active threads are assigned a number
@@ -2735,7 +2756,7 @@ void wscmInitialize (void) {
 	while (i--) memVectorSet(semaphores, i, null);
 
 	/* Create empty global environment list. */
-	objNewSymbol("TGE", 3);
+	objNewSymbol((Str)"TGE", 3);
 	r1=r0;  r2=null;  objCons12();  env=tge=r0;
 
 	/* Bind usefull values r2=value r1=symbol. */
@@ -2805,20 +2826,20 @@ void wscmInitialize (void) {
 	objNewInt(1); wscmDefine ("x");
 
 	r1=(Obj)0;
-	objNewSymbol ("stdin", 5);
+	objNewSymbol ((Str)"stdin", 5);
 	r2=r3=r0;
 	r4 = sopen;
 	objNewPort();  r3=r0; wscmDefine("stdin");
 	                 r0=r3; wscmDefine("in"); /* Also bind to 'in */
 
 	r1=(Obj)1;
-	objNewSymbol ("stdout", 6);
+	objNewSymbol ((Str)"stdout", 6);
 	r2=r3=r0;
 	r4 = sopen;
 	objNewPort ();   wscmDefine("stdout");
 
 	r1=(Obj)2;
-	objNewSymbol ("stderr", 6);
+	objNewSymbol ((Str)"stderr", 6);
 	r2=r3=r0;
 	r4 = sopen;
 	objNewPort(); wscmDefine("stderr");
@@ -2836,7 +2857,7 @@ void wscmInitialize (void) {
 	while (i--) { memVectorSet(r0, i, null); }
 	wscmDefine("SIGNALHANDLERS");
 
-DB("INIT <--wscmInitialize()");
+	DB("  --%s", __func__);
 }
 
 
@@ -2920,7 +2941,7 @@ void wscmBindArgs (int argc, char *argv[]) {
 	r0=r1; wscmDefine ("argv"); 
 }
 
-int mmain (int argc, char *argv[]) {
+int main (int argc, char *argv[]) {
 	wscmInitialize();
 	setbuf(stdout, NULL);
 	signal(SIGPIPE, SIG_IGN);
@@ -2931,7 +2952,7 @@ int mmain (int argc, char *argv[]) {
 	/* Three ways of firing up a repl. */
 
 	//wscmCReadEvalPrintLoop(); /* REPL in C. */
-	//wscmStringReadEvalPrintLoop(); /* REPL as inlined scheme. */
+	wscmStringReadEvalPrintLoop(); /* REPL as inlined scheme. */
 	//return 0;
 
 	/* Bind symbol 'in and assign the stdin port or the filename passed as arg
@@ -2939,16 +2960,16 @@ int mmain (int argc, char *argv[]) {
 	if (argc==2) {
 		/* Create port object, push the argument, set arg count to 1 then
 		   make the syscall. */
-		objNewSymbol (argv[1], strlen(argv[1]));
+		objNewSymbol ((Str)argv[1], strlen(argv[1]));
 		push(r0);  r1=(Obj)1;  sysOpen();
 		/* Assign port to existing binding. */
 		if ((r3=r0) != false) {
-			objNewSymbol ("in", 2);  r1=r0;  wscmTGEFind();
+			objNewSymbol ((Str)"in", 2);  r1=r0;  wscmTGEFind();
 			memVectorSet(r0, 0, r3);
 		}
 	}
 
-	objNewSymbol ("repl2", 5);r1=r0;
+	objNewSymbol ((Str)"repl2", 5);r1=r0;
 	wscmTGEFind(); r0=caar(r0);
 
 	wscmWrite(r0, 0, 1);

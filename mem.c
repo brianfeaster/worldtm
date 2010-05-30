@@ -229,7 +229,7 @@ Obj *(mutatedOldObjects[0x400])={0};
 
 /* ALLOCATED AN OBJECT IN THE HEAP:
  *  THE DESCRIPTOR PARAMATER IS A LONG [tsssssss] t=type-field s=size=field.
- *  A TYPE >= 0X80 IS ASSUMED A VECTOR OF OBJECTS (POINTERS, LENGTH 4 ON INTEL
+ *  A TYPE >= 0X80 IS ASSUMED A VECTOR OF OBJECTS (POINTERS, LENGTH 4 ON IA32
  *  BOXEN). A TYPE < 0X80 IS RAW BYTES.  THIS RESTRICTION IS USED BY THE GC.
  *
  * THE SIZE PARAMATER IS THE NUMBER OF ACTUAL BYTES THE OBJECT IS COMPOSED
@@ -882,7 +882,10 @@ void memDebugDumpHeapHeaders (void) {
 
 void memDebugDumpObject (Obj o) {
  Int i;
-	/* Dump the object's address descriptor. */
+ char *s;
+ Obj obj;
+	/* Dump the object's address and descriptor information.
+	   7fe8f5f44610 81 PAIR      2 #(7fe8f5f445f0 7fe8f5f44600) */
 	fprintf (stderr, "\n"OBJ" "HEX02" %-7s"HEX4,
 		o, memObjectType(o), memTypeString(memObjectType(o)), memObjectLength(o));
 
@@ -903,7 +906,10 @@ void memDebugDumpObject (Obj o) {
 			fprintf (stderr, " ("OBJ")()", *(Obj*)o);
 		else {
 			for (i=0; i<memObjectLength(o); i++) {
-				fprintf (stderr, " %s"HEX, i==0?"#(":"", ((Obj*)o)[i]);
+				obj = ((Obj*)o)[i];
+				fprintf (stderr, " %s"HEX, i==0?"#(":"", obj);
+				s = memObjString(obj);
+				if (s) fprintf (stderr, ":%s", s);
 			}
 			fprintf (stderr, ")");
 		}

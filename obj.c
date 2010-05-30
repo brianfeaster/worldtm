@@ -32,7 +32,7 @@ int wscmDebug=0;
    My tweak is to feed the last char back into the algorithm which seems to
    help distribute more single-length symbols.
 */
-unsigned hashpjw (char *s, int len) {
+unsigned hashpjw (Str s, int len) {
  unsigned ret=0, mask;
 	while (len--) {
 		if ((mask=(ret=(ret<<4)+*s++)&0xf<<28)) ret^=(mask|mask>>24);
@@ -117,7 +117,7 @@ void objCopyReal (void) {
 
 /* Create new string copying len bytes from str to object in r0.
 */
-void objNewString (u8 *str, int len) {
+void objNewString (Str str, int len) {
    memNewArray(TSTRING, len);
    if (str) memcpy(r0, str, len);
 }
@@ -130,7 +130,7 @@ void objCopyString (void) {
 	memcpy(r0, r1, len);
 }
 
-void objNewSymbol (char *str, int len) {
+void objNewSymbol (Str str, int len) {
  static unsigned hash, i;
 	i = hash = hashpjw(str, len) % 2029;
 	do {
@@ -138,12 +138,12 @@ void objNewSymbol (char *str, int len) {
 		/* Bucket empty so insert into symbol table. */
 		if (r0 == null) {
 			memNewArray(TSYMBOL, len);
-			memcpy((char*)r0, str, len);
+			memcpy(r0, str, len);
 			memVectorSet(symbols, i, r0);
 			return;
 		}
 		/* If something here, check if it's the symbol */
-		if(memObjectLength(r0)==len && !strncmp(r0,str,len)) {
+		if(memObjectLength(r0)==len && !memcmp(r0,str,len)) {
 			return;
 		}
 		/* Otherwise continue linear sweep for empty bucket or symbol. */
@@ -154,20 +154,20 @@ void objNewSymbol (char *str, int len) {
 }
 
 void objNewSymbolStatic (char *s) {
- int len = strlen(s);
+ Num len = strlen(s);
  static unsigned hash, i;
-	i = hash = hashpjw(s, len) % 2029;
+	i = hash = hashpjw((Str)s, len) % 2029;
 	do {
 		r0 = memVectorObject(symbols, i);
 		/* Bucket empty so insert into symbol table. */
 		if (r0 == null) {
 			memNewStatic(TSYMBOL, len); /* r0 now holds new symbol */
-			memcpy((char*)r0, s, len);
+			memcpy(r0, s, len);
 			memVectorSet(symbols, i, r0);
 			return;
 		}
 		/* If something here, check if it's the symbol */
-		if(memObjectLength(r0)==len && !strncmp(r0,s,len)) {
+		if(memObjectLength(r0)==len && !memcmp(r0,s,len)) {
 			return;
 		}
 		/* Otherwise continue linear sweep for empty bucket or symbol. */
@@ -293,9 +293,9 @@ void objDump (Obj a, int fd) {
 			break;
 		case TCLOSURE :
 			if (cdr(a) == tge)
-				len = sprintf(buff, "#CLOSURE<CODE:%08x TGE:%08x>", car(a), cdr(a));
+				len = sprintf(buff, "#CLOSURE<CODE:"OBJ" TGE:"OBJ">", car(a), cdr(a));
 			else
-				len = sprintf(buff, "#CLOSURE<CODE:%08x ENV:%08x>", car(a), cdr(a));
+				len = sprintf(buff, "#CLOSURE<CODE:"OBJ" ENV:"OBJ">", car(a), cdr(a));
 			write(fd, buff, len);
 			break;
 		case TPAIR :
@@ -309,32 +309,36 @@ void objDump (Obj a, int fd) {
 			write (fd, "#(", 2);
 			for (i=0; i<memObjectLength(a); i++) {
 				if (i) write (fd, " ", 1);
-				len = sprintf(buff, "%x", *((u32*)a+i));
+				len = sprintf(buff, OBJ, *((Obj*)a+i));
 				write(fd, buff, len);
 			}
 			write (fd, ")", 1);
 			break;
 		case TCODE :
-			len = sprintf(buff, "#<CODE %x>", a);
+			len = sprintf(buff, "#<CODE "OBJ">", a);
 			write(fd, buff, len);
 			break;
 		case TSTACK :
-			len = sprintf(buff, "#<STACK %x>", a);
+			len = sprintf(buff, "#<STACK "OBJ">", a);
 			write(fd, buff, len);
 			break;
 		case TSYSCALL :
-			len = sprintf(buff, "#<SYSCALL %x>", *(u32*)a);
+			len = sprintf(buff, "#<SYSCALL "OBJ">", *(Obj*)a);
 			write(fd, buff, len);
 			break;
 		default :
-			if (a == objNewVector1) {
-				write(fd, "objNewVector1()", 15);
-			} else if (tge == a) {
-				len = sprintf(buff, "#<TGE %x>", a);
+			if (tge == a) {
+				len = sprintf(buff, "#<TGE "OBJ">", a);
 				write(fd, buff, len);
 			} else {
-				len = sprintf(buff, "%x", a);
+				len = sprintf(buff, OBJ, a);
 				write(fd, buff, len);
+			}
+			/* Dump the object description. */
+			c = memObjString(a);
+			if (c) {
+				write (1, ":", 1);
+				write (1, c, strlen(c));
 			}
 	}
 }
@@ -381,8 +385,8 @@ void objObjectDumper (Obj o) {
 
 void objInitialize (Func intHandler) {
  Int i;
-DB("INIT -->objInitialize() ");
-DB("INIT    initializing memory module");
+	DB("::%s", __func_);
+	DB("  initializing memory module");
 	asmInitialize(intHandler, objGCPre, objGCPost, objObjectDumper);
 	memInitialize(0, 0);
 	/* These primitive types are also external (display) strings. */
@@ -469,5 +473,5 @@ DB("INIT    initializing memory module");
 	memNewStatic(TEOF, 4);              eof = r0;
 	*(Int*)eof = 256;                   memVectorSet(characters, 256, eof);
 
-DB("INIT <--objInitialize() ");
+	DB("  --%s", __func_);
 }

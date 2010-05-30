@@ -66,6 +66,8 @@ asmtest: asmt
 wscmtest: wscmt
 	./wscmt
 
+tests: memt objt vmt asmt wscmt
+
 test: memtest objtest vmtest asmtest wscmtest
 
 linecount:

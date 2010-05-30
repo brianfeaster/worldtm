@@ -2,6 +2,7 @@
 #define DB_MODULE "COMP "
 #include "debug.h"
 
+#include <stdio.h>
 #include <unistd.h>
 #include "obj.h"
 #include "comp.h"
@@ -33,7 +34,7 @@ void compRem () {
 }
 
 void compEval (Num flags) {
-	DB("-->%s", __func__);
+	DB("::%s", __func__);
 	expr = cadr(expr);
 	compExpression(flags & ~TAILCALL);
 	asm(SYSI); asm(sysCompile);
@@ -44,7 +45,7 @@ void compEval (Num flags) {
 		asm(JAL0);
 		asm(POP15); asm(POP1E); asm(POP1D);
 	}
-	DB("-->%s", __func__);
+	DB("  --%s", __func__);
 }
 
 void compSelfEvaluating (void) {
@@ -1035,7 +1036,7 @@ void compThread (void) {
 	/* Create new emit-code stack. */
 	memNewStack(); asmstack=r0;
 
-	/* Compile parameter passed to thread emitting the unthrad syscall
+	/* Compile parameter passed to thread emitting the unthread syscall
 	   as the last opcode. */
 	compBegin(0);
 	asm(SYSI); asm(sysUnthread);
@@ -1693,18 +1694,17 @@ Int compExpression (Num flags) {
 }
 
 
-
 /* Compile expression.
    r0 -> Expression we're compiling.
    r0 <- Resuling code object (vector of VM opcodes).
 */
 Int compCompile (void) {
  Int ret;
-	DB("-->%s", __func__);
+	DB ("::%s", __func__);
 	//env = tge;               /* We'll be using a pseudo env (r16=r17). */
 	expr = r0;                 /* Move expression to expr (r18). */
 	push(expr);						/* Keep track of expression (for debugging). */
-	asmAsm ( /* Keep track of original expression for debuggin. */
+	asmAsm ( /* Keep track of original expression for debugging. */
 		BRA, 8,
 		expr,
 		END
@@ -1714,15 +1714,7 @@ Int compCompile (void) {
 	ret = compExpression(0);
 	asm(QUIT); /* Emit the QUIT opcode which exits the VM. */
 	asmNewCode();
-	DB("<--%s", __func__);
-	DBE wscmWrite (r0, 0, 2);
-
-	//DB("  calling memDebugDumpHeapStructures()\n");
-	//memDebugDumpHeapStructures();
-	DB("  calling memDebugDumpObject(r0) and vmDebugDump()\n");
-	memDebugDumpObject(r0);
-	vmDebugDumpCode(r0);
-
+	DB("  --%s", __func__);
 	return ret;
 }
 
