@@ -19,10 +19,6 @@
      "A bound variable gets a value stored in it's location"
 */
 
-/* Scheduling stuff prototypes.
-*/
-
-
 /******************************************************************************
  Usefull functions.
 ******************************************************************************/

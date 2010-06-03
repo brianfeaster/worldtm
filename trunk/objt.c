@@ -108,7 +108,7 @@ int main (int argc, char *argv[]) {
 	memGarbageCollect();
 	memGarbageCollect();
 	memGarbageCollect();
-*/
 done:
+*/
 	return 0;
 }

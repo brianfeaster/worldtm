@@ -94,9 +94,11 @@ int main (int argc, char *argv[]) {
 
 	/* Three ways of firing up a repl. */
 
-	//wscmCReadEvalPrintLoop(); /* REPL in C. */
-	wscmStringReadEvalPrintLoop(); /* REPL as inlined scheme. */
-	return 0;
+	/* REPL in C. */
+	//wscmCReadEvalPrintLoop(); return 0;
+
+	/* REPL as inlined scheme. */
+	wscmStringReadEvalPrintLoop(); return 0;
 
 	/* Bind symbol 'in and assign the stdin port or the filename passed as arg
 	   1 to wscm. */
