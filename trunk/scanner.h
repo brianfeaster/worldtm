@@ -5,7 +5,7 @@
 
 /* Scanner state fields.
 */
-#define FINALSTATE  0x80
+#define FINALSTATE  0x80l
 #define PUSHBACK    0x40
 
 /* Scanner final states including states requiring a character push-back.

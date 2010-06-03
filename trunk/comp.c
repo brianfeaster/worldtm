@@ -460,16 +460,13 @@ void compLambda (Num flags) {
 
 void compVerifyVectorRef (void) {
 	if (*(Int*)r0 < 0 || memObjectLength(r1) <= *(Int*)r0) {
-		sleep(1);
-		sleep(5);
 		fprintf (stderr, "ERROR::out of bounds:  (vector-ref ");
 		wscmWrite(r1, 0, 2);
 		fprintf (stderr, " ");
 		wscmWrite(r0, 0, 2);
 		fprintf (stderr, ")");
 		/* Dump the current code block */
-		r0=code; vmDebugDumpCode(r0);
-		printf ("\nIP %x", ip);
+		vmDebugDumpCode(code);
 		wscmDumpEnv(env);
 		fflush(stdout);
 		*(Int*)0 = 0;

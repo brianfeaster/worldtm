@@ -10,6 +10,7 @@ void compLambdaBody (Num flags);
 void compLambda (Num flags);
 void compAdd (Num flags);
 void compVerifyVectorRef (void);
+void compVerifyVectorSetB (void);
 void compVectorRef (Num flags);
 void compVectorVectorRef (Num flags);
 void compCons (Num flags);

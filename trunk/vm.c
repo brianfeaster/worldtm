@@ -12,7 +12,7 @@
 
 /* Debg dump the current opcode
 */
-#define OPDB(s) DBE fprintf(stderr,"\n"OBJ":"HEX" " s, code, ((Obj*)ip-(Obj*)code))
+#define OPDB(s,...) DBE fprintf(stderr,"\n"OBJ":"HEX" " s, code, ((Obj*)ip-(Obj*)code), ##__VA_ARGS__)
 //#define OPDB(s) DBE fprintf(stderr,"\n"OBJ":"HEX" " s, code+8*((Obj*)ip-(Obj*)code), ((Obj*)ip-(Obj*)code))
 
 
@@ -379,7 +379,7 @@ void vmVm (Int cmd) {
 	}
 
 	/* Jump to immediate2 if r0 not equal to immediate 1. */
-	bnei0: OPDB("bnei0");
+	bnei0: OPDB("bnei0 r0="OBJ" type="HEX, r0, *(void**)(ip+8));
 	if (r0 != *(void**)(ip+=8)) {
 		ip += 8;
 		ip += *(Int*)ip;
@@ -512,9 +512,9 @@ void vmVm (Int cmd) {
    offset in immediate ip (r1b).
 */
 void vmRun (void) {
-	DB("VM -->vmRun <= "OBJ" "INT, code, ip);
+	DB(TAB0"::"STR OBJ" "INT, __func__, code, ip);
 	vmVm (RUN);
-	DB("VM <--vmRun");
+	DB(TAB1"--", __func__);
 }
 
 
@@ -558,10 +558,13 @@ void vmInitialize (Func intHandler, Func preGC, Func postGC, Func1 vmObjDumper) 
 void vmDebugDumpCode (Obj c) {
  Obj *i=c;
  Num asmLineNumber;
-	printf ("\n::vmDebugDumpCode "OBJ"  code:"OBJ"  ip:"OBJ, c, code, ip);
+	DB (TAB1"::vmDebugDumpCode "OBJ"  code:"OBJ"  ip:"OBJ, c, code, ip);
 	while (i < ((Obj*)c + memObjectLength(c))) { // Forcing pointer arithmatic.
 		asmLineNumber = i-(Obj*)c;
-		printf ("\n  "OBJ"%s"HEX04" ", i, (i==ip || asmLineNumber==(Num)ip)?"*":" ", asmLineNumber);
+		printf (NL OBJ STR HEX04" ",
+			i,
+			(i==ip || asmLineNumber==(Num)ip)?"*":" ",
+			asmLineNumber);
 		if (*i == NOP)      {printf("nop");}
 		else if (*i==MVI0)  {printf("mvi_0 "); vmObjectDumper(*++i);}
 		else if (*i==MVI1)  {printf("mvi_1 "); vmObjectDumper(*++i);}
@@ -666,5 +669,5 @@ void vmDebugDumpCode (Obj c) {
 		i++;
 		fflush(stdout);
 	}
-	printf ("\n  --vmDebugDumpCode");
+	DB (TAB2"--vmDebugDumpCode");
 }
