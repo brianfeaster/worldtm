@@ -96,7 +96,6 @@ int main (void) {
 	ip=0;
 	vmRun();
 
-done:
 	return 0;
 }
 

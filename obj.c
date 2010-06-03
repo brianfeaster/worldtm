@@ -249,7 +249,7 @@ void new_continuation(void) {
 #endif
 
 
-void objDump (Obj a, int fd) {
+void objDumpR (Obj a, int fd, int islist) {
  Int len, i;
  static char buff[128];
  char *c;
@@ -299,11 +299,20 @@ void objDump (Obj a, int fd) {
 			write(fd, buff, len);
 			break;
 		case TPAIR :
-			write (fd, "(", 1);
-			objDump(memVectorObject(a, 0), fd);
-			write (fd, " . ", 3);
-			objDump(memVectorObject(a, 1), fd);
-			write (fd, ")", 1);
+			if (!islist) write (fd, "(", 1);
+			objDumpR(car(a), fd, 0);
+
+			if (TPAIR == memObjectType(cdr(a))) {
+				write (fd, " ", 1);
+				objDumpR(cdr(a), fd, 1);
+			} else {
+				if (cdr(a) != null) {
+					write (fd, " . ", 3);
+					objDumpR(cdr(a), fd, 0);
+				}
+			}
+
+			if (!islist) write (fd, ")", 1);
 			break;
 		case TVECTOR :
 			write (fd, "#(", 2);
@@ -342,6 +351,11 @@ void objDump (Obj a, int fd) {
 			}
 	}
 }
+
+void objDump (Obj a, int fd) {
+	objDumpR(a, fd, 0);
+}
+
 
 /* caar <=> (car (car x)) <=>
     LDI0 #<binding x>

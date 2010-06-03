@@ -39,7 +39,7 @@ mem.o:                          mem.h globals.h debug.h
 scanner.o:     obj.h            mem.h globals.h         scanner.h
 
 build: globals.h debug.h mem.h vm.h asm.h obj.h comp.h sys.h scanner.h mem.c vm.c asm.c obj.c comp.c sys.c wscm.c scanner.c
-	cat globals.h debug.h mem.h vm.h asm.h obj.h comp.h sys.h scanner.h mem.c vm.c asm.c obj.c comp.c sys.c wscm.c scanner.c > f.c ; gcc $(CFLAGS) -O6 $(LDFLAGS) f.c -o wscm
+	cat globals.h debug.h mem.h vm.h asm.h obj.h comp.h sys.h scanner.h mem.c vm.c asm.c obj.c comp.c sys.c wscm.c scanner.c > build.c ; gcc $(CFLAGS) -O6 $(LDFLAGS) build.c -o wscm
 
 memt: $(MEMTOBJS)
 
@@ -74,6 +74,6 @@ linecount:
 	wc Makefile asm.c asm.h asmt.c comp.c comp.h debug.h globals.h mem.c mem.h memt.c obj.c obj.h objt.c scanner.c scanner.h vm.c vm.h vmt.c sys.h sys.c wscm.c wscmt.c
 
 clean:
-	rm $(WSCMOBJS) $(WSCMTOBJS) $(MEMTOBJS) $(OBJTOBJS) $(VMTOBJS) $(ASMTOBJS) wscm wscmt asmt vmt objt memt
+	rm $(WSCMOBJS) $(WSCMTOBJS) $(MEMTOBJS) $(OBJTOBJS) $(VMTOBJS) $(ASMTOBJS) wscm wscmt asmt vmt objt memt build.c
 
 

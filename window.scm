@@ -217,6 +217,10 @@
    (define (getDESC y x)
       ;(write (list 'size= (vector-length DESC)))
       ;(write (list "first index" (modulo (+ y topRow) WHeight)))
+      (if (or (>= x WWidth) (>= y WHeight))
+       (begin
+        (display (list "ERROR x y out of range" x y WWidth WHeight))
+        (quit)))
       (let ((a (vector-ref DESC (modulo (+ y topRow) WHeight))))
          ;(write (list "second index" x))(newline)
          (let ((b (vector-ref a x)))
@@ -245,6 +249,7 @@
          (set! CurX (+ 1 CurX))
          (if (>= CurX WWidth)
            (if (= CurY (- WHeight 1))
+               (set! needToScroll #t)
                (begin 
                  (return)
                  (newline)))))))))

@@ -79,6 +79,7 @@
                                                     #(#x6b #\o #x6b #\O)))
 (define KITTY 80)     (cell-set! KITTY      (glyphNew #x07 #\M #x07 #\e
                                                     #(#x07 #\o #x07 #\w)))
+(define TV 90)        (cell-set! TV         (glyphNew #x71 #\[ #x71 #\]))
 (define AIR 127)      (cell-set! AIR        (glyphNew #x00 CHAR-CTRL-@ #x00 CHAR-CTRL-@))
 
 ; Ultime cells
@@ -849,17 +850,16 @@ c))
         (+ 0 (read-char fdm))))))
    (~ y (+ x 1))))))))
 
-;(thread (load-ultima-world4))
-;(load-ultima-world4)
-(build-island 15 15 7) 
-(dropCell 13 17 HELP)
-(dropCell 16 18 SNAKE)
-(dropCell 19 16 KITTY)
-(dropCell 12 13 TV)
-(dropCell 17 13 CHAIR)
-(build-island 4 28 4) 
-(build-island 20 30 5)
-(build-brick-room 15 35)
+(thread (load-ultima-world4))
+;(build-island 15 15 7) 
+;(dropCell 13 17 HELP)
+;(dropCell 16 18 SNAKE)
+;(dropCell 19 16 KITTY)
+;(dropCell 12 13 TV)
+;(dropCell 17 13 CHAIR)
+;(build-island 4 28 4) 
+;(build-island 20 30 5)
+;(build-brick-room 15 35)
 
 (define (tankTalk str) (thread (begin
   (sleep 700)
