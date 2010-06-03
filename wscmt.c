@@ -1,23 +1,20 @@
 #define DEBUG 0
 #define DB_MODULE "WSCMTEST "
 #include "debug.h"
+
 #include <stdio.h>
 #include <unistd.h>
 #include <stdlib.h>
-#include "scanner.h"
-#include "obj.h"
-#include "comp.h"
+#include "sys.h"
 
 
 extern int interrupt;
 extern void sysIllegalOperator();
 extern void sysTGELookup();
 extern void sysTGEMutate();
-extern void wscmError();
 extern void wscmInitialize();
 extern void objNewClosure1Env();
 extern void vmVm(Int cmd);
-extern void wscmWrite (Obj a, long islist, Int fd);
 
 
 /* Verify goto to an address pointer works.
@@ -42,9 +39,9 @@ int main (void) {
 	// Expression to evaluate.
 	//yy_scan_string((Str)"(begin (display \"\n\") (fun '*) (display \"The end.\n\"))");
 	//yy_scan_string((Str)"(let ~ () (~))");
-	//yy_scan_string((Str)"(begin (display stdin) (display (cons '(you typed) (read stdin))))");
+	yy_scan_string((Str)"(begin (display stdin) (display (cons '(you typed) (read stdin))))");
 	//yy_scan_string((Str)"(let ~ ((i 0)(e -9000)) (display i) (display \"\\r\")(if (= i e) i (~ (+ i 1) e)))");
-	yy_scan_string((Str)"(display (eval '(+ 1 2)))");
+	//yy_scan_string((Str)"(display (eval '(+ 1 2)))");
 	
 	yyparse(); //wscmWrite(r0, 0, 1);
 	compCompile();

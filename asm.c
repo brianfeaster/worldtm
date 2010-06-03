@@ -11,18 +11,20 @@ void asmAsm (Obj o,...) {
  va_list ap;
 	va_start(ap, o);
 	obj = o;
+	DB (TAB0 "::" STR, __func__); 
 	while (obj!=END) {
-		DB("::%s "INT4":"OBJ, __func__, memStackLength(asmstack), obj);
+		DB(TAB1 INT4":"OBJ, memStackLength(asmstack), obj);
 		memStackPush(asmstack, obj);
 		obj=va_arg(ap, Obj);
 	}
 	va_end(ap);
+	DB (TAB1 "--" STR, __func__); 
 }
 
 
 void asmCompileAsmstack (Int opcodeStart) {
  Int j, i, opcodeEnd, opcodeWrite, labelCount=0, addrCount=0;
-DB("::%s", __func__);
+	DB(TAB0"::%s", __func__);
 	memStackPush(stack, r0);
 	memStackPush(stack, r1);
 	memStackPush(stack, r2);
@@ -41,13 +43,13 @@ DB("::%s", __func__);
 	for (i=opcodeWrite; i<opcodeEnd; i++) {
 		r0 = memVectorObject(asmstack, i);
 		if (r0 == LABEL) {
-			DB(HEX4" label "OBJ" %s", opcodeWrite, r0, memVectorObject(asmstack, i+1));
+			DB(TAB1 HEX4" label "OBJ" %s", opcodeWrite, r0, memVectorObject(asmstack, i+1));
 			/* Store label value. */
 			memVectorSet(r2, labelCount++, memVectorObject(asmstack, ++i));
 			/* Store opcode address. */
 			memVectorSet(r2, labelCount++, (Obj)opcodeWrite);
 		} else if (r0 == ADDR) {
-			DB(HEX4" addr "OBJ, opcodeWrite, r0);
+			DB(TAB1 HEX4" addr "OBJ, opcodeWrite, r0);
 			/* Store label value. */
 			memVectorSet(r3, addrCount++, memVectorObject(asmstack, ++i));
 			/* Store opcode address. */
@@ -56,7 +58,7 @@ DB("::%s", __func__);
 			   just increment the opcodeWrite address. */
 			memVectorSet(asmstack, opcodeWrite++, (Obj)0);
 		} else {
-			//DB("%x opcode %08x", opcodeWrite, r0);
+			//DB(TAB1 "%x opcode %08x", opcodeWrite, r0);
 			memVectorSet(asmstack, opcodeWrite++, r0);
 		}
 	}
@@ -87,20 +89,20 @@ DB("::%s", __func__);
 	r2 = memStackPop(stack);
 	r1 = memStackPop(stack);
 	r0 = memStackPop(stack);
-DB("  --%s", __func__);
+	DB(TAB1"--%s", __func__);
 }
 
 
 void asmNewCode (void) {
  Int len;
-	DB("::" __func__);
+	DB("::%s", __func__);
 	memNewVector(TCODE, len=memStackLength(asmstack));
 	memcpy(r0, asmstack+8, len*8);
 	/* Reset assembly stack by setting the first entry to
 	   the stack itself (points to itself). */
 	*(Obj*)asmstack = asmstack;
 	DBE vmDebugDumpCode(r0);
-	DB("  --" __func__);
+	DB("  --%s", __func__);
 }
 
 

@@ -61,6 +61,8 @@ typedef void (*Func2) (Obj a, Obj b);
 
 /* Printf format strings for the above types.
 */
+#define STR "%s"
+
 #define X8  "%x"
 #define X16 "%x"
 #define X32 "%x"
@@ -149,5 +151,14 @@ static const unsigned R0 =       0x00000001;
 #define MAX_THREADS 1024
 
 #define ASSERT assert
+
+#define NL "\n"
+
+#define TAB0 ""
+#define TAB1 TAB0 "   "
+#define TAB2 TAB1 "   "
+#define TAB3 TAB2 "   "
+#define TAB4 TAB3 "   "
+#define TAB5 TAB4 "   "
 
 #endif

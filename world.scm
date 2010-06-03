@@ -300,9 +300,10 @@ c))
      (~dumpGlyphs y (++ x))))))
  ; DEBUG: Plot column
  ((WinColumn 'home))
- (let ~ ((z 11))
+; TODO BF: FOR NOW DISABLE WINCOLUMN
+ (rem let ~ ((z 11))
   (let ((c (field-ref z y x)))
-   (if (eq? AIR c)
+   (rem if (eq? AIR c)
     (begin (WinColumnSetColor #x08)
            (WinColumnPuts "()"))
     (begin (set! c (cell-ref c))
@@ -779,7 +780,6 @@ c))
 (ConsoleDisplay "\r\nHit ? to toggle the help window")
 (ConsoleDisplay "\r\n\r\n   *** Welcome to the construct. ***")
 
-
 (viewportReset (avatar 'y) (avatar 'x))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -849,17 +849,17 @@ c))
         (+ 0 (read-char fdm))))))
    (~ y (+ x 1))))))))
 
-(thread (load-ultima-world4))
+;(thread (load-ultima-world4))
 ;(load-ultima-world4)
-;(build-island 15 15 7) 
-;(dropCell 13 17 HELP)
-;(dropCell 16 18 SNAKE)
-;(dropCell 19 16 KITTY)
-;(dropCell 12 13 TV)
-;(dropCell 17 13 CHAIR)
-;(build-island 4 28 4) 
-;(build-island 20 30 5)
-;(build-brick-room 15 35)
+(build-island 15 15 7) 
+(dropCell 13 17 HELP)
+(dropCell 16 18 SNAKE)
+(dropCell 19 16 KITTY)
+(dropCell 12 13 TV)
+(dropCell 17 13 CHAIR)
+(build-island 4 28 4) 
+(build-island 20 30 5)
+(build-brick-room 15 35)
 
 (define (tankTalk str) (thread (begin
   (sleep 700)
