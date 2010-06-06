@@ -214,17 +214,6 @@
                    (modulo (+ (- gy Y0) topRow) WHeight)
                    (- gx X0))))
        (gputc (vector-ref desc 1) (vector-ref desc 0) gy gx)))
-   (define (getDESC y x)
-      ;(write (list 'size= (vector-length DESC)))
-      ;(write (list "first index" (modulo (+ y topRow) WHeight)))
-      (if (or (>= x WWidth) (>= y WHeight))
-       (begin
-        (display (list "ERROR x y out of range" x y WWidth WHeight))
-        (quit)))
-      (let ((a (vector-ref DESC (modulo (+ y topRow) WHeight))))
-         ;(write (list "second index" x))(newline)
-         (let ((b (vector-ref a x)))
-            b)))
    (define (putchar c)
      (semaphore-down WindowSemaphore)
      (if needToScroll (begin (set! needToScroll #f) (return) (newline)))
@@ -240,16 +229,14 @@
               (eq? self (vector-vector-ref WindowMask gy gx))
               (gputc c COLOR gy gx))
          ; Cache color and char to buffer.
-         (let ((desc ;(vector-vector-ref DESC (modulo (+ CurY topRow) WHeight) CurX)
-                  (getDESC CurY CurX)
-                 ))
+         (let ((desc (vector-vector-ref DESC (modulo (+ CurY topRow) WHeight) CurX)))
            (vector-set! desc 0 COLOR)
            (vector-set! desc 1 c))
          ; Advance cursor.
          (set! CurX (+ 1 CurX))
          (if (>= CurX WWidth)
            (if (= CurY (- WHeight 1))
-               (set! needToScroll #t)
+               (set! needToScroll #t) ; TODO remove this line then develop a framework to debug the issue.
                (begin 
                  (return)
                  (newline)))))))))

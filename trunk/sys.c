@@ -228,7 +228,7 @@ void wscmWrite (Obj a, long islist, Int fd) {
 			write(fd, ">", 1);
 			break;
 		case TSYSCALL:
-			i = sprintf(buff, "#SYSCALL<"HEX">", a);
+			i = sprintf(buff, "#SYSCALL<"OBJ">", a);
 			write(fd, buff, i);
 			break;
 		case TSTACK :
@@ -1465,8 +1465,8 @@ void sysSerializeDisplay (void) {
 	DB("-->%s", __func__);
 	if (wscmAssertArgumentCount(1, __func__)) return;
 	r0 = pop();
-	if ((Num)r0 < 0x100000) {
-		len = sprintf((char*)buff, "#"HEX, (Num)r0);
+	if ((Num)r0 < 0x100000l) {
+		len = sprintf((char*)buff, "#"OBJ, (Num)r0);
 		objNewString(buff, len);
 	} else switch (memObjectType(r0)) {
 		case TSTRING : 
@@ -1498,13 +1498,13 @@ void sysSerializeDisplay (void) {
 	DB("<--%s", __func__);
 }
 void sysSerializeWrite (void) {
- static u8 buff[8192];
+ static Chr buff[8192];
  Int len, i;
 	DB("SYS -->%s", __func__);
 	if (wscmAssertArgumentCount(1, __func__)) return;
 	r0 = pop();
-	if ((Num)r0 < 0x100000) {
-		len = sprintf((char*)buff, "#%x", (Num)r0);
+	if ((Num)r0 < 0x100000l) {
+		len = sprintf((char*)buff, "#"HEX, (Num)r0);
 		objNewString(buff, len);
 	} else switch (memObjectType(r0)) {
 		case TSYMBOL : 
@@ -1547,7 +1547,7 @@ void sysSerializeWrite (void) {
 			objNewString(buff, len);
 			break;
 		default      :
-			len = sprintf((char*)buff, "#%08x", (Num*)r0);
+			len = sprintf((char*)buff, "#"HEX, (Num*)r0);
 			objNewString(buff, len);
 			break;
 	}

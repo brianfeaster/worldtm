@@ -191,6 +191,7 @@ c))
  (vector-vector-ref FIELD (modulo y FieldDimension)
                           (modulo x FieldDimension)))
 
+; TODO BF This is currently crashing radomly at World startup.0
 (define (field-ref z y x)
  (letrec ((column   (field-column y x))
           (elements (columnRef column z)))
@@ -247,6 +248,7 @@ c))
    (~ y (+ x 1))))))
 (ConsoleDisplay "Initialized Canvas " (- (time) timeStart) " seconds")
 
+; TODO BF This is currently crashing radomly at World startup during the field-ref call.1
 (define (canvasRender y x)
  (let ((top (field-ref-top 1000 y x)))
   (canvasCellSet! y x (cell-ref (field-ref top y x)))
@@ -792,6 +794,7 @@ c))
   (viewportRender y x)
   ))
 
+; TODO BF This is currently crashing radomly at World startup during the canvasRender call.2
 (define (setCell z y x cell)
   ;(if (or (< cell 0) (> cell 255)) (begin (display "shit") (quit)))
   (field-set! z y x cell)
@@ -824,6 +827,7 @@ c))
 ; Mapping from World[tm] (y x) corrdinates to Ultima4 map file byte index.
 ; i = (+ (modulo x 32) (* (/ x 32) 1024) (* (modulo y 32) 32) (* (/ y 32) 8192))
 
+; TODO BF This is currently crashing radomly at World startup during the setCell call.3
 (define (load-ultima-world4)
  (let ((fd (open "ultima4.map"))
        (bar (makeProgressBar 5 30 "Britannia 4")))

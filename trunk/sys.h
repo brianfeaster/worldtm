@@ -27,6 +27,8 @@
 #include "comp.h"
 
 void wscmWrite (Obj a, long islist, Int fd);
+void wscmDisplay (Obj a, long islist, int fd);
+void wscmTGEFind (void);
 void wscmInsertThread (Obj t, Obj q);
 void wscmRemoveThread (Obj t);
 void wscmMoveToQueue (Obj thread, Obj queue, Obj state);
@@ -39,5 +41,9 @@ void wscmScheduleBlocked (void);
 void wscmSchedule (void);
 void wscmInterruptHandler (void);
 void wscmError (void);
+void sysUnthread (void);
+void sysOpen (void);
+void wscmDefine (char* sym);
+void wscmInitialize (void);
 
 #endif

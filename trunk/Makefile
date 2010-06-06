@@ -1,7 +1,7 @@
 # Makefile for Wscheme.  It's simple.
 
 CFLAGS = -Wall -ggdb -Wno-format -Wno-trigraphs -O3
-#CFLAGS = -D_GNU_SOURCE -march=pentium -Wall -Wno-format -Wno-trigraphs -ggdb
+#CFLAGS = -D_GNU_SOURCE -march=pentium -Wall -Wno-format -Wno-trigraphs -ggdb -O3
 # -Wall            -- Many warnings.
 # -Wno-format      -- Disable the annoying printf warnings.
 # -Wno-parentheses -- If it's valid C why bitch about it?
