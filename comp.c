@@ -1439,18 +1439,18 @@ void compAsmNonTailCall () {
 		/* Syscall operator section.  Reference the syscall address, set the
 	   	operand count then make the system call.
 		*/
-		LABEL, "syscall",
+	LABEL, "syscall",
 		LDI00, 0l,
 		SYS0,
 		BRA,  ADDR, "end",
 		/* Closure operator section.
 		*/
-		LABEL, "closure",
+	LABEL, "closure",
 		LDI20, 0l, /* load r2 with code and jump. */
 		JAL2,
 		/* End of block.
 		 */
-		LABEL, "end",
+	LABEL, "end",
 		POP15, /* Restores previous environment, ip and code registers. */
 		POP1E,
 		POP1D,

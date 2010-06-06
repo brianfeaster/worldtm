@@ -1791,7 +1791,6 @@ I plan to add to every compiled code block the originating scheme expression.
 
 Fri Nov 28 22:01:44 PST 2008
 
-
 This window bug is a pain.  When I hit ctrl-l to refresh the screen and quickly
 move, I can get the map window to render incorrectly.  Seems somehow when
 I refresh a window and also try and draw to it things get out of whack.
@@ -1801,3 +1800,13 @@ the map window will start to scroll what it's drawing.
 There's a lot of mutation going on in the window class.  I should localize
 it.  Specifically not set! the cursor position everywhere.  Instead each
 function should keep a copy for itself then set it at the end.
+
+
+
+Sun Jun  6 00:17:53 EDT 2010
+
+code:r1c retcode:r1e stack r1f
+
+call vmDebugDumpCode(r1c)
+call vmDebugDumpCode(r1e)
+call wscmWrite(r1f, 0, 1)

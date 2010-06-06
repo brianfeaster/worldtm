@@ -309,12 +309,12 @@ void vmVm (Int cmd) {
 	pop1e:OPDB("pop1e"); r1e = memStackPop(stack);  goto **(void**)(ip+=8);
 
 	/* Add immediate to r0. */
-	addi0: OPDB("addi0"); r0 += *(s32*)(ip+=8); goto **(void**)(ip+=8);
-	addi1: OPDB("addi1"); r1 += *(s32*)(ip+=8); goto **(void**)(ip+=8);
+	addi0: OPDB("addi0"); r0 += *(Int*)(ip+=8); goto **(void**)(ip+=8);
+	addi1: OPDB("addi1"); r1 += *(Int*)(ip+=8); goto **(void**)(ip+=8);
 
 	/* Mutate object r1 with (object r1 + object r0). */
-	add10: OPDB("add10"); *(s32*)r1 += *(s32*)r0; goto **(void**)(ip+=8);
-	mul10: OPDB("mul10"); *(s32*)r1 *= *(s32*)r0; goto **(void**)(ip+=8);
+	add10: OPDB("add10"); *(Int*)r1 += *(Int*)r0; goto **(void**)(ip+=8);
+	mul10: OPDB("mul10"); *(Int*)r1 *= *(Int*)r0; goto **(void**)(ip+=8);
 
 	blti1: OPDB("blti1");
 	if (r1<*(void**)(ip+=8)) {
@@ -669,5 +669,6 @@ void vmDebugDumpCode (Obj c) {
 		i++;
 		fflush(stdout);
 	}
+	printf (NL);
 	DB (TAB2"--vmDebugDumpCode");
 }
