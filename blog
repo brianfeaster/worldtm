@@ -1810,3 +1810,48 @@ code:r1c retcode:r1e stack r1f
 call vmDebugDumpCode(r1c)
 call vmDebugDumpCode(r1e)
 call wscmWrite(r1f, 0, 1)
+call sysDumpCallStackCode()
+
+450/8 = 8a
+1358/8 = 26b
+370/8 = 6e
+
+ip =0x7ffff539bb48
+(define (field-ref z y x)...)
+((column elements) (set! column (field-column y x)) (set! elements (columnRef column z)) (if (pair? elements) (car elements) elements))
+
+rip=0x7ffff509ca10
+((top) (canvasCellSet! y x (cell-ref (field-ref top y x))) (canvasCellHeightSet! y x top))
+
+stack=0x7ffff4fc7720
+Stack 0 8200000000000007 7ffff4fdc850
+Stack 1 85000000000000ab 7ffff4fdc2f0
+Stack 2 0000000000000000 000000000450
+Stack 3 8200000000000007 7ffff4fdc850
+Stack 4 85000000000000ab 7ffff4fdc2f0
+Stack 5 0000000000000000 000000000450
+Stack 6 0a00000000000008 7ffff500fa90
+Stack 7 0a00000000000008 7ffff500fa80
+Stack 8 8200000000000007 7ffff4fdc850
+Stack 9 85000000000000ab 7ffff4fdc2f0
+Stack 10 0000000000000000 000000000450
+Stack 11 8200000000000004 7ffff4fdbab0
+Stack 12 8500000000000292 7ffff4fda618
+Stack 13 0000000000000000 000000001358
+Stack 14 8200000000000004 7ffff4fda5f0
+Stack 15 8500000000000020 7ffff4fda4e8
+Stack 16 0000000000000000 0000000000d0
+Stack 17 0000000000000000 000000000000
+Stack 18 0000000000000000 000000000000
+Stack 19 0000000000000000 000000000000
+
+0x7ffff4fdc2f0=
+((z y x cell) (field-set! z y x cell) (canvasRender y x) (viewportRender y x))
+r0 (code object) should be 7ffff5018128
+but r0 is 7ffff5ef0880
+
+
+Wed Jun  9 00:55:57 EDT 2010
+
+The random World startup crash I first need to identify and create a test that
+repeats the issue so a regtest can be created.
