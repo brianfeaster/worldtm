@@ -304,9 +304,9 @@ c))
  ; DEBUG: Plot column
  ((WinColumn 'home))
 ; TODO BF: FOR NOW DISABLE WINCOLUMN
- (rem let ~ ((z 11))
+ (let ~ ((z 11))
   (let ((c (field-ref z y x)))
-   (rem if (eq? AIR c)
+   (if (eq? AIR c)
     (begin (WinColumnSetColor #x08)
            (WinColumnPuts "()"))
     (begin (set! c (cell-ref c))
@@ -382,7 +382,7 @@ c))
 ;;
 (define (Avatar name) ; Inherits Entity
  ((Entity (random) name
-   4 106 90 
+   4 107 86
    ;0 0 0 
    (glyphNew #x0f (string-ref name 0)
              #x0f (string-ref name 1)))
@@ -674,6 +674,8 @@ c))
 
 ; Always read and evaluate everything from IPC.
 (thread  (let ~ () (eval ((ipc 'qread))) (~)))
+; TODO BF: disabling this to see if world still crashes at startup. replacing with a boring function.
+;(thread  (let ~ ()  (~)))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -827,7 +829,6 @@ c))
 ; Mapping from World[tm] (y x) corrdinates to Ultima4 map file byte index.
 ; i = (+ (modulo x 32) (* (/ x 32) 1024) (* (modulo y 32) 32) (* (/ y 32) 8192))
 
-; TODO BF This is currently crashing radomly at World startup during the setCell call.3
 (define (load-ultima-world4)
  (let ((fd (open "ultima4.map"))
        (bar (makeProgressBar 5 30 "Britannia 4")))
@@ -839,6 +840,12 @@ c))
                (+ (modulo i 32) (* (modulo (/ i 1024) 8) 32))
                (+ 0 (read-char fd))) ; Hack to convert char to integer
       (~ (+ i 1)))))))
+
+; The REPL
+; TODO BF This is currently crashing radomly at World startup during the setCell call.3
+(thread (load-ultima-world4))
+;(sleep 3000)
+;(quit) ; BF TODO debugging.  Stopping here to see if calling load ultima world4 really causes a crash.
 
 (define (load-ultima-world5)
  (let ((fdm (open "ultima5.map"))
@@ -854,7 +861,6 @@ c))
         (+ 0 (read-char fdm))))))
    (~ y (+ x 1))))))))
 
-(thread (load-ultima-world4))
 ;(build-island 15 15 7) 
 ;(dropCell 13 17 HELP)
 ;(dropCell 16 18 SNAKE)
@@ -904,6 +910,9 @@ c))
    (if (string=? "load underworld" talkInput) (thread (load-ultima-underworld))
    (if (string=? "load ultima5" talkInput) (thread (load-ultima-world5)))))))))
 
+(define (say talkInput)
+ ((ipc 'qwrite) (list 'voice (avatar 'dna) (avatar 'z) (avatar 'y) (avatar 'x) 10 talkInput)))
+
 (define replTalk
  (let ((talkInput ""))
   (lambda (c)
@@ -935,7 +944,7 @@ c))
                     (call/cc (lambda (c) ; Return here if an error occurs
                        (vector-set! ERRORS (tid) c)
                        (eval (read-string (cdr-string talkInput)))))))
-           ((ipc 'qwrite) (list 'voice (avatar 'dna) (avatar 'z) (avatar 'y) (avatar 'x) 10 talkInput)))
+           (say talkInput))
        (WinInputPuts "\r\n>")
        (set! talkInput "")
        'talk)
@@ -1008,7 +1017,9 @@ c))
  (if (eq? c #\>) (winMapBigger)
  (if (eq? c #\z) (circularize)
  (if (eq? c #\Z) (circularize #t)
- (if (eq? c CHAR-CTRL-W) (walkForever))))))))))))))))))))))))))))))))
+ (if (eq? c CHAR-CTRL-W) (walkForever)
+ (if (eq? c #\4) (load-ultima-world4)
+ (if (eq? c #\c) (begin (say "Herz ur kitteh") (thread (spawnKitty))))))))))))))))))))))))))))))))))))
  state)
 
 (define wrepl (let ((state 'cmd))
@@ -1135,6 +1146,7 @@ c))
 ;(signal 2)
 
 ; Redraw map resulting in animated cells.
+; TODO BF: Disabled until I can resolve the random startup bug.
 (rem thread (let ~ ()
    (sleep 5)
    (viewportReset (avatar 'y) (avatar 'x))
@@ -1178,8 +1190,7 @@ c))
  ((ipc 'qwrite) (list 'voice (avatar 'dna) (avatar 'z) (avatar 'y) (avatar 'x) 100 "*POOF*"))
  (sleep 500)); wait for ipc to flush
 
-; Catch the terminal hangup signal so that normal
-; shutdown can occur.
+; Catch the terminal hangup signal so that normal shutdown can occur.
 (vector-set! SIGNALHANDLERS 1 (lambda () (sleep 1000)))
 (signal 1)
 

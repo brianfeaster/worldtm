@@ -39,7 +39,7 @@ void asmCompileAsmstack (Int opcodeStart) {
 	   pointer.
 	*/
 	opcodeEnd = memStackLength(asmstack)+1;
-	opcodeWrite = opcodeStart+1;
+	opcodeWrite = opcodeStart+1l;
 	for (i=opcodeWrite; i<opcodeEnd; i++) {
 		r0 = memVectorObject(asmstack, i);
 		if (r0 == LABEL) {
@@ -54,7 +54,7 @@ void asmCompileAsmstack (Int opcodeStart) {
 			memVectorSet(r3, addrCount++, memVectorObject(asmstack, ++i));
 			/* Store opcode address. */
 			memVectorSet(r3, addrCount++, (Obj)opcodeWrite);
-			/* Store a 0 for the branch offset for now (could just as well
+			/* TODO Store a 0 for the branch offset for now (could just as well
 			   just increment the opcodeWrite address. */
 			memVectorSet(asmstack, opcodeWrite++, (Obj)0);
 		} else {
@@ -69,15 +69,15 @@ void asmCompileAsmstack (Int opcodeStart) {
 
 	/* Traverse address entries and resolve the branch offsets.
 	*/
-	for (i=0; i<addrCount; i+=2) {
+	for (i=0l; i<addrCount; i+=2l) {
 		r0 = memVectorObject(r3, i); /* Consider addr label. */
-		for (j=0; j<labelCount; j+=2) {
+		for (j=0l; j<labelCount; j+=2l) {
 			if (r0 == memVectorObject(r2, j)) {
 				/* Found label for this address. */
 				memVectorSet(asmstack,
-				             (Num)memVectorObject(r3, i+1),
-				             (Obj)(8 * (memVectorObject(r2, j+1)
-				                        - memVectorObject(r3, i+1)-1)));
+				             (Num)memVectorObject(r3, i+1l),
+				             (Obj)(8l * (memVectorObject(r2, j+1l)
+				                        - memVectorObject(r3, i+1l)-1l)));
 				break;
 			}
 		}

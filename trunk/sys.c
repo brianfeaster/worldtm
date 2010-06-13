@@ -1225,16 +1225,16 @@ void wscmScheduleSemaphoreBlocked (Int sem) {
 }
 
 void wscmSchedule (void) {
-	DB("-->%s\n", __func__);
+	//fprintf(stderr, "::%s\r", __func__);
 	if (!wscmIsQueueEmpty(sleeping)) wscmScheduleSleeping();
 	if (!wscmIsQueueEmpty(blocked)) wscmScheduleBlocked();
 	while (wscmIsQueueEmpty(ready)) {
 // All are aparently getting blocked.
-	DB ("   %s [t:%d b:%d s:%d sem:%d]\n", __func__, objDoublyLinkedListLength(ready), objDoublyLinkedListLength(blocked), objDoublyLinkedListLength(sleeping), *(Int*)memVectorObject(semaphores, 0));
-		DB("   %s looping: ready queue empty\r\n", __func__);
+	//fprintf (stderr, "   %s [t:%d b:%d s:%d sem:%d]\r", __func__, objDoublyLinkedListLength(ready), objDoublyLinkedListLength(blocked), objDoublyLinkedListLength(sleeping), *(Int*)memVectorObject(semaphores, 0));
+		//fprintf(stderr, "   %s looping: ready queue empty\rn", __func__);
 		/* No more threads so shutdown. */
 		if (wscmIsQueueEmpty(sleeping) && wscmIsQueueEmpty(blocked)) {
-			DB("   No more threads.  Bye bye.");
+			//fprintf(stderr, "   No more threads.  Bye bye.");
 			exit(0);
 		}
 		if (!wscmIsQueueEmpty(sleeping)) wscmScheduleSleeping();
@@ -1249,13 +1249,13 @@ void wscmSchedule (void) {
 	}
 
 	/* Switch to another thread.  Round robin scheme.  Just go to next thread. */
-	DB("   Round robin");
+	//fprintf(stderr, "   Round robin");
 	running = cdr(running);
 	if (running==ready) running=cdr(ready); // Can this happen?
 	if (running==ready) fprintf (stderr, "ERROR: deal with this!");
 	vmSigAlarmReset(); /* Enable scheduler's interrupt timer. */
 	wscmRun();
-	DB("<--%s =>%d\n", __func__, memVectorObject(car(running), 1));
+	//fprintf(stderr, "  --%s =>%d\rn", __func__, memVectorObject(car(running), 1));
 }
 
 /* This function passed to the virtual machine module during initialization
@@ -2327,6 +2327,8 @@ void sysToggleDebug (void) {
 	r0 = wscmDebug ? true : false;
 }
 
+
+
 /*******************************************************************************
  Initialization stuff.
 *******************************************************************************/
@@ -2345,6 +2347,9 @@ void wscmDefineSyscall (Func function, char* symbol) {
 	r2=cdr(tge);
 	objCons12();
 	memVectorSet(tge, 1, r0);
+
+	memObjStringRegister(function, symbol); /* Register internal pointer with memory module. */
+
 	DB("<--%s => ", __func__);
 	DBE wscmWrite (r1, 0, 2);
 }
@@ -2676,15 +2681,11 @@ void wscmInitialize (void) {
 	memObjStringSet(objListToVector);
 	memObjStringSet(objCons12);
 	memObjStringSet(objCopyString);
-	memObjStringSet(sysDisplay);
 	memObjStringSet(sysCompile);
-	memObjStringSet(sysUnthread);
-	memObjStringSet(sysMul);
 	memObjStringSet(objCons23);
 	memObjStringSet(compVerifyVectorRef);
 	memObjStringSet(compVerifyVectorSetB);
 	memObjStringSet(wscmNewThread);
-	memObjStringSet(sysWrite);
 	memObjStringSet(objCopyInteger);
 	memObjStringSet(sysCreateContinuation);
 
@@ -2826,6 +2827,28 @@ void wscmInitialize (void) {
 	wscmDefine("SIGNALHANDLERS");
 
 	DB("  --%s", __func__);
+}
+
+/* stack=r1f
+*/
+void sysDumpCallStackCode (void) {
+ Int i;
+ Obj o;
+
+	for (i=0; i<memStackLength(stack); ++i) {
+		o = memStackObject(stack, i);
+		printf ("Stack "INT" "HEX016" "OBJ NL, i, memIsObjectValid(o)?memObjectDescriptor(o):0, o);
+	}
+
+	for (i=0; i<memStackLength(stack); ++i) {
+		o = memStackObject(stack, i);
+		if (memIsObjectValid(o)) {
+			if (memObjectType(o)==TCODE) {
+				printf ("Stack "INT" "HEX016" "OBJ NL, i, memObjectDescriptor(o), o);
+				wscmWrite(memVectorObject(o, 2), 0, 1);
+			}
+		}
+	}
 }
 
 #undef DB_MODULE

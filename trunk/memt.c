@@ -44,9 +44,9 @@ int main (int argc, char *argv[]) {
 	memAssertions();
 
 	// If any arguments passed to test unit, do more fun things.
-	if (argc<2) return 0;
-
-	if (!strcmp(argv[1], "-f")) return -1;
+	if (argc==2) {
+		if (!strcmp(argv[1], "-f")) return -1;
+	}
 
 	setbuf(stdout,0);
 	memInitialize(NULL, NULL);
@@ -74,6 +74,12 @@ int main (int argc, char *argv[]) {
 	memDebugDumpAll();
 	memGarbageCollect();
 	memDebugDumpAll();
+
+	memDebugDumpObject(rf);
+	memStackPop(rf);
+	(*(Obj**)rf)++; // This is illegal but I want to verify that popping clears the object on the stack.
+	memDebugDumpObject(rf);
+	assert(memStackObject(rf, 0)==0);
 	goto ret;
 
 	memVectorSet(r9, 1, r2);

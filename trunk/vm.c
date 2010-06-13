@@ -35,8 +35,6 @@ CALL block inst
 RET (saved block/inst)
 */
 
-void memDebugDumpHeapHeaders (void);
-
 Func vmCallerPreGarbageCollect = 0,
      vmCallerPostGarbageCollect = 0;
 
@@ -142,6 +140,11 @@ void vmVm (Int cmd) {
 		RET=&&ret;
 
 		SYSI=&&sysi;   SYS0=&&sys0;   QUIT=&&quit;
+
+		//-----------
+		memObjStringSet(NOP); memObjStringSet(MVI0); memObjStringSet(MVI1); memObjStringSet(MVI2); memObjStringSet(MVI3); memObjStringSet(MVI4); memObjStringSet(MVI5); memObjStringSet(MVI6); memObjStringSet(MVI7); memObjStringSet(MV01); memObjStringSet(MV02); memObjStringSet(MV03); memObjStringSet(MV04); memObjStringSet(MV07); memObjStringSet(MV016); memObjStringSet(MV01C); memObjStringSet(MV10); memObjStringSet(MV13); memObjStringSet(MV116); memObjStringSet(MV20); memObjStringSet(MV23); memObjStringSet(MV30); memObjStringSet(MV416); memObjStringSet(MV50); memObjStringSet(MV160); memObjStringSet(MV162); memObjStringSet(MV164); memObjStringSet(LDI00); memObjStringSet(LDI02); memObjStringSet(LDI016); memObjStringSet(LDI11); memObjStringSet(LDI116); memObjStringSet(LDI20); memObjStringSet(LDI22); memObjStringSet(LDI40); memObjStringSet(LDI50); memObjStringSet(LDI160); memObjStringSet(LDI1616); memObjStringSet(LD012); memObjStringSet(STI01); memObjStringSet(STI016); memObjStringSet(STI20); memObjStringSet(STI21); memObjStringSet(STI30); memObjStringSet(STI40); memObjStringSet(STI50); memObjStringSet(ST012); memObjStringSet(ST201); memObjStringSet(PUSH0); memObjStringSet(PUSH1); memObjStringSet(PUSH2); memObjStringSet(PUSH3); memObjStringSet(PUSH4); memObjStringSet(PUSH7); memObjStringSet(PUSH15); memObjStringSet(PUSH16); memObjStringSet(PUSH1D); memObjStringSet(PUSH1E); memObjStringSet(POP0); memObjStringSet(POP1); memObjStringSet(POP2); memObjStringSet(POP3); memObjStringSet(POP4); memObjStringSet(POP7); memObjStringSet(POP15); memObjStringSet(POP1D); memObjStringSet(POP1E); memObjStringSet(ADDI0); memObjStringSet(ADDI1); memObjStringSet(ADD10); memObjStringSet(MUL10); memObjStringSet(BLTI1); memObjStringSet(BEQI0); memObjStringSet(BEQI1); memObjStringSet(BEQI7); memObjStringSet(BNEI0); memObjStringSet(BNEI1); memObjStringSet(BRTI0); memObjStringSet(BNTI0); memObjStringSet(BRA); memObjStringSet(J0); memObjStringSet(J2); memObjStringSet(JAL0); memObjStringSet(JAL2); memObjStringSet(RET); memObjStringSet(SYSI); memObjStringSet(SYS0); memObjStringSet(QUIT);
+		//-----------
+
 		return;
 	}
 

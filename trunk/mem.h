@@ -56,7 +56,7 @@ void memNewFinalizer   (void);
 void memNewPointer     (void);
 void memNewStack       (void);
 
-
+int memIsObjectValid  (Obj o);
 
 /* Object mutators.  Need to go through this abstraction since the generational
    collector might need to keep track of mutated vector objects in the 'old'
@@ -72,6 +72,7 @@ Obj  memStackPop  (Obj stack);
 
 /* Object selectors.
 */
+Descriptor memObjectDescriptor (Obj o);
 Type memObjectType   (Obj obj);
 Num  memObjectLength (Obj obj);
 Int  memStackLength  (Obj obj);
@@ -84,13 +85,13 @@ Obj  memStackObject  (Obj obj, Num topOffset);
 
 /* Force heap to be collected.
 */
-void memGarbageCollect (void);
+void memGarbageCollect ();
 
 
 
 /* Debugging aids.
 */
-void memDebugDumpHeapHeaders (void);
+void memDebugDumpHeapHeaders (FILE *stream);
 void memDebugDumpObject (Obj o);
 void memDebugDumpAll (void);
 void memValidateObject (Obj o);

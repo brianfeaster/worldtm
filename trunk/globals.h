@@ -83,11 +83,12 @@ typedef void (*Func2) (Obj a, Obj b);
 
 #define NUM  "%lu"
 
-#define HEX     "%lx"
-#define HEX2   "%2lx"
-#define HEX02 "%02lx"
-#define HEX4   "%4lx"
-#define HEX04 "%04lx"
+#define HEX       "%lx"
+#define HEX2     "%2lx"
+#define HEX4     "%4lx"
+#define HEX02   "%02lx"
+#define HEX04   "%04lx"
+#define HEX016 "%016lx"
 
 #define REAL "%lf"
 
@@ -101,33 +102,33 @@ typedef void (*Func2) (Obj a, Obj b);
    object.  The lower 56 bits are used in descriptors for the object length
    either number of bytes in the array or the vector size.
  */
-#define TBASEARRAY     0x00
-#define TFALSE         0x01
-#define TTRUE          0x02
-#define TNULL          0x03
-#define TNULLVEC       0x04
-#define TNULLSTR       0x05
-#define TEOF           0x06
-#define TCHAR          0x07
-#define TSTRING        0x08
-#define TSYMBOL        0x09
-#define TINTEGER       0x0a
-#define TREAL          0x0b
+#define TBASEARRAY     0x00l
+#define TFALSE         0x01l
+#define TTRUE          0x02l
+#define TNULL          0x03l
+#define TNULLVEC       0x04l
+#define TNULLSTR       0x05l
+#define TEOF           0x06l
+#define TCHAR          0x07l
+#define TSTRING        0x08l
+#define TSYMBOL        0x09l
+#define TINTEGER       0x0al
+#define TREAL          0x0bl
 
-#define TBASEVECTOR    0x80
-#define TPAIR          0x81
-#define TVECTOR        0x82
-#define TCLOSURE       0x83
-#define TCONTINUATION  0x84
-#define TCODE          0x85
-#define TPORT          0x86
-#define TSOCKET        0x87
-#define TSYSCALL       0x88
+#define TBASEVECTOR    0x80l
+#define TPAIR          0x81l
+#define TVECTOR        0x82l
+#define TCLOSURE       0x83l
+#define TCONTINUATION  0x84l
+#define TCODE          0x85l
+#define TPORT          0x86l
+#define TSOCKET        0x87l
+#define TSYSCALL       0x88l
 
-#define TFINALIZER     0xfc
-#define TPOINTER       0xfd
-#define TSTACK         0xfe
-#define TSHADOW        0xff
+#define TFINALIZER     0xfcl
+#define TPOINTER       0xfdl
+#define TSTACK         0xfel
+#define TSHADOW        0xffl
 
 
 /* Compiler flags.  Make sure only 20 bits are used as garbage collector

@@ -39,8 +39,8 @@ int main (void) {
 	// Expression to evaluate.
 	//yy_scan_string((Str)"(begin (display \"\n\") (fun '*) (display \"The end.\n\"))");
 	//yy_scan_string((Str)"(let ~ () (~))");
-	yy_scan_string((Str)"(begin (display stdin) (display (cons '(you typed) (read stdin))))");
-	//yy_scan_string((Str)"(let ~ ((i 0)(e -9000)) (display i) (display \"\\r\")(if (= i e) i (~ (+ i 1) e)))");
+	//yy_scan_string((Str)"(begin (display stdin) (display (cons '(you typed) (read stdin))))");
+	yy_scan_string((Str)"(let ~ ((i 0)(e 9000)) (display i) (display \"\\r\")(if (= i e) (display \"\n\") (~ (+ i 1) e)))");
 	//yy_scan_string((Str)"(display (eval '(+ 1 2)))");
 	
 	yyparse(); //wscmWrite(r0, 0, 1);

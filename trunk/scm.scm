@@ -110,6 +110,7 @@
 (define (integer->char i) (vector-ref characters i))
 
 (define CHAR-CTRL-@ (integer->char #x00))
+(define CHAR-CTRL-C (integer->char #x03))
 (define CHAR-CTRL-F (integer->char #x06))
 (define CHAR-CTRL-G (integer->char #x07))
 (define CHAR-CTRL-H (integer->char #x08))

@@ -178,7 +178,7 @@ void objNewSymbolStatic (char *s) {
 }
 
 void objNewSyscall (Func f) {
-   memNewArray(TSYSCALL, 1);
+   memNewStaticVector(TSYSCALL, 1);
 	memVectorSet(r0, 0, f);
 }
 
@@ -269,7 +269,7 @@ void objDumpR (Obj a, int fd, int islist) {
 			write (fd, a, memObjectLength(a));
 			break;
 		case TINTEGER:
-			len = sprintf(buff, "%d", *(u32*)a);
+			len = sprintf(buff, INT, *(Int*)a);
 			write(fd, buff, len);
 			break;
 		case TSTRING : 
