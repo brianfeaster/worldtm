@@ -249,16 +249,16 @@ void new_continuation(void) {
 #endif
 
 
-void objDumpR (Obj a, int fd, int islist) {
- Int len, i;
- static char buff[128];
+void objDumpR (Obj o, FILE *stream, int islist) {
+ Int i;
  char *c;
-	if ((Num)a < 0x100000) {
-		len = sprintf(buff, "#<%x>", a);
-		write(fd, buff, len);
+
+	if ((Num)o < 0x100000) {
+		fprintf(stream, "#<%x>", o);
 		return;
 	}
-	switch (memObjectType(a)) {
+
+	switch (memObjectType(o)) {
 		case TNULL   :
 		case TNULLSTR:
 		case TNULLVEC:
@@ -266,94 +266,86 @@ void objDumpR (Obj a, int fd, int islist) {
 		case TTRUE   :
 		case TEOF    :
 		case TSYMBOL :
-			write (fd, a, memObjectLength(a));
+			fwrite (o, 1, memObjectLength(o), stream);
 			break;
 		case TINTEGER:
-			len = sprintf(buff, INT, *(Int*)a);
-			write(fd, buff, len);
+			fprintf(stream, INT, *(Int*)o);
 			break;
 		case TSTRING : 
-			write (fd, "\"", 1);
-			c = a;
-			for (i=memObjectLength(a); i; i--) {
+			fwrite ("\"", 1, 1, stream);
+			c = o;
+			for (i=memObjectLength(o); i; i--) {
 				switch (*c) {
-					case '\\' : write(fd, "\\\\", 2); break;
-					case '\"' : write(fd, "\\\"", 2); break;
-					case '\a' : write(fd, "\\a", 2); break;
-					case '\e' : write(fd, "\\e", 2); break;
-					case '\233' : write(fd, "\\c", 2); break;
-					case '\n' : write(fd, "\\n", 2); break;
-					case '\r' : write(fd, "\\r", 2); break;
-					case '\t' : write(fd, "\\t", 2); break;
-					default   : write(fd, c, 1);
+					case '\\' : fwrite("\\\\",1, 2, stream); break;
+					case '\"' : fwrite("\\\"",1, 2, stream); break;
+					case '\a' : fwrite("\\a", 1, 2, stream); break;
+					case '\e' : fwrite("\\e", 1, 2, stream); break;
+					case '\233':fwrite("\\c", 1, 2, stream); break;
+					case '\n' : fwrite("\\n", 1, 2, stream); break;
+					case '\r' : fwrite("\\r", 1, 2, stream); break;
+					case '\t' : fwrite("\\t", 1, 2, stream); break;
+					default   : fwrite(c, 1, 2, stream);
 				}
 				c++;
 			}
-			write (fd, "\"", 1);
+			fwrite ("\"", 1, 1, stream);
 			break;
 		case TCLOSURE :
-			if (cdr(a) == tge)
-				len = sprintf(buff, "#CLOSURE<CODE:"OBJ" TGE:"OBJ">", car(a), cdr(a));
+			if (cdr(o) == tge)
+				fprintf(stream, "#CLOSURE<CODE:"OBJ" TGE:"OBJ">", car(o), cdr(o));
 			else
-				len = sprintf(buff, "#CLOSURE<CODE:"OBJ" ENV:"OBJ">", car(a), cdr(a));
-			write(fd, buff, len);
+				fprintf(stream, "#CLOSURE<CODE:"OBJ" ENV:"OBJ">", car(o), cdr(o));
 			break;
 		case TPAIR :
-			if (!islist) write (fd, "(", 1);
-			objDumpR(car(a), fd, 0);
+			if (!islist) fwrite ("(", 1, 1, stream);
+			objDumpR(car(o), stream, 0);
 
-			if (TPAIR == memObjectType(cdr(a))) {
-				write (fd, " ", 1);
-				objDumpR(cdr(a), fd, 1);
+			if (TPAIR == memObjectType(cdr(o))) {
+				fwrite (" ", 1, 1, stream);
+				objDumpR(cdr(o), stream, 1);
 			} else {
-				if (cdr(a) != null) {
-					write (fd, " . ", 3);
-					objDumpR(cdr(a), fd, 0);
+				if (cdr(o) != null) {
+					fwrite (" . ", 1, 3, stream);
+					objDumpR(cdr(o), stream, 0);
 				}
 			}
 
-			if (!islist) write (fd, ")", 1);
+			if (!islist) fwrite (")", 1, 1, stream);
 			break;
 		case TVECTOR :
-			write (fd, "#(", 2);
-			for (i=0; i<memObjectLength(a); i++) {
-				if (i) write (fd, " ", 1);
-				len = sprintf(buff, OBJ, *((Obj*)a+i));
-				write(fd, buff, len);
+			fwrite ("#(", 1, 2, stream);
+			for (i=0; i<memObjectLength(o); i++) {
+				if (i) fwrite (" ", 1, 1, stream);
+				fprintf(stream, OBJ, *((Obj*)o+i));
 			}
-			write (fd, ")", 1);
+			fwrite (")", 1, 1, stream);
 			break;
 		case TCODE :
-			len = sprintf(buff, "#<CODE "OBJ">", a);
-			write(fd, buff, len);
+			fprintf(stream, "#<CODE "OBJ">", o);
 			break;
 		case TSTACK :
-			len = sprintf(buff, "#<STACK "OBJ">", a);
-			write(fd, buff, len);
+			fprintf(stream, "#<STACK "OBJ">", o);
 			break;
 		case TSYSCALL :
-			len = sprintf(buff, "#<SYSCALL "OBJ">", *(Obj*)a);
-			write(fd, buff, len);
+			fprintf(stream, "#<SYSCALL "OBJ">", *(Obj*)o);
 			break;
 		default :
-			if (tge == a) {
-				len = sprintf(buff, "#<TGE "OBJ">", a);
-				write(fd, buff, len);
+			if (tge == o) {
+				fprintf(stream, "#<TGE "OBJ">", o);
 			} else {
-				len = sprintf(buff, OBJ, a);
-				write(fd, buff, len);
+				fprintf(stream, OBJ, o);
 			}
 			/* Dump the object description. */
-			c = memObjString(a);
+			c = memObjString(o);
 			if (c) {
-				write (1, ":", 1);
-				write (1, c, strlen(c));
+				fwrite (":", 1, 1, stream);
+				fwrite (c, 1, strlen(c), stream);
 			}
 	}
 }
 
-void objDump (Obj a, int fd) {
-	objDumpR(a, fd, 0);
+void objDump (Obj o, FILE *stream) {
+	objDumpR(o, stream, 0);
 }
 
 
@@ -390,18 +382,13 @@ void objGCPost (void) {
 		if (objCallerPostGarbageCollect) objCallerPostGarbageCollect ();
 }
 
-//extern void wscmDisplay (Obj a, long islist, int fd);
-void objObjectDumper (Obj o) {
-	objDump (o, 1); // This modules version of write.
-	//wscmDisplay (o, 0, 1); // WSCMs version of display.
-}
- 
 
+/* Called by sys.c */
 void objInitialize (Func intHandler) {
  Int i;
 	DB("::%s", __func_);
 	DB("  initializing memory module");
-	asmInitialize(intHandler, objGCPre, objGCPost, objObjectDumper);
+	asmInitialize(intHandler, objGCPre, objGCPost, objDump);
 	memInitialize(0, 0);
 	/* These primitive types are also external (display) strings. */
 	memNewStatic(TNULL, 2);    null=r0;    memcpy(r0, "()", 2);

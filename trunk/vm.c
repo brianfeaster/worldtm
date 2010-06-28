@@ -515,31 +515,27 @@ void vmVm (Int cmd) {
    offset in immediate ip (r1b).
 */
 void vmRun (void) {
-	DB(TAB0"::"STR OBJ" "INT, __func__, code, ip);
+	DB(TAB0"::"STR  " code:"OBJ  " ip:"INT, __func__, code, ip);
 	vmVm (RUN);
-	DB(TAB1"--", __func__);
+	DB(TAB1"--"STR, __func__);
 }
 
 
 /* Default Object serializer
  */
-void vmObjectDumperDefault (Obj o) {
- static char buff[80], *p;
- int len;
-	len = sprintf (buff, HEX, o);
-	write (1, buff, len);
+void vmObjectDumperDefault (Obj o, FILE *stream) {
+ static char *p;
 
-	p = memObjString(o);
-	if (p) {
-		write (1, ":", 1);
-		write (1, p, strlen(p));
-	}
+	fprintf (stream, HEX, o);
+
+	if ((p=memObjString(o))) fprintf (stream, ":%s", p);
 }
 
-void (*vmObjectDumper)(Obj o) = vmObjectDumperDefault;
+void (*vmObjectDumper)(Obj o, FILE *stream) = vmObjectDumperDefault;
 
 
-void vmInitialize (Func intHandler, Func preGC, Func postGC, Func1 vmObjDumper) {
+/* Called by asm.c */
+void vmInitialize (Func intHandler, Func preGC, Func postGC, void(*vmObjDumper)(Obj, FILE*)) {
  static int shouldInitialize=1;
 	if (shouldInitialize) {
 		shouldInitialize=0;
@@ -558,120 +554,124 @@ void vmInitialize (Func intHandler, Func preGC, Func postGC, Func1 vmObjDumper) 
 }
 
 
-void vmDebugDumpCode (Obj c) {
+void vmDebugDumpCode (Obj c, FILE *stream) {
  Obj *i=c;
  Num asmLineNumber;
-	DB (TAB1"::vmDebugDumpCode "OBJ"  code:"OBJ"  ip:"OBJ, c, code, ip);
+
+	DB (TAB1"::"STR " "OBJ"  code:"OBJ"  ip:"OBJ, __func__, c, code, ip);
+
+	if (stream == NULL) stream=stderr;
+
 	while (i < ((Obj*)c + memObjectLength(c))) { // Forcing pointer arithmatic.
 		asmLineNumber = i-(Obj*)c;
-		printf (NL OBJ STR HEX04" ",
+		fprintf (stream, NL OBJ STR HEX04" ",
 			i,
 			(i==ip || asmLineNumber==(Num)ip)?"*":" ",
 			asmLineNumber);
-		if (*i == NOP)      {printf("nop");}
-		else if (*i==MVI0)  {printf("mvi_0 "); vmObjectDumper(*++i);}
-		else if (*i==MVI1)  {printf("mvi_1 "); vmObjectDumper(*++i);}
-		else if (*i==MVI2)  {printf("mvi_2 "); vmObjectDumper(*++i);}
-		else if (*i==MVI3)  {printf("mvi_3 "); vmObjectDumper(*++i);}
-		else if (*i==MVI4)  {printf("mvi_4 "); vmObjectDumper(*++i);}
-		else if (*i==MVI5)  {printf("mvi_5 "); vmObjectDumper(*++i);}
-		else if (*i==MVI6)  {printf("mvi_6 "); vmObjectDumper(*++i);}
-		else if (*i==MVI7)  {printf("mvi_7 "); vmObjectDumper(*++i);}
-		else if (*i==MV01)  {printf("mv_0_1 ");}
-		else if (*i==MV02)  {printf("mv_0_2 ");}
-		else if (*i==MV03)  {printf("mv_0_3 ");}
-		else if (*i==MV04)  {printf("mv_0_4 ");}
-		else if (*i==MV07)  {printf("mv_0_7 ");}
-		else if (*i==MV016) {printf("mv_0_16 ");}
-		else if (*i==MV01C) {printf("mv_0_1c ");}
-		else if (*i==MV10)  {printf("mv_1_0 ");}
-		else if (*i==MV13)  {printf("mv_1_3 ");}
-		else if (*i==MV116) {printf("mv_1_16 ");}
-		else if (*i==MV20)  {printf("mv_2_0 ");}
-		else if (*i==MV23)  {printf("mv_2_3 ");}
-		else if (*i==MV30)  {printf("mv_3_0 ");}
-		else if (*i==MV50)  {printf("mv_5_0 ");}
-		else if (*i==MV416) {printf("mv_4_16 ");}
-		else if (*i==MV160) {printf("mv_16_0 ");}
-		else if (*i==MV162) {printf("mv_16_2 ");}
-		else if (*i==MV164) {printf("mv_16_4 ");}
-		else if (*i==LDI00) {printf("ldi_0_0 "); vmObjectDumper(*++i);}
-		else if (*i==LDI02) {printf("ldi_0_2 "); vmObjectDumper(*++i);}
-		else if (*i==LDI016){printf("ldi_0_16 "); vmObjectDumper(*++i);}
-		else if (*i==LDI11) {printf("ldi_1_1 "); vmObjectDumper(*++i);}
-		else if (*i==LDI116){printf("ldi_1_16 "); vmObjectDumper(*++i);}
-		else if (*i==LDI20) {printf("ldi_2_0 "); vmObjectDumper(*++i);}
-		else if (*i==LDI22) {printf("ldi_2_2 "); vmObjectDumper(*++i);}
-		else if (*i==LDI40) {printf("ldi_4_0 "); vmObjectDumper(*++i);}
-		else if (*i==LDI50) {printf("ldi_5_0 "); vmObjectDumper(*++i);}
-		else if (*i==LDI160){printf("ldi_16_0 "); vmObjectDumper(*++i);}
-		else if (*i==LDI1616){printf("ldi_16_16 "); vmObjectDumper(*++i);}
-		else if (*i==LD012) {printf("ld0_1_2");}
-		else if (*i==STI01) {printf("sti_0_1 "); vmObjectDumper(*++i);}
-		else if (*i==STI016){printf("sti_0_16 "); vmObjectDumper(*++i);}
-		else if (*i==STI20) {printf("sti_2_0 "); vmObjectDumper(*++i);}
-		else if (*i==STI21) {printf("sti_2_1 "); vmObjectDumper(*++i);}
-		else if (*i==STI30) {printf("sti_3_0 "); vmObjectDumper(*++i);}
-		else if (*i==STI40) {printf("sti_4_0 "); vmObjectDumper(*++i);}
-		else if (*i==STI50) {printf("sti_5_0 "); vmObjectDumper(*++i);}
-		else if (*i==ST012) {printf("st_0_1_2 ");}
-		else if (*i==ST201) {printf("st_2_0_1 ");}
-		else if (*i==PUSH0) {printf("push_0 ");}
-		else if (*i==PUSH1) {printf("push_1 ");}
-		else if (*i==PUSH2) {printf("push_2 ");}
-		else if (*i==PUSH3) {printf("push_3 ");}
-		else if (*i==PUSH4) {printf("push_4 ");}
-		else if (*i==PUSH7) {printf("push_7 ");}
-		else if (*i==PUSH15){printf("push_15 ");}
-		else if (*i==PUSH16){printf("push_16 ");}
-		else if (*i==PUSH1D){printf("push_1d ");}
-		else if (*i==PUSH1E){printf("push_1e ");}
-		else if (*i==POP0)  {printf("pop_0 ");}
-		else if (*i==POP1)  {printf("pop_1 ");}
-		else if (*i==POP2)  {printf("pop_2 ");}
-		else if (*i==POP3)  {printf("pop_3 ");}
-		else if (*i==POP4)  {printf("pop_4 ");}
-		else if (*i==POP7)  {printf("pop_7 ");}
-		else if (*i==POP15) {printf("pop_15 ");}
-		else if (*i==POP1D) {printf("pop_1d ");}
-		else if (*i==POP1E) {printf("pop_1e ");}
-		else if (*i==ADDI0) {printf("addi_0 %d", *(i+1)); i++; }
-		else if (*i==ADDI1) {printf("addi_1 %d", *(i+1)); i++; }
-		else if (*i==ADD10) {printf("add_1_0 "); }
-		else if (*i==MUL10) {printf("mul_1_0 "); }
-		else if (*i==BLTI1) {printf("blti_1 %x %04x",
+		if (*i == NOP)      {fprintf(stream, "nop");}
+		else if (*i==MVI0)  {fprintf(stream, "mvi_0 "); vmObjectDumper(*++i, stream);}
+		else if (*i==MVI1)  {fprintf(stream, "mvi_1 "); vmObjectDumper(*++i, stream);}
+		else if (*i==MVI2)  {fprintf(stream, "mvi_2 "); vmObjectDumper(*++i, stream);}
+		else if (*i==MVI3)  {fprintf(stream, "mvi_3 "); vmObjectDumper(*++i, stream);}
+		else if (*i==MVI4)  {fprintf(stream, "mvi_4 "); vmObjectDumper(*++i, stream);}
+		else if (*i==MVI5)  {fprintf(stream, "mvi_5 "); vmObjectDumper(*++i, stream);}
+		else if (*i==MVI6)  {fprintf(stream, "mvi_6 "); vmObjectDumper(*++i, stream);}
+		else if (*i==MVI7)  {fprintf(stream, "mvi_7 "); vmObjectDumper(*++i, stream);}
+		else if (*i==MV01)  {fprintf(stream, "mv_0_1 ");}
+		else if (*i==MV02)  {fprintf(stream, "mv_0_2 ");}
+		else if (*i==MV03)  {fprintf(stream, "mv_0_3 ");}
+		else if (*i==MV04)  {fprintf(stream, "mv_0_4 ");}
+		else if (*i==MV07)  {fprintf(stream, "mv_0_7 ");}
+		else if (*i==MV016) {fprintf(stream, "mv_0_16 ");}
+		else if (*i==MV01C) {fprintf(stream, "mv_0_1c ");}
+		else if (*i==MV10)  {fprintf(stream, "mv_1_0 ");}
+		else if (*i==MV13)  {fprintf(stream, "mv_1_3 ");}
+		else if (*i==MV116) {fprintf(stream, "mv_1_16 ");}
+		else if (*i==MV20)  {fprintf(stream, "mv_2_0 ");}
+		else if (*i==MV23)  {fprintf(stream, "mv_2_3 ");}
+		else if (*i==MV30)  {fprintf(stream, "mv_3_0 ");}
+		else if (*i==MV50)  {fprintf(stream, "mv_5_0 ");}
+		else if (*i==MV416) {fprintf(stream, "mv_4_16 ");}
+		else if (*i==MV160) {fprintf(stream, "mv_16_0 ");}
+		else if (*i==MV162) {fprintf(stream, "mv_16_2 ");}
+		else if (*i==MV164) {fprintf(stream, "mv_16_4 ");}
+		else if (*i==LDI00) {fprintf(stream, "ldi_0_0 "); vmObjectDumper(*++i, stream);}
+		else if (*i==LDI02) {fprintf(stream, "ldi_0_2 "); vmObjectDumper(*++i, stream);}
+		else if (*i==LDI016){fprintf(stream, "ldi_0_16 "); vmObjectDumper(*++i, stream);}
+		else if (*i==LDI11) {fprintf(stream, "ldi_1_1 "); vmObjectDumper(*++i, stream);}
+		else if (*i==LDI116){fprintf(stream, "ldi_1_16 "); vmObjectDumper(*++i, stream);}
+		else if (*i==LDI20) {fprintf(stream, "ldi_2_0 "); vmObjectDumper(*++i, stream);}
+		else if (*i==LDI22) {fprintf(stream, "ldi_2_2 "); vmObjectDumper(*++i, stream);}
+		else if (*i==LDI40) {fprintf(stream, "ldi_4_0 "); vmObjectDumper(*++i, stream);}
+		else if (*i==LDI50) {fprintf(stream, "ldi_5_0 "); vmObjectDumper(*++i, stream);}
+		else if (*i==LDI160){fprintf(stream, "ldi_16_0 "); vmObjectDumper(*++i, stream);}
+		else if (*i==LDI1616){fprintf(stream, "ldi_16_16 "); vmObjectDumper(*++i, stream);}
+		else if (*i==LD012) {fprintf(stream, "ld0_1_2");}
+		else if (*i==STI01) {fprintf(stream, "sti_0_1 "); vmObjectDumper(*++i, stream);}
+		else if (*i==STI016){fprintf(stream, "sti_0_16 "); vmObjectDumper(*++i, stream);}
+		else if (*i==STI20) {fprintf(stream, "sti_2_0 "); vmObjectDumper(*++i, stream);}
+		else if (*i==STI21) {fprintf(stream, "sti_2_1 "); vmObjectDumper(*++i, stream);}
+		else if (*i==STI30) {fprintf(stream, "sti_3_0 "); vmObjectDumper(*++i, stream);}
+		else if (*i==STI40) {fprintf(stream, "sti_4_0 "); vmObjectDumper(*++i, stream);}
+		else if (*i==STI50) {fprintf(stream, "sti_5_0 "); vmObjectDumper(*++i, stream);}
+		else if (*i==ST012) {fprintf(stream, "st_0_1_2 ");}
+		else if (*i==ST201) {fprintf(stream, "st_2_0_1 ");}
+		else if (*i==PUSH0) {fprintf(stream, "push_0 ");}
+		else if (*i==PUSH1) {fprintf(stream, "push_1 ");}
+		else if (*i==PUSH2) {fprintf(stream, "push_2 ");}
+		else if (*i==PUSH3) {fprintf(stream, "push_3 ");}
+		else if (*i==PUSH4) {fprintf(stream, "push_4 ");}
+		else if (*i==PUSH7) {fprintf(stream, "push_7 ");}
+		else if (*i==PUSH15){fprintf(stream, "push_15 ");}
+		else if (*i==PUSH16){fprintf(stream, "push_16 ");}
+		else if (*i==PUSH1D){fprintf(stream, "push_1d ");}
+		else if (*i==PUSH1E){fprintf(stream, "push_1e ");}
+		else if (*i==POP0)  {fprintf(stream, "pop_0 ");}
+		else if (*i==POP1)  {fprintf(stream, "pop_1 ");}
+		else if (*i==POP2)  {fprintf(stream, "pop_2 ");}
+		else if (*i==POP3)  {fprintf(stream, "pop_3 ");}
+		else if (*i==POP4)  {fprintf(stream, "pop_4 ");}
+		else if (*i==POP7)  {fprintf(stream, "pop_7 ");}
+		else if (*i==POP15) {fprintf(stream, "pop_15 ");}
+		else if (*i==POP1D) {fprintf(stream, "pop_1d ");}
+		else if (*i==POP1E) {fprintf(stream, "pop_1e ");}
+		else if (*i==ADDI0) {fprintf(stream, "addi_0 %d", *(i+1)); i++; }
+		else if (*i==ADDI1) {fprintf(stream, "addi_1 %d", *(i+1)); i++; }
+		else if (*i==ADD10) {fprintf(stream, "add_1_0 "); }
+		else if (*i==MUL10) {fprintf(stream, "mul_1_0 "); }
+		else if (*i==BLTI1) {fprintf(stream, "blti_1 %x %04x",
 									 *(i+1), 3+i-(Obj*)c+(Int)*(i+2)/8); i+=2;}
-		else if (*i==BEQI0) {printf("beqi_0 %x %04x",
+		else if (*i==BEQI0) {fprintf(stream, "beqi_0 %x %04x",
 									 *(i+1), 3+i-(Obj*)c+(Int)*(i+2)/8); i+=2;}
-		else if (*i==BEQI1) {printf("beqi_1 %x %04x",
+		else if (*i==BEQI1) {fprintf(stream, "beqi_1 %x %04x",
 									 *(i+1), 3+i-(Obj*)c+(Int)*(i+2)/8); i+=2;}
-		else if (*i==BEQI7) {printf("beqi_7 %x %04x",
+		else if (*i==BEQI7) {fprintf(stream, "beqi_7 %x %04x",
 									 *(i+1), 3+i-(Obj*)c+(Int)*(i+2)/8); i+=2;}
-		else if (*i==BNEI0) {printf("bnei_0 %x %04x",
+		else if (*i==BNEI0) {fprintf(stream, "bnei_0 %x %04x",
 									 *(i+1), 3+i-(Obj*)c+(Int)*(i+2)/8); i+=2;}
-		else if (*i==BNEI1) {printf("bnei_1 %x %04x",
+		else if (*i==BNEI1) {fprintf(stream, "bnei_1 %x %04x",
 									 *(i+1), 3+i-(Obj*)c+(Int)*(i+2)/8); i+=2;}
-		else if (*i==BRTI0) {printf ("brti_0 %x %04x",
+		else if (*i==BRTI0) {fprintf (stream, "brti_0 %x %04x",
 									 *(i+1), 3+i-(Obj*)c+(Int)*(i+2)/8); i+=2;}
-		else if (*i==BNTI0) {printf ("bnti_0 %08x %04x",
+		else if (*i==BNTI0) {fprintf (stream, "bnti_0 %08x %04x",
 									 *(i+1), 3+i-(Obj*)c+(Int)*(i+2)/8); i+=2;}
-		else if (*i==BRA)   {printf ("bra %04x",
+		else if (*i==BRA)   {fprintf (stream, "bra %04x",
 									 2+i-(Obj*)c+(Int)*(i+1)/8); i++;}
-		else if (*i==J0)    {printf ("j_0 ");}
-		else if (*i==J2)    {printf ("j_2 ");}
-		else if (*i==JAL0)  {printf ("jal_0 ");}
-		else if (*i==JAL2)  {printf ("jal_2 ");}
-		else if (*i==RET)   {printf ("ret ");}
-		else if (*i==SYSI)  {printf ("sysi "); vmObjectDumper(*++i);}
-		else if (*i==SYS0)  {printf ("sys_0 ");}
-		else if (*i==QUIT)  {printf ("quit ");}
+		else if (*i==J0)    {fprintf (stream, "j_0 ");}
+		else if (*i==J2)    {fprintf (stream, "j_2 ");}
+		else if (*i==JAL0)  {fprintf (stream, "jal_0 ");}
+		else if (*i==JAL2)  {fprintf (stream, "jal_2 ");}
+		else if (*i==RET)   {fprintf (stream, "ret ");}
+		else if (*i==SYSI)  {fprintf (stream, "sysi "); vmObjectDumper(*++i, stream);}
+		else if (*i==SYS0)  {fprintf (stream, "sys_0 ");}
+		else if (*i==QUIT)  {fprintf (stream, "quit ");}
 		else {
-			printf ("???:"HEX" ", *i);
-			vmObjectDumper(*i);
+			fprintf (stream, "???:"HEX" ", *i);
+			vmObjectDumper(*i, stream);
 		}
 		i++;
 		fflush(stdout);
 	}
 	printf (NL);
-	DB (TAB2"--vmDebugDumpCode");
+	DB (TAB2"--"STR, __func__);
 }

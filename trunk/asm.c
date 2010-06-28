@@ -101,12 +101,13 @@ void asmNewCode (void) {
 	/* Reset assembly stack by setting the first entry to
 	   the stack itself (points to itself). */
 	*(Obj*)asmstack = asmstack;
-	DBE vmDebugDumpCode(r0);
+	DBE vmDebugDumpCode(r0, stderr);
 	DB("  --%s", __func__);
 }
 
 
-void asmInitialize (Func intHandler, Func preGC, Func postGC, Func1 vmObjDumper) {
+/* Called by obj.c */
+void asmInitialize (Func intHandler, Func preGC, Func postGC, void(*vmObjDumper)(Obj, FILE*)) {
  static Int shouldInitialize=1;
 	if (shouldInitialize) {
 		shouldInitialize=0;

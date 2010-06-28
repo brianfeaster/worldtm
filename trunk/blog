@@ -1807,10 +1807,14 @@ Sun Jun  6 00:17:53 EDT 2010
 
 code:r1c retcode:r1e stack r1f
 
+call memDebugDumpHeapHeaders(0)
+call wscmWrite(r1f, 0, 1)
+call vmDebugDumpCode(r1c)
+call sysDumpCallStackCode()
+call memDebugDumpYoungHeap(0)
+
 call vmDebugDumpCode(r1c)
 call vmDebugDumpCode(r1e)
-call wscmWrite(r1f, 0, 1)
-call sysDumpCallStackCode()
 
 450/8 = 8a
 1358/8 = 26b
@@ -1850,8 +1854,34 @@ Stack 19 0000000000000000 000000000000
 r0 (code object) should be 7ffff5018128
 but r0 is 7ffff5ef0880
 
-
 Wed Jun  9 00:55:57 EDT 2010
 
 The random World startup crash I first need to identify and create a test that
 repeats the issue so a regtest can be created.
+
+7ffff7407008[3]=7ffff5fab410
+7ffff5fab410 0a INTEGER   8 (7f 0 0 0 0 0 0 0)
+
+0xd8/8=1b
+0xac0/8=158
+
+
+Sun Jun 27 19:18:40 EDT 2010
+
+PROBLEM POINTER
+7ffff5fab410
+
+YOUNG HEAP
+7ffff7407008 82 VECTOR    4 #(7ffff531a1e8 7ffff531a1f8 7ffff534a2b8 7ffff5fab410)
+7ffff7407030 83 CLOSURE   2 #(7ffff53170b0 7ffff52ef310)
+7ffff7407048 82 VECTOR    4 #(7ffff52ef310 7ffff534a400 7ffff7407008 7ffff7ff6008)
+7ffff7407070 82 VECTOR    7 #(7ffff53543b0 7ffff53d8d00 7ffff7407008 7ffff534a418 7ffff5314798 7ffff534a428 7ffff7ff6008)
+7ffff74070b0 83 CLOSURE   2 #(7ffff53d8d18 7ffff7407070)
+7ffff74070c8 82 VECTOR    3 #(7ffff7407070 7ffff55df458 7ffff74070e8)
+7ffff74070e8 83 CLOSURE   2 #(7ffff55df470 7ffff74070c8)
+7ffff7407100 82 VECTOR    5 #(7ffff74070c8 7ffff55f02c0 7ffff534a418 7ffff534a428 7ffff7ff6008)
+7ffff7407130 0a INTEGER   8 (4 0 0 0 0 0 0 0)
+7ffff7407140 0a INTEGER   8 (3 0 0 0 0 0 0 0)
+7ffff7407150 0a INTEGER   8 (1 0 0 0 0 0 0 0)
+7ffff7407160 0a INTEGER   8 (1 0 0 0 0 0 0 0)
+

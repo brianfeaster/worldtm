@@ -46,7 +46,7 @@ void objNewClosure1Env (void);
 //void objNewSocket (void);
 void objNewPort (void);
 
-void objDump (Obj a, int fd);
+void objDump (Obj a, FILE *stream);
 
 Obj car (Obj o);
 Obj caar (Obj o);

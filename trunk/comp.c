@@ -144,10 +144,10 @@ void compDefine (Num flags) {
 			asm(MVI1); asm(pop()); /* Load r1 with saved binding. */
 			asm(STI01); asm(0l);    /* Set binding's value. */
 		} else {
-			write (2, "ERROR: compDefine(): Missing expression.", 34);
+			write (2, "ERROR: compDefine(): Missing expression.", 40);
 		}
 	} else  {
-		write (2, "ERROR: compDefine(): Not a symbol:", 28); wscmWrite(r1, 0,2);
+		write (2, "ERROR: compDefine(): Not a symbol:", 34); wscmWrite(r1, 0,2);
 	}
 	DB("<--compDefine");
 }
@@ -466,7 +466,7 @@ void compVerifyVectorRef (void) {
 		wscmWrite(r0, 0, 2);
 		fprintf (stderr, ")");
 		/* Dump the current code block */
-		vmDebugDumpCode(code);
+		vmDebugDumpCode(code, stderr);
 		wscmDumpEnv(env);
 		fflush(stdout);
 		*(Int*)0 = 0;
@@ -1089,10 +1089,10 @@ void compTransformLet (void) {
 	/* Create (lambda (var...)body) */
 	r1=slambda;r2=r0;  objCons12();
 
-	/* Create ((lambda (var...)body) val...) */
+	/* Create ((lambda (var...) body) val...) */
 	r1=r0;  r2=pop();  objCons12();
 
-	/* Return transormed expression. */
+	/* Return transformed expression. */
 	expr=r0;
 
 	DB("<--%s => ", __func__);

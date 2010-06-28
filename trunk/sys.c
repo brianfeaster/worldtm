@@ -1598,16 +1598,13 @@ void sysVector (void) {
 
 void sysMakeVector (void) {
  Num len;
- Obj o=null;
 	DB("-->%s", __func__);
 	if (wscmAssertArgumentCountRange(1, 2, __func__)) return;
-	if (r1==(Obj)2) {
-		o=pop();
-		objNewVector(len=*(Num*)pop());
-		while (len--) memVectorSet(r0, len, o);
-	} else {
-		objNewVector(*(Num*)pop());
-	}
+
+	r2 = r1==(Obj)2 ? pop() : null;
+	objNewVector(len=*(Num*)pop());
+	while (len--) memVectorSet(r0, len, r2);
+
 	DB("<--%s", __func__);
 }
 
@@ -2207,17 +2204,21 @@ void sysCompile (void) {
 		END
 	);
 	asmNewCode();
-	if (wscmDebug) vmDebugDumpCode(r0); // Dump the code block after compiling code during runtime.
+	if (wscmDebug) vmDebugDumpCode(r0, stderr); // Dump the code block after compiling code during runtime.
 	env=pop();
 ret:
 	DB("<--%s", __func__);
 	DBE wscmWrite (r0, 0, 2);
 }
 
+void sysDebugDumpAll (void) {
+	memDebugDumpAll(NULL);
+}
+
 void sysDisassemble (void) {
 	r0=pop();
 	if (memObjectType(r0) == TCLOSURE) r0=car(r0);
-	vmDebugDumpCode(r0);
+	vmDebugDumpCode(r0, stderr);
 }
 
 void sysTrace (void) {
@@ -2780,7 +2781,7 @@ void wscmInitialize (void) {
 	wscmDefineSyscall (sysStringRef, "string-ref");
 	wscmDefineSyscall (sysStringSetB, "string-set!");
 	wscmDefineSyscall (sysVectorLength, "vector-length");
-	wscmDefineSyscall (memDebugDumpAll, "dump-heap");
+	wscmDefineSyscall (sysDebugDumpAll, "dump-heap");
 	wscmDefineSyscall (memGarbageCollect, "garbage-collect");
 	wscmDefineSyscall (sysDisassemble, "disassemble");
 	wscmDefineSyscall (sysTrace, "trace");
