@@ -23,6 +23,6 @@ void asmCompileAsmstack (Int opcodeStart);
    in r0 based on assembly stack (r1a). */
 void asmNewCode (void);
 
-void asmInitialize (Func intHandler, Func preGC, Func postGC, Func1 objDumper);
+void asmInitialize (Func intHandler, Func preGC, Func postGC, void(*objDumper)(Obj, FILE*));
 
 #endif

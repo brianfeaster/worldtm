@@ -92,8 +92,8 @@ void memGarbageCollect ();
 /* Debugging aids.
 */
 void memDebugDumpHeapHeaders (FILE *stream);
-void memDebugDumpObject (Obj o);
-void memDebugDumpAll (void);
+void memDebugDumpObject (Obj o, FILE *stream);
+void memDebugDumpAll (FILE *stream);
 void memValidateObject (Obj o);
 void memValidateHeapStructures (void);
 

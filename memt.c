@@ -22,6 +22,10 @@ void memAssertions() {
 	assert(sizeof(r64)==8);
 	assert(sizeof(r128)==16);
 
+	// Verify size of integer constants.
+	assert(sizeof(1)==4);
+	assert(sizeof(1l)==8);
+
 	// Does mmap return #x1000 (4096) byte chunks?
 	mmapPointer1 = mmap(0x0, 1, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, 0, 0);
 	mmapPointer2 = mmap(0x0, 1, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, 0, 0);
@@ -37,11 +41,12 @@ void memAssertions() {
 	assert(memArrayLengthToObjectSize(9)==24);
 	assert(memArrayLengthToObjectSize(16)==24);
 	assert(memArrayLengthToObjectSize(17)==32);
+	assert(memArrayLengthToObjectSize(24)==32);
+	assert(memArrayLengthToObjectSize(25)==40);
 }
 
 int main (int argc, char *argv[]) {
  int i, j;
-	memAssertions();
 
 	// If any arguments passed to test unit, do more fun things.
 	if (argc==2) {
@@ -50,6 +55,8 @@ int main (int argc, char *argv[]) {
 
 	setbuf(stdout,0);
 	memInitialize(NULL, NULL);
+
+	memAssertions();
 
 	memNewArray(TSYMBOL, 8); r1=r0;
 	memNewArray(TINTEGER, 4); r2=r0;

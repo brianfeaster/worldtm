@@ -37,7 +37,7 @@ void wscmCReadEvalPrintLoop (void) {
 		code=r0; ip=0;
 		DB("MAIN Running======================");
 		DBE wscmWrite(code, 0, 2);DBE write (2, "\n", 1);
-		vmDebugDumpCode(code);
+		vmDebugDumpCode(code, stderr);
 		vmRun();
 		//wscmDisplay(stack, 0, 2);
 		//DBE memDebugDumpHeapStructures ();

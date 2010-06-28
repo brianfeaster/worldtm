@@ -1,6 +1,6 @@
 #define DEBUG 0
 #define DEBUG_ASSERT 0
-#define VALIDATE_HEAP 1
+#define VALIDATE_HEAP 0
 #define DB_MODULE "MEM "
 #include "debug.h"
 /* Two sets of objects, old and young,  will be maintained.  Normally, the
@@ -38,10 +38,10 @@
 #include "mem.h"
 
 
+extern void vmDebugDumpCode (Obj c, FILE *stream);
 
 void memGarbageCollectInternal (Descriptor desc, Num byteSize);
 void memError (void);
-
 
 
 /* Byte size of a Linux virtual memory block.  Resolution of mmap. */
@@ -55,6 +55,7 @@ const Num STACK_LENGTH           = 0x02000; //     8Kb 0x002000 2^13
 
 Num garbageCollectionCount = 0;
 const Num DescSize = sizeof(Descriptor);
+const Num ObjSize = sizeof(Obj);
 
 
 
@@ -582,13 +583,10 @@ void memObjectCopyToHeapNew (Obj *obj) {
 		if (memIsObjectStack (*obj)) {
 			DBE fprintf (stderr, "...Stack");
 			/* Add 1 to stack length to account for pointer. */
-			memcpy(heapNew.next,  *obj-DescSize,
-			       DescSize + sizeof(Obj)
-			       + (1+memStackLength(*obj))*sizeof(Obj));
+			memcpy(heapNew.next, *obj-DescSize, (DescSize + ObjSize + ObjSize*memStackLength(*obj)));
 			/* Update this stack's internal pointer (first word in vector) to
 				point to the proper position in the vector. */
-			*(Obj*)newObjectLocation = (Obj*)newObjectLocation
-			                           + memStackLength(*obj);
+			*(Obj*)newObjectLocation = (Obj*)newObjectLocation + memStackLength(*obj);
 		/* ... or just copy bytes that make up this object. */
 		} else {
 			DBE fprintf (stderr, "...Array");
@@ -640,15 +638,21 @@ char memGCFlag=0;
 void memGarbageCollectInternal (Descriptor desc, Num byteSize) {
  Obj newObj;
  Int  i, len;
- FILE *stream;
 
+#if 0
+ FILE *stream=NULL;
 	/* Debug dump heap headers.  Keep stream open for
 	   final header dump below. */
-	stream = fopen("headers.out", "a");
-	assert(stream != NULL);
-
-	fprintf(stream, "\n::memGarbageCollectInternal  desc "OBJ0"  byteSize "HEX"::::::::::::::::::::::::", desc, byteSize);
-	memDebugDumpHeapHeaders(stream);
+	if (garbageCollectionCount==30) exit(-1);
+	if (GarbageCollectionMode==GC_MODE_OLD && 24<garbageCollectionCount) {
+		stream = fopen("headers.out", "w");
+		assert(stream != NULL);
+		fprintf(stream, "::memGarbageCollectInternal "INT"  desc "OBJ0"  byteSize "HEX"::::::::::::::::::::::::",garbageCollectionCount, desc, byteSize);
+		memDebugDumpAll(stream);
+		vmDebugDumpCode(r1c, stream);
+		memDebugDumpObject(r1f, stream);
+	}
+#endif
 
 	/* Verify no recursive call. */
 	assert(memGCFlag==0);
@@ -841,12 +845,18 @@ DB("   collecting and compacting mutated old object references...");
 
 	if (memPostGarbageCollect) memPostGarbageCollect();
 
+#if 0
 	/* Final header dump. */
-	memDebugDumpHeapHeaders(stream);
-	fprintf(stream, "--memGarbageCollectInternal----------------------------------------------------------------\n");
-	fclose(stream);
-
-//	fprintf (stderr, "<--memGarbageCollectInternal()\n");
+	if (stream!=NULL) {
+		memDebugDumpAll(stream);
+		vmDebugDumpCode(r1c, stream);
+		memDebugDumpObject(r1f, stream);
+		fprintf(stream, "\n--memGarbageCollectInternal----------------------------------------------------------------\ncalling memValidateHeapStructures()...\n");
+		memValidateHeapStructures();
+		fprintf(stream, "success.\n");
+		fclose(stream);
+	}
+#endif
 
 	if (memGCFlag != 1) fprintf (stderr, "\n\aWARNING: objGCPost() memGCFlag==%d", memGCFlag);
 	memGCFlag=0;
@@ -855,7 +865,7 @@ DB("   collecting and compacting mutated old object references...");
 	memValidateHeapStructures();
 #endif
 
-//printf ("[count %d  heapOld %08x  heap %08x(%08x)  heapNew %08x  count %x]\n", garbageCollectionCount, heapOld.start, heap.start, heap.last-heap.start, heapNew.start, heapNew.blockCount);
+	//printf ("[count %d  heapOld %08x  heap %08x(%08x)  heapNew %08x  count %x]\n", garbageCollectionCount, heapOld.start, heap.start, heap.last-heap.start, heapNew.start, heapNew.blockCount);
 	//memDebugdumpAll();
 
 	DB("--memGarbageCollectInternal");
@@ -910,13 +920,16 @@ void memDebugDumpHeapHeaders (FILE *stream) {
 
 
 
-void memDebugDumpObject (Obj o) {
+void memDebugDumpObject (Obj o, FILE *stream) {
  Int i;
  char *s;
  Obj obj;
+
+	if (stream == NULL) stream=stderr;
+
 	/* Dump the object's address and descriptor information.
 	   7fe8f5f44610 81 PAIR      2 #(7fe8f5f445f0 7fe8f5f44600) */
-	fprintf (stderr, "\n"OBJ" "HEX02" %-7s"HEX4,
+	fprintf (stream, "\n"OBJ" "HEX02" %-7s"HEX4,
 		o, memObjectType(o), memTypeString(memObjectType(o)), memObjectLength(o));
 
 	/* Some objects are just an instance of the descriptor
@@ -925,78 +938,101 @@ void memDebugDumpObject (Obj o) {
 
 	if (memIsObjectVector(o)) { // Vector
 		if (memIsObjectPointer(o))
-			fprintf (stderr, " "OBJ" -> "OBJ, ((Obj*)o)[0], ((Obj*)o)[1]);
+			fprintf (stream, " "OBJ" -> "OBJ, ((Obj*)o)[0], ((Obj*)o)[1]);
 		else if (memIsObjectStack(o)) {
-			fprintf (stderr, " ["HEX" | ", memStackLength(o));
-			for (i=0; i<memStackLength(o); i++) fprintf (stderr, HEX" ", ((Obj*)o)[i+1]);
-			fprintf (stderr, "]");
+			fprintf (stream, " ["HEX" | ", memStackLength(o));
+			for (i=0; i<memStackLength(o); i++)
+				fprintf (stream, HEX" ", ((Obj*)o)[i+1]);
+			fprintf (stream, "]");
 		} else if (memIsObjectShadow(o))
-			fprintf (stderr, " *"OBJ"", *(Obj*)o);
+			fprintf (stream, " *"OBJ"", *(Obj*)o);
 		else if (memIsObjectFinalizer(o))
-			fprintf (stderr, " ("OBJ")()", *(Obj*)o);
+			fprintf (stream, " ("OBJ")()", *(Obj*)o);
 		else {
 			for (i=0; i<memObjectLength(o); i++) {
 				obj = ((Obj*)o)[i];
-				fprintf (stderr, " %s"HEX, i==0?"#(":"", obj);
+				fprintf (stream, " %s"HEX, i==0?"#(":"", obj);
 				s = memObjString(obj); /* Internal pointer address */
-				if (s) fprintf (stderr, ":%s", s);
+				if (s) fprintf (stream, ":%s", s);
 			}
-			fprintf (stderr, ")");
+			fprintf (stream, ")");
 		}
 	} else { // Array
 		for (i=0; i<memObjectLength(o); i++) {
-			fprintf (stderr, " %s%x", i==0?"(":"", ((u8*)o)[i]);
+			fprintf (stream, " %s%x", i==0?"(":"", ((u8*)o)[i]);
 		}
-		fprintf (stderr, ")");
+		fprintf (stream, ")");
 	}
 }
 
 
 
-void memDebugDumpAll (void) {
+void memDebugDumpStaticHeap (FILE *stream) {
  Obj o;
-	DB("::%s", __func__);
-
-	memDebugDumpHeapHeaders(NULL);
-
-	/* DUMP EACH HEAP OBJECT */
-	printf ("----STATIC HEAP----");
+	if (stream == NULL) stream=stderr;
 	o = heapStatic.start + DescSize;
 	while (o<heapStatic.next) {
-		memDebugDumpObject (o);
+		memDebugDumpObject (o, stream);
 		o += memObjectSize(o);
 	}
-	printf ("\n----OLD HEAP----");
-//	for (i=0; i<mutatedOldObjectsLength; i++) {
-//		printf (" %08x", mutatedOldObjects[i]);
-//	}
+}
+
+void memDebugDumpOldHeap (FILE *stream) {
+ Obj o;
+	if (stream == NULL) stream=stderr;
 	o = heapOld.start + DescSize;
 	while (o<heapOld.next) {
-		memDebugDumpObject (o);
+		memDebugDumpObject (o, stream);
 		o += memObjectSize(o);
 	}
-	printf ("\n----YOUNG HEAP----");
+}
+
+void memDebugDumpYoungHeap (FILE *stream) {
+ Obj o;
+	if (stream == NULL) stream=stderr;
 	o = heap.start + DescSize;
 	while (o<heap.next) {
-		memDebugDumpObject (o);
+		memDebugDumpObject (o, stream);
 		o += memObjectSize(o);
 	}
-	printf ("\n----NEW HEAP----");
+}
+
+void memDebugDumpNewHeap (FILE *stream) {
+ Obj o;
+	if (stream == NULL) stream=stderr;
 	o = heapNew.start + DescSize;
 	while (o<heapNew.next) {
-		memDebugDumpObject (o);
+		memDebugDumpObject (o, stream);
 		o += memObjectSize(o);
 	}
-	printf ("\n----DONE DUMPING HEAP STRUCTURES----\n");
-	fflush(stdout);
-/*
-	// Dump raw words from this heap.
-	o =heapNew.start;
-	while (o<heapNew.next) {
-		printf ("\n%08x %08x", o, *(unsigned*)o);
-		o += 4;
-	}
-*/
+}
+
+void memDebugDumpAll (FILE *stream) {
+	DB("::%s", __func__);
+
+	if (stream == NULL) stream=stderr;
+
+	memDebugDumpHeapHeaders(stream);
+
+	/* DUMP EACH HEAP OBJECT */
+	fprintf (stream, "----STATIC HEAP----");
+	memDebugDumpStaticHeap(stream);
+
+	fprintf (stream, "\n----OLD HEAP----");
+//	for (i=0; i<mutatedOldObjectsLength; i++) {
+//		fprintf (stream " "OBJ, mutatedOldObjects[i]);
+//	}
+	memDebugDumpOldHeap(stream);
+
+	fprintf (stream, "\n----YOUNG HEAP----");
+	memDebugDumpYoungHeap(stream);
+
+	fprintf (stream, "\n----NEW HEAP----");
+	memDebugDumpNewHeap(stream);
+
+	fprintf (stream, "\n----DONE DUMPING HEAP STRUCTURES----\n");
+	fflush(stream);
+
 	DB("  --%s", __func__);
 }
 
@@ -1044,19 +1080,15 @@ void memValidateObject (Obj o) {
 				    && (oo > (Obj)0x420000 && oo < (Obj)-0x420000) /* Was 0xffff */
 				    && !memObjString(oo)) { /* Ignore registered internal pointers. */
 					fprintf (stderr, "ERROR memValidateObject() vector object "OBJ"["INT"]="OBJ" invalid.\n", o, i, oo);
-					wscmWrite(memVectorObject(o, 2), 0, 1);
+					//wscmWrite(memVectorObject(o, 2), 0, 1);
 					valid=0;
 				}
 			}
 	}
 	if (!valid) {
 		fprintf (stderr, "ERROR memValidateObject() found bad object "OBJ NL, o);
-		memDebugDumpObject (o);
-		memDebugDumpAll();
-		for (i=10; i; i--) {
-			printf (NL);
-			fprintf (stderr, NL);
-		}
+		memDebugDumpObject (o, NULL);
+		//memDebugDumpAll(NULL);
 		*(int*)0=0;
 		exit(-1);
 	}
@@ -1148,6 +1180,7 @@ void memObjStringRegister (Obj obj, char *str) {
 }
 
 
+/* Called by obj.c and vm.c */
 void memInitialize (Func preGC, Func postGC) {
  int static shouldInitialize=1;
 	if (shouldInitialize) {
@@ -1165,13 +1198,12 @@ void memInitialize (Func preGC, Func postGC) {
 }
 
 
-//extern void vmDebugDumpCode (void);
 void memError (void) {
 	fprintf (stderr, "\nHalted on error.  Want a Heap dump (y/n)?");
 	//memDebugdumpAll();
 	r0=code;
 //	vmDebugDumpCode();
-	if (getchar()=='y') memDebugDumpAll();
+	if (getchar()=='y') memDebugDumpAll(NULL);
 	*(int*)0 = 1; // Force a crash.
 	//exit(-1);
 }
