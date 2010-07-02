@@ -107,11 +107,11 @@ void asmNewCode (void) {
 
 
 /* Called by obj.c */
-void asmInitialize (Func intHandler, Func preGC, Func postGC, void(*vmObjDumper)(Obj, FILE*)) {
+void asmInitialize (Func scheduler, Func preGC, Func postGC, void(*vmObjDumper)(Obj, FILE*)) {
  static Int shouldInitialize=1;
 	if (shouldInitialize) {
 		shouldInitialize=0;
-		vmInitialize(intHandler, preGC, postGC, vmObjDumper);
+		vmInitialize(scheduler, preGC, postGC, vmObjDumper);
 		LABEL = &LABEL;
 		ADDR = &ADDR;
 		END = &END;

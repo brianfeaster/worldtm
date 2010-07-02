@@ -1,7 +1,6 @@
 #ifndef _GLOBALS_H
 #define _GLOBALS_H
 
-
 /* Register aliases.
 */
 #define semaphores r9  /* WSCM: semaphore counters. */

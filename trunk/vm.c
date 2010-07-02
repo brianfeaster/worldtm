@@ -65,7 +65,7 @@ void vmPostGarbageCollect (void) {
 
 /* This causes the machine to make a call to the interrupt handler.
 */
-int interrupt=0;
+Int interrupt=0;
 
 void vmSigAlarmHandler (int sig) {
 	interrupt=1;
@@ -75,7 +75,7 @@ void vmSigAlarmReset (void) {
 	ualarm(10*1000,0); /* 10 miliseconds (100 tics/sec)*/
 }
 
-Func vmCallerInterruptHandler = 0;
+Func vmCallerScheduler = NULL;
 
 void vmInterruptHandler (void) {
 	DB("VM -->vmInterruptHandler <= %08x %08x", code, ip);
@@ -83,7 +83,7 @@ void vmInterruptHandler (void) {
 		concept of massaging register values into garbage-collector-friendly
 		values. */
 	vmPreGarbageCollect();
-	if (vmCallerInterruptHandler) vmCallerInterruptHandler();
+	if (vmCallerScheduler) vmCallerScheduler();
 	vmPostGarbageCollect();
 	interrupt=0;
 	vmSigAlarmReset();
@@ -535,12 +535,12 @@ void (*vmObjectDumper)(Obj o, FILE *stream) = vmObjectDumperDefault;
 
 
 /* Called by asm.c */
-void vmInitialize (Func intHandler, Func preGC, Func postGC, void(*vmObjDumper)(Obj, FILE*)) {
+void vmInitialize (Func scheduler, Func preGC, Func postGC, void(*vmObjDumper)(Obj, FILE*)) {
  static int shouldInitialize=1;
 	if (shouldInitialize) {
 		shouldInitialize=0;
 		vmVm(INIT); // Initialize the opcodes (C jump addresses).
-		if (intHandler) vmCallerInterruptHandler = intHandler;
+		if (scheduler) vmCallerScheduler = scheduler;
 		if (preGC) vmCallerPreGarbageCollect = preGC;
 		if (postGC) vmCallerPostGarbageCollect = postGC;
 		if (vmObjDumper) vmObjectDumper = vmObjDumper;

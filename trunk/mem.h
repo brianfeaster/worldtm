@@ -93,6 +93,10 @@ void memGarbageCollect ();
 */
 void memDebugDumpHeapHeaders (FILE *stream);
 void memDebugDumpObject (Obj o, FILE *stream);
+void memDebugDumpStaticHeap (FILE *stream);
+void memDebugDumpOldHeap (FILE *stream);
+void memDebugDumpYoungHeap (FILE *stream);
+void memDebugDumpNewHeap (FILE *stream);
 void memDebugDumpAll (FILE *stream);
 void memValidateObject (Obj o);
 void memValidateHeapStructures (void);

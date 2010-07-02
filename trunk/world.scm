@@ -1019,7 +1019,9 @@ c))
  (if (eq? c #\Z) (circularize #t)
  (if (eq? c CHAR-CTRL-W) (walkForever)
  (if (eq? c #\4) (load-ultima-world4)
- (if (eq? c #\c) (begin (say "Herz ur kitteh") (thread (spawnKitty))))))))))))))))))))))))))))))))))))
+ (if (eq? c #\c) (begin (say "Herz ur kitteh") (thread (spawnKitty)))
+ (if (eq? c #\1) (thread (sigwinch))
+ ))))))))))))))))))))))))))))))))))
  state)
 
 (define wrepl (let ((state 'cmd))
@@ -1130,11 +1132,12 @@ c))
 
 (define sig28Semaphore (open-semaphore 1))
 
-(vector-set! SIGNALHANDLERS 28 (lambda ()
+(define (sigwinch)
   (semaphore-down sig28Semaphore)
   (handleTerminalResize)
-  (semaphore-up sig28Semaphore)
-  (unthread)))
+  (semaphore-up sig28Semaphore))
+
+(vector-set! SIGNALHANDLERS 28 (lambda () (sigwinch) (unthread)))
 
 (signal 28)
 

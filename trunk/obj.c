@@ -193,7 +193,7 @@ void objCons23 (void) {
 	memVectorSet(r0, 1, r3);
 }
 
-/* Create UNITIALIZED vector in r0 of length r1:immediate
+/* Create uninitialized vector in r0 of length r1:immediate
 */
 void objNewVector (int len) {
    memNewVector(TVECTOR, len);
@@ -384,11 +384,11 @@ void objGCPost (void) {
 
 
 /* Called by sys.c */
-void objInitialize (Func intHandler) {
+void objInitialize (Func scheduler) {
  Int i;
 	DB("::%s", __func_);
 	DB("  initializing memory module");
-	asmInitialize(intHandler, objGCPre, objGCPost, objDump);
+	asmInitialize(scheduler, objGCPre, objGCPost, objDump);
 	memInitialize(0, 0);
 	/* These primitive types are also external (display) strings. */
 	memNewStatic(TNULL, 2);    null=r0;    memcpy(r0, "()", 2);
