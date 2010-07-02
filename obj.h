@@ -61,7 +61,7 @@ Obj  pop  (void);
 
 
 
-void objInitialize (Func intHandler);
+void objInitialize (Func scheduler);
 
 
 

@@ -1809,10 +1809,10 @@ code:r1c retcode:r1e stack r1f
 
 call memDebugDumpHeapHeaders(0)
 call wscmWrite(r1f, 0, 1)
-call vmDebugDumpCode(r1c)
+call vmDebugDumpCode(r1c, stdout)
 call sysDumpCallStackCode()
-call memDebugDumpYoungHeap(0)
 
+call memDebugDumpYoungHeap(0)
 call vmDebugDumpCode(r1c)
 call vmDebugDumpCode(r1e)
 

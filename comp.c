@@ -296,6 +296,9 @@ void compLambdaBody (Num flags) {
 	push(asmstack);
 	memNewStack(); asmstack=r0;
 
+	/* The first opcode emitted is a branch over the next bogu instruction.  The
+	   instruction is really the original expression being compiled.  This is a
+	   quick and dirty debugging aid. */
 	asmAsm(
 		BRA, 8l,
 		expr,

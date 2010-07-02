@@ -2,6 +2,7 @@
 #define DB_MODULE "SYS "
 #include "debug.h"
 
+#include <assert.h>
 #include "sys.h"
 
 
@@ -678,10 +679,9 @@ void wscmAcceptLocalStream (void) {
 		goto ret;
 	}
 
-	/* Close listening socket. */
-	//close(ld);
+	//close(ld); /* Close listening socket. */
 
-	/* Disable blocking on the new descriptor. */
+	/* Disable C level blocking on the new descriptor. */
 	fcntl (fd2, F_SETFL, fcntl (fd2, F_GETFL) | O_NONBLOCK);
 
 	/* The file descriptor. */
@@ -1258,21 +1258,6 @@ void wscmSchedule (void) {
 	//fprintf(stderr, "  --%s =>%d\rn", __func__, memVectorObject(car(running), 1));
 }
 
-/* This function passed to the virtual machine module during initialization
-   and is called periodically.
-*/
-void wscmInterruptHandler (void) {
-	DB("-->%s", __func__);
-	/* If just a single thread in existence, leave it alone and just continue
-	   on. */
-	if ((Int)memVectorObject(threads, 0) != 1 || !wscmIsQueueEmpty(sleeping)) {
-		// TODO: BF: If signal queue not empty..spawn signal hander threads.
-		wscmUnRun();
-		wscmSchedule();
-	}
-	DB("<--%s", __func__);
-}
-
 /* Force a call to the error continuation.  This better be defined in
    The Global Environment.  R1 contains number of expressions on stack
 	to display as part of the error handling.
@@ -1309,7 +1294,12 @@ void wscmError (void) {
 
 void sysQuit (void) { exit(0); }
 
-void sysFun (void) { putchar(*(char*)(r0=pop())); }
+/* This can do anything.  I change it mainly for debugging and prototyping. */
+void sysFun (void) {
+	//vmDebugDumpCode(r1c, stderr);
+	memDebugDumpYoungHeap(stderr);
+	memDebugDumpHeapHeaders(stderr);
+}
 
 void sysDumpEnv (void) {
 	// Dump environment to stdout
@@ -2292,22 +2282,49 @@ void sysTime (void) {
 	DB("<--%s\n", __func__);
 }
 
-Int catchSignalFlag=0;
+#define MAX_SIGNAL_VALUE 32
+Int caughtSignals[MAX_SIGNAL_VALUE]={0};
 
-void catch_signal (int s) {
-	if (catchSignalFlag==0 && memGCFlag==0) {
-		catchSignalFlag=1;
-		//Create new thread by calling the function in global signal handler vector.
-		//Do something similar to compThread perhaps?
-		r1=signalhandlers;  wscmTGEFind(); r0=car(r0);
-		r1 = memVectorObject(r0, s);
-		r0 = car(r1);
-		// Hack:  replace inital opcode with NOP since closure obj code expects the closure to be passed in via r0 as well.
-		memVectorSet(r0, 3, NOP);
-		memVectorSet(r0, 4, NOP);
-		wscmNewThread();
-		catchSignalFlag=0;
+/* This function passed to the virtual machine module during initialization
+   and is called periodically to reschedule a new thread.
+*/
+void sysSchedule (void) {
+ Int i=0;
+	DB("-->%s", __func__);
+
+	for (; i < MAX_SIGNAL_VALUE; ++i)
+		/* Spawn new signal handler thread.  Function exist in global signal-handler vector.*/
+		if (caughtSignals[i]) {
+			caughtSignals[i]=0;
+			push(r0); /* Save state */
+			push(r1);
+				r1=signalhandlers;  wscmTGEFind(); r0=car(r0);
+				r1 = memVectorObject(r0, i);
+				r0 = car(r1);
+				/* Hack:  replace inital opcode with NOP since closure obj
+				   code expects the closure to be passed in via r0 as well.
+				   TODO: BF: IS THIS STILL REQUIRD? */
+				memVectorSet(r0, 3, NOP);
+				memVectorSet(r0, 4, NOP);
+				wscmNewThread();
+			r1=pop();
+			r0=pop();
+		}
+
+	/* If just a single thread in existence, leave it alone and just continue on. */
+	if ((Int)memVectorObject(threads, 0) != 1 || !wscmIsQueueEmpty(sleeping)) {
+		// TODO: BF: If signal queue not empty..spawn signal hander threads.
+		wscmUnRun();
+		wscmSchedule();
 	}
+
+	DB("<--%s", __func__);
+}
+
+void catchSignal (int sig) {
+	assert(0 < sig && sig < MAX_SIGNAL_VALUE);
+	caughtSignals[sig]=1;
+	interrupt=1; /* Let virtual machine know an interrupt occured. */
 }
 
 void sysSignal (void) {
@@ -2316,7 +2333,7 @@ void sysSignal (void) {
 */
 	DB("-->%s\n", __func__);
 	if (wscmAssertArgumentCount(1, __func__)) return;
-	signal((int)(*(Num*)pop()), catch_signal);
+	signal((int)(*(Num*)pop()), catchSignal);
 	DB("<--%s\n", __func__);
 }
 
@@ -2582,8 +2599,15 @@ void wscmCreateRead (void) {
 	r1=r0;
 
 	/* r5 eventually gets a new token string buffer (copied from this) when the
-		following code runs. */
-	objNewString((u8*)"----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------", 640);
+		following code runs.  BF: TODO: Implement as a dynamic buffer.*/
+	objNewString((u8*)"--------------------------------------------------------------------------------"
+	                  "--------------------------------------------------------------------------------"
+	                  "--------------------------------------------------------------------------------"
+	                  "--------------------------------------------------------------------------------"
+	                  "--------------------------------------------------------------------------------"
+	                  "--------------------------------------------------------------------------------"
+	                  "--------------------------------------------------------------------------------"
+	                  "--------------------------------------------------------------------------------", 640);
 	r2=r0;
 	objNewString((Str)"ParserMain",10);
 	asmAsm (
@@ -2690,7 +2714,7 @@ void wscmInitialize (void) {
 	memObjStringSet(objCopyInteger);
 	memObjStringSet(sysCreateContinuation);
 
-	objInitialize(wscmInterruptHandler);
+	objInitialize(sysSchedule);
 
 	/* Create empty thread vector.  All active threads are assigned a number
 	   and stored here for easy constant time lookup. */

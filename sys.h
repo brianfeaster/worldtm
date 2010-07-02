@@ -39,10 +39,12 @@ void wscmSleepThread (void);
 void wscmScheduleSleeping (void);
 void wscmScheduleBlocked (void);
 void wscmSchedule (void);
-void wscmInterruptHandler (void);
 void wscmError (void);
 void sysUnthread (void);
 void sysOpen (void);
+void sysSchedule (void);
+void catchSignal (int sig);
+void sysSignal (void);
 void wscmDefine (char* sym);
 void wscmInitialize (void);
 
