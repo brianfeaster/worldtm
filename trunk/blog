@@ -1804,8 +1804,7 @@ function should keep a copy for itself then set it at the end.
 
 
 Sun Jun  6 00:17:53 EDT 2010
-
-code:r1c retcode:r1e stack r1f
+code r1c  retcode r1e  stack r1f
 
 call memDebugDumpHeapHeaders(0)
 call wscmWrite(r1f, 0, 1)
@@ -1885,3 +1884,76 @@ YOUNG HEAP
 7ffff7407150 0a INTEGER   8 (1 0 0 0 0 0 0 0)
 7ffff7407160 0a INTEGER   8 (1 0 0 0 0 0 0 0)
 
+
+Sat Jul  3 15:57:10 EDT 2010
+
+Functions now exist for debugging code block and the stack.  What needs to
+happen is automatic dumps of the stacks, threads, blocks and VM structures
+and stored locally.
+
+World will crash when user is idle and cell animation is enabled.  Currently
+water is the only animated cell.  After a while a C segmentation fault
+occurs duing a syscall to sysNotEquals.  Something is corrupting the stack
+which is expected to have the arguments to != passed.  The NewThread C
+function clobbers register 2 which I didn't save during the periodic
+schedule call function.  We'll see what happens.
+
+Something is corrupting at least registers R1 and R2 with immediate values.
+In this case 0x7e and 0x2 respectively.  I have a feeling it's with parsing
+and I/O scheduling.
+
+CURRENT BLOCK                           TERMINAL:gputc
+Stack 2 850000000000023f  7ffff4c78e60  WINDOW:PUTCHAR first let block
+Stack 5 8500000000000242  7ffff4c1b3d8  WINDOW:PUTCHAR
+Stack 8 85000000000002fc  7ffff4bfb5b0  WORLD:WinMapPutGlyph 
+Stack 11 8500000000000194 7ffff4c11100  WORLD::viewportReset first let block
+Stack 14 85000000000001ae 7ffff4c10358  WORLD::viewportReset
+Stack 17 850000000000009d 7ffff4c0fe48  WORLD:cell animation thread
+
+
+Fri Jul  9 20:05:34 EDT 2010
+
+call memDebugDumpHeapHeaders(0)
+call sysDumpCallStackCode()
+
+call vmDebugDumpCode(r1c, stdout)
+call vmDebugDumpCode(r1e, stdout)
+
+call memRbufDump()
+call wscmDumpEnv(r16)
+call wscmWrite(r1f, 0, 1)
+call wscmDumpTGE()
+
+
+Sun Jul 11 20:23:04 EDT 2010
+
+Improved dumps of the stack which now include each pushed code string and
+their environment chain.  I have narrowed down the current World idle crash
+issue to a courrupted vector.  Specifically the CANVAS global variable's
+vector of vectors is becomming corrupt which results in invalid object
+pointers being passed to map rendering functions eventually.
+
+I believe the issue is either with the garbage collector or atom mutators.
+
+   [ Glitter as presented by Alex on Facebook .~.*.`~;`*'~ `.'*~` ]
+
+After a full garbage collection the CANVAS vector seems to be corrupt.
+I need to verify it is indeed after a full collection.  I'll verify using
+the new internal ring buffer debug mechanism.
+
+
+Mon Jul 12 10:45:16 EDT 2010
+
+The corruption is occuring during a regular (young only) garbage collection.
+I will verify the CANVAS object before and after each GC now.
+
+
+Wed Jul 14 03:25:24 EDT 2010
+
+Nothing was wrong with wscheme.  The issue was a conditional that queried
+time directly in the test expression then called time again in the consequent
+expression.
+
+The byproduct of the debugging are decent environment dumps.  One call will
+dump the current environment, caller environment then the remaining
+environments pushed to the stack excluding the global environment.

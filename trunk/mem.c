@@ -1,5 +1,6 @@
 #define DEBUG 0
 #define DEBUG_ASSERT 0
+#define DEBUG_ASSERT_VECTOR 1
 #define VALIDATE_HEAP 0
 #define DB_MODULE "MEM "
 #include "debug.h"
@@ -374,9 +375,8 @@ void memArraySet (Obj obj, Num offset, u8 item) {
 }
 
 void memVectorSet (Obj obj, Num offset, Obj item) {
-	#if DEBUG_ASSERT
-	if (!(memIsObjectInHeap(&heap, obj) || memIsObjectInHeap(&heapOld, obj)
-	      || memIsObjectInHeap(&heapStatic, obj))) {
+	#if DEBUG_ASSERT_VECTOR
+	if (!memIsObjectValid(obj)) {
 		DB ("ERROR memVectorSet(obj "OBJ" offset "NUM" item "OBJ") Invalid object.",
 		    obj, offset, item);
 		memError();
@@ -477,7 +477,7 @@ u8 memArrayObject (Obj obj, Num offset) {
 }
 
 Obj memVectorObject (Obj obj, Num offset) {
-	#if DEBUG_ASSERT
+	#if DEBUG_ASSERT_VECTOR
 	if (!(memIsObjectInHeap(&heap, obj)
 	      || memIsObjectInHeap(&heapOld, obj)
 	      || memIsObjectInHeap(&heapStatic, obj))) {
@@ -545,6 +545,25 @@ unsigned memPointerOffset (Obj obj) {
 	return (Obj*)memVectorObject(obj, 0) - (Obj*)memVectorObject(obj, 1);
 }
 
+
+/* Ring buffer.  Used for debugging internal behavior.
+*/ 
+const Int RBUFMAX=0x100;
+Int rbufi=0;
+Int rbuf[0x100]={0};
+const Int RBUFTOP=-1;
+
+void memRbufDump (void) {
+ Int i;
+	for (i=0; i<RBUFMAX; ++i)
+		fprintf (stderr, INT" ", rbuf[i]);
+}
+
+void memRbufAdd (Int p) {
+	rbuf[rbufi++]=p;
+	if (rbufi==RBUFMAX) rbufi=0;
+	rbuf[rbufi]=RBUFTOP;
+}
 
 
 /* Given pointer to an object, move object into the new heap and update
@@ -653,6 +672,7 @@ void memGarbageCollectInternal (Descriptor desc, Num byteSize) {
 		memDebugDumpObject(r1f, stream);
 	}
 #endif
+	//memRbufAdd(GarbageCollectionMode+10); // BF: TODO: Temporary debugging.
 
 	/* Verify no recursive call. */
 	assert(memGCFlag==0);
@@ -1199,11 +1219,11 @@ void memInitialize (Func preGC, Func postGC) {
 
 
 void memError (void) {
-	fprintf (stderr, "\nHalted on error.  Want a Heap dump (y/n)?");
+	fprintf (stderr, "\nHalted on memory module error.\n");
 	//memDebugdumpAll();
-	r0=code;
-//	vmDebugDumpCode();
-	if (getchar()=='y') memDebugDumpAll(NULL);
+	//r0=code;
+	//	vmDebugDumpCode();
+	//if (getchar()=='y') memDebugDumpAll(NULL);
 	*(int*)0 = 1; // Force a crash.
 	//exit(-1);
 }
