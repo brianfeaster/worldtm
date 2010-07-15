@@ -15,6 +15,10 @@
 ; Now that kernel semaphores are implemented, need to
 ; block not on a call to display but the port.
 
+; Keep track of internal implemenations.
+(define sdisplay display)
+(define swrite write)
+
 (define (display-list-serialize-list o r)
   (display-list-serialize
      (car o) (if (pair? (cdr o))
@@ -110,6 +114,8 @@
 (define (integer->char i) (vector-ref characters i))
 
 (define CHAR-CTRL-@ (integer->char #x00))
+(define CHAR-CTRL-A (integer->char #x01))
+(define CHAR-CTRL-B (integer->char #x01))
 (define CHAR-CTRL-C (integer->char #x03))
 (define CHAR-CTRL-F (integer->char #x06))
 (define CHAR-CTRL-G (integer->char #x07))
@@ -118,6 +124,7 @@
 (define NEWLINE     (integer->char #x0a))
 (define CHAR-CTRL-K (integer->char #x0b))
 (define CHAR-CTRL-L (integer->char #x0c))
+(define CHAR-CTRL-M (integer->char #x0d))
 (define RETURN      (integer->char #x0d))
 (define CHAR-CTRL-Q (integer->char #x11))
 (define CHAR-CTRL-W (integer->char #x17))
@@ -163,6 +170,12 @@
          (l (string-length s)))
   (if (= i l) '()
       (cons (string-ref s i) (~ (+ i 1) l)))))
+
+(define (vector->list v)
+ (let ~ ((i 0)
+         (l (vector-length v)))
+  (if (= i l) '()
+      (cons (vector-ref v i) (~ (+ i 1) l)))))
 
 ; Returns a pair containing the string split on the first delimeter character.
 ;   (strtok "abc-123" #\-)  =>  ("abc" . "123")

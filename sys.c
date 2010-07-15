@@ -44,7 +44,7 @@ Int wscmAssertArgumentCount (Num count, const char *functionName) {
 		fprintf(stderr, "\r\nERROR: Expecting %u arguments (%s",count,functionName);
 	for (i=0; i<(Num)r1; i++) {
 		write(1, " ", 1);
-		wscmWrite(memStackObject(stack,(Num)r1-i-1), 0, 1);
+		wscmWrite(memStackObject(stack,(Num)r1-i-1), stderr);
 	}
 	write(1, ")\r\n", 3);
 	/* Pop args from stack. */
@@ -60,7 +60,7 @@ Int wscmAssertArgumentCountRange (Num min, Num max, const char *functionName) {
 	fprintf(stderr, "\r\nERROR: Expecting %u to %u arguments (%s",min,max,functionName);
 	for (i=0; i<(Num)r1; i++) {
 		write(1, " ", 1);
-		wscmWrite(memStackObject(stack,(Num)r1-i-1), 0, 1);
+		wscmWrite(memStackObject(stack,(Num)r1-i-1), stderr);
 	}
 	write(1, ")\r\n", 3);
 	/* Pop args from stack. */
@@ -79,7 +79,7 @@ Int wscmAssertArgumentCountMin (Num min, const char *functionName) {
 		fprintf(stderr, "\r\nERROR: Expecting at least %u arguments (%s",min,functionName);
 	for (i=0; i<(Num)r1; i++) {
 		write(1, " ", 1);
-		wscmWrite(memStackObject(stack,(Num)r1-i-1), 0, 1);
+		wscmWrite(memStackObject(stack,(Num)r1-i-1), stderr);
 	}
 	write(1, ")\r\n", 3);
 	/* Pop args from stack. */
@@ -123,129 +123,136 @@ void wscmSerializeInteger (Int num, Int base) {
 	DB("<--%s", __func__);
 }
 
-void wscmWrite (Obj a, long islist, Int fd) {
- static char buff[64];
- Int i, len;
- Int ok=0;
-	if ((Num)a < 0x100000) {
-		i = sprintf(buff, "#<"HEX">", a);
-		write(fd, buff, i);
-	}
+Int wscmWriteR (Obj a, long islist, FILE *stream, Int max) {
+ Int i, count=0;
+
+	if (NULL==stream) stream=stderr;
+
+	if (max <= 0) count += fprintf (stream, "...");
+	else if (!memIsObjectValid(a)) count += fprintf(stream, "#<"HEX">", a);
 	else switch (memObjectType(a)) {
 		case TFALSE:
-			write (fd, "#f", 2);
+			count += fprintf(stream, "#f");
 			break;
 		case TTRUE:
-			write (fd, "#t", 2);
+			count += fprintf(stream, "#t");
 			break;
 		case TNULL:
-			write (fd, "()", 2);
+			count += fprintf(stream, "()");
 			break;
 		case TNULLVEC:
-			write (fd, "#()", 3);
+			count += fprintf(stream, "#()");
 			break;
 		case TNULLSTR:
-			write (fd, "\"\"", 2);
+			count += fprintf(stream, "\"\"");
 			break;
 		case TEOF:
-			write (fd, "#eof", 4);
+			count += fprintf(stream, "#eof");
 			break;
 		case TCHAR:
-			write (fd, "#\\", 2);
-			write (fd, a, 1);
+			 switch (*(char*)a) {
+				case '\a'   : count += fprintf(stream, "\\bell");  break;
+				case '\033' : count += fprintf(stream, "\\esc");  break;
+				case '\233' : count += fprintf(stream, "\\csi");  break; /* CSI character.  ESC + 8th bit*/
+				case '\n'   : count += fprintf(stream, "\\newline");  break;
+				case '\r'   : count += fprintf(stream, "\\return");  break;
+				case '\t'   : count += fprintf(stream, "\\tab");  break;
+				case '\v'   : count += fprintf(stream, "\\vtab");  break;
+				case ' '   : count += fprintf(stream, "\\space");  break;
+				default     : count += fprintf(stream, "#\\%c", *(char*)a);
+			}
 			break;
 		case TSTRING:
-			write (fd, "\"", 1);
+			count += fprintf(stream, "\"");
 			for (i=0; i<memObjectLength(a); i++)
 			 switch (((char*)a)[i]) {
-				case '\\'   : write(fd, "\\\\", 2); break;
-				case '\"'   : write(fd, "\\\"", 2); break;
-				case '\a'   : write(fd, "\\a", 2);  break;
-				case '\033' : write(fd, "\\e", 2);  break;
-				case '\233' : write(fd, "\\c", 2);  break;
-				case '\n'   : write(fd, "\\n", 2);  break;
-				case '\r'   : write(fd, "\\r", 2);  break;
-				case '\t'   : write(fd, "\\t", 2);  break;
-				case '\v'   : write(fd, "\\v", 2);  break;
-				default     : write(fd, (char*)a+i, 1);
+				case '\\'   : count += fprintf(stream, "\\\\"); break;
+				case '\"'   : count += fprintf(stream, "\\\""); break;
+				case '\a'   : count += fprintf(stream, "\\a");  break;
+				case '\033' : count += fprintf(stream, "\\e");  break;
+				case '\233' : count += fprintf(stream, "\\c");  break; /* CSI character.  ESC + 8th bit*/
+				case '\n'   : count += fprintf(stream, "\\n");  break;
+				case '\r'   : count += fprintf(stream, "\\r");  break;
+				case '\t'   : count += fprintf(stream, "\\t");  break;
+				case '\v'   : count += fprintf(stream, "\\v");  break;
+				default     : count += fprintf(stream, "%c", ((char*)a)[i]);
 			 }
-			write (fd, "\"", 1);
+			count += fprintf(stream, "\"");
 			break;
 		case TSYMBOL:
-			write (fd, a, memObjectLength(a));
+			count += fwrite(a, 1, memObjectLength(a), stream);
 			break;
 		case TINTEGER:
-			len = sprintf(buff, INT, *(Int*)a);
-			write(fd, buff, len);
+			count += fprintf(stream, INT, *(Int*)a);
 			break;
 		case TREAL: 
-			len = sprintf(buff, REAL, *(Real*)a);
-			write(fd, buff, len);	
+			count += fprintf(stream, REAL, *(Real*)a);
 			break;
 	 	case TPAIR:
-			if (!islist) write (fd, "(", 1);
-			wscmWrite(car(a), 0, fd);
+			if (!islist) count += fprintf(stream, "(");
+			count += wscmWriteR(car(a), 0, stream, max-count);
 			if (TPAIR == memObjectType(cdr(a))) {
-				write (fd, " ", 1);
-				wscmWrite(cdr(a), 1, fd);
+				count += fprintf(stream, " ");
+				count += wscmWriteR(cdr(a), 1, stream, max-count);
 			} else {
 				if (cdr(a)!=null) {
-					write (fd, " . ", 3);
-					wscmWrite(cdr(a), 0, fd);
+					count += fprintf(stream, " . ");
+					count += wscmWriteR(cdr(a), 0, stream, max-count);
 				}
 			}
-      	if (!islist) write (fd, ")", 1);
+      	if (!islist) count += fprintf(stream, ")");
 			break;
 		case TVECTOR:
-			ok += (write (fd, "#(", 2) < 1);
-			for (i=0; i<memObjectLength(a); i++) {
-				if (i) (ok += write (fd, " ", 1) < 1);
-				wscmWrite(memVectorObject(a, i), 0, fd);
+			count += fprintf(stream, "#(");
+			for (i=0; i<memObjectLength(a) && count < max; i++) {
+				if (i) count += fprintf(stream, " ");
+				count += wscmWriteR(memVectorObject(a, i), 0, stream, max-count);
 			}
-			ok += (write (fd, ")", 1) < 1);
+			if (count > max) count += fprintf(stream, "...");
+			count += fprintf(stream, ")");
 			break;
 		case TCLOSURE:
-			len=sprintf (buff, "#CLOSURE<CODE "HEX"  ENV:"HEX">", car(a), cdr(a));
-			write(fd, buff, len);
+			count += fprintf(stream, "#CLOSURE<CODE "HEX"  ENV "HEX">", car(a), cdr(a));
 			break;
 		case TCONTINUATION:
+			count += fprintf(stream, "#CONTINUATION<"HEX">", a);
 			break;
 		case TCODE:
-			len = sprintf(buff, "#CODE<"HEX">", a);
-			write(fd, buff, len);
+			count += fprintf(stream, "#CODE<"HEX">", a);
 			break;
 		case TPORT:
 		case TSOCKET:
-			write(fd, "#SOCKET<", 8);
-			wscmWrite (memVectorObject(a, 0), 0, fd);
-			write(fd, " ", 1);
-			wscmWrite (memVectorObject(a, 1), 0, fd);
-			write(fd, " ", 1);
-			wscmWrite (memVectorObject(a, 2), 0, fd);
-			write(fd, " ", 1);
-			wscmWrite (memVectorObject(a, 3), 0, fd);
-			write(fd, " ", 1);
-			wscmWrite (memVectorObject(a, 4), 0, fd);
-			write(fd, ">", 1);
+			count += fprintf(stream, "#SOCKET< DESC ");
+			count += wscmWriteR(memVectorObject(a, 0), 0, stream, max);
+			count += fprintf(stream, "  ADDR ");
+			count += wscmWriteR(memVectorObject(a, 1), 0, stream, max);
+			count += fprintf(stream, "  PORT ");
+			count += wscmWriteR(memVectorObject(a, 2), 0, stream, max);
+			count += fprintf(stream, "  STATE ");
+			count += wscmWriteR(memVectorObject(a, 3), 0, stream, max);
+			count += fprintf(stream, "  NEXT ");
+			count += wscmWriteR(memVectorObject(a, 4), 0, stream, max);
+			count += fprintf(stream, ">");
 			break;
 		case TSYSCALL:
-			i = sprintf(buff, "#SYSCALL<"OBJ">", a);
-			write(fd, buff, i);
+			count += fprintf(stream, "#SYSCALL<"OBJ">", a);
 			break;
 		case TSTACK :
-			len = sprintf(buff, "#[%x |", memStackLength(a));
-			write(fd, buff, len);
+			count += fprintf(stream, "#[%x |", memStackLength(a));
 			for (i=0; i<memStackLength(a); i++) {
-				len=sprintf(buff, " "HEX, memStackObject(a, memStackLength(a)-i-1));
-				write(fd, buff, len);
+				count += fprintf(stream, " "HEX, memStackObject(a, memStackLength(a)-i-1));
 			}
-			write(fd, "]", 1);
+			count += fprintf(stream, "]");
 			break;
 	 	default:
-			len = sprintf(buff, "#???<"HEX">", a);
-			write(fd, buff, len);
+			count += fprintf(stream, "#???<"HEX">", a);
 	}
+
+	return count;
 }
+
+Int wscmWrite    (Obj a, FILE *stream) { return wscmWriteR (a, 0, stream, LONG_MAX); }
+Int wscmWriteMax (Obj a, FILE *stream, Int max) { return wscmWriteR (a, 0, stream, max); }
 
 void wscmDisplay (Obj a, long islist, int fd) {
  static char buff[64];
@@ -350,34 +357,40 @@ void wscmDisplay (Obj a, long islist, int fd) {
 	}
 }
 
+void wscmDumpTGE () {
+ Obj o;
+ Int len;
+	o = tge;
+	fprintf (stderr, "\n----TGE "OBJ"------------------------------------", o);
+	while (o != null) {
+		fprintf (stderr, "\n"OBJ" ", caar(o));
+		len=wscmWrite (cdar(o), stderr);
+		fprintf(stderr, "                "+((len<17)?len-1:15));
+		wscmWriteMax (caar(o), stderr, 80);
+		o=cdr(o);
+	}
+	fprintf (stderr, "\n\\------------------------------------------------------\n");
+}
+
 void wscmDumpEnv (Obj o) {
  Obj formals;
- Int i;
-	DB(TAB0"::%s", __func__);
+ Int i, len;
+
+	if (o==tge) fprintf (stderr, "\n----TGE "OBJ"------------------------------------\n...", o);
+
 	while (o!=tge) {
 		formals = memVectorObject(o, 1);
-		fprintf (stderr, "\n\e[3g+---ENV------------ˆ--------ˆ--------ˆ--------ˆ--------ˆ-----ˆ");
-		DBE wscmWrite(formals, 0, 1);
+		fprintf (stderr, "\n----ENV "OBJ"------------------------------------", o);
 		for (i=2; memObjectType(formals) == TPAIR; i++) {
-			fprintf (stderr, "\n| ");
-			wscmWrite (car(formals), 0, 2);
-			fprintf (stderr, "\t");
-			wscmWrite (memVectorObject(o, i), 0, 2);
+			fprintf (stderr, "\n"OBJ" ", memVectorObject(o, i));
+			len=wscmWrite (car(formals), stderr);
+			fprintf(stderr, "                "+((len<17)?len-1:15));
+			wscmWriteMax (memVectorObject(o, i), stderr, 80);
 			formals = cdr(formals);
 		}
 		o=memVectorObject(o, 0);
 	}
-	o = cdr(o);
-	fprintf (stderr, "\n+---TGE-------------------------------------------------");
-	while (o != null) {
-		fprintf (stderr, "\n| ");
-		wscmWrite (cdar(o), 0, 2);
-		fprintf (stderr, "\t");
-		wscmWrite (caar(o), 0, 2);
-		o=cdr(o);
-	}
 	fprintf (stderr, "\n\\------------------------------------------------------\n");
-	DB(TAB1"--%s", __func__);
 }
 
 
@@ -391,17 +404,17 @@ void wscmDumpEnv (Obj o) {
 */
 void wscmTGEFind (void) {
 	DB("ENV     -->wscmTGEFind <= ");
-	DBE wscmWrite(r1, 0, 2);
+	DBE wscmWrite(r1, stderr);
 	/* Scan over the list of (value . symbol) pairs. */
 	for (r0=cdr(tge); r0!=null; r0=cdr(r0)) {
-		//DBE wscmWrite(car(r0), 0, 2);
+		//DBE wscmWrite(car(r0), stderr);
 		if (cdar(r0) == r1) {
 			r0 = car(r0);
 			break;
 		}
 	}
 	DB("ENV     <--wscmTGEFind => ");
-	DBE wscmWrite(r0, 0, 2);
+	DBE wscmWrite(r0, stderr);
 }
 
 /* Given a symbol in r1, bind it to a new location if it doesn't already
@@ -418,7 +431,7 @@ void wscmTGEBind (void) {
 		memVectorSet(tge, 1, r0);
 		r0 = r1; /* return binding. */
 		DB("ENV    Added binding ");
-		DBE wscmWrite(cdr(r0), 0, 2);
+		DBE wscmWrite(cdr(r0), stderr);
 	}
 	DB("ENV <--wscmTGEBind");
 }
@@ -430,16 +443,16 @@ void wscmTGEBind (void) {
 Int wscmEnvFind (void) {
  Int ret, depth=0, offset;
 	DB("COMP -->wscmEnvFind: ");
-	DBE wscmWrite(r1, 0, 2);
+	DBE wscmWrite(r1, stderr);
 	push(env);
 	while (env != tge) {
 		DB("        Examining env: ");
-		DBE wscmWrite(cdr(env), 0, 2);
+		DBE wscmWrite(cdr(env), stderr);
 		/* Start at 2 since local environment values start at offset 2. */
 		offset=2;
 		for (r0=cdr(env); memObjectType(r0) == TPAIR; r0=cdr(r0)) {
 			DB("        looking at:");
-			DBE wscmWrite(car(r0), 0, 2);
+			DBE wscmWrite(car(r0), stderr);
 			if (car(r0) == r1) { /* Pseudo env ( ^ a b c), so just check car */
 				ret = (depth<<8) | offset;
 				DB("        found in local environment");
@@ -672,7 +685,7 @@ void wscmAcceptLocalStream (void) {
  Int ld, fd2;
  char *name;
 	DB("SYS -->wscmAcceptLocalStream <=");
-	DBE wscmWrite(r1, 0, 2);
+	DBE wscmWrite(r1, stderr);
 	ld = (Int)memVectorObject(r1, 0);
 	salen = sizeof(struct sockaddr);
 	if (-1 == (fd2=accept(ld, &sa, &salen))) {
@@ -723,9 +736,9 @@ void wscmRecv (void) {
  u8 buffer[0x2000];
  Int ret=0, len;
 	DB("SYS -->wscmRecv <= ");
-	//DBE wscmWrite(r1, 0, 1);
-	//DBE wscmWrite(r2, 0, 1);
-	//DBE wscmWrite(r3, 0, 1);
+	//DBE wscmWrite(r1, stderr);
+	//DBE wscmWrite(r2, stderr);
+	//DBE wscmWrite(r3, stderr);
 
 	/* Port is open and data is flowing. */
 	if (memVectorObject(r1, 3) == sopen) {
@@ -790,7 +803,7 @@ void wscmRecv (void) {
 	}
 
 	DB("SYS <--wscmRecv => r0=%x", r0);
-	//DBE wscmWrite (r0, 0, 2);
+	//DBE wscmWrite (r0, stderr);
 }
 
 /* Called by sysRecv or VM syscall instruction.
@@ -816,9 +829,9 @@ void wscmRecvBlock (void) {
 void wscmSend (void) {
  Int ret, len;
 	DB("-->%s : ", __func__);
-	//DB("   r1 "); DBE wscmWrite(r1, 0, 2);
-	//DB("   r2 "); DBE wscmWrite(r2, 0, 2);
-	//DB("   r3 "); DBE wscmWrite(r3, 0, 2);
+	//DB("   r1 "); DBE wscmWrite(r1, stderr);
+	//DB("   r2 "); DBE wscmWrite(r2, stderr);
+	//DB("   r3 "); DBE wscmWrite(r3, stderr);
 
 	if (r2 == nullstr) r0=nullstr;
 	/* Port is open and data is flowing. */
@@ -902,20 +915,18 @@ void wscmMoveToQueue (Obj thread, Obj queue, Obj state) {
 }
 
 /* Create a new thread who's code is passed in r0.
+	Uses: r0 r1 r2
 */
 void wscmNewThread (void) {
- Int id=1; /* Thread table's first entry is thread count. */
-	DB("OS -->wscmNewThread");
-	/* Find next available thread id. */
-	while (memVectorObject(threads, id) != null) {
-		id++;
-		if (id > MAX_THREADS) {
-			fprintf (stderr, "ERROR: wscmNewThread: At %d thread limit.\r\n",
-			         MAX_THREADS);
-			return;
-		}
-	}
+ Int id;
+	DB("-->%s", __func__);
+
+	/* Find next available thread id.  Thread table's initial entry
+	   is the count so index range is 1 to MAX_THREADS inclusive. */
+	for (id=1; memVectorObject(threads, id) != null; ++id);
+	assert(id <= MAX_THREADS);
 	DB("\nOS    Thread id: %d\n", id);
+
 	r1=r0; /* Move code block to r1. */
 	/* Create thread's stack (in an un-running state). */
 	memNewStack(); r2=r0;
@@ -952,7 +963,7 @@ void wscmNewThread (void) {
 	wscmInsertThread (r0, running);
 
 	objNewInt(id);
-	DB("OS <--wscmNewThread:%d", id);
+	DB("<--%s id:"INT, __func__, id);
 }
 
 Obj wscmThreadStack (Obj t) { return memVectorObject (t, 0); }
@@ -971,29 +982,29 @@ Int wscmQueueCount (Obj q) {
 */
 void wscmUnRun (void) {
  Obj threadDescriptor;
-	DB("OS -->wscmUnRun()");
-	/* Set thread's state as ready (not running). */
+	DB("-->%s", __func__);
+
+	/* Verify thread is in runningstate then change to ready state. */
 	threadDescriptor = car(running);
-	if (memVectorObject(threadDescriptor, 2) != srunning) {
-		printf ("WARNING: wscmUnRun: not a running thread.\a\n");
-	} else {
-		memVectorSet(threadDescriptor, 2, sready);
-		push (env);
-		push (ip);
-		push (code);
-		push (retenv);
-		push (retip);
-		push (retcode);
-		push (r7);
-		push (r6);
-		push (r5);
-		push (r4);
-		push (r3);
-		push (r2);
-		push (r1);
-		push (r0);
-	}
-	DB("OS <--wscmUnRun()");
+	assert(memVectorObject(threadDescriptor, 2) == srunning);
+	memVectorSet(threadDescriptor, 2, sready);
+
+	push (env);
+	push (ip);
+	push (code);
+	push (retenv);
+	push (retip);
+	push (retcode);
+	push (r7);
+	push (r6);
+	push (r5);
+	push (r4);
+	push (r3);
+	push (r2);
+	push (r1);
+	push (r0);
+
+	DB("<--%s", __func__);
 }
 
 /* Make running thread ready for the VM.  Pop all the saved registers. */
@@ -1022,7 +1033,7 @@ void wscmRun (void) {
 		memVectorSet(car(running), 2, srunning);
 	}
 	DB("OS <--wscmRun() => ");
-	DBE wscmWrite(car(running), 0, 2);
+	DBE wscmWrite(car(running), stderr);
 }
 
 /* Put thread on sleep list.  Stack contains the millisecond count to sleep.
@@ -1312,8 +1323,8 @@ void sysDumpEnv (void) {
 
 void sysDumpStack (void) {
 	write (1, "\n", 1);
-	wscmWrite(stack, 0, 1);
-	//wscmWrite(symbols, 0, 1);
+	wscmWrite(stack, stderr);
+	//wscmWrite(symbols, stderr);
 	//memDebugDumpHeapStructures();
 }
 
@@ -1383,7 +1394,7 @@ void sysCreateContinuation (void) {
 }
 
 void sysDumpThreads (void) {
-	wscmWrite(threads, 0, 1);
+	wscmWrite(threads, stderr);
 }
 
 void sysString (void) {
@@ -1559,10 +1570,17 @@ void sysNumber2String (void) {
 */
 void sysWrite (void) {
  Int fd=1;
+ FILE *stream=NULL;
 	DB("SYS -->sysWrite");
+
 	if (wscmAssertArgumentCountRange(1, 2, __func__)) return;
-	if ((Int)r1==2) fd=*(Int*)pop(); /* Descriptor. */
-	wscmWrite(r0=pop(), 0, fd);
+	if ((Int)r1==2) fd=*(Int*)pop(); /* File descriptor. */
+
+	if (fd==1) stream = stdout;
+	if (fd==2) stream = stderr;
+	assert(NULL != stream);
+
+	wscmWrite(r0=pop(), stream);
 	DB("SYS <--sysWrite");
 }
 void sysDisplay (void) {
@@ -1623,7 +1641,7 @@ void sysEquals (void) {
 void sysEqP (void) {
 	DB("-->%s", __func__);
 	if (wscmAssertArgumentCount(2, __func__)) return;
-	r0 = pop() == pop() ? true : false;
+	r0 = (pop() == pop()) ? true : false;
 	DB("<--%s", __func__);
 }
 
@@ -1640,9 +1658,14 @@ void sysStringEqualsP (void) {
 }
 
 void sysNotEquals (void) {
+ Int a, b;
 	DB("SYS -->sysNotEquals");
 	if (wscmAssertArgumentCount(2, __func__)) return;
-	r0 = (*(Int*)pop() != *(Int*)pop()) ? true : false;
+	r1=pop();
+	a = *(Int*)r1;
+	r2=pop();
+	b = *(Int*)r2;
+	r0 = (a != b) ? true : false;
 	DB("SYS <--sysNotEquals");
 }
 
@@ -1879,7 +1902,7 @@ void sysClose(void) {
    number of bytes.
 */
 void sysRecv (void) {
-	DB("SYS -->sysRecv");
+	DB("::%s", __func__);
 
 	/* r1 gets port object. */
 	r1=pop();
@@ -1900,7 +1923,7 @@ void sysRecv (void) {
 	} else {
 		wscmRecvBlock();
 	}
-	DB("SYS <--sysRecv");
+	DB("  --%s", __func__);
 }
 
 void sysReadChar (void) {
@@ -1989,11 +2012,11 @@ void sysIllegalOperator (void) {
  Int i;
 	fprintf (stderr, "ERROR: Illegal expression ");
 	write(2, "(", 1);
-	wscmWrite (r0, 0, 2);
+	wscmWrite (r0, stderr);
 	i=(Int)r1;
 	while (i--) {
 		write (2, " ", 1);
-		wscmWrite (memStackObject(stack, i), 0, 2);
+		wscmWrite (memStackObject(stack, i), stderr);
 	}
 	write(2, ")", 1);
 	/* Dump virtual machine state and code block. */
@@ -2012,7 +2035,7 @@ void sysTGELookup (void) {
 	wscmTGEFind();
 	if (r0 == null) {
 		fprintf (stderr, "\nERROR: sysTGELookup() Unbound symbol:");
-		wscmWrite(r1, 0, 2);
+		wscmWrite(r1, stderr);
 		fprintf (stderr, ".\n");
 		r0 = r1;
 		// TODO  Kill thread, stop machine, return to monitor/shell?
@@ -2037,7 +2060,7 @@ void sysTGEMutate (void) {
 	wscmTGEFind();
 	if (r0 == null) {
 		write (2, "ERROR: sysTGEMutate(): Unbound symbol: ", 37);
-		wscmWrite(r1, 0, 2);
+		wscmWrite(r1, stderr);
 		r0 = r2; /* Return value. */
 		// TODO  Kill thread, stop machine, return to monitor/shell?
 	} else {
@@ -2107,8 +2130,8 @@ void sysVectorLength (void) {
 */
 void sysTransition (void) {
 	DB(TAB0"::"STR" r2=%x r4=%x", __func__, r2, r4);
-	//DBE wscmWrite (r2, 0, 2);
-	//DBE wscmWrite (r4, 0, 2);
+	//DBE wscmWrite (r2, stderr);
+	//DBE wscmWrite (r4, stderr);
 	/* Make the transition on char in r2 given state in r4. */
 	r4 = (Obj)transition(*(Num*)r2, (Num)r4);
 	DB(TAB1"transition to state => "HEX, r4);
@@ -2125,8 +2148,8 @@ void sysTransition (void) {
 		r0=r4;
 	}
 	DB(TAB1"--"STR" final state r0="HEX, __func__, r0);
-	//DBE wscmWrite(r4, 0, 2);
-	//DBE wscmWrite(r5, 0, 2);
+	//DBE wscmWrite(r4, stderr);
+	//DBE wscmWrite(r5, stderr);
 }
 
 /* Deserializers:  String representation in r5, length r6 => new atom in r0. */
@@ -2198,7 +2221,7 @@ void sysCompile (void) {
 	env=pop();
 ret:
 	DB("<--%s", __func__);
-	DBE wscmWrite (r0, 0, 2);
+	DBE wscmWrite (r0, stderr);
 }
 
 void sysDebugDumpAll (void) {
@@ -2298,7 +2321,8 @@ void sysSchedule (void) {
 			caughtSignals[i]=0;
 			push(r0); /* Save state */
 			push(r1);
-				r1=signalhandlers;  wscmTGEFind(); r0=car(r0);
+			push(r2);
+				r1=signalhandlers;  wscmTGEFind(); r0=car(r0); /* Consider vector of signalhandlers. */
 				r1 = memVectorObject(r0, i);
 				r0 = car(r1);
 				/* Hack:  replace inital opcode with NOP since closure obj
@@ -2307,14 +2331,16 @@ void sysSchedule (void) {
 				memVectorSet(r0, 3, NOP);
 				memVectorSet(r0, 4, NOP);
 				wscmNewThread();
+			r2=pop();
 			r1=pop();
 			r0=pop();
 		}
 
 	/* If just a single thread in existence, leave it alone and just continue on. */
 	if ((Int)memVectorObject(threads, 0) != 1 || !wscmIsQueueEmpty(sleeping)) {
-		// TODO: BF: If signal queue not empty..spawn signal hander threads.
 		wscmUnRun();
+		/* BF: TODO: This thread's stack is still active.  It MIGHT get clobbered
+		   while a new thread is scheduled, wakes up or unblocked.*/
 		wscmSchedule();
 	}
 
@@ -2369,7 +2395,7 @@ void wscmDefineSyscall (Func function, char* symbol) {
 	memObjStringRegister(function, symbol); /* Register internal pointer with memory module. */
 
 	DB("<--%s => ", __func__);
-	DBE wscmWrite (r1, 0, 2);
+	DBE wscmWrite (r1, stderr);
 }
 
 /* Bind symbol, created from 'sym', in TGE and assign object in r0 to
@@ -2384,7 +2410,7 @@ void wscmDefine (char* sym) {
 	r1=r0;  r2=cdr(tge);  objCons12();
 	memVectorSet(tge, 1, r0);
 	DB("<--%s => ", __func__);
-	DBE wscmWrite (r1, 0, 2);
+	DBE wscmWrite (r1, stderr);
 }
 
 /* Call to the read scheme closure will setup registers for calls to internal
@@ -2418,7 +2444,7 @@ void wscmCreateRead (void) {
 		BNEI0, SCLOSEPAREN, ADDR, "dot",
 		MVI0, null,
 		RET,
-		LABEL, "dot",
+	LABEL, "dot",
 		/* dot? */
 		BNEI0, SDOT, ADDR, "eof",
 		PUSH7, PUSH1D, PUSH1E, /* Recurse on this fn (parser) with isList set. */
@@ -2429,12 +2455,12 @@ void wscmCreateRead (void) {
 		LDI00, 0l, /* Only want the car of the list we just parsed. */
 		RET,
 		/* eof? */
-		LABEL, "eof",
+	LABEL, "eof",
 		BNEI0, SEOF, ADDR, "vector",
 		MVI0, eof,
 		RET,
 		/* vector? */
-		LABEL, "vector",
+	LABEL, "vector",
 		BNEI0, SVECTOR, ADDR, "quote",
 		PUSH7, PUSH1D, PUSH1E, /* Recursive call with isList set */
 		MVI7, 1l,
@@ -2447,7 +2473,7 @@ void wscmCreateRead (void) {
 		POP1,  /* Restore r1. */
 		BRA, ADDR, "done",
 
-		LABEL, "quote",
+	LABEL, "quote",
 		/* quote? */
 		BNEI0, SQUOTE, ADDR, "unquotesplicing",
 		PUSH7, PUSH1D, PUSH1E,
@@ -2464,7 +2490,7 @@ void wscmCreateRead (void) {
 		SYSI, objCons12,
 		POP2, POP1,   /* Restore r1 and r2 */
 		BRA, ADDR, "done",
-		LABEL, "unquotesplicing",
+	LABEL, "unquotesplicing",
 		/* unquote-splicing? */
 		BNEI0, SUNQUOTESPLICING, ADDR, "unquote",
 		PUSH7, PUSH1D, PUSH1E,
@@ -2482,7 +2508,7 @@ void wscmCreateRead (void) {
 		POP2, POP1,   /* Restore r1 and r2 */
 		BRA, ADDR, "done",
 		/* unquote? */
-		LABEL, "unquote",
+	LABEL, "unquote",
 		BNEI0, SUNQUOTE, ADDR, "quasiquote",
 		PUSH7, PUSH1D, PUSH1E,
 		MVI7, 0l,
@@ -2499,7 +2525,7 @@ void wscmCreateRead (void) {
 		POP2, POP1,   /* Restore r1 and r2 */
 		BRA, ADDR, "done",
 		/* quasiquote? */
-		LABEL, "quasiquote",
+	LABEL, "quasiquote",
 		BNEI0, SQUASIQUOTE, ADDR, "openparen",
 		PUSH7, PUSH1D, PUSH1E,
 		MVI7, 0l,
@@ -2516,7 +2542,7 @@ void wscmCreateRead (void) {
 		POP2, POP1,   /* Restore r1 and r2 */
 		BRA, ADDR, "done",
 		/* open paren? */
-		LABEL, "openparen",
+	LABEL, "openparen",
 		BNEI0, SOPENPAREN, ADDR, "character",
 		PUSH7, PUSH1D, PUSH1E, /* Recursive call with isList set */
 		MVI7, 1l,
@@ -2525,56 +2551,56 @@ void wscmCreateRead (void) {
 		POP1E, POP1D, POP7,
 		BRA, ADDR, "done",
 		/* character? */
-		LABEL, "character",
+	LABEL, "character",
 		BNEI0, SCHARACTER, ADDR, "symbol",
 		SYSI, sysNewCharacter,
 		BRA, ADDR, "done",
 		/* symbol? */
-		LABEL, "symbol",
+	LABEL, "symbol",
 		BNEI0, SSYMBOL, ADDR, "string",
 		SYSI, sysNewSymbol,
 		BRA, ADDR, "done",
 		/* string? */
-		LABEL, "string",
+	LABEL, "string",
 		BNEI0, SSTRING, ADDR, "integer",
 		SYSI, sysNewString,
 		BRA, ADDR, "done",
 		/* integer? */
-		LABEL, "integer",
+	LABEL, "integer",
 		BNEI0, SINTEGER, ADDR, "real",
 		SYSI, sysNewInteger,
 		BRA, ADDR, "done",
 		/* real? */
-		LABEL, "real",
+	LABEL, "real",
 		BNEI0, SREAL, ADDR, "hex",
 		SYSI, sysNewReal,
 		BRA, ADDR, "done",
 		/* hex number? */
-		LABEL, "hex",
+	LABEL, "hex",
 		BNEI0, SHEX, ADDR, "binary",
 		SYSI, sysNewHex,
 		BRA, ADDR, "done",
 		/* binary number? */
-		LABEL, "binary",
+	LABEL, "binary",
 		BNEI0, SBINARY, ADDR, "false",
 		SYSI, sysNewBinary,
 		BRA, ADDR, "done",
 		/* false? */
-		LABEL, "false",
+	LABEL, "false",
 		BNEI0, SFALSE, ADDR, "true",
 		MVI0, false,
 		BRA, ADDR, "done",
 		/* true? */
-		LABEL, "true",
+	LABEL, "true",
 		BNEI0, STRUE, ADDR, "default",
 		MVI0, true,
 		BRA, ADDR, "done",
 		/* default to null? */
-		LABEL, "default",
+	LABEL, "default",
 		MVI0, null,
 
 		/* List context?  If so recurse and contruct pair. */
-		LABEL, "done",
+	LABEL, "done",
 		BEQI7, 0l, ADDR, "ret",
 		PUSH0, /* Save object just parsed. */
 		PUSH1D, PUSH1E, /* Recurse. */
@@ -2590,7 +2616,7 @@ void wscmCreateRead (void) {
 		SYSI, objCons12,
 		POP2, POP1,   /* Restore r1 and r2 */
 	
-		LABEL, "ret",
+	LABEL, "ret",
 		RET,
 		END
 	);
@@ -2854,12 +2880,12 @@ void wscmInitialize (void) {
 	DB("  --%s", __func__);
 }
 
-/* stack=r1f
-*/
 void sysDumpCallStackCode (void) {
  Int i;
- Obj o;
+ Obj o, l=NULL;
 
+	wscmDumpEnv(r16);
+	wscmDumpEnv(r15);
 	for (i=0; i<memStackLength(stack); ++i) {
 		o = memStackObject(stack, i);
 		printf ("Stack "INT" "HEX016" "OBJ NL, i, memIsObjectValid(o)?memObjectDescriptor(o):0, o);
@@ -2869,10 +2895,13 @@ void sysDumpCallStackCode (void) {
 		o = memStackObject(stack, i);
 		if (memIsObjectValid(o)) {
 			if (memObjectType(o)==TCODE) {
-				printf ("Stack "INT" "HEX016" "OBJ NL, i, memObjectDescriptor(o), o);
-				wscmWrite(memVectorObject(o, 2), 0, 1);
+				printf (NL "Stack "INT" "HEX016" "OBJ NL, i, memObjectDescriptor(o), o);
+				wscmWrite(memVectorObject(o, 2), stdout);
+				if (l!=NULL) wscmDumpEnv(l);
+				else printf (NL);
 			}
 		}
+		l = o;
 	}
 }
 

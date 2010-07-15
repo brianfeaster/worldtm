@@ -1,4 +1,6 @@
 (define move list)
+(define BEQUIET (not (null? (memv "silent" (vector->list argv)))))
+(define SCROLLINGMAP #t)
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Window stuff
 (load "window.scm")
@@ -45,10 +47,9 @@
     (vector-ref CELLS i)))
 (define (cell-set! i c) (vector-set! CELLS i c))
 
-(define WATER0 0)     (cell-set! WATER0     (glyphNew #x04 #\/ #x04 #\\
-                                                    #(#x04 #\\ #x04 #\/)))
-(define WATER1 1)     (cell-set! WATER1     (glyphNew #x04 #\~ #x04 #\~))
-(define WATER2 2)     (cell-set! WATER2     (glyphNew #x0c #\~ #x0c #\~))
+(define WATER0 0)     (cell-set! WATER0     (glyphNew #x04 #\\ #x04 #\/ #(#x04 #\/ #x04 #\\)))
+(define WATER1 1)     (cell-set! WATER1     (glyphNew #x04 #\~ #x04 #\~ #(#x04 #\- #x04 #\-) #(#x04 #\_ #x04 #\_)))
+(define WATER2 2)     (cell-set! WATER2     (glyphNew #x04 #\~ #x0c #\~ #(#x0c #\~ #x04 #\~)))
 (define POISON 3)     (cell-set! POISON     (glyphNew #x04 #\. #x02 #\.))
 (define GRASS 4)      (cell-set! GRASS      (glyphNew #x02 #\. #x02 #\.))
 (define BUSHES 5)     (cell-set! BUSHES     (glyphNew #x0a #\o #x0a #\o))
@@ -191,7 +192,6 @@ c))
  (vector-vector-ref FIELD (modulo y FieldDimension)
                           (modulo x FieldDimension)))
 
-; TODO BF This is currently crashing radomly at World startup.0
 (define (field-ref z y x)
  (letrec ((column   (field-column y x))
           (elements (columnRef column z)))
@@ -248,7 +248,6 @@ c))
    (~ y (+ x 1))))))
 (ConsoleDisplay "Initialized Canvas " (- (time) timeStart) " seconds")
 
-; TODO BF This is currently crashing radomly at World startup during the field-ref call.1
 (define (canvasRender y x)
  (let ((top (field-ref-top 1000 y x)))
   (canvasCellSet! y x (cell-ref (field-ref top y x)))
@@ -303,7 +302,6 @@ c))
      (~dumpGlyphs y (++ x))))))
  ; DEBUG: Plot column
  ((WinColumn 'home))
-; TODO BF: FOR NOW DISABLE WINCOLUMN
  (let ~ ((z 11))
   (let ((c (field-ref z y x)))
    (if (eq? AIR c)
@@ -438,13 +436,12 @@ c))
 
 ;; Call this 'move.  Entites move.  Back to the original ways?
 ;; was 'avatar
-(define alwaysScroll #f)
 (define (move dna z y x)
  ;(ConsoleDisplay "\r" (list z y x (distance (list 0 (avatar 'y) (avatar 'x)) (list 0 (+ PortY (/ PortH 2)) (+ PortX (/ PortW 2))))))
  (letrec ((entity (entitiesGet dna))
           (thisIsMe (= dna (avatar 'dna)))
           (shouldScroll (and thisIsMe
-           (or alwaysScroll (< 10 (distance (list 0 (avatar 'y) (avatar 'x))
+           (or SCROLLINGMAP (< 10 (distance (list 0 (avatar 'y) (avatar 'x))
                                            (list 0 (+ PortY (/ PortH 2)) (+ PortX (/ PortW 2)))))))))
   (if (null? entity)
     (begin
@@ -585,7 +582,7 @@ c))
  (let ((MapSize (min 28 (min (- (Terminal 'THeight) 1)
                              (/ (Terminal 'TWidth) 2)))))
   ((Terminal 'WindowNew)
-    0 (- (Terminal 'TWidth) (* MapSize 2) 2)
+    0 (- (Terminal 'TWidth) (* MapSize 2) 0) ; Position of the map window
     (+ MapSize 0) (* 2 MapSize)
     #x17 'NOREFRESH)))
 
@@ -620,7 +617,7 @@ c))
   ((WinMap 'moveresize)
      0 (- (Terminal 'TWidth) (WinMap 'WWidth) 0)
      (+ -1 (WinMap 'WHeight))
-     (+ -2 (WinMap 'WWidth)))
+     (+ 2 (WinMap 'WWidth)))
   (circularize)
   (viewportReset (avatar 'y) (avatar 'x))
   ((WinMap 'toggle)))))
@@ -647,18 +644,22 @@ c))
 (define (WinMapPutGlyph glyph y x)
   (semaphore-down MapWindowSemaphore)
   ((WinMap 'goto) y x)
-  (if (and (= (vector-length glyph) 5) ; Animation hack.
-           (> (modulo (time) 2) 0))
-      (set! glyph (vector-ref glyph 4)))
-  (WinMapSetColor (glyphColor0 glyph))
-  (WinMapPutc     (glyphChar0 glyph))
-  (WinMapSetColor (glyphColor1 glyph))
-  (WinMapPutc     (glyphChar1 glyph))
+  ; Animation hack.  Every second use the default glyph or each
+  ; consecutive glyph (stored as consecutive vectors of simple
+  ; glyphs).
+  (let ((t (time)) ; capture the time
+        (l (- (vector-length glyph) 3))) ; number of extra animation glyphs
+    (if (> (modulo t l) 0) (set! glyph (vector-ref glyph (+ 3 (modulo t l)))))
+    (WinMapSetColor (glyphColor0 glyph))
+    (WinMapPutc     (glyphChar0 glyph))
+    (WinMapSetColor (glyphColor1 glyph))
+    (WinMapPutc     (glyphChar1 glyph)))
   (semaphore-up MapWindowSemaphore))
 
 
 ;; Map column debug window
 (define WinColumn ((Terminal 'WindowNew) 1 (- (Terminal 'TWidth) 2) 18 2 #x5b))
+((WinColumn 'toggle))
 (define WinColumnPutc (WinColumn 'putc))
 (define WinColumnPuts (WinColumn 'puts))
 (define WinColumnSetColor (WinColumn 'set-color))
@@ -674,8 +675,6 @@ c))
 
 ; Always read and evaluate everything from IPC.
 (thread  (let ~ () (eval ((ipc 'qread))) (~)))
-; TODO BF: disabling this to see if world still crashes at startup. replacing with a boring function.
-;(thread  (let ~ ()  (~)))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -764,7 +763,7 @@ c))
    (random (- (Terminal 'TWidth) 3))
    200))
 
-(define WinHelp ((Terminal 'WindowNew) 5 20 10 30 #x21))
+(define WinHelp ((Terminal 'WindowNew) 5 20 11 30 #x21))
 
 (map (lambda (x) ((WinHelp 'alpha) 0 x #f))
      '(0 1 2 3 4 5 6 7 8 20 21 22 23 24 25 26 27 28 29))
@@ -772,7 +771,7 @@ c))
 ((WinHelp 'goto) 0 0)
 ((WinHelp 'puts) "         )) Help! ((")
 ((WinHelp 'set-color) #x20)
-((WinHelp 'puts) "\r\n? = toggle help window\r\nt = talk\r\nesc = exit talk\r\nw = toggle map\r\n> = increase map size\r\n< = decrease map size\r\nq = quit\r\nhjkl = move\r\n^F = change color")
+((WinHelp 'puts) "\r\n? = toggle help window\r\nt = talk\r\nesc = exit talk\r\nW = toggle map\r\n> = increase map size\r\n< = decrease map size\r\nq = quit\r\nhjkl = move\r\n^A = change color\r\nc = spawn kitteh")
 ((WinHelp 'toggle))
 
 (define (help)
@@ -796,9 +795,7 @@ c))
   (viewportRender y x)
   ))
 
-; TODO BF This is currently crashing radomly at World startup during the canvasRender call.2
 (define (setCell z y x cell)
-  ;(if (or (< cell 0) (> cell 255)) (begin (display "shit") (quit)))
   (field-set! z y x cell)
   (canvasRender y x)
   (viewportRender y x))
@@ -841,11 +838,7 @@ c))
                (+ 0 (read-char fd))) ; Hack to convert char to integer
       (~ (+ i 1)))))))
 
-; The REPL
-; TODO BF This is currently crashing radomly at World startup during the setCell call.3
 (thread (load-ultima-world4))
-;(sleep 3000)
-;(quit) ; BF TODO debugging.  Stopping here to see if calling load ultima world4 really causes a crash.
 
 (define (load-ultima-world5)
  (let ((fdm (open "ultima5.map"))
@@ -975,24 +968,15 @@ c))
  (if (eq? c #\u) (walk 9)
  (if (eq? c #\+) (walk 5)
  (if (eq? c #\-) (walk 0)
- (if (eq? c #\s) (begin (set! alwaysScroll (not alwaysScroll)) (ConsoleDisplay "\r\nalwaysScroll " alwaysScroll))
- (if (eq? c #\w) (begin
-                   ((WinStatus 'toggle))
-                   ((WinColumn 'toggle))
-                   ((WinMap 'toggle)))
- (if (eq? c #\W) (begin
-                   ((WinColumn 'toggle)))
+ (if (eq? c #\s) (begin (set! SCROLLINGMAP (not SCROLLINGMAP)) (ConsoleDisplay "\r\nalwaysScroll " SCROLLINGMAP))
+ (if (eq? c #\m)         ((WinMap 'toggle))
+ (if (eq? c CHAR-CTRL-M) (begin ((WinStatus 'toggle)) ((WinColumn 'toggle)))
  (if (eq? c #\t) (begin
                    (WinInputPuts (string ">" (replTalk 'getBuffer)))
                    (set! state 'talk))
- (if (eq? c CHAR-CTRL-K) ((ipc 'qwrite) `(set! FIELD ,FIELD)) ; Send my plane out to IPC.
  (if (or (eq? c #\q) (eq? c #\Q) (eof-object? c) (eq? c CHAR-CTRL-Q))
      (set! state 'done)
- (if (eq? c CHAR-CTRL-L)
-     (begin
-      (viewportReset (avatar 'y) (avatar 'x))
-      ((Console 'repaint)))
- (if (eq? c CHAR-CTRL-F) (begin
+ (if (eq? c CHAR-CTRL-A) (begin
     ((avatar 'setGlyph)
       (glyphNew (+ (* (colorBackground (glyphColor0 (avatar 'glyph))) 16)
                    (modulo (+ (colorForeground (glyphColor0 (avatar 'glyph))) 1) 16))
@@ -1001,6 +985,11 @@ c))
                    (modulo (+ (colorForeground (glyphColor1 (avatar 'glyph))) 1) 16))
                 (glyphChar1 (avatar 'glyph))))
     (who))
+ (if (eq? c CHAR-CTRL-K) ((ipc 'qwrite) `(set! FIELD ,FIELD)) ; Send my plane out to IPC.
+ (if (eq? c CHAR-CTRL-L)
+     (begin
+      (viewportReset (avatar 'y) (avatar 'x))
+      ((Console 'repaint)))
  (if (eq? c CHAR-CTRL-_) (walk 4)
  (if (eq? c #\d)
     ((ipc 'qwrite) `(dropCell ,(avatar 'y) ,(avatar 'x) BRICK)) ; Send my plane out to IPC.
@@ -1017,7 +1006,7 @@ c))
  (if (eq? c #\>) (winMapBigger)
  (if (eq? c #\z) (circularize)
  (if (eq? c #\Z) (circularize #t)
- (if (eq? c CHAR-CTRL-W) (walkForever)
+ (if (eq? c CHAR-CTRL-F) (walkForever)
  (if (eq? c #\4) (load-ultima-world4)
  (if (eq? c #\c) (begin (say "Herz ur kitteh") (thread (spawnKitty)))
  (if (eq? c #\1) (thread (sigwinch))
@@ -1038,6 +1027,7 @@ c))
    (WinMap 'Y0) (- (Terminal 'TWidth) 12)
    1            12
    #x43))
+((WinStatus 'toggle))
 
 ;(viewportReset (avatar 'y) (avatar 'x))
 ((ipc 'qwrite) '(who))
@@ -1148,13 +1138,6 @@ c))
 ;(vector-set! SIGNAL-HANDLERS 2 catch)
 ;(signal 2)
 
-; Redraw map resulting in animated cells.
-; TODO BF: Disabled until I can resolve the random startup bug.
-(rem thread (let ~ ()
-   (sleep 5)
-   (viewportReset (avatar 'y) (avatar 'x))
-   (~)))
-
 (define walkForever (let ((walkForeverFlag #f)) (lambda ()
  (if walkForeverFlag
   (begin
@@ -1180,25 +1163,33 @@ c))
    ((ipc 'qwrite) cmd) (sleep 500)
    ((ipc 'qwrite) cmd) (sleep 500)))
 
-((ipc 'qwrite)
+(define (sayHelloWorld)
+ ((ipc 'qwrite)
    (list 'voice (avatar 'dna) (avatar 'z) (avatar 'y) (avatar 'x) 100
      (vector-rnd
        #("*PUSH* *SQUIRT* *SPANK* *WAAAAAAAAA*"
          "*All Worldlians Want to Be Borned*"
-         "*Happy Birthday*"
-     ))))
+         "*Happy Birthday*")))))
+
+; Redraw map resulting in animated cells.
+(thread (let ~ ()
+   (sleep 1000)
+   (viewportReset (avatar 'y) (avatar 'x))
+   (~)))
 
 (define (sayByeBye)
- ((ipc 'qwrite) `(die ,(avatar 'dna))) ; Kill avatar's entity
- ((ipc 'qwrite) (list 'voice (avatar 'dna) (avatar 'z) (avatar 'y) (avatar 'x) 100 "*POOF*"))
- (sleep 500)); wait for ipc to flush
+ ((ipc 'qwrite) (list 'voice (avatar 'dna) (avatar 'z) (avatar 'y) (avatar 'x) 100 "*POOF*")))
 
 ; Catch the terminal hangup signal so that normal shutdown can occur.
 (vector-set! SIGNALHANDLERS 1 (lambda () (sleep 1000)))
 (signal 1)
 
+(or BEQUIET (sayHelloWorld))
 (wrepl)
-(sayByeBye)
+(or BEQUIET (sayByeBye))
+
+((ipc 'qwrite) `(die ,(avatar 'dna))) ; Kill avatar's entity
+(sleep 500)); wait for ipc to flush
+
 (displayl "\e[" (Terminal 'THeight) "H\r\n\e[0m\e[?25h")
 (quit)
-

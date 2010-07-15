@@ -25,18 +25,18 @@ void wscmCReadEvalPrintLoop (void) {
 		env = tge;
 		DB("MAIN Parsing======================");
 		//DBE wscmDumpEnv(env);
-		DBE wscmWrite(stack, 0, 2), write (2, "\n", 1);
-		DBE wscmWrite(ready,0, 2), write (2, "\n", 1);
-		DBE wscmWrite(sleeping,0, 2), write (2, "\n", 1);
-		DBE wscmWrite(blocked,0, 2);
+		DBE wscmWrite(stack, stderr), write (2, "\n", 1);
+		DBE wscmWrite(ready, stderr), write (2, "\n", 1);
+		DBE wscmWrite(sleeping, stderr), write (2, "\n", 1);
+		DBE wscmWrite(blocked, stderr);
 		write (1, "\nC>", 3);
 		yyparse();/* Expr read into r0. */
 		DB("MAIN Compiling==================== <= ");
-		DBE wscmWrite(r0, 0, 1);
+		DBE wscmWrite(r0, stderr);
 		compCompile();   /* Expr in r0 compiled into VM runable code in r0. */
 		code=r0; ip=0;
 		DB("MAIN Running======================");
-		DBE wscmWrite(code, 0, 2);DBE write (2, "\n", 1);
+		DBE wscmWrite(code, stderr);DBE write (2, "\n", 1);
 		vmDebugDumpCode(code, stderr);
 		vmRun();
 		//wscmDisplay(stack, 0, 2);
@@ -117,7 +117,7 @@ int main (int argc, char *argv[]) {
 	objNewSymbol ((Str)"repl2", 5);r1=r0;
 	wscmTGEFind(); r0=caar(r0);
 
-	wscmWrite(r0, 0, 1);
+	wscmWrite(r0, stderr);
 	wscmNewThread();
 	wscmSchedule();
 	vmRun();
