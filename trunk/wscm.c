@@ -88,7 +88,7 @@ int main (int argc, char *argv[]) {
 	wscmInitialize();
 	setbuf(stdout, NULL);
 	signal(SIGPIPE, SIG_IGN);
-	fcntl (0, F_SETFL, fcntl(0, F_GETFL)|O_NONBLOCK);
+	fcntl (0, F_SETFL, fcntl(0, F_GETFL, 0)|O_NONBLOCK);
 	srandom(time(NULL));
 	wscmBindArgs(argc, argv);
 

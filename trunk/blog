@@ -814,10 +814,10 @@ the specializeable syscall will be used instead.
 Mon Feb 21 02:17:57 PST 2005
 
 --OLD COMMENTS--------
-	/* Revert env after returning from function.  Optimize for
-	   functions of 0 operands. */
-	//emit(LDLD); asm(&env); /* Copy parent env to r0. */
-	//asm(ST); asm(&env);   /* Save back into env.  I hope this works? */
+   /* Revert env after returning from function.  Optimize for
+      functions of 0 operands. */
+   //emit(LDLD); asm(&env); /* Copy parent env to r0. */
+   //asm(ST); asm(&env);   /* Save back into env.  I hope this works? */
 
 I believe local environments don't need the the variable bound.  A variables
 bound location is computed at compile time and unused after that.  I'm keeping
@@ -1050,11 +1050,11 @@ loop:
       asm(BRA); asm(-9*4);
 
 Now it's emitting the unrolled equivalent:
-		r3++;
-		while (r3--) {
-			asm(POP2);
-			asm(STI20); asm(r3+2);
-		}
+      r3++;
+      while (r3--) {
+         asm(POP2);
+         asm(STI20); asm(r3+2);
+      }
 
 Woops.  One more TAILCALL bug.  Rather than reinstate the flags for the tail
 called expression, I needed to set the tailcall flag THEN reinstate the
@@ -1408,9 +1408,9 @@ original vm module assembler are 'labels' and 'address'.  The former are
 branch address and the later place holders for branch opcode address offset
 locations in the byte code.
 
-		BNE 10 ADDR "skip"
-		MV10
-		LABEL "skip" ADDI1 1
+   BNE 10 ADDR "skip"
+   MV10
+   LABEL "skip" ADDI1 1
 
 The values used for labels and address just need to be the same numeric
 constant.  I chose to use use C strings that take advantge of string tables
@@ -1431,9 +1431,8 @@ Wed Sep 14 21:02:56 PDT 2005
 
 Now that the assembler module can resolve branch addresses and labels, I'm
 considering handling the loading of registers from data within the program:
-	MV1616 ADDR "data"
-	DATA "data" 69
-
+   MV1616 ADDR "data"
+   DATA "data" 69
 
 
 Fri Sep 16 01:32:46 PDT 2005
@@ -1913,13 +1912,13 @@ Stack 17 850000000000009d 7ffff4c0fe48  WORLD:cell animation thread
 
 Fri Jul  9 20:05:34 EDT 2010
 
+call memDebugDumpYoungHeap(stdout)
 call memDebugDumpHeapHeaders(0)
 call sysDumpCallStackCode()
-
 call vmDebugDumpCode(r1c, stdout)
-call vmDebugDumpCode(r1e, stdout)
 
-call memRbufDump()
+call vmDebugDumpCode(r1e, stdout)
+CALL MEMrBUfDump()
 call wscmDumpEnv(r16)
 call wscmWrite(r1f, 0, 1)
 call wscmDumpTGE()
@@ -1957,3 +1956,32 @@ expression.
 The byproduct of the debugging are decent environment dumps.  One call will
 dump the current environment, caller environment then the remaining
 environments pushed to the stack excluding the global environment.
+
+
+Fri Jul 16 00:34:32 EDT 2010
+
+Program received signal SIGPIPE, Broken pipe.
+0x00007ffff78c9c20 in __write_nocancel () from /lib/libc.so.6
+(gdb) bt
+#0  0x00007ffff78c9c20 in __write_nocancel () from /lib/libc.so.6
+#1  0x0000000000403e22 in wscmSend () at sys.c:841
+#2  0x0000000000408f30 in sysSend () at sys.c:1990
+#3  0x000000000040fa3d in vmVm (cmd=18) at vm.c:510
+#4  0x000000000040145b in main (argc=2, argv=0x7fffffffe658) at wscm.c:101
+
+This occurs to the world instance who's avatar is moving when another world
+process quits.
+
+
+Sun Jul 18 12:36:12 EDT 2010
+
+I noticed continuations were broken.  I use them as exception calls during
+runtime errors such as car/cdring a non-pair.  When calling heap dumps I
+noticed partial output and strange crashes.  I narrowed it down to fprintf
+failing due to this errno value 11 "Resource temporarily unavailable."  If I
+skip the call to disable I/O blocking:
+
+   fcntl (0, F_SETFL, fcntl(0, F_GETFL)|O_NONBLOCK);
+
+then the heap dumps work correctly.  My assumption was this unblocked the input
+file descriptor, not the output or error output descriptor.

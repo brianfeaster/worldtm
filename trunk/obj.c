@@ -284,7 +284,7 @@ void objDumpR (Obj o, FILE *stream, int islist) {
 					case '\n' : fwrite("\\n", 1, 2, stream); break;
 					case '\r' : fwrite("\\r", 1, 2, stream); break;
 					case '\t' : fwrite("\\t", 1, 2, stream); break;
-					default   : fwrite(c, 1, 2, stream);
+					default   : fwrite(c, 1, 1, stream);
 				}
 				c++;
 			}

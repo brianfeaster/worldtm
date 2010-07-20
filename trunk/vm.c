@@ -6,6 +6,7 @@
 #include <string.h>
 #include <signal.h> /* for signal() */
 #include <unistd.h> /* For ualarm() */
+#include <fcntl.h>
 #include "vm.h"
 
 #include <unistd.h> /* For write(). */
@@ -560,8 +561,11 @@ void vmInitialize (Func scheduler, Func preGC, Func postGC, void(*vmObjDumper)(O
 
 
 void vmDebugDumpCode (Obj c, FILE *stream) {
+ int fdState;
  Obj *i=c;
  Num asmLineNumber;
+
+	fcntl (0, F_SETFL, (fdState=fcntl(0, F_GETFL, 0))&~O_NONBLOCK);
 
 	DB (TAB1"::"STR " "OBJ"  code:"OBJ"  ip:"OBJ, __func__, c, code, ip);
 
@@ -680,5 +684,6 @@ void vmDebugDumpCode (Obj c, FILE *stream) {
 		fflush(stdout);
 	}
 	printf (NL);
+	fcntl (0, F_SETFL, fdState);
 	DB (TAB2"--"STR, __func__);
 }
