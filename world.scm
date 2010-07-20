@@ -582,7 +582,7 @@ c))
  (let ((MapSize (min 28 (min (- (Terminal 'THeight) 1)
                              (/ (Terminal 'TWidth) 2)))))
   ((Terminal 'WindowNew)
-    0 (- (Terminal 'TWidth) (* MapSize 2) 0) ; Position of the map window
+    0 (- (Terminal 'TWidth) (* MapSize 2)) ; Position of the map window
     (+ MapSize 0) (* 2 MapSize)
     #x17 'NOREFRESH)))
 
@@ -615,9 +615,9 @@ c))
  (if (< 5 (WinMap 'WHeight)) (begin
   ((WinMap 'toggle))
   ((WinMap 'moveresize)
-     0 (- (Terminal 'TWidth) (WinMap 'WWidth) 0)
+     0 (- (Terminal 'TWidth) (WinMap 'WWidth) -2)
      (+ -1 (WinMap 'WHeight))
-     (+ 2 (WinMap 'WWidth)))
+     (+ -2 (WinMap 'WWidth)))
   (circularize)
   (viewportReset (avatar 'y) (avatar 'x))
   ((WinMap 'toggle)))))
@@ -627,11 +627,11 @@ c))
   ((WinMap 'toggle))
   (if (< (time) deltaMoveTime)
     ((WinMap 'moveresize) ; Full resize.
-       0 (- (Terminal 'TWidth) (WinMap 'WWidth))
+       0 (- (Terminal 'TWidth) (WinMap 'WWidth) 2)
        (min (/ (Terminal 'TWidth) 2) (Terminal 'THeight))
        (* 2 (min (/ (Terminal 'TWidth) 2) (Terminal 'THeight)))))
     ((WinMap 'moveresize) ; Resize by one.
-       0 (- (Terminal 'TWidth) (WinMap 'WWidth) 4)
+       0 (- (Terminal 'TWidth) (WinMap 'WWidth) 2)
        (+ 1 (WinMap 'WHeight))
        (+ 2 (WinMap 'WWidth)))
   (circularize)
@@ -771,7 +771,7 @@ c))
 ((WinHelp 'goto) 0 0)
 ((WinHelp 'puts) "         )) Help! ((")
 ((WinHelp 'set-color) #x20)
-((WinHelp 'puts) "\r\n? = toggle help window\r\nt = talk\r\nesc = exit talk\r\nW = toggle map\r\n> = increase map size\r\n< = decrease map size\r\nq = quit\r\nhjkl = move\r\n^A = change color\r\nc = spawn kitteh")
+((WinHelp 'puts) "\r\n? = toggle help window\r\nt = talk\r\nesc = exit talk\r\nm = toggle map\r\n> = increase map size\r\n< = decrease map size\r\nq = quit\r\nhjkl = move\r\n^A = change color\r\nc = spawn kitteh")
 ((WinHelp 'toggle))
 
 (define (help)
@@ -1008,9 +1008,8 @@ c))
  (if (eq? c #\Z) (circularize #t)
  (if (eq? c CHAR-CTRL-F) (walkForever)
  (if (eq? c #\4) (load-ultima-world4)
- (if (eq? c #\c) (begin (say "Herz ur kitteh") (thread (spawnKitty)))
- (if (eq? c #\1) (thread (sigwinch))
- ))))))))))))))))))))))))))))))))))
+ (if (eq? c #\c) (thread (spawnKitty))
+ (if (eq? c #\1) (thread (sigwinch))))))))))))))))))))))))))))))))))))
  state)
 
 (define wrepl (let ((state 'cmd))
@@ -1166,7 +1165,7 @@ c))
 (define (sayHelloWorld)
  ((ipc 'qwrite)
    (list 'voice (avatar 'dna) (avatar 'z) (avatar 'y) (avatar 'x) 100
-     (vector-rnd
+     (vector-random
        #("*PUSH* *SQUIRT* *SPANK* *WAAAAAAAAA*"
          "*All Worldlians Want to Be Borned*"
          "*Happy Birthday*")))))
@@ -1184,12 +1183,16 @@ c))
 (vector-set! SIGNALHANDLERS 1 (lambda () (sleep 1000)))
 (signal 1)
 
+; Catch SIGPIPE which occurs when an IPC connection is broken.
+;(vector-set! SIGNALHANDLERS 13 (lambda () (ConsoleDisplay  "\r\nSIGPIPE IGNORED")))
+;(signal 13)
+
 (or BEQUIET (sayHelloWorld))
 (wrepl)
 (or BEQUIET (sayByeBye))
 
 ((ipc 'qwrite) `(die ,(avatar 'dna))) ; Kill avatar's entity
-(sleep 500)); wait for ipc to flush
+(sleep 500) ; wait for ipc to flush
 
 (displayl "\e[" (Terminal 'THeight) "H\r\n\e[0m\e[?25h")
 (quit)

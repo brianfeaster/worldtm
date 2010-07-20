@@ -357,10 +357,10 @@ void wscmDisplay (Obj a, long islist, int fd) {
 	}
 }
 
-void wscmDumpTGE () {
+void wscmDumpTGE (void) {
  Obj o;
  Int len;
-	o = tge;
+	o = cdr(tge);
 	fprintf (stderr, "\n----TGE "OBJ"------------------------------------", o);
 	while (o != null) {
 		fprintf (stderr, "\n"OBJ" ", caar(o));
@@ -848,9 +848,8 @@ void wscmSend (void) {
 			if(errno == EAGAIN) {
 				r0=false;/* Nothing sent so block. */
 			} else {
-				DB("ERROR: Unknown return value from system send [%s]",
-				                strerror(errno));
-				r0=eof;                /* ret==0 closed fd so return eof. */
+				DB("ERROR: Unknown return value from system send [%s]", strerror(errno));
+				r0=eof; /* ret==0 closed fd so return eof. */
 			}
 		}
 	} else
@@ -1276,15 +1275,15 @@ void wscmSchedule (void) {
 void wscmError (void) {
  Int argument_count = (Int)r1;
 	DB("-->%s", __func__);
-	/* Look up error function/continuation in ERRORS vecvtor in TGE. */
-	objNewSymbol ((Str)"ERRORS", 6);  r1=r0;  wscmTGEFind();
+	/* Look up error function/continuation in ERRORS vector in TGE. */
+	objNewSymbol ((Str)"ERRORS", 6);  r1=r0;  wscmTGEFind(); r0=car(r0);
 	/* Set the code register and IP:
-	     (car running) the thread
-	     (cdr thread) thread number
-	     (car r0) the ERRORS vector
-	     (vector-ref ERRORS-vector thread-number) closure
-	     (car closure) closure's code block.  Cdr is parent env. */
-	code = car(memVectorObject(car(r0), (Int)cdr(car(running))));
+	     (car running) The thread
+	     (cdr thread)  Thread number
+	     r0            The ERRORS vector
+	     (vector-ref   ERRORS-vector thread-number) closure
+	     (car closure) Closure's code block.  Cdr is parent env. */
+	code = car(memVectorObject(r0, (Int)cdr(car(running))));
 	ip=0;
 	/* Listify arguments. */
 	r2 = null;
@@ -1296,6 +1295,7 @@ void wscmError (void) {
 	push(r2);
 	/* Set the number of arguments. */
 	r1=(Obj)1;
+	r0=null;
 	DB("<--%s", __func__);
 }
 
@@ -1308,17 +1308,15 @@ void sysQuit (void) { exit(0); }
 /* This can do anything.  I change it mainly for debugging and prototyping. */
 void sysFun (void) {
 	//vmDebugDumpCode(r1c, stderr);
+	memDebugDumpHeapHeaders(stderr);
 	memDebugDumpYoungHeap(stderr);
 	memDebugDumpHeapHeaders(stderr);
 }
 
+/* Dump external representation of the local environment hierarchy to stdout. */
 void sysDumpEnv (void) {
-	// Dump environment to stdout
 	wscmDumpEnv(env);
 	r0=null;
-
-	// Just return the environment object.
-	//r0=env;
 }
 
 void sysDumpStack (void) {
@@ -1349,8 +1347,8 @@ void sysReinstateContinuation (void) {
 	/* Reinstate stack and registers.
 	*/
 	length = memObjectLength(r3); /* The stored stack is in r3. */
-	memcpy(stack+4, r3, length*4); /* Copy objects into stack vector. */
-	*(Obj*)stack = stack+length*4; /* Set the stack object pointer. */
+	memcpy(stack+8, r3, length*8); /* Copy objects into stack vector. */
+	*(Obj*)stack = stack+length*8; /* Set the stack object pointer. */
 	code = pop();
 	retcode = pop();
 	ip = pop();
@@ -1369,7 +1367,7 @@ void sysCreateContinuation (void) {
 	push(code);
 	length = memStackLength(stack);
 	objNewVector(length);
-	memcpy(r0, stack+4, length*4);
+	memcpy(r0, stack+8, length*8);
 	pop(); pop(); pop(); pop(); pop(); pop();
 	r1=r0;
 	/* r1 now has a copy of the stack */
@@ -2724,7 +2722,6 @@ void wscmInitialize (void) {
 	memObjStringSet(sysIllegalOperator);
 	memObjStringSet(sysTGELookup);
 	memObjStringSet(sysTGEMutate);
-	memObjStringSet(wscmError);
 	memObjStringSet(objNewClosure1Env);
 	memObjStringSet(objNewVector1);
 	memObjStringSet(wscmRecvBlock);
@@ -2739,6 +2736,7 @@ void wscmInitialize (void) {
 	memObjStringSet(wscmNewThread);
 	memObjStringSet(objCopyInteger);
 	memObjStringSet(sysCreateContinuation);
+	memObjStringSet(sysReinstateContinuation);
 
 	objInitialize(sysSchedule);
 
@@ -2780,9 +2778,11 @@ void wscmInitialize (void) {
 	r1=r0;  r2=null;  objCons12();  env=tge=r0;
 
 	/* Bind usefull values r2=value r1=symbol. */
+	wscmDefineSyscall (wscmError, "error");
 	wscmDefineSyscall (sysQuit, "quit");
 	wscmDefineSyscall (sysFun, "fun");
 	wscmDefineSyscall (sysDumpEnv, "env");
+	wscmDefineSyscall (wscmDumpTGE, "tge");
 	wscmDefineSyscall (sysDumpStack, "stack");
 	wscmDefineSyscall (sysDumpThreads, "threads");
 	wscmDefineSyscall (sysString, "string");

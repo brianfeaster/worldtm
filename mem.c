@@ -4,6 +4,10 @@
 #define VALIDATE_HEAP 0
 #define DB_MODULE "MEM "
 #include "debug.h"
+#include <errno.h>
+#include <string.h>
+#include <unistd.h>
+#include <fcntl.h>
 /* Two sets of objects, old and young,  will be maintained.  Normally, the
    young object heap will be copy collected, when it fills up, to a new
    young heap.  The old heap will not be touched.  Only when the young heap
@@ -941,9 +945,15 @@ void memDebugDumpHeapHeaders (FILE *stream) {
 
 
 void memDebugDumpObject (Obj o, FILE *stream) {
- Int i;
+ Int i, fdState;
  char *s;
  Obj obj;
+
+	fcntl (0, F_SETFL, (fdState=fcntl(0, F_GETFL, 0))&~O_NONBLOCK);
+
+	if (!memIsObjectValid(o)) {
+		fprintf(stream, NL "???" OBJ, o);
+	}
 
 	if (stream == NULL) stream=stderr;
 
@@ -954,24 +964,25 @@ void memDebugDumpObject (Obj o, FILE *stream) {
 
 	/* Some objects are just an instance of the descriptor
 	   such as #f and #() they have no content. */
- 	if (!memObjectLength(o)) return;
-
-	if (memIsObjectVector(o)) { // Vector
-		if (memIsObjectPointer(o))
+ 	if (!memObjectLength(o)) {
+		fprintf(stderr, "SIMPLETON");
+	} else if (memIsObjectVector(o)) { // Vector
+		if (memIsObjectPointer(o)) {
 			fprintf (stream, " "OBJ" -> "OBJ, ((Obj*)o)[0], ((Obj*)o)[1]);
-		else if (memIsObjectStack(o)) {
+		} else if (memIsObjectStack(o)) {
 			fprintf (stream, " ["HEX" | ", memStackLength(o));
-			for (i=0; i<memStackLength(o); i++)
+			for (i=0; i<memStackLength(o); i++) {
 				fprintf (stream, HEX" ", ((Obj*)o)[i+1]);
+			}
 			fprintf (stream, "]");
-		} else if (memIsObjectShadow(o))
+		} else if (memIsObjectShadow(o)) {
 			fprintf (stream, " *"OBJ"", *(Obj*)o);
-		else if (memIsObjectFinalizer(o))
+		} else if (memIsObjectFinalizer(o)) {
 			fprintf (stream, " ("OBJ")()", *(Obj*)o);
-		else {
+		} else {
 			for (i=0; i<memObjectLength(o); i++) {
 				obj = ((Obj*)o)[i];
-				fprintf (stream, " %s"HEX, i==0?"#(":"", obj);
+				fprintf (stream, "%s"HEX, ((i==0)?"#(":" "), obj);
 				s = memObjString(obj); /* Internal pointer address */
 				if (s) fprintf (stream, ":%s", s);
 			}
@@ -983,6 +994,8 @@ void memDebugDumpObject (Obj o, FILE *stream) {
 		}
 		fprintf (stream, ")");
 	}
+
+	fcntl (0, F_SETFL, fdState);
 }
 
 
