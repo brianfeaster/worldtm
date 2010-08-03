@@ -19,11 +19,11 @@ Obj null, nullvec, nullstr, false, true, eof,
     sif, sor, sand, ssetb,
     svectorref, svectorvectorref, svectorvectorsetb, svectorsetb, svectorlength,
     scons, scar, scdr, ssetcarb, ssetcdrb,
-    snullp,
+    sprocedurep, snullp,
     spairp, svectorp, sstringp, sportp, sappend, seofobjectp,
     sthread, slet, sletrec,
     seval, sapply, scallcc, ssyntaxrules, seof,
-    snot, sadd, ssub, smul, sdiv, slogand, characters, signalhandlers;
+    snot, sadd, ssub, smul, sdiv, slogand, characters, staticIntegers, signalhandlers;
 
 int wscmDebug=0;
 
@@ -92,6 +92,14 @@ void objListToVector (void) {
 /* Creates a new integer object in r0.
 */
 void objNewInt  (Int i) {
+/* Attempt at implementing static integers.
+	if (staticIntegers && -255<=i && i<=256) {
+		r0 = ((Obj*)staticIntegers)[i+255];
+	} else {
+   	memNewArray(TINTEGER, sizeof(Int));
+   	*(Int*)r0 = i;
+	}
+*/
    memNewArray(TINTEGER, sizeof(Int));
    *(Int*)r0 = i;
 }
@@ -422,6 +430,7 @@ void objInitialize (Func scheduler) {
 	objNewSymbolStatic("cdr");          scdr= r0;
 	objNewSymbolStatic("set-car!");     ssetcarb= r0;
 	objNewSymbolStatic("set-cdr!");     ssetcdrb= r0;
+	objNewSymbolStatic("procedure?");   sprocedurep= r0;
 	objNewSymbolStatic("null?");        snullp= r0;
 	objNewSymbolStatic("pair?");        spairp= r0;
 	objNewSymbolStatic("vector?");      svectorp= r0;
@@ -459,7 +468,7 @@ void objInitialize (Func scheduler) {
 	objNewSymbolStatic("closed");       sclosed = r0;
 	objNewSymbolStatic("SIGNALHANDLERS");  signalhandlers=r0;
 
-	/* Table of character objects.  The 257th is the EOF character. */
+	/* Table of character objects.  The 257th character is the EOF object. */
 	memNewStaticVector(TVECTOR, 257);   characters = r0;
 	for (i=0; i<256; i++) {
 		memNewStatic(TCHAR, 1);  *(Int*)r0=i;
@@ -467,12 +476,17 @@ void objInitialize (Func scheduler) {
 	}
 
 	/* Treat character number 256 0x100 as a char and as the eof object. */
-	/* TODO Something fishy going on here.  When ctrl-c in telnet to an ipc
-	    connection sysTransition fails because r2 (the character in question)
-	    is an invalid pointer to object (pointing to the character-vector's
-	    descriptor. Debugging... */
-	memNewStatic(TEOF, 4);              eof = r0;
-	*(Int*)eof = 256;                   memVectorSet(characters, 256, eof);
+	memNewStatic(TEOF, 4);  eof = r0;
+	*(Int*)eof = 256l;
+ 	memVectorSet(characters, 256, eof);
+
+	/* Table of integer constants. */
+	memNewStaticVector(TVECTOR, 512);  staticIntegers = r0;
+	for (i=-255l; i<=256l; ++i) {
+   	memNewStatic(TINTEGER, sizeof(Int));
+		*(Int*)r0 = i;
+		memVectorSet(staticIntegers, i+255, r0);
+	}
 
 	DB("  --%s", __func_);
 }

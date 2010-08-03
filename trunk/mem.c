@@ -1,6 +1,7 @@
 #define DEBUG 0
 #define DEBUG_ASSERT 0
 #define DEBUG_ASSERT_VECTOR 1
+#define DEBUG_ASSERT_STACK 1
 #define VALIDATE_HEAP 0
 #define DB_MODULE "MEM "
 #include "debug.h"
@@ -36,8 +37,8 @@
             might be other meta data associated with the object so size will return.
 */
 #include <stdio.h>
-#include <stdlib.h> /* For exit(). */
-#include <string.h> /* For memcpy(). */
+#include <stdlib.h>
+#include <string.h>
 #include <sys/mman.h>
 #include <assert.h>
 #include "mem.h"
@@ -51,11 +52,11 @@ void memError (void);
 
 /* Byte size of a Linux virtual memory block.  Resolution of mmap. */
 const Num BLOCK_BYTE_SIZE         = 0x1000; //     4Kb 0x001000 2^12
-const Num HEAP_STATIC_BLOCK_COUNT =  0x004; //    16Kb 0x004000 2^14
+const Num HEAP_STATIC_BLOCK_COUNT =  0x008; //    32Kb 0x008000 2^15
 const Num HEAP_BLOCK_COUNT        =  0x400; // 4Mb     0x400000 2^22
 //const Num HEAP_INCREMENT_COUNT   = 0x040; //   256Kb 0x040000 2^18
 //const Num HEAP_DECREMENT_COUNT   = 0x010; //    64Kb 0x018000 2^16
-const Num STACK_LENGTH           = 0x02000; //     8Kb 0x002000 2^13
+const Num STACK_LENGTH           = 0x04000; //    16Kb 0x004000 2^14
 
 
 Num garbageCollectionCount = 0;
@@ -192,7 +193,7 @@ Num memIsObjectShadow (Obj o) { return memObjectType(o) == TSHADOW; }
    in bytes) based on an array's 'length'.
 */
 Num memArrayLengthToObjectSize  (LengthType length) {
-	return (length + 7 + DescSize) & -DescSize;
+	return DescSize + (length + DescSize-1) & -DescSize;
 }
 
 /* Compute object size based on vector's 'length'.
@@ -398,16 +399,16 @@ void memVectorSet (Obj obj, Num offset, Obj item) {
 }
 
 void memStackPush (Obj obj, Obj item) {
-	#if DEBUG_ASSERT
-	if (!(memIsObjectInHeap(&heap, obj) || memIsObjectInHeap(&heapOld, obj)
-	      || memIsObjectInHeap(&heapStatic, obj))) {
-		DB ("ERROR memStackPush(obj "OBJ" item "OBJ") Invalid object.", obj, item);
+	#if DEBUG_ASSERT_STACK
+	if (!memIsObjectValid(obj)) {
+		fprintf (stderr, "ERROR memStackPush(obj "OBJ" item "OBJ") Invalid object.", obj, item);
 		memError();
 	} else if (!memIsObjectStack(obj)) {
-		DB ("ERROR memStackPush(obj "OBJ" item "OBJ") Not stack type.", obj, item);
+		fprintf (stderr, "ERROR memStackPush(obj "OBJ" item "OBJ") Not stack type.", obj, item);
 		memError();
 	} else if (STACK_LENGTH <= memStackLength(obj)) {
-		DB ("ERROR memStackPush(obj "OBJ" item "OBJ") Stack overflow.", obj, item);
+		fprintf (stderr, "ERROR memStackPush(obj "OBJ" item "OBJ") Stack overflow.", obj, item);
+		memDebugDumpObject(r1f, stderr);
 		memError();
 	}
 	#endif
@@ -527,7 +528,7 @@ Obj memStackObject (Obj obj, Num topOffset) {
 /* Number of elements pushed onto stack.
 */
 Int memStackLength (Obj obj) {
-	#if DEBUG_ASSERT
+	#if DEBUG_ASSERT_STACK
 	if (!(memIsObjectInHeap(&heap, obj)
 	      || memIsObjectInHeap(&heapOld, obj)
 	      || memIsObjectInHeap(&heapStatic, obj)
@@ -965,7 +966,7 @@ void memDebugDumpObject (Obj o, FILE *stream) {
 	/* Some objects are just an instance of the descriptor
 	   such as #f and #() they have no content. */
  	if (!memObjectLength(o)) {
-		fprintf(stderr, "SIMPLETON");
+		fprintf(stderr, " EMPTY");
 	} else if (memIsObjectVector(o)) { // Vector
 		if (memIsObjectPointer(o)) {
 			fprintf (stream, " "OBJ" -> "OBJ, ((Obj*)o)[0], ((Obj*)o)[1]);

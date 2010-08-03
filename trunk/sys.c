@@ -5,6 +5,7 @@
 #include <assert.h>
 #include "sys.h"
 
+const int MaxSemaphoreCount=64;
 
 /* Concepts:
      (Operator operand operand operand ...)
@@ -1308,9 +1309,11 @@ void sysQuit (void) { exit(0); }
 /* This can do anything.  I change it mainly for debugging and prototyping. */
 void sysFun (void) {
 	//vmDebugDumpCode(r1c, stderr);
-	memDebugDumpHeapHeaders(stderr);
-	memDebugDumpYoungHeap(stderr);
-	memDebugDumpHeapHeaders(stderr);
+	//memDebugDumpHeapHeaders(stderr);
+	//memDebugDumpYoungHeap(stderr);
+	//memDebugDumpHeapHeaders(stderr);
+	sysDumpCallStackCode();
+	*(int*)0=0;
 }
 
 /* Dump external representation of the local environment hierarchy to stdout. */
@@ -1435,17 +1438,27 @@ void sysSubString (void) {
  Int end=0, start=0;
 	DB("SYS -->sysSubString");
 	if (wscmAssertArgumentCount(3, __func__)) return;
-	end=*(Int*)pop();
-	start=*(Int*)pop();
-	r1=pop();
-	if (end==start)
-		 r0=nullstr;
-	else {
-		memNewArray(TSTRING, end-start);
-		memcpy(r0, r1+start, end-start);
+	end=*(Int*)(r2=pop());
+	start=*(Int*)(r1=pop());
+	if (end==start) {
+		r1=pop();
+		r0=nullstr;
+	} else {
+		if (end-start < 0) {
+			pop();
+			objNewString((u8*)"Invalid range to substring.", 27);  push(r0);
+			push(r2); push(r1);
+			r1 = (Obj)3;
+			wscmError();
+		} else {
+			memNewArray(TSTRING, end-start);
+			r1=pop();
+			memcpy(r0, r1+start, end-start);
+		}
 	}
 	DB("SYS <--sysSubString");
 }
+
 void sysStringLength (void) {
 	DB("SYS -->sysStringLength");
 	if (wscmAssertArgumentCount(1, __func__)) return;
@@ -2240,7 +2253,8 @@ void sysOpenSemaphore (void) {
  int i=0;
 	if (wscmAssertArgumentCount(1, __func__)) return;
 	/* Look for next available semaphore. */
-	while (memVectorObject(semaphores, i) != null) i++; // TODO BF: if no room?
+	while (memVectorObject(semaphores, i) != null) i++;
+	assert(i<MaxSemaphoreCount);
 	/* Create new integer object from passed initial count value. */
 	objNewInt(*(Num*)pop());
 	memVectorSet(semaphores, i, r0);
@@ -2295,11 +2309,20 @@ void sysSemaphoreUp (void) {
 }
 
 void sysTime (void) {
+ struct timeval tv;
 	DB("-->%s\n", __func__);
 	if (wscmAssertArgumentCountRange(0, 0, __func__)) return;
- struct timeval tv;
 	gettimeofday(&tv, NULL);
 	objNewInt(tv.tv_sec);
+	DB("<--%s\n", __func__);
+}
+
+void sysUTime (void) {
+ struct timeval tv;
+	DB("-->%s\n", __func__);
+	if (wscmAssertArgumentCountRange(0, 0, __func__)) return;
+	gettimeofday(&tv, NULL);
+	objNewInt(tv.tv_sec*1000 + tv.tv_usec/1000);
 	DB("<--%s\n", __func__);
 }
 
@@ -2769,7 +2792,7 @@ void wscmInitialize (void) {
 	//objNewVector(1024);  blocked=r0;
 
 	/* Create semaphore counters. */
-	i=64;
+	i=MaxSemaphoreCount;
 	objNewVector(i);  semaphores=r0;
 	while (i--) memVectorSet(semaphores, i, null);
 
@@ -2814,6 +2837,7 @@ void wscmInitialize (void) {
 	wscmDefineSyscall (sysModulo, "modulo");
 	wscmDefineSyscall (sysSub, "-");
 	wscmDefineSyscall (sysTime, "time");
+	wscmDefineSyscall (sysUTime, "utime");
 	wscmDefineSyscall (sysSleep, "sleep");
 	wscmDefineSyscall (sysTID, "tid");
 	wscmDefineSyscall (sysUnthread, "unthread");

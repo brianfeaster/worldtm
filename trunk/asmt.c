@@ -8,7 +8,7 @@
 static void asmtDisplayInteger (void) { printf (INT, r1); }
 static void asmtDisplayString (void) { printf ("%s", r1); }
 static void asmtDisplayNewline (void) { printf ("\n"); }
-static void asmtVmDebugDumpCode (void) { memDebugDumpAll(); vmDebugDumpCode(code); }
+static void asmtVmDebugDumpCode (void) { memDebugDumpAll(stdout); vmDebugDumpCode(code, stdout); }
 
 int main (void) {
  char *welcomemsg="asmt.c  Unit test for asm module.";
@@ -47,15 +47,15 @@ int main (void) {
 	);
 
 	/* Compile the assembly.  Dump asmstack before and after. */
-	memDebugDumpObject(asmstack);
+	memDebugDumpObject(asmstack, stdout);
 	asmCompileAsmstack(0);
-	memDebugDumpObject(asmstack);
+	memDebugDumpObject(asmstack, stdout);
 
 	/* Create new code object from asmstack into r0. */
 	asmNewCode();
 
 	/* Dump assembled code object. */
-	memDebugDumpObject(r0);
+	memDebugDumpObject(r0, stdout);
 
 	/* Run the code twice. */
 	code = r0;

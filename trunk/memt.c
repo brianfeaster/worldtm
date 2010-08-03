@@ -78,14 +78,14 @@ int main (int argc, char *argv[]) {
 		for (j=0; j<16; j++) ((char*)r0)[j] = j+i;
 	}
 
-	memDebugDumpAll();
+	memDebugDumpAll(stdout);
 	memGarbageCollect();
-	memDebugDumpAll();
+	memDebugDumpAll(stdout);
 
-	memDebugDumpObject(rf);
+	memDebugDumpObject(rf, stdout);
 	memStackPop(rf);
 	(*(Obj**)rf)++; // This is illegal but I want to verify that popping clears the object on the stack.
-	memDebugDumpObject(rf);
+	memDebugDumpObject(rf, stdout);
 	assert(memStackObject(rf, 0)==0);
 	goto ret;
 

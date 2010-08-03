@@ -21,6 +21,7 @@ void sysWrite (void);
 void sysIllegalOperator (void);
 void sysCreateContinuation (void);
 void wscmDumpEnv (Obj o);
+void sysDumpCallStackCode (void);
 
 /* Has compiler encountered an error?
 */
@@ -735,6 +736,21 @@ void compSetCdrB (Num flags) {
 	asm(STI20); asm(1l);
 ret:
 	DB("<--compSetCdrB");
+}
+
+void compProcedureP (Num flags) {
+	DB("-->%s", __func__);
+	if (memObjectType(cdr(expr)) != TPAIR) {
+		write (1, "ERROR: null? illegal operand count: ", 36);
+		wscmWrite (expr, 0, 1);
+	}
+	expr = cadr(expr);      /* Consider and compile expression. */
+	compExpression(flags & ~TAILCALL);
+	asm(BRTI0); asm(TCLOSURE); asm(4*8l);
+	asm(MVI0); asm(false);
+	asm(BRA); asm(2*8l);
+	asm(MVI0); asm(true);
+	DB("<--%s", __func__);
 }
 
 void compNullP (Num flags) {
@@ -1664,6 +1680,7 @@ Int compExpression (Num flags) {
 			else if (scdr       == car(expr)) compCdr(flags);
 			else if (ssetcarb   == car(expr)) compSetCarB(flags);
 			else if (ssetcdrb   == car(expr)) compSetCdrB(flags);
+			else if (sprocedurep== car(expr)) compProcedureP(flags);
 			else if (snullp     == car(expr)) compNullP(flags);
 			else if (spairp     == car(expr)) compPairP(flags);
 			else if (svectorp   == car(expr)) compVectorP(flags);

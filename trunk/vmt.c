@@ -4,7 +4,7 @@
 #include "vm.h"
 
 
-extern void vmInitialize (Func intHandler, Func preGC, Func postGC, Func1 objDumper);
+extern void vmInitialize (Func intHandler, Func preGC, Func postGC, void(*vmObjDumper)(Obj, FILE*));
 
 /* Debugging: Syscalls.
 */
