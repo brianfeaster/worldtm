@@ -93,12 +93,12 @@
    (display char)
    ; Update cursor.
    (set! GX (+ 1 GX))
-   (if (>= GX TWidth)
+   (if (<= TWidth GX)
        (begin
          (set! GX 0)
          (set! GY (+ 1 GY))
-         (if (>= GY THeight)
-             (set! GY (- THeight 1)))))
+         ;(if (<= THeight GY) (set! GY (- THeight 1))) ; Allow the cursor to be off scree to force a cursor move.
+       ))
    (semaphore-up TerminalSemaphore))
 
  (define (tcursor-visible)
@@ -126,12 +126,10 @@
 
  (define (WindowMaskDump)
   (let ~ ((w WINDOWS))
-    (or (null? w) (begin (display ((car w) 'ID))
+    (or (null? w) (begin (display ((car w) 'ID)) (newline)
                          (~ (cdr w)))))
-  (newline)
   (vector-map
      (lambda (v)
-        (newline)
         (vector-map (lambda (v) (display (if (null? v) 0 (v 'ID)))) v))
      WindowMask))
 

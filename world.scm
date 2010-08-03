@@ -1,26 +1,36 @@
-(define move list)
-(define BEQUIET (not (null? (memv "silent" (vector->list argv)))))
+(define QUIETLOGIN (not (null? (memv "silent" (vector->list argv)))))
+(define CELLANIMATION #t) 
 (define SCROLLINGMAP #t)
+(define KITTEHBRAIN  #f)
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; IPC stuff
+(load "ipc.scm")
+
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Window stuff
 (load "window.scm")
+
+; Force just only one instance of the Terminal object
+; by setting the object value to an instance of itself.
 (define Terminal (Terminal))
 
-(define Console ((Terminal 'WindowNew)
+(define WinChat ((Terminal 'WindowNew)
  0 0
- (- (Terminal 'THeight) 1) (Terminal 'TWidth)
+ (- (Terminal 'THeight) 1)  (Terminal 'TWidth)
  #x0f))
-(define ConsolePutc (Console 'putc))
-(define ConsolePuts (Console 'puts))
-(define ConsoleSetColor (Console 'set-color))
-(define (ConsoleDisplay . l)
-  (map (lambda (o) (ConsolePuts (display->string o))) l))
-(define (ConsoleWrite o)
-  ((Console 'puts) (write->string o)))
+(define WinChatPutc (WinChat 'putc))
+(define WinChatPuts (WinChat 'puts))
+(define WinChatSetColor (WinChat 'set-color))
+(define (WinChatDisplay . l)
+  (for-each (lambda (o) (WinChatPuts (display->string o))) l))
+(define (WinChatWrite o)
+  ((WinChat 'puts) (write->string o)))
 
-((Console 'goto) 0 0) ;(Console 'WHeight)
-;(ConsoleDisplay  "\r\nWelcome to World\r\n")
-;(ConsoleDisplay  "\r\nEnter your name>\r\n")
+(define WinConsole ((Terminal 'WindowNew) 0 0 (- (Terminal 'THeight) 1)  (Terminal 'TWidth) #x74))
+(define WinConsolePuts (WinConsole 'puts))
+((WinConsole 'toggle))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -41,11 +51,13 @@
 ;; Cells - For now cells are just glyphs...eventually smarter objects.
 ;;
 (define CELLS (make-vector 256 (glyphNew #x1b #\? #x31 #\?)))
+
+(define (cell-set! i c) (vector-set! CELLS i c))
+
 (define (cell-ref i)
-  (if (> i 255)
+  (if (< 256 i) ; An index larger than 255 is assumbed to be an entity object.
     ((entitiesGet i) 'glyph)
     (vector-ref CELLS i)))
-(define (cell-set! i c) (vector-set! CELLS i c))
 
 (define WATER0 0)     (cell-set! WATER0     (glyphNew #x04 #\\ #x04 #\/ #(#x04 #\/ #x04 #\\)))
 (define WATER1 1)     (cell-set! WATER1     (glyphNew #x04 #\~ #x04 #\~ #(#x04 #\- #x04 #\-) #(#x04 #\_ #x04 #\_)))
@@ -71,15 +83,15 @@
 (define BRIDGE 23)    (cell-set! BRIDGE     (glyphNew #x03 #\= #x03 #\=))
 (define CELLB 29)     (cell-set! CELLB      (glyphNew #x1b #\? #x31 #\c))
 (define SHRINE 30)    (cell-set! SHRINE     (glyphNew #x06 #\[ #x06 #\]))
+(define SAND2 37)     (cell-set! SAND2      (glyphNew #x03 #\, #x03 #\,))
+(define SAND3 50)     (cell-set! SAND3      (glyphNew #x03 #\. #x03 #\.))
 (define CELLD 61)     (cell-set! CELLD      (glyphNew #x1b #\? #x31 #\d))
 (define FIRE2 70)     (cell-set! FIRE2      (glyphNew #x01 #\^ #x01 #\^))
 (define FIRE  76)     (cell-set! FIRE       (glyphNew #x09 #\^ #x09 #\^))
 (define HELP  77)     (cell-set! HELP       (glyphNew #x1b #\? #x1b #\?))
 (define CHAIR 78)     (cell-set! CHAIR      (glyphNew #x19 #\P #x19 #\o))
-(define SNAKE 79)     (cell-set! SNAKE      (glyphNew #x6b #\O #x6b #\o
-                                                    #(#x6b #\o #x6b #\O)))
-(define KITTY 80)     (cell-set! KITTY      (glyphNew #x07 #\M #x07 #\e
-                                                    #(#x07 #\o #x07 #\w)))
+(define SNAKE 79)     (cell-set! SNAKE      (glyphNew #x6b #\O #x6b #\o #(#x6b #\o #x6b #\O)))
+(define KITTY 80)     (cell-set! KITTY      (glyphNew #x07 #\M #x07 #\e #(#x07 #\o #x07 #\w)))
 (define TV 90)        (cell-set! TV         (glyphNew #x71 #\[ #x71 #\]))
 (define AIR 127)      (cell-set! AIR        (glyphNew #x00 CHAR-CTRL-@ #x00 CHAR-CTRL-@))
 
@@ -91,7 +103,7 @@
 ;;  by including all values within a range with the objects below and above
 ;;  the range the first and last values in the vector.
 ;;
-;; IE: Position -3 -1 0 1 2|3 4 5 6 7|8...
+;; IE: Position -2 -1 0 1 2|3 4 5 6 7|8...
 ;;                         |         |
 ;;     Objects   0  0 0 0 0|0 1 2 2 5|5 5...
 ;;       default           |  real   |        default
@@ -149,21 +161,6 @@
 (vector-set! c i o)))
 c))
 
-(rem
-(define (fun C)
-(displayl "\r\nThe column:" C)
-(displayl "\r\nHeight Bottom:" (columnHeightBottom C))
-(displayl "\r\nHeight Top" (columnHeightTop C))
-(display "\r\nObjects:")
-(let ~ ((i 0)) (and (< i 15) (displayl "\c30;1m" i "\c0m" (columnRef C i) " ") (~ (+ i 1))))
-(display "\r\n"))
-(define C #(2  0 1 2  2 2 5))
-(fun C)
-(displayl "\r\ncolumn: " C)
-(displayl "\r\ncolumnSet 8 99") (display (columnSet C 8 99))
-(displayl "\r\ncolumnSet 11 11") (display (columnSet C 11 11))
-(displayl "\r\ncolumnSet 3 77") (display (columnSet C 3 77))
-(quit))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Field - Maps will populate the field as if it were a local cache relative
@@ -172,13 +169,17 @@ c))
 (define FieldDimension 256) ; Field dimension
 
 ; Create default plane.
-(define FIELD
- (vector-vector-map! 
-   (lambda (i)
-    ;(if (random-bool 2) (vector 2 XX GRASS AIR) (vector 2 XX DIRT  AIR))
-    ;(vector 2 XX  WATER  AIR AIR))
-    (vector 0 XX AIR))
-  (make-vector-vector FieldDimension FieldDimension ())))
+(define FIELD ())
+
+(define (resetField)
+ (set! FIELD
+  (vector-vector-map! 
+    (lambda (i)
+     ;(if (random-bool 2) (vector 2 XX GRASS AIR) (vector 2 XX DIRT  AIR))
+     ;(vector 2 XX  WATER  AIR AIR))
+     (vector 0 XX AIR))
+   (make-vector-vector FieldDimension FieldDimension ()))))
+(resetField)
 
 ;(vector-vector-map! (lambda (i) (display "\r\n") (display i) i) FIELD)
 
@@ -246,7 +247,7 @@ c))
                top
                1000)))
    (~ y (+ x 1))))))
-(ConsoleDisplay "Initialized Canvas " (- (time) timeStart) " seconds")
+;(WinChatDisplay "Initialized Canvas " (- (time) timeStart) " seconds")
 
 (define (canvasRender y x)
  (let ((top (field-ref-top 1000 y x)))
@@ -366,7 +367,7 @@ c))
   (if (null? ent)
       (set! EntityDB (cons (cons dna (Entity dna name z y x glyph))
                            EntityDB))
-      (((cdr ent) 'setAll) name z y x glyph))))
+      (((cdr ent) 'setAll) name z y x glyph)))) ; Clone the remote entitiy locally.
 
 ; Lookup entity, or null, in database.
 (define (entitiesGet dna)
@@ -420,14 +421,14 @@ c))
 (define (entity dna name z y x glyph)
  (entitiesSet dna name z y x glyph)
  (move dna z y x))
- ;(ConsoleSetColor #x0e)
- ;;(ConsoleDisplay name))
- ;(ConsoleSetColor #x07)
- ;(ConsoleDisplay " is present in World[tm] as "))
- ;(ConsoleSetColor (glyphColor0 glyph))
- ;(ConsoleDisplay (glyphChar0 glyph))
- ;(ConsoleSetColor (glyphColor1 glyph))
- ;(ConsoleDisplay (glyphChar1 glyph)))
+ ;(WinChatSetColor #x0e)
+ ;;(WinChatDisplay name))
+ ;(WinChatSetColor #x07)
+ ;(WinChatDisplay " is present in World[tm] as "))
+ ;(WinChatSetColor (glyphColor0 glyph))
+ ;(WinChatDisplay (glyphChar0 glyph))
+ ;(WinChatSetColor (glyphColor1 glyph))
+ ;(WinChatDisplay (glyphChar1 glyph)))
 
 
 (define (who)
@@ -437,7 +438,7 @@ c))
 ;; Call this 'move.  Entites move.  Back to the original ways?
 ;; was 'avatar
 (define (move dna z y x)
- ;(ConsoleDisplay "\r" (list z y x (distance (list 0 (avatar 'y) (avatar 'x)) (list 0 (+ PortY (/ PortH 2)) (+ PortX (/ PortW 2))))))
+ ;(WinChatDisplay "\r" (list z y x (distance (list 0 (avatar 'y) (avatar 'x)) (list 0 (+ PortY (/ PortH 2)) (+ PortX (/ PortW 2))))))
  (letrec ((entity (entitiesGet dna))
           (thisIsMe (= dna (avatar 'dna)))
           (shouldScroll (and thisIsMe
@@ -445,7 +446,7 @@ c))
                                            (list 0 (+ PortY (/ PortH 2)) (+ PortX (/ PortW 2)))))))))
   (if (null? entity)
     (begin
-      ;(ConsoleDisplay "\r\nERROR: move: unknown avatar:" dna)
+      ;(WinChatDisplay "\r\nERROR: move: unknown avatar:" dna)
       (entitiesSet dna "??" z y x (glyphNew #x19 #\? #x19 #\?))
       ((ipc 'qwrite) '(who)))
     (begin
@@ -462,8 +463,8 @@ c))
         (or shouldScroll (viewportRender y x))))
       (if shouldScroll (begin
         (viewportReset (avatar 'y) (avatar 'x))
-        ;(ConsoleDisplay (display->string ((avatar 'look))))
-        ;(ConsoleDisplay "\r")
+        ;(WinChatDisplay (display->string ((avatar 'look))))
+        ;(WinChatDisplay "\r")
         ;(displayl "\c28H\c0m" (field-column (avatar 'y) (avatar 'x)) "\cK" )
         ))))))
 
@@ -481,15 +482,15 @@ c))
 
 (define (voice dna z y x level text)
  (let ((entity (entitiesGet dna)))
-   (ConsoleDisplay "\r\n")
-   (ConsoleSetColor (glyphColor0 (entity 'glyph)))
+   (WinChatDisplay "\r\n")
+   (WinChatSetColor (glyphColor0 (entity 'glyph)))
    (if (null? entity)
-     (ConsoleDisplay "???>")
-     (ConsoleDisplay (entity 'name)))
-   (ConsoleSetColor (glyphColor1 (entity 'glyph)))
-   (ConsoleDisplay " ")
-   (if (= level 100) (ConsoleSetColor #x09))
-   (ConsoleDisplay text))
+     (WinChatDisplay "???>")
+     (WinChatDisplay (entity 'name)))
+   (WinChatSetColor (glyphColor1 (entity 'glyph)))
+   (WinChatDisplay " ")
+   (if (= level 100) (WinChatSetColor #x09))
+   (WinChatDisplay text))
  (if (eqv? text "your turn") (thread (sayDesperate)))
  (if (and (!= dna (avatar 'dna)) (eqv? text "unatco"))
      ((ipc 'qwrite)
@@ -501,7 +502,7 @@ c))
 ;; Keyboard Input
 ;;
 (define AvatarDirectionGlyphs
-(vector
+ (vector
    (glyphNew #x07 #\? #x07 #\?)
    (glyphNew #x4f #\\ #x4f #\_)
    (glyphNew #x4f #\\ #x4f #\/)
@@ -523,10 +524,10 @@ c))
 (define (walk dir)
 ; (if (not (eq? BRICK (field-ref (avatar 'z) (avatar 'y) (avatar 'x))))
 ;   (begin
-     ;(ConsoleDisplay (list (avatar 'z)":" (avatar 'y)":"(avatar 'x)"="))
-     ;(ConsoleDisplay (list (field-ref 4 15 15) "," (field-ref 4 14 18)))
-     ;(ConsoleDisplay (field-ref (avatar 'z) (avatar 'y) (avatar 'x)))
-     ;(ConsoleDisplay "\r\n")))
+     ;(WinChatDisplay (list (avatar 'z)":" (avatar 'y)":"(avatar 'x)"="))
+     ;(WinChatDisplay (list (field-ref 4 15 15) "," (field-ref 4 14 18)))
+     ;(WinChatDisplay (field-ref (avatar 'z) (avatar 'y) (avatar 'x)))
+     ;(WinChatDisplay "\r\n")))
  ((avatar 'walk) dir)
  ((ipc 'qwrite) `(move ,(avatar 'dna) ,@((avatar 'gps))))
  ; Popup a message to a new window temporarily.
@@ -551,6 +552,20 @@ c))
  ((WinStatus 'puts) " ")
  ((WinStatus 'puts) (number->string (avatar 'x))))
 
+; Change avatar color.  Will just cycle through all 16 avatar colors.
+(define (avatarColor)
+ (letrec ((glyph (avatar 'glyph))
+          (color0 (glyphColor0 glyph))
+          (color1 (glyphColor1 glyph)))
+  ((avatar 'setGlyph)
+    (glyphNew (+ (* (colorBackground color0) 16)
+                 (modulo (+ (colorForeground color0) 1) 16))
+              (glyphChar0 glyph)
+              (+ (* (colorBackground color1) 16)
+                 (modulo (+ (colorForeground color1) 1) 16))
+              (glyphChar1 glyph))))
+  (who))
+
 ;(define (fortune)
 ; (let ~ (( dv8 (open-socket "dv8.org" 80)))
 ;  (sleep 10)
@@ -570,7 +585,8 @@ c))
 ;; Input Window
 (define WinInput
  ((Terminal 'WindowNew)
-  (- (Terminal 'THeight) 1) 0 1 (- (Terminal 'TWidth) 1) #x4a))
+  (- (Terminal 'THeight) 1) 0
+  1 (Terminal 'TWidth) #x4a))
 (define WinInputPutc (WinInput 'putc))
 (define WinInputPuts (WinInput 'puts))
 (define WinInputSetColor (WinInput 'set-color))
@@ -585,7 +601,7 @@ c))
     0 (- (Terminal 'TWidth) (* MapSize 2)) ; Position of the map window
     (+ MapSize 0) (* 2 MapSize)
     #x17 'NOREFRESH)))
-
+((WinMap 'toggle))
 ((WinMap 'cursor-visible) #f) ; Disable cursor in map window.
 
 ; Make Map window circular!
@@ -609,36 +625,46 @@ c))
 
 (circularize)
 
-(define deltaMoveTime (+ 1 (time)))
 
-(define (winMapSmaller)
- (if (< 5 (WinMap 'WHeight)) (begin
-  ((WinMap 'toggle))
-  ((WinMap 'moveresize)
-     0 (- (Terminal 'TWidth) (WinMap 'WWidth) -2)
-     (+ -1 (WinMap 'WHeight))
-     (+ -2 (WinMap 'WWidth)))
-  (circularize)
-  (viewportReset (avatar 'y) (avatar 'x))
-  ((WinMap 'toggle)))))
+(define deltaMoveTime (+ 62 (utime))) ; Double click 1/16 sec.
 
 (define (winMapBigger)
  (if (< (WinMap 'WHeight) (Terminal 'THeight)) (begin
-  ((WinMap 'toggle))
-  (if (< (time) deltaMoveTime)
+  ;((WinMap 'toggle))
+  ((WinMap 'home))
+  (if (< (utime) deltaMoveTime)
     ((WinMap 'moveresize) ; Full resize.
        0 (- (Terminal 'TWidth) (WinMap 'WWidth) 2)
-       (min (/ (Terminal 'TWidth) 2) (Terminal 'THeight))
-       (* 2 (min (/ (Terminal 'TWidth) 2) (Terminal 'THeight)))))
+             (min (/ (Terminal 'TWidth) 2) (- (Terminal 'THeight) 1))
+       (* 2  (min (/ (Terminal 'TWidth) 2) (- (Terminal 'THeight) 1)))))
     ((WinMap 'moveresize) ; Resize by one.
        0 (- (Terminal 'TWidth) (WinMap 'WWidth) 2)
        (+ 1 (WinMap 'WHeight))
        (+ 2 (WinMap 'WWidth)))
   (circularize)
   (viewportReset (avatar 'y) (avatar 'x))
-  ((WinMap 'toggle))
-  (set! deltaMoveTime (+ 1 (time))))))
+  ;((WinMap 'toggle))
+  (set! deltaMoveTime (+ 250 (utime))))))
 
+(define (winMapSmaller)
+ (if (< 5 (WinMap 'WHeight)) (begin
+  ;((WinMap 'toggle))
+  ((WinMap 'home))
+  ((WinMap 'moveresize)
+     0 (- (Terminal 'TWidth) (WinMap 'WWidth) -2)
+     (+ -1 (WinMap 'WHeight))
+     (+ -2 (WinMap 'WWidth)))
+  (circularize)
+  (viewportReset (avatar 'y) (avatar 'x))
+  ;((WinMap 'toggle))
+)))
+
+(define (winMapUp)  ((WinMap 'move)  (+ -1 (WinMap 'Y0)) (WinMap 'X0)))
+(define (winMapDown) ((WinMap 'move)  (+  1 (WinMap 'Y0)) (WinMap 'X0)))
+(define (winMapLeft)    ((WinMap 'move) (WinMap 'Y0) (+ -1 (WinMap 'X0))))
+(define (winMapRight)  ((WinMap 'move) (WinMap 'Y0) (+  1 (WinMap 'X0))))
+
+ 
 (define WinMapSetColor (WinMap 'set-color))
 (define WinMapPutc (WinMap 'putc))
 (define (WinMapPutGlyph glyph y x)
@@ -665,25 +691,14 @@ c))
 (define WinColumnSetColor (WinColumn 'set-color))
 
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; IPC stuff
-(load "ipc.scm")
-
-; Create ipc object with an debug message output port.
-;(define ipc (Ipc ConsoleDisplay))
-(define ipc (Ipc (lambda x ())))
-
-; Always read and evaluate everything from IPC.
-(thread  (let ~ () (eval ((ipc 'qread))) (~)))
-
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; stuff
 (define (welcome)
  (define WinMarquee
   ((Terminal 'WindowNew)
-    2 (- (/ (Terminal 'TWidth) 1) 45)
-    3 22
+    (/ (Terminal 'THeight) 3)  (- (/ (Terminal 'TWidth) 2) 11)
+    3  22
     #x0f))
  (define WinMarqueePuts (WinMarquee 'puts))
  (define WinMarqueePutc (WinMarquee 'putc))
@@ -763,15 +778,16 @@ c))
    (random (- (Terminal 'TWidth) 3))
    200))
 
-(define WinHelp ((Terminal 'WindowNew) 5 20 11 30 #x21))
+(define WinHelp ((Terminal 'WindowNew) 5 20 12 30 #x21))
 
+; Give the help window an artistic border.
 (map (lambda (x) ((WinHelp 'alpha) 0 x #f))
      '(0 1 2 3 4 5 6 7 8 20 21 22 23 24 25 26 27 28 29))
 
 ((WinHelp 'goto) 0 0)
 ((WinHelp 'puts) "         )) Help! ((")
 ((WinHelp 'set-color) #x20)
-((WinHelp 'puts) "\r\n? = toggle help window\r\nt = talk\r\nesc = exit talk\r\nm = toggle map\r\n> = increase map size\r\n< = decrease map size\r\nq = quit\r\nhjkl = move\r\n^A = change color\r\nc = spawn kitteh")
+((WinHelp 'puts) "\r\n? = toggle help window\r\nt = talk\r\nesc = exit talk\r\nm = toggle map\r\nW = toggle animation\r\n> = increase map size\r\n< = decrease map size\r\nq = quit\r\nhjkl = move\r\n^A = change color\r\nc = spawn kitteh")
 ((WinHelp 'toggle))
 
 (define (help)
@@ -779,21 +795,13 @@ c))
  ; (WinHelp '(set! Y1 (+ Y0 WHeight)))
   ((WinHelp 'toggle)))
 
-(ConsoleSetColor #x0b)
-(ConsoleDisplay "\r\nSee http://code.google.com/p/worldtm")
-(ConsoleDisplay "\r\nHit ? to toggle the help window")
-(ConsoleDisplay "\r\n\r\n   *** Welcome to the construct. ***")
-
-(viewportReset (avatar 'y) (avatar 'x))
-
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Drop some cells on the map
 (define (dropCell y x cell)
  (let ((z (+ 1 (field-ref-top 1000 y x))))
   (field-set! z y x cell)
   (canvasRender y x)
-  (viewportRender y x)
-  ))
+  (viewportRender y x)))
 
 (define (setCell z y x cell)
   (field-set! z y x cell)
@@ -827,8 +835,10 @@ c))
 ; i = (+ (modulo x 32) (* (/ x 32) 1024) (* (modulo y 32) 32) (* (/ y 32) 8192))
 
 (define (load-ultima-world4)
+ (resetField)
  (let ((fd (open "ultima4.map"))
-       (bar (makeProgressBar 5 30 "Britannia 4")))
+       (bar (makeProgressBar 5 30 "Britannia 4"))
+       (timeStart (time)))
   (let ~ ((i 0))
      (or (= i 65536) (begin
       (if (= 0 (modulo i (/ 65536 20))) (bar))
@@ -836,9 +846,9 @@ c))
                (+ (modulo (/ i 32) 32) (* (/ i 8192) 32))
                (+ (modulo i 32) (* (modulo (/ i 1024) 8) 32))
                (+ 0 (read-char fd))) ; Hack to convert char to integer
-      (~ (+ i 1)))))))
-
-(thread (load-ultima-world4))
+      (~ (+ i 1)))))
+  ;(WinChatDisplay "\r\nInitialized UltimaIV Map " (- (time) timeStart) " seconds")
+))
 
 (define (load-ultima-world5)
  (let ((fdm (open "ultima5.map"))
@@ -854,22 +864,13 @@ c))
         (+ 0 (read-char fdm))))))
    (~ y (+ x 1))))))))
 
-;(build-island 15 15 7) 
-;(dropCell 13 17 HELP)
-;(dropCell 16 18 SNAKE)
-;(dropCell 19 16 KITTY)
-;(dropCell 12 13 TV)
-;(dropCell 17 13 CHAIR)
-;(build-island 4 28 4) 
-;(build-island 20 30 5)
-;(build-brick-room 15 35)
 
 (define (tankTalk str) (thread (begin
   (sleep 700)
-  (ConsoleSetColor #x0f)
-  (ConsoleDisplay "\r\nTank ")
-  (ConsoleSetColor #x07)
-  (ConsoleDisplay str))))
+  (WinChatSetColor #x0f)
+  (WinChatDisplay "\r\nTank ")
+  (WinChatSetColor #x07)
+  (WinChatDisplay str))))
 
 (define tankHangupTime 0)
 (define tankIsListening #f)
@@ -930,10 +931,10 @@ c))
        ; Send talk chatter to IPC or evaluate expression
        (if (and (not (eq? "" talkInput))
                 (eq? #\: (string-ref talkInput 0)))
-           (begin (ConsoleDisplay "\r\n")
-                  (ConsoleDisplay talkInput)
-                  (ConsoleDisplay "=>")
-                  (ConsoleDisplay 
+           (begin (WinChatDisplay "\r\n")
+                  (WinChatDisplay talkInput)
+                  (WinChatDisplay "=>")
+                  (WinChatDisplay 
                     (call/cc (lambda (c) ; Return here if an error occurs
                        (vector-set! ERRORS (tid) c)
                        (eval (read-string (cdr-string talkInput)))))))
@@ -952,64 +953,118 @@ c))
               'talk)
    'talk))))))))
 
-(define (replCmd c)
- (define state 'cmd)
- (if (eq? c #\j) (walk 2)
- (if (eq? c #\B) (walk 2)
- (if (eq? c #\k) (walk 8)
- (if (eq? c #\A) (walk 8)
- (if (eq? c #\h) (walk 4)
- (if (eq? c #\D) (walk 4)
- (if (eq? c #\l) (walk 6)
- (if (eq? c #\C) (walk 6)
- (if (eq? c #\b) (walk 1)
- (if (eq? c #\n) (walk 3)
- (if (eq? c #\y) (walk 7)
- (if (eq? c #\u) (walk 9)
- (if (eq? c #\+) (walk 5)
- (if (eq? c #\-) (walk 0)
- (if (eq? c #\s) (begin (set! SCROLLINGMAP (not SCROLLINGMAP)) (ConsoleDisplay "\r\nalwaysScroll " SCROLLINGMAP))
- (if (eq? c #\m)         ((WinMap 'toggle))
- (if (eq? c CHAR-CTRL-M) (begin ((WinStatus 'toggle)) ((WinColumn 'toggle)))
- (if (eq? c #\t) (begin
-                   (WinInputPuts (string ">" (replTalk 'getBuffer)))
-                   (set! state 'talk))
- (if (or (eq? c #\q) (eq? c #\Q) (eof-object? c) (eq? c CHAR-CTRL-Q))
-     (set! state 'done)
- (if (eq? c CHAR-CTRL-A) (begin
-    ((avatar 'setGlyph)
-      (glyphNew (+ (* (colorBackground (glyphColor0 (avatar 'glyph))) 16)
-                   (modulo (+ (colorForeground (glyphColor0 (avatar 'glyph))) 1) 16))
-                (glyphChar0 (avatar 'glyph))
-                (+ (* (colorBackground (glyphColor1 (avatar 'glyph))) 16)
-                   (modulo (+ (colorForeground (glyphColor1 (avatar 'glyph))) 1) 16))
-                (glyphChar1 (avatar 'glyph))))
-    (who))
- (if (eq? c CHAR-CTRL-K) ((ipc 'qwrite) `(set! FIELD ,FIELD)) ; Send my plane out to IPC.
- (if (eq? c CHAR-CTRL-L)
-     (begin
-      (viewportReset (avatar 'y) (avatar 'x))
-      ((Console 'repaint)))
- (if (eq? c CHAR-CTRL-_) (walk 4)
- (if (eq? c #\d)
-    ((ipc 'qwrite) `(dropCell ,(avatar 'y) ,(avatar 'x) BRICK)) ; Send my plane out to IPC.
-   ;(field-set! (avatar 'z) (avatar 'y) (avatar 'x) (avatar 'cell))
-   ;(canvasRender (avatar 'y) (avatar 'x))
-   ;(viewportRender (avatar 'y) (avatar 'x)))
-;(if (eq? c #\f) ((Terminal 'WindowMaskDump))
- (if (eq? c #\g)
-   (let ((o (field-ref (avatar 'z) (avatar 'y) (avatar 'x))))
+(define (boxInput title)
+ (define box
+  ((Terminal 'WindowNew)
+    (/ (Terminal 'THeight) 2)  (- (/ (Terminal 'TWidth) 2) 10)
+    3  20
+    #x0f))
+ (define puts (box 'puts))
+ (define putc (box 'putc))
+ (define setcolor (box 'set-color))
+ (define str "")
+ ;((box 'cursor-visible) #f) ; Disable cursor in map window.
+ (puts "+------------------+")
+ (puts "|                  |")
+ (puts "+------------------+")
+ ((box 'goto) 0 2) (puts title)
+ ((box 'goto) 1 1)
+ (let ~ ((c (read-char stdin)))
+   (or (eq? c RETURN) (eq? c NEWLINE)
+    (begin
+     (if (or (eq? c CHAR-CTRL-H)
+             (eq? c CHAR-CTRL-_)
+             (eq? c CHAR-CTRL-?)
+             (eq? c #\%))
+       (if (eq? str "") "" (begin
+             ((box 'backspace) #\ )
+             (set! str (substring str 0 (- (string-length str) 1)))))
+       (if (< (string-length str) 18) (begin
+             (putc c)
+             (set! str (string str c)))))
+     (~ (read-char stdin)))))
+ ((box 'delete))
+ str)
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Buttons
+; 157 crashes
+(define Buttons (make-vector 257 (lambda())))
+
+(define (setButton ch exp)
+ (vector-set! Buttons ch exp)) ; For now characters are also integer constants.
+
+(define ShowButtons #f)
+(define (showButtons) (set! ShowButtons (not ShowButtons)))
+
+; Consider the button value.  If data just return the expression.  Otherwise
+; assume a closure.  Consider the closure, closure's code, the code's pre-compiled
+; expression and return it.
+(define (getButton ch)
+ (let ((val (vector-ref Buttons ch)))
+   (if (pair? val)  val
+   (if (procedure? val) (cons 'lambda (vector-ref (vector-ref (vector-ref Buttons ch) 0) 2))
+   val))))
+
+(setButton #\1 '(thread (sigwinch)))
+(setButton #\4 '(load-ultima-world4))
+(setButton #\j '(walk 2))
+(setButton #\B '(walk 2))
+(setButton #\k '(walk 8))
+(setButton #\A '(walk 8))
+(setButton #\h '(walk 4))
+(setButton #\D '(walk 4))
+(setButton #\l '(walk 6))
+(setButton #\C '(walk 6))
+(setButton #\b '(walk 1))
+(setButton #\n '(walk 3))
+(setButton #\y '(walk 7))
+(setButton #\u '(walk 9))
+(setButton #\+ '(walk 5))
+(setButton #\- '(walk 0))
+(setButton #\H '(winMapLeft))
+(setButton #\J '(winMapDown))
+(setButton #\K '(winMapUp))
+(setButton #\L '(winMapRight))
+(setButton #\W '(begin
+  (set! CELLANIMATION (not CELLANIMATION))
+  (WinChatDisplay "\r\nCell animation " CELLANIMATION)))
+(setButton #\s '(begin
+  (set! SCROLLINGMAP (not SCROLLINGMAP))
+  (WinChatDisplay "\r\nalwaysScroll " SCROLLINGMAP)))
+(setButton #\m '((WinMap 'toggle)))
+(setButton #\t '(begin
+  (WinInputPuts (string ">" (replTalk 'getBuffer)))
+  (set! state 'talk)))
+(setButton CHAR-CTRL-A '(avatarColor))
+(setButton CHAR-CTRL-F '(walkForever))
+(setButton CHAR-CTRL-K '((ipc 'qwrite) `(set! FIELD ,FIELD))) ; Send my plane out to IPC.
+(setButton CHAR-CTRL-L '(begin (viewportReset (avatar 'y) (avatar 'x)) ((WinChat 'repaint))))
+(setButton CHAR-CTRL-M '(begin ((WinStatus 'toggle)) ((WinColumn 'toggle))))
+(setButton CHAR-CTRL-Q '(set! state 'done))
+(setButton CHAR-CTRL-_ '(walk 4))
+(setButton #\d '((ipc 'qwrite) `(dropCell ,(avatar 'y) ,(avatar 'x) BRICK))) ; Send my plane out to IPC.
+(setButton #\g 
+   '(let ((o (field-ref (avatar 'z) (avatar 'y) (avatar 'x))))
      (field-delete!  (avatar 'z) (avatar 'y) (avatar 'x) o)
-     (avatar `(set! cell ,o)))
- (if (eq? c #\?) (help)
- (if (eq? c #\<) (winMapSmaller)
- (if (eq? c #\>) (winMapBigger)
- (if (eq? c #\z) (circularize)
- (if (eq? c #\Z) (circularize #t)
- (if (eq? c CHAR-CTRL-F) (walkForever)
- (if (eq? c #\4) (load-ultima-world4)
- (if (eq? c #\c) (thread (spawnKitty))
- (if (eq? c #\1) (thread (sigwinch))))))))))))))))))))))))))))))))))))
+     (avatar `(set! cell ,o))))
+(setButton #\? '(help))
+(setButton #\< '(winMapSmaller))
+(setButton #\> '(winMapBigger))
+(setButton #\z '(circularize))
+(setButton #\Z '(circularize #t))
+(setButton #\c '(thread (spawnKitty)))
+(setButton #\q '(set! state 'done))
+(setButton #\Q '(set! state 'done))
+(setButton eof '(set! state 'done))
+(setButton CHAR-CTRL-C '((WinConsole 'toggle)))
+
+(define (replCmd c)
+ (define state 'cmd) ; state might be changed to 'done or 'talk.
+ (let ((button (vector-ref Buttons c)))
+   (if ShowButtons (WinChatDisplay "\r\n" c " " (getButton c)))
+   (if (pair? button) (eval button)
+    (if (procedure? button) (button)
+     (WinChatDisplay "\r\nButton " c " undefined " button))))
  state)
 
 (define wrepl (let ((state 'cmd))
@@ -1028,27 +1083,22 @@ c))
    #x43))
 ((WinStatus 'toggle))
 
-;(viewportReset (avatar 'y) (avatar 'x))
-((ipc 'qwrite) '(who))
-;((ipc 'qwrite) `(voice ,(avatar 'dna) ,@((avatar 'gps)) 10 "Hello World[tm]!"))
-
 
 ;; Walking kitty soldier
-(define kittehDie #f)
 (define (spawnKitty . cycles)
- (set! cycles (if (null? cycles) 60 (car cycles))) ; Set max cycles
+ (set! cycles (if (null? cycles) 128 (car cycles))) ; Set max cycles
  (letrec ((kitty (Avatar "Kat"))
           (dir->card (lambda (d) (vector-ref #(6 9 8 7 4 1 2 3) d)))
           (card->dir (lambda (c) (vector-ref #(0 5 6 7 4 0 0 3 2 1) c)))
           (happyVector (vector 0 0 0 0 0 0 0 0))
           (dist 0))
- ; Tell everyone who I am.
+ ; Tell everyone who this kitteh is.
  ((ipc 'qwrite) `(entity ,(kitty 'dna) "kitty" ,@((kitty 'gps)) ,(glyphNew #x07 #\K #x0f #\a)))
  (let ~ ((i 0)) ; Main loop
    ; Distance from parent avatar
    (set! dist (distance ((kitty 'gps)) ((avatar 'gps))))
    ; Neuron depletion.
-   (if (= i 10) (vector-map! (lambda (x) (/ x 2)) happyVector))
+   (if (= 0 (modulo i 10)) (vector-map! (lambda (x) (/ x 2)) happyVector))
    ; Walk kitty quasi-randomly.
    ((kitty 'walk)
        (dir->card (letrec ((dir (card->dir (kitty 'dir)))
@@ -1061,34 +1111,23 @@ c))
        (+ (let ((kd (distance ((kitty 'gps))
                               ((avatar 'gps)))))
             (if (< kd dist) 1
-            (if (= kd dist) -1
-                            -2)))
+            (if (= kd dist) -1 -2)))
           (vector-ref happyVector (card->dir (kitty 'dir)))))
    ((ipc 'qwrite) `(move ,(kitty 'dna) ,@((kitty 'gps))))
-(rem
-   ((Console 'goto) 10 0)
-   (ConsoleDisplay (vector-ref happyVector 3))
-   (ConsoleDisplay " \t")
-   (ConsoleDisplay (vector-ref happyVector 2))
-   (ConsoleDisplay " \t")
-   (ConsoleDisplay (vector-ref happyVector 1))
-   (ConsoleDisplay "   \r\n")
-   (ConsoleDisplay (vector-ref happyVector 4))
-   (ConsoleDisplay " \t\t")
-   (ConsoleDisplay (vector-ref happyVector 0))
-   (ConsoleDisplay "   \r\n")
-   (ConsoleDisplay (vector-ref happyVector 5))
-   (ConsoleDisplay " \t")
-   (ConsoleDisplay (vector-ref happyVector 6))
-   (ConsoleDisplay " \t")
-   (ConsoleDisplay (vector-ref happyVector 7))
-   (ConsoleDisplay "   ")
-)
-   (sleep 100)
+   (if KITTEHBRAIN (begin
+     ((WinChat 'goto) 10 5) (WinChatDisplay (vector-ref happyVector 3) "  ")
+     ((WinChat 'goto) 10 8) (WinChatDisplay (vector-ref happyVector 2) "  ")
+     ((WinChat 'goto) 10 11)(WinChatDisplay (vector-ref happyVector 1) "  ")
+     ((WinChat 'goto) 11 5) (WinChatDisplay (vector-ref happyVector 4) "  ")
+     ((WinChat 'goto) 11 11)(WinChatDisplay (vector-ref happyVector 0) "  ")
+     ((WinChat 'goto) 12 5) (WinChatDisplay (vector-ref happyVector 5) "  ")
+     ((WinChat 'goto) 12 8) (WinChatDisplay (vector-ref happyVector 6) "  ")
+     ((WinChat 'goto) 12 11)(WinChatDisplay (vector-ref happyVector 7) "  ")))
+   (sleep 200)
    ;(if (equal? ((kitty 'gps))
    ;            ((avatar 'gps)))
    ;    ((ipc 'qwrite) `(voice ,(kitty 'dna) ,@((kitty 'gps)) 10 "Mrrreeeooowww!")))
-   (if (or kittehDie (> i (+ cycles (random 30))))
+   (if (> i (+ cycles (random 30)))
        ((ipc 'qwrite) `(die ,(kitty 'dna))) ; kill entity
        (~ (+ i 1)))))) ; spawnKitty
 
@@ -1097,26 +1136,18 @@ c))
  (vector-map! (lambda (x) (thread (x))) (make-vector (random 30) spawnKitty)))
  
 
-;(thread (snake 18 38 500))
-;(thread (snake 18 75 200))
-;(thread (snake 1 75 100))
-;(thread (welcome))
-;(ConsoleDisplay "\r\nWelcome to World")
-;(display "\e[?25h")
-
-
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Screen redraw signal handler
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (define (handleTerminalResize)
-  (ConsoleDisplay "\r\n" (terminal-size))
+  (WinChatDisplay "\r\n" (terminal-size))
   ((Terminal 'ResetTerminal))
-  ((Console 'resize)  (- (Terminal 'THeight) 1) (Terminal 'TWidth))
+  ((WinChat 'resize)  (- (Terminal 'THeight) 1) (Terminal 'TWidth))
   ((WinMap 'move)     0 (- (Terminal 'TWidth) (WinMap 'WWidth) 2))
   ((WinColumn 'move)  1 (- (Terminal 'TWidth) 2) )
   ((WinStatus 'move)  (WinMap 'Y0) (- (Terminal 'TWidth) 12))
-  ((WinInput 'resize) 1 (- (Terminal 'TWidth) 1))
+  ((WinInput 'resize) 1 (Terminal 'TWidth))
   ((WinInput 'move)   (- (Terminal 'THeight) 1) 0))
 
 (define sig28Semaphore (open-semaphore 1))
@@ -1127,7 +1158,6 @@ c))
   (semaphore-up sig28Semaphore))
 
 (vector-set! SIGNALHANDLERS 28 (lambda () (sigwinch) (unthread)))
-
 (signal 28)
 
 
@@ -1141,11 +1171,11 @@ c))
  (if walkForeverFlag
   (begin
    (set! walkForeverFlag #f)
-   (ConsoleSetColor #x0a)
-   (ConsoleDisplay "\r\nThus ends the journey"))
+   (WinChatSetColor #x0a)
+   (WinChatDisplay "\r\nThus ends the journey"))
   (begin
-   (ConsoleSetColor #x0a)
-   (ConsoleDisplay "\r\nThe journey begins")
+   (WinChatSetColor #x0a)
+   (WinChatDisplay "\r\nThe journey begins")
    (set! walkForeverFlag #t)
    (thread (let ~ ()
      (for-each
@@ -1170,10 +1200,58 @@ c))
          "*All Worldlians Want to Be Borned*"
          "*Happy Birthday*")))))
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Start everything
+
+(thread (welcome))
+
+(let ((name (boxInput "Enter your name")))
+ (if (eq? name "") (set! name "Guest"))
+ ((avatar 'setNameGlyph) name (glyphNew #x0f (string-ref name 0) #x0f (string-ref name 1))))
+
+(WinChatSetColor #x0b)
+;(WinChatDisplay "\r\n\r\n   *** Welcome to the construct. ***")
+((WinChat 'goto) 0 0) ;(WinChat 'WHeight)
+(WinChatDisplay "\r\nWelcome to World")
+(WinChatDisplay "\r\nSee http://code.google.com/p/worldtm")
+(WinChatDisplay "\r\nHit ? to toggle the help window")
+(WinChatDisplay "\r\nYour name is " (avatar 'name))
+
+; Create ipc object.  Pass in a debug message output port.
+; for production world an 'empty' port is passed.
+; (define ipc (Ipc WinChatDisplay))
+(define ipc (Ipc (lambda x ())))
+
+; Always read and evaluate everything from IPC.
+(thread  (let ~ () 
+ (let ((sexp ((ipc 'qread))))
+    (WinConsolePuts (display->string sexp))
+    (eval sexp)
+    (~))))
+
+((ipc 'qwrite) '(who))
+;((ipc 'qwrite) `(voice ,(avatar 'dna) ,@((avatar 'gps)) 10 "Hello World[tm]!"))
+
+
+;(build-island 15 15 7) 
+;(dropCell 13 17 HELP)
+;(dropCell 16 18 SNAKE)
+;(dropCell 19 16 KITTY)
+;(dropCell 12 13 TV)
+;(dropCell 17 13 CHAIR)
+;(build-island 4 28 4) 
+;(build-island 20 30 5)
+;(build-brick-room 15 35)
+(viewportReset (avatar 'y) (avatar 'x))
+((WinMap 'toggle))
+(thread (load-ultima-world4))
+
+;(thread (snake 18 38 500))
+
 ; Redraw map resulting in animated cells.
 (thread (let ~ ()
    (sleep 1000)
-   (viewportReset (avatar 'y) (avatar 'x))
+   (if CELLANIMATION (viewportReset (avatar 'y) (avatar 'x)))
    (~)))
 
 (define (sayByeBye)
@@ -1184,12 +1262,12 @@ c))
 (signal 1)
 
 ; Catch SIGPIPE which occurs when an IPC connection is broken.
-;(vector-set! SIGNALHANDLERS 13 (lambda () (ConsoleDisplay  "\r\nSIGPIPE IGNORED")))
+;(vector-set! SIGNALHANDLERS 13 (lambda () (WinChatDisplay  "\r\nSIGPIPE IGNORED")))
 ;(signal 13)
 
-(or BEQUIET (sayHelloWorld))
+(or QUIETLOGIN (sayHelloWorld))
 (wrepl)
-(or BEQUIET (sayByeBye))
+(or QUIETLOGIN (sayByeBye))
 
 ((ipc 'qwrite) `(die ,(avatar 'dna))) ; Kill avatar's entity
 (sleep 500) ; wait for ipc to flush

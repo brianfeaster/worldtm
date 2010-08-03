@@ -5,10 +5,10 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <stdlib.h>
+#include <assert.h>
 #include "sys.h"
 
 
-extern int interrupt;
 extern void sysIllegalOperator();
 extern void sysTGELookup();
 extern void sysTGEMutate();
@@ -51,8 +51,8 @@ int main (void) {
 	code=r0; ip=0; vmRun();
 	memGarbageCollect();
 
-	DBE memDebugDumpAll();
-	DBE vmDebugDumpCode(code);
+	DBE memDebugDumpAll(stdout);
+	DBE vmDebugDumpCode(code, stdout);
 	DB ("  --%s", __func__);
 	return 0;
 }

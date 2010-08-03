@@ -49,5 +49,6 @@ void catchSignal (int sig);
 void sysSignal (void);
 void wscmDefine (char* sym);
 void wscmInitialize (void);
+void sysDumpCallStackCode (void);
 
 #endif

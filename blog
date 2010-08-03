@@ -1985,3 +1985,39 @@ skip the call to disable I/O blocking:
 
 then the heap dumps work correctly.  My assumption was this unblocked the input
 file descriptor, not the output or error output descriptor.
+
+
+Thu Jul 22 03:12:35 EDT 2010
+
+* Crash when trying to evaluate "Buttons" in World.
+* Resizing the screen during login will result in an object dump but won't crash.
+
+I'm getting a segfault in a call to memStackObject.  The stack is located in
+the old heap.  Dumping the old heap reveals many unused space which shows up as
+multiple "7ffff46b3ff0 00 BASEARRAY   0SIMPLETON" objects.
+
+
+Loading times for initializing canvas and loading map
+2 and 8 seconds.
+1 and 4 seconds.
+
+Attempting to increase efficiency by cached a few integers before runtime.
+
+
+Fri Jul 23 11:35:33 EDT 2010
+
+Crashed when writing the Buttons object to World's console window due to an
+insufficient stack size.
+
+
+Sat Jul 24 10:51:03 EDT 2010
+
+The Terminal code doesn't handle the bottom right corner very well.  Native
+terminal scrolling can occur.  The bottom right corner position needs to be
+handled specificially by the Terminal object.
+
+
+Mon Aug  2 16:48:59 EDT 2010
+
+Currently the field size is the same size as the canvas.  I've yet to implement
+a dynamic field and canvas or a map abstraction.

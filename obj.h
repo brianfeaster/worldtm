@@ -14,10 +14,10 @@ extern Obj null, nullvec, nullstr, false, true, eof,
        svectorref, svectorvectorref, svectorvectorsetb, svectorsetb,
        svectorlength,
        scons, scar, scdr, ssetcarb, ssetcdrb,
-       snullp, spairp, svectorp, sstringp, sportp, sappend,
+       sprocedurep, snullp, spairp, svectorp, sstringp, sportp, sappend,
        seofobjectp, sthread, slet, sletrec, seval, sapply, scallcc,
        ssyntaxrules, seof,
-       snot, sadd, ssub, smul, sdiv, slogand, characters,
+       snot, sadd, ssub, smul, sdiv, slogand, characters, staticIntegers,
        signalhandlers;
 
 extern int wscmDebug;
