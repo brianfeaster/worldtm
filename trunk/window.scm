@@ -155,6 +155,7 @@
    (define needToScroll #f) ; For bottom right character printing.
    (define (cursor-visible s) (set! CURSOR-VISIBLE s))
    (define WindowSemaphore (open-semaphore 1))
+   (define ScrollbackHack #f)
    (define (goto y x)
      (set! needToScroll #f)
      (set! CurY (min y (- WHeight 1)))
@@ -180,12 +181,26 @@
      (if (and (< 0 CurX) (< CurX WWidth))
        (begin (set! CurX (- CurX 1))
               (set! needToScroll #f)
-              (putc c)
+              (semaphore-down WindowSemaphore)
+              (putchar c)
+              (semaphore-up WindowSemaphore)
               (display CHAR-CTRL-H) 
               (set! needToScroll #f)
               (set! CurX (- CurX 1)))))
    (define (scrollUp)
      ; Clear top-row which is to become the bottom row.
+     ; Force topmost line off the top of the terminal in hopes
+     ; of filling the client's terminal backscroll buffer. Set
+     ; 2 line scrolling region, move cursor, clear line.
+     (if ScrollbackHack (begin
+       (display "\e7\e[1;2r\e[H")
+       (let ~ ((x 0))
+         (if (>= x WWidth) 'done
+           (let ((desc (vector-vector-ref DESC topRow x)))
+              (displayl (integer->colorstring (vector-ref desc 0)) (vector-ref desc 1))
+              (~ (+ x 1)))))
+       (display "\e[K\n\n\e[r\e8")
+       (WindowMaskReset 0 0 1 (- TWidth 1))))
      (let ~ ((x 0))
         (if (< x WWidth)
           (let ((desc (vector-vector-ref DESC topRow x)))
@@ -213,7 +228,6 @@
                    (- gx X0))))
        (gputc (vector-ref desc 1) (vector-ref desc 0) gy gx)))
    (define (putchar c)
-     (semaphore-down WindowSemaphore)
      (if needToScroll (begin (set! needToScroll #f) (return) (newline)))
      (if (!= TCURSOR-VISIBLE CURSOR-VISIBLE) (tcursor-visible))
      (if (eq? c NEWLINE) (newline)
@@ -237,11 +251,15 @@
                (set! needToScroll #t) ; TODO remove this line then develop a framework to debug the issue.
                (begin 
                  (return)
-                 (newline)))))))))
+                 (newline))))))))))
+   (define (putc c)
+     (semaphore-down WindowSemaphore)
+     (putchar c)
      (semaphore-up WindowSemaphore))
-   (define putc putchar)
    (define (puts str)
-     (for-each putchar (string->list str)))
+     (semaphore-down WindowSemaphore)
+     (for-each putchar (string->list str))
+     (semaphore-up WindowSemaphore))
    (define (toggle)
      (set! ENABLED (not ENABLED))
      (WindowMaskReset Y0 X0 Y1 X1))

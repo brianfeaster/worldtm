@@ -1882,7 +1882,7 @@ void sysOpen (void) {
 	if (wscmAssertArgumentCount(1, __func__)) return;
 	r2=pop(); /* Filename */
 	memcpy(name, r2, memObjectLength(r2));
-	r1 = (Obj)(Int)open(name, O_RDWR);
+	r1 = (Obj)(Int)open(name, O_CREAT|O_RDWR);
 	if ((Int)r1==-1) {
 		fprintf (stderr, "ERROR: sysOpen() Unable to open local file.");
 		r0 = false;

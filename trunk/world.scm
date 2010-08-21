@@ -3,23 +3,21 @@
 (define SCROLLINGMAP #t)
 (define KITTEHBRAIN  #f)
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; IPC stuff
-(load "ipc.scm")
-
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; Window stuff
+(if QUIETLOGIN (load "ipc.scm" )(load "ipc.scm"))
 (load "window.scm")
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Create terminal windows
 
 ; Force just only one instance of the Terminal object
 ; by setting the object value to an instance of itself.
 (define Terminal (Terminal))
 
+; Chat window.
 (define WinChat ((Terminal 'WindowNew)
- 0 0
- (- (Terminal 'THeight) 1)  (Terminal 'TWidth)
- #x0f))
+  0 0
+  (- (Terminal 'THeight) 1)  (Terminal 'TWidth)
+  #x0f))
 (define WinChatPutc (WinChat 'putc))
 (define WinChatPuts (WinChat 'puts))
 (define WinChatSetColor (WinChat 'set-color))
@@ -27,10 +25,38 @@
   (for-each (lambda (o) (WinChatPuts (display->string o))) l))
 (define (WinChatWrite o)
   ((WinChat 'puts) (write->string o)))
+(WinChat '(set! ScrollbackHack #t))
 
-(define WinConsole ((Terminal 'WindowNew) 0 0 (- (Terminal 'THeight) 1)  (Terminal 'TWidth) #x74))
+; Console window
+(define WinConsole ((Terminal 'WindowNew)
+  0 0
+  (- (Terminal 'THeight) 1)  (Terminal 'TWidth)
+  #x74))
 (define WinConsolePuts (WinConsole 'puts))
+(define (WinConsoleDisplay . e) (for-each (lambda (x) (WinConsolePuts (display->string x))) e))
+(define (WinConsoleWrite . e) (for-each (lambda (x) (WinConsolePuts (write->string x))) e))
 ((WinConsole 'toggle))
+
+; Input Window
+(define WinInput ((Terminal 'WindowNew)
+  (- (Terminal 'THeight) 1) 0
+  1 (Terminal 'TWidth)
+  #x4a))
+(define WinInputPutc (WinInput 'putc))
+(define WinInputPuts (WinInput 'puts))
+(define WinInputSetColor (WinInput 'set-color))
+
+; Map Window. Initial map size is 20 or terminal width/height.
+(define WinMap
+ (let ((MapSize (min 28 (min (- (Terminal 'THeight) 1)
+                             (/ (Terminal 'TWidth) 2)))))
+  ((Terminal 'WindowNew)
+    0 (- (Terminal 'TWidth) (* MapSize 2)) ; Position of the map window
+    (+ MapSize 0) (* 2 MapSize)
+    #x17 'NOREFRESH)))
+((WinMap 'toggle))
+((WinMap 'cursor-visible) #f) ; Disable cursor in map window
+
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -50,15 +76,17 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Cells - For now cells are just glyphs...eventually smarter objects.
 ;;
-(define CELLS (make-vector 256 (glyphNew #x1b #\? #x31 #\?)))
+(define MAXCELL 1023)
+(define CELLS (make-vector (+ 1 MAXCELL) (glyphNew #x1b #\? #x31 #\?)))
 
 (define (cell-set! i c) (vector-set! CELLS i c))
 
 (define (cell-ref i)
-  (if (< 256 i) ; An index larger than 255 is assumbed to be an entity object.
+  (if (< MAXCELL i) ; An index larger than MAXCEL is assumbed to be an entity object.
     ((entitiesGet i) 'glyph)
     (vector-ref CELLS i)))
 
+(define AIR   MAXCELL)(cell-set! AIR        (glyphNew #x00 CHAR-CTRL-@ #x00 CHAR-CTRL-@))
 (define WATER0 0)     (cell-set! WATER0     (glyphNew #x04 #\\ #x04 #\/ #(#x04 #\/ #x04 #\\)))
 (define WATER1 1)     (cell-set! WATER1     (glyphNew #x04 #\~ #x04 #\~ #(#x04 #\- #x04 #\-) #(#x04 #\_ #x04 #\_)))
 (define WATER2 2)     (cell-set! WATER2     (glyphNew #x04 #\~ #x0c #\~ #(#x0c #\~ #x04 #\~)))
@@ -93,9 +121,8 @@
 (define SNAKE 79)     (cell-set! SNAKE      (glyphNew #x6b #\O #x6b #\o #(#x6b #\o #x6b #\O)))
 (define KITTY 80)     (cell-set! KITTY      (glyphNew #x07 #\M #x07 #\e #(#x07 #\o #x07 #\w)))
 (define TV 90)        (cell-set! TV         (glyphNew #x71 #\[ #x71 #\]))
-(define AIR 127)      (cell-set! AIR        (glyphNew #x00 CHAR-CTRL-@ #x00 CHAR-CTRL-@))
 
-; Ultime cells
+; Ultima cells
 ;(0:34014 1:10336 2:1933 3:666 4:7159 5:4924 6:2304 7:2328 8:1745 9:7 10:7 11:3 12:4 13:1 14:1 15:1 23:17 29:1 30:7 61:1 70:7 76:70)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -103,15 +130,18 @@
 ;;  by including all values within a range with the objects below and above
 ;;  the range the first and last values in the vector.
 ;;
-;; IE: Position -2 -1 0 1 2|3 4 5 6 7|8...
-;;                         |         |
-;;     Objects   0  0 0 0 0|0 1 2 2 5|5 5...
-;;       default           |  real   |        default
-;;    bottom objects_______| objects |_____ top objects
+;;  Z coordinate   -2 -1  0  1  2| 3  4  5  6  7| 8  9 10 11
+;;                ---------------+--------------+-------------
+;;                  0  0  0  0  0| 0  5  7  4  9| 9  9  9  9
+;;  Default bottom objects       | Real objects |     Default top objects
+;;                               |              |
+;;          Vector data       #(2  0  5  7  4  9)
 ;;
-;;  Is stored as #(2  0 1 2 2 5) where the first value in the vector is the
-;;  position of the first default object.  The lower and upper default object
-;;  are stored in the 2nd and last position.
+;;  Is stored as #(2 0 5 5 3 9) where the first value in the vector is the
+;;  position of the first default object. The lower and upper default object
+;;  are stored in the 2nd and last position. The position of the top most
+;;  default object is derived by adding the vector length to the first vector
+;;  value.
 ;;
 ; Height of first default bottom object.
 (define (columnHeightBottom c)
@@ -158,8 +188,8 @@
       (begin
         (set! c (columnExtendAbove c (+ h 2)))
         (vector-set! c i o))
-(vector-set! c i o)))
-c))
+    (vector-set! c i o)))
+    c))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -177,7 +207,7 @@ c))
     (lambda (i)
      ;(if (random-bool 2) (vector 2 XX GRASS AIR) (vector 2 XX DIRT  AIR))
      ;(vector 2 XX  WATER  AIR AIR))
-     (vector 0 XX AIR))
+     (vector -1 XX AIR))
    (make-vector-vector FieldDimension FieldDimension ()))))
 (resetField)
 
@@ -193,10 +223,17 @@ c))
  (vector-vector-ref FIELD (modulo y FieldDimension)
                           (modulo x FieldDimension)))
 
+; Query the first cell at this location.  Mainly used as the object to display.
 (define (field-ref z y x)
  (letrec ((column   (field-column y x))
           (elements (columnRef column z)))
    (if (pair? elements) (car elements) elements)));1st in improper list of objs
+
+; Query the last cell at this location.  Used to get the base/non-entity object.
+(define (field-base-ref z y x)
+ (letrec ((column   (field-column y x))
+          (elements (columnRef column z)))
+   (last elements))) ; Last in improper list of objs
 
 
 ; Scan down map column starting at z for first visibile cell.  Return height.
@@ -212,13 +249,23 @@ c))
        (if (pair? z) (car z) z) ; Return first in improper list of objects.
        (findNonAir (- z 1))))))
 
+; Replace all cells at this Z location with a single cell.
 (define (field-set! z y x c)
+ (letrec ((fy (modulo y FieldDimension))
+          (fx (modulo x FieldDimension))
+          (column (vector-vector-ref FIELD fy fx)))
+  (vector-vector-set! FIELD fy fx
+     (columnSet column z c ))))
+
+; Insert the cell at this Z location.  Creates a malformed list.
+(define (field-add! z y x c)
  (letrec ((fy (modulo y FieldDimension))
           (fx (modulo x FieldDimension))
           (column (vector-vector-ref FIELD fy fx)))
   (vector-vector-set! FIELD fy fx
      (columnSet column z (cons c (columnRef column z))))))
 
+; Remove the cell from themalformed list at this Z location.
 (define (field-delete! z y x e)
  (letrec ((fy (modulo y FieldDimension))
           (fx (modulo x FieldDimension))
@@ -231,6 +278,8 @@ c))
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Canvas
 ;;
+;; A canvas entry is a vector consisting of the current visibile cell and
+;; its Z coordinate.
 (define CanvasDimension FieldDimension)
 
 (define CANVAS (make-vector-vector CanvasDimension CanvasDimension ()))
@@ -243,9 +292,7 @@ c))
   ; top most visible height.
    (vector-vector-set! CANVAS y x 
      (let ((top (field-ref-top 1000 y x)));What'll be higher than 1k?
-       (vector (cell-ref (field-ref top y x))
-               top
-               1000)))
+       (vector (cell-ref (field-ref top y x)) top)))
    (~ y (+ x 1))))))
 ;(WinChatDisplay "Initialized Canvas " (- (time) timeStart) " seconds")
 
@@ -376,22 +423,22 @@ c))
        nobody
        (cdr e))))
 
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Avatar
 ;;
 (define (Avatar name) ; Inherits Entity
  ((Entity (random) name
-   4 107 86
-   ;0 0 0 
+   1 108 86
    (glyphNew #x0f (string-ref name 0)
              #x0f (string-ref name 1)))
   `(let ()
     (define (self msg) (eval msg))
     (define dir 0)
-    (define (jump s r q) (set! z s) (set! y r) (set! x q))
+    (define (jump zz yy xx) (set! z zz) (set! y yy) (set! x xx))
     (define (face dirNew) (set! dir dirNew))
     (define (move)
-      (if (= dir 0) (jump (+ z -1) y      x))
+      (if (= dir 0) (jump (+ z -1) y      x)
       (if (= dir 1) (jump z        (++ y) (-- x))
       (if (= dir 2) (jump z        (++ y) x)
       (if (= dir 3) (jump z        (++ y) (++ x))
@@ -400,17 +447,28 @@ c))
       (if (= dir 6) (jump z        y      (++ x))
       (if (= dir 7) (jump z        (-- y) (-- x))
       (if (= dir 8) (jump z        (-- y) x)
-      (if (= dir 9) (jump z        (-- y) (++ x))))))))))))
+      (if (= dir 9) (jump z        (-- y) (++ x)))))))))))))
     (define (walk dir)
      (face dir)
      (move))
     (define (look)
       (let ((loc (gps)))
-        (move)
-        (let ((c (cell-ref (field-ref z y x))))
-          (apply setLoc loc)
+        (move) ; temporarily walk to this location
+        (let ((c (field-ref z y x)))
+          (apply setLoc loc) ; restore old location.
           c)))
     (define cell BRICK)
+    (define (gpsLook)
+      (if (= dir 0) (list (+ z -1) y      x)
+      (if (= dir 1) (list z        (++ y) (-- x))
+      (if (= dir 2) (list z        (++ y) x)
+      (if (= dir 3) (list z        (++ y) (++ x))
+      (if (= dir 4) (list z        y      (-- x))
+      (if (= dir 5) (list (+ z 1)  y      x)
+      (if (= dir 6) (list z        y      (++ x))
+      (if (= dir 7) (list z        (-- y) (-- x))
+      (if (= dir 8) (list z        (-- y) x)
+      (if (= dir 9) (list z        (-- y) (++ x)))))))))))))
     self) ))
 
 (define avatar (Avatar "Guest"))
@@ -438,7 +496,6 @@ c))
 ;; Call this 'move.  Entites move.  Back to the original ways?
 ;; was 'avatar
 (define (move dna z y x)
- ;(WinChatDisplay "\r" (list z y x (distance (list 0 (avatar 'y) (avatar 'x)) (list 0 (+ PortY (/ PortH 2)) (+ PortX (/ PortW 2))))))
  (letrec ((entity (entitiesGet dna))
           (thisIsMe (= dna (avatar 'dna)))
           (shouldScroll (and thisIsMe
@@ -446,7 +503,6 @@ c))
                                            (list 0 (+ PortY (/ PortH 2)) (+ PortX (/ PortW 2)))))))))
   (if (null? entity)
     (begin
-      ;(WinChatDisplay "\r\nERROR: move: unknown avatar:" dna)
       (entitiesSet dna "??" z y x (glyphNew #x19 #\? #x19 #\?))
       ((ipc 'qwrite) '(who)))
     (begin
@@ -457,16 +513,16 @@ c))
         (or shouldScroll (viewportRender (entity 'y) (entity 'x)))))
       ; Place here
       ((entity 'setLoc) z y x)
-      (field-set! z y x dna)
+      (field-add! z y x dna)
       (if (>= (entity 'z) (canvasCellHeightRef y x)) (begin
         (canvasRender y x)
         (or shouldScroll (viewportRender y x))))
-      (if shouldScroll (begin
-        (viewportReset (avatar 'y) (avatar 'x))
-        ;(WinChatDisplay (display->string ((avatar 'look))))
-        ;(WinChatDisplay "\r")
-        ;(displayl "\c28H\c0m" (field-column (avatar 'y) (avatar 'x)) "\cK" )
-        ))))))
+      (if shouldScroll
+        (viewportReset (avatar 'y) (avatar 'x)))))))
+
+(define (force z y x dir str)
+ (if (and (= z (avatar 'z)) (= y (avatar 'y)) (= x (avatar 'x)))
+   (walk dir)))
 
 (define (die dna)
  (let ((entity (entitiesGet dna))
@@ -491,12 +547,12 @@ c))
    (WinChatDisplay " ")
    (if (= level 100) (WinChatSetColor #x09))
    (WinChatDisplay text))
- (if (eqv? text "your turn") (thread (sayDesperate)))
- (if (and (!= dna (avatar 'dna)) (eqv? text "unatco"))
-     ((ipc 'qwrite)
-      `(voice ,(avatar 'dna)
-              ,(avatar 'z) ,(avatar 'y) ,(avatar 'x)
-              10 "no Savage"))))
+ ;(if (eqv? text "your turn") (thread (sayDesperate)))
+ (if (and (!= dna (avatar 'dna))
+          (eqv? text "unatco"))
+     (say "no Savage")))
+
+
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Keyboard Input
@@ -521,6 +577,8 @@ c))
    (if (or (<= PortW x) (<= PortH y))
      (viewportReset (avatar 'y) (avatar 'x)))))
 
+; TODO: Implement coor+dir use new dir to field-ref location an dif > MAX_CELL ipc-write (force blah blah)
+
 (define (walk dir)
 ; (if (not (eq? BRICK (field-ref (avatar 'z) (avatar 'y) (avatar 'x))))
 ;   (begin
@@ -528,29 +586,35 @@ c))
      ;(WinChatDisplay (list (field-ref 4 15 15) "," (field-ref 4 14 18)))
      ;(WinChatDisplay (field-ref (avatar 'z) (avatar 'y) (avatar 'x)))
      ;(WinChatDisplay "\r\n")))
- ((avatar 'walk) dir)
- ((ipc 'qwrite) `(move ,(avatar 'dna) ,@((avatar 'gps))))
- ; Popup a message to a new window temporarily.
- (if (eq? BUSHES   (field-ref (avatar 'z) (avatar 'y) (avatar 'x)))
-  ((lambda ()
-     (define WinTemp ((Terminal 'WindowNew) 1 29 1 22 #x1b))
-     (define WinTempPutc (WinTemp 'putc))
-     (map WinTempPutc (string->list "Are we having fun yet?"))
-     (read-char stdin)
-     ((WinTemp 'delete)))))
- (if (eq? HELP (field-ref (avatar 'z) (avatar 'y) (avatar 'x)))
-     (help))
- (if (eq? SNAKE (field-ref (avatar 'z) (avatar 'y) (avatar 'x)))
-     (thread (snake-random)))
- (if (eq? KITTY (field-ref (avatar 'z) (avatar 'y) (avatar 'x)))
-     (thread (spawnKittehs)))
- ; Dump our coordinates.
- ((WinStatus 'puts) "\r\n")
- ((WinStatus 'puts) (number->string (avatar 'z)))
- ((WinStatus 'puts) " ")
- ((WinStatus 'puts) (number->string (avatar 'y)))
- ((WinStatus 'puts) " ")
- ((WinStatus 'puts) (number->string (avatar 'x))))
+ ((avatar 'face) dir) ; Turn avatar
+ (let ((nextCell ((avatar 'look)))) ; Consider cell I'm walking into
+   (if (< MAXCELL nextCell) ; Cell I'm walking into is probably an entity
+    (begin
+     ((ipc 'qwrite) `(force ,@((avatar 'gpsLook)) ,dir 10))) ; Push the entity that's in my way.
+    (if (pair? (memv nextCell (list MNTS HILLS WATER0 WATER1 WATER2)))
+     'bumpIntoMountain
+     (begin
+      ((avatar 'move))
+      ((ipc 'qwrite) `(move ,(avatar 'dna) ,@((avatar 'gps))))
+      ; Popup a message to a new window temporarily.
+      (rem if (eqv? BUSHES   (field-ref (avatar 'z) (avatar 'y) (avatar 'x)))
+       ((lambda ()
+          (define WinTemp ((Terminal 'WindowNew) 1 29 1 22 #x1b))
+          (define WinTempPutc (WinTemp 'putc))
+          (map WinTempPutc (string->list "Are we having fun yet?"))
+          (read-char stdin)
+          ((WinTemp 'delete)))))
+      (if (eq? HELP (field-ref (avatar 'z) (avatar 'y) (avatar 'x)))  (help))
+      (if (eq? SNAKE (field-ref (avatar 'z) (avatar 'y) (avatar 'x))) (thread (snake-random)))
+      (if (eqv? BRIT2 (field-base-ref (avatar 'z) (avatar 'y) (avatar 'x))) (thread (spawnKitty)))
+      ;(WinConsoleWrite (field-column (avatar 'y) (avatar 'x)) (field-ref (avatar 'z) (avatar 'y) (avatar 'x)))
+      ; Dump our coordinates.
+      ((WinStatus 'puts) "\r\n")
+      ((WinStatus 'puts) (number->string (avatar 'z)))
+      ((WinStatus 'puts) " ")
+      ((WinStatus 'puts) (number->string (avatar 'y)))
+      ((WinStatus 'puts) " ")
+      ((WinStatus 'puts) (number->string (avatar 'x))))))))
 
 ; Change avatar color.  Will just cycle through all 16 avatar colors.
 (define (avatarColor)
@@ -582,27 +646,7 @@ c))
 ;; Get the wheels in motion
 ;;
 
-;; Input Window
-(define WinInput
- ((Terminal 'WindowNew)
-  (- (Terminal 'THeight) 1) 0
-  1 (Terminal 'TWidth) #x4a))
-(define WinInputPutc (WinInput 'putc))
-(define WinInputPuts (WinInput 'puts))
-(define WinInputSetColor (WinInput 'set-color))
-
 ;; Map window
-
-; Initial map size is 20 or terminal width/height.
-(define WinMap
- (let ((MapSize (min 28 (min (- (Terminal 'THeight) 1)
-                             (/ (Terminal 'TWidth) 2)))))
-  ((Terminal 'WindowNew)
-    0 (- (Terminal 'TWidth) (* MapSize 2)) ; Position of the map window
-    (+ MapSize 0) (* 2 MapSize)
-    #x17 'NOREFRESH)))
-((WinMap 'toggle))
-((WinMap 'cursor-visible) #f) ; Disable cursor in map window.
 
 ; Make Map window circular!
 (define (circularize . val)
@@ -697,19 +741,33 @@ c))
 (define (welcome)
  (define WinMarquee
   ((Terminal 'WindowNew)
-    (/ (Terminal 'THeight) 3)  (- (/ (Terminal 'TWidth) 2) 11)
-    3  22
+    (/ (Terminal 'THeight) 3)  (- (/ (Terminal 'TWidth) 2) 12)
+    3  24
     #x0f))
  (define WinMarqueePuts (WinMarquee 'puts))
  (define WinMarqueePutc (WinMarquee 'putc))
  (define WinMarqueeSetColor (WinMarquee 'set-color))
  ((WinMarquee 'cursor-visible) #f) ; Disable cursor in map window.
- (WinMarqueePuts "+--------------------+")
- (WinMarqueePuts "|                    |")
- (WinMarqueePuts "+--------------------+")
+ (WinMarqueePuts " +====================+ ")
+ (WinMarqueePuts " |                    | ")
+ (WinMarqueePuts " +====================+ ")
  (let ~~ ((i -5))
-   ((WinMarquee 'goto) 1 1)
    (sleep 200) ; Delay
+   ((WinMarquee 'goto) 0 0)
+   (WinMarqueeSetColor #x0f)
+   (if (= 0 (modulo i 4)) (begin
+      (WinMarqueePuts "  +====================+")
+      (WinMarqueePuts " /                    / ")
+      (WinMarqueePuts "+====================+  "))
+   (if (or (= 3 (modulo i 4)) (= 1 (modulo i 4))) (begin
+      (WinMarqueePuts " +====================+ ")
+      (WinMarqueePuts " |                    | ")
+      (WinMarqueePuts " +====================+ "))
+   (begin
+      (WinMarqueePuts "+====================+  ")
+      (WinMarqueePuts " \\                    \\ ")
+      (WinMarqueePuts "  +====================+"))))
+   ((WinMarquee 'goto) 1 2)
    (let ~ ((j 0))
      (WinMarqueeSetColor (vector-ref #(07 07 07 07 07 07 07 07   07 07 07
                                        9  11 10 12 13 15 15 15 15 15)
@@ -787,7 +845,7 @@ c))
 ((WinHelp 'goto) 0 0)
 ((WinHelp 'puts) "         )) Help! ((")
 ((WinHelp 'set-color) #x20)
-((WinHelp 'puts) "\r\n? = toggle help window\r\nt = talk\r\nesc = exit talk\r\nm = toggle map\r\nW = toggle animation\r\n> = increase map size\r\n< = decrease map size\r\nq = quit\r\nhjkl = move\r\n^A = change color\r\nc = spawn kitteh")
+((WinHelp 'puts) "\r\n? = toggle help window\r\nt = talk\r\nesc = exit talk\r\nm = toggle map\r\nW = toggle animation\r\n> = increase map size\r\n< = decrease map size\r\nq = quit\r\nhjkl = move\r\n^A = change color")
 ((WinHelp 'toggle))
 
 (define (help)
@@ -834,6 +892,61 @@ c))
 ; Mapping from World[tm] (y x) corrdinates to Ultima4 map file byte index.
 ; i = (+ (modulo x 32) (* (/ x 32) 1024) (* (modulo y 32) 32) (* (/ y 32) 8192))
 
+(define U44MapVector
+ (let ((fd (open "ultima4.map"))
+       (timeStart (time))
+       (vec (make-vector 65536 DIRT)))
+  (let ~ ((i 0))
+     (if (= i 65536)
+      (begin ; return the vector
+       (WinConsoleDisplay "\r\nInitialized U44MapVector " (- (time) timeStart) "s.")
+       vec)
+      (begin
+        (vector-set! vec
+                 (+ (* 256 (+ (modulo (/ i 32) 32) (* (/ i 8192) 32)))
+                    (+ (modulo i 32) (* (modulo (/ i 1024) 8) 32)))
+                 (+ 0 (read-char fd))) ; Hack to convert char to integer
+        (~ (+ i 1)))))))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Ultima city detail map.
+;;
+;; u4mapsize 256
+;; u44cellsize 8 (But will be 32 the U4 town dimension)
+;; FieldDimension 256
+;; Lord British's castle (108 86)
+(define u4mapsize 256)
+(define u44cellsize 20)
+(define u44height (* u44cellsize u4mapsize))
+(define u44width  (* u44cellsize u4mapsize))
+(define (U44MapVectorRef y x) (vector-ref U44MapVector (+ (* 256 (modulo y 256)) (modulo x 256))))
+(define U44MapVectorRefDir
+ (let ((yd (vector 0 -1 -1 -1  0  1 1 1)) (xd (vector 1  1  0 -1 -1 -1 0 1)))
+  (lambda (y x d)
+    (set! d (modulo d 8))
+    (vector-ref U44MapVector
+                 (+ (* 256 (modulo (+ y (vector-ref yd d)) 256))
+                    (modulo (+ x (vector-ref xd d)) 256))))))
+
+(define (load-ultima-world44)
+ (resetField)
+ (let ((bar (makeProgressBar 5 30 "Britannia 4"))
+       (timeStart (time)))
+  (let ~ ((y 0)(x 0)) (or (= y 256) (if (= x 256) (~ (+ y 1) 0) (begin
+      (if (= 0 (modulo (+ (* 256 y) x) (/ 65536 20))) (bar)) ; Update progress bar.
+      (setCell 1 y x
+        (let ((yy (/ (+ y (* 108 (- u44cellsize 1)) ) u44cellsize))
+              (xx (/ (+ x (*  86 (- u44cellsize 1)) ) u44cellsize)))
+         (let ((dist (distance
+                      (list 0 y x)
+                      (list 0 (+ 20 (* (/ y u44cellsize) u44cellsize))
+                              (+ 20 (* (/ x u44cellsize) u44cellsize))))))
+          (if (< dist 100) (U44MapVectorRef yy xx) HELP) ; BF TODO WORKING
+          )))
+      (~ y (+ x 1))))))
+  (WinConsoleDisplay "\r\nInitialized UltimaIV Map " (- (time) timeStart) "s.")))
+
 (define (load-ultima-world4)
  (resetField)
  (let ((fd (open "ultima4.map"))
@@ -842,13 +955,17 @@ c))
   (let ~ ((i 0))
      (or (= i 65536) (begin
       (if (= 0 (modulo i (/ 65536 20))) (bar))
-      (setCell 2
-               (+ (modulo (/ i 32) 32) (* (/ i 8192) 32))
-               (+ (modulo i 32) (* (modulo (/ i 1024) 8) 32))
-               (+ 0 (read-char fd))) ; Hack to convert char to integer
+      (let ((z 1)
+            (y (+ (modulo (/ i 32) 32) (* (/ i 8192) 32)))
+            (x (+ (modulo i 32) (* (modulo (/ i 1024) 8) 32)))
+            (c (+ 0 (read-char fd)))) ; Hack to convert char to integer
+        (setCell z       y x c)
+        (if (not (null? (memv c (list FOREST BUSHES))))
+          (setCell (+ z 1) y x c)))
       (~ (+ i 1)))))
-  ;(WinChatDisplay "\r\nInitialized UltimaIV Map " (- (time) timeStart) " seconds")
-))
+  (WinChatDisplay "\r\nInitialized UltimaIV Map " (- (time) timeStart) "s.")
+  ((ipc 'qwrite) '(who))))
+
 
 (define (load-ultima-world5)
  (let ((fdm (open "ultima5.map"))
@@ -943,7 +1060,7 @@ c))
        (set! talkInput "")
        'talk)
    ; Quit chat mode.
-   (if (or (eq? c CHAR-CTRL-ESC) ; Escape char
+   (if (or (eq? c CHAR-ESC) ; Escape char
            (eq? c CHAR-CTRL-I)) ; Tab char
      (begin (WinInputPuts "\r\n")
             'cmd)
@@ -963,7 +1080,7 @@ c))
  (define putc (box 'putc))
  (define setcolor (box 'set-color))
  (define str "")
- ;((box 'cursor-visible) #f) ; Disable cursor in map window.
+ ;((box 'cursor-visible) #f)
  (puts "+------------------+")
  (puts "|                  |")
  (puts "+------------------+")
@@ -972,14 +1089,15 @@ c))
  (let ~ ((c (read-char stdin)))
    (or (eq? c RETURN) (eq? c NEWLINE)
     (begin
-     (if (or (eq? c CHAR-CTRL-H)
+     (if (or (eq? c CHAR-CTRL-H) ; Rubout characters
              (eq? c CHAR-CTRL-_)
-             (eq? c CHAR-CTRL-?)
-             (eq? c #\%))
+             (eq? c CHAR-CTRL-?))
        (if (eq? str "") "" (begin
              ((box 'backspace) #\ )
              (set! str (substring str 0 (- (string-length str) 1)))))
-       (if (< (string-length str) 18) (begin
+       (if (and (< (string-length str) 18) ; Name length limit
+                (<= #\! c) (<= c #\~))     ; Name character restriction
+            (begin
              (putc c)
              (set! str (string str c)))))
      (~ (read-char stdin)))))
@@ -987,7 +1105,6 @@ c))
  str)
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Buttons
-; 157 crashes
 (define Buttons (make-vector 257 (lambda())))
 
 (define (setButton ch exp)
@@ -1005,8 +1122,6 @@ c))
    (if (procedure? val) (cons 'lambda (vector-ref (vector-ref (vector-ref Buttons ch) 0) 2))
    val))))
 
-(setButton #\1 '(thread (sigwinch)))
-(setButton #\4 '(load-ultima-world4))
 (setButton #\j '(walk 2))
 (setButton #\B '(walk 2))
 (setButton #\k '(walk 8))
@@ -1041,8 +1156,7 @@ c))
 (setButton CHAR-CTRL-L '(begin (viewportReset (avatar 'y) (avatar 'x)) ((WinChat 'repaint))))
 (setButton CHAR-CTRL-M '(begin ((WinStatus 'toggle)) ((WinColumn 'toggle))))
 (setButton CHAR-CTRL-Q '(set! state 'done))
-(setButton CHAR-CTRL-_ '(walk 4))
-(setButton #\d '((ipc 'qwrite) `(dropCell ,(avatar 'y) ,(avatar 'x) BRICK))) ; Send my plane out to IPC.
+(setButton #\d '((ipc 'qwrite) `(dropCell ,(avatar 'y) ,(avatar 'x) BRICK)))
 (setButton #\g 
    '(let ((o (field-ref (avatar 'z) (avatar 'y) (avatar 'x))))
      (field-delete!  (avatar 'z) (avatar 'y) (avatar 'x) o)
@@ -1052,11 +1166,13 @@ c))
 (setButton #\> '(winMapBigger))
 (setButton #\z '(circularize))
 (setButton #\Z '(circularize #t))
-(setButton #\c '(thread (spawnKitty)))
 (setButton #\q '(set! state 'done))
 (setButton #\Q '(set! state 'done))
 (setButton eof '(set! state 'done))
 (setButton CHAR-CTRL-C '((WinConsole 'toggle)))
+;(setButton #\1 '(thread (sigwinch)))
+;(setButton CHAR-CTRL-_ '(walk 4)) ; Sent by backspace?
+(setButton #\4 '(load-ultima-world4))
 
 (define (replCmd c)
  (define state 'cmd) ; state might be changed to 'done or 'talk.
@@ -1067,14 +1183,15 @@ c))
      (WinChatDisplay "\r\nButton " c " undefined " button))))
  state)
 
-(define wrepl (let ((state 'cmd))
- (lambda ()
-  (if (not (eq? state 'done))
-    (let ((c (read-char stdin)))
-      (if (eq? state 'talk)
-          (set! state (replTalk c))
-          (if (eq? state 'cmd)  (set! state (replCmd c))))
-      (wrepl))))))
+(define wrepl
+ (let ((state 'cmd))
+  (lambda ()
+   (if (not (eq? state 'done)) ; Exit if state is done.
+     (let ((c (read-char stdin)))
+       (if (eq? state 'talk)
+           (set! state (replTalk c))
+           (if (eq? state 'cmd)  (set! state (replCmd c))))
+       (wrepl))))))
 
 ;; Stats window
 (define WinStatus ((Terminal 'WindowNew)
@@ -1129,12 +1246,8 @@ c))
    ;    ((ipc 'qwrite) `(voice ,(kitty 'dna) ,@((kitty 'gps)) 10 "Mrrreeeooowww!")))
    (if (> i (+ cycles (random 30)))
        ((ipc 'qwrite) `(die ,(kitty 'dna))) ; kill entity
-       (~ (+ i 1)))))) ; spawnKitty
+       (~ (+ i 1))))))
 
-(define (spawnKittehs)
- (loading 10 35)
- (vector-map! (lambda (x) (thread (x))) (make-vector (random 30) spawnKitty)))
- 
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -1150,22 +1263,17 @@ c))
   ((WinInput 'resize) 1 (Terminal 'TWidth))
   ((WinInput 'move)   (- (Terminal 'THeight) 1) 0))
 
-(define sig28Semaphore (open-semaphore 1))
 
-(define (sigwinch)
-  (semaphore-down sig28Semaphore)
-  (handleTerminalResize)
-  (semaphore-up sig28Semaphore))
+(define sigwinch
+ (let ((sig28Semaphore (open-semaphore 1)))
+  (lambda ()
+   (semaphore-down sig28Semaphore)
+   (handleTerminalResize)
+   (semaphore-up sig28Semaphore))))
 
 (vector-set! SIGNALHANDLERS 28 (lambda () (sigwinch) (unthread)))
 (signal 28)
 
-
-;; Example on how to implement a signal handler.
-;; This will capture control C spaning a thread which just displays "hi".
-;(define (catch) (display 'hi) (unthread))
-;(vector-set! SIGNAL-HANDLERS 2 catch)
-;(signal 2)
 
 (define walkForever (let ((walkForeverFlag #f)) (lambda ()
  (if walkForeverFlag
@@ -1192,46 +1300,39 @@ c))
    ((ipc 'qwrite) cmd) (sleep 500)
    ((ipc 'qwrite) cmd) (sleep 500)))
 
-(define (sayHelloWorld)
- ((ipc 'qwrite)
-   (list 'voice (avatar 'dna) (avatar 'z) (avatar 'y) (avatar 'x) 100
-     (vector-random
-       #("*PUSH* *SQUIRT* *SPANK* *WAAAAAAAAA*"
-         "*All Worldlians Want to Be Borned*"
-         "*Happy Birthday*")))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Start everything
 
-(thread (welcome))
+; Welcome marquee and login box
+(if (not QUIETLOGIN ) (begin
+ (thread (welcome))
+ (let ((name (boxInput "Enter your name")))
+   (if (eq? name "") (set! name "Guest"))
+   ((avatar 'setNameGlyph) name (glyphNew #x0f (string-ref name 0) #x0f (string-ref name 1))))))
 
-(let ((name (boxInput "Enter your name")))
- (if (eq? name "") (set! name "Guest"))
- ((avatar 'setNameGlyph) name (glyphNew #x0f (string-ref name 0) #x0f (string-ref name 1))))
-
+; Display some initial information
 (WinChatSetColor #x0b)
-;(WinChatDisplay "\r\n\r\n   *** Welcome to the construct. ***")
-((WinChat 'goto) 0 0) ;(WinChat 'WHeight)
-(WinChatDisplay "\r\nWelcome to World")
-(WinChatDisplay "\r\nSee http://code.google.com/p/worldtm")
-(WinChatDisplay "\r\nHit ? to toggle the help window")
-(WinChatDisplay "\r\nYour name is " (avatar 'name))
+;((WinChat 'goto) 0 0)
+;(WinChatDisplay "   *** Welcome to the construct. ***")
+(WinChatDisplay "Welcome to World\r\n")
+(WinChatDisplay "See http://code.google.com/p/worldtm\r\n")
+(WinChatDisplay "Hit ? to toggle the help window\r\n")
+(WinChatDisplay "Your name is " (avatar 'name))
 
 ; Create ipc object.  Pass in a debug message output port.
 ; for production world an 'empty' port is passed.
 ; (define ipc (Ipc WinChatDisplay))
-(define ipc (Ipc (lambda x ())))
+(define ipc (Ipc WinConsoleDisplay))
 
 ; Always read and evaluate everything from IPC.
 (thread  (let ~ () 
  (let ((sexp ((ipc 'qread))))
-    (WinConsolePuts (display->string sexp))
+    (WinConsoleWrite sexp)
     (eval sexp)
     (~))))
 
 ((ipc 'qwrite) '(who))
-;((ipc 'qwrite) `(voice ,(avatar 'dna) ,@((avatar 'gps)) 10 "Hello World[tm]!"))
-
 
 ;(build-island 15 15 7) 
 ;(dropCell 13 17 HELP)
@@ -1244,7 +1345,8 @@ c))
 ;(build-brick-room 15 35)
 (viewportReset (avatar 'y) (avatar 'x))
 ((WinMap 'toggle))
-(thread (load-ultima-world4))
+(thread (if QUIETLOGIN (load-ultima-world4) (load-ultima-world4)))
+
 
 ;(thread (snake 18 38 500))
 
@@ -1254,23 +1356,46 @@ c))
    (if CELLANIMATION (viewportReset (avatar 'y) (avatar 'x)))
    (~)))
 
-(define (sayByeBye)
- ((ipc 'qwrite) (list 'voice (avatar 'dna) (avatar 'z) (avatar 'y) (avatar 'x) 100 "*POOF*")))
-
 ; Catch the terminal hangup signal so that normal shutdown can occur.
-(vector-set! SIGNALHANDLERS 1 (lambda () (sleep 1000)))
+(define (registerSignalHandler sig msg)
+ (vector-set! SIGNALHANDLERS sig (lambda () (say msg) (shutdown)))
+ (signal sig))
+
+(vector-set! SIGNALHANDLERS 1 (lambda () (say "signal 1 HUP")  (shutdown)))
 (signal 1)
 
-; Catch SIGPIPE which occurs when an IPC connection is broken.
-;(vector-set! SIGNALHANDLERS 13 (lambda () (WinChatDisplay  "\r\nSIGPIPE IGNORED")))
-;(signal 13)
+(vector-set! SIGNALHANDLERS 2 (lambda () (say "signal 2 INT")  (shutdown)))
+(signal 2)
+
+(vector-set! SIGNALHANDLERS 3 (lambda () (say "signal 3 QUIT")  (shutdown)))
+(signal 3)
+
+(vector-set! SIGNALHANDLERS 6 (lambda () (say "signal 6 ABRT")  (shutdown)))
+(signal 6)
+
+(vector-set! SIGNALHANDLERS 13 (lambda () (say "signal 13 PIPE")  (shutdown)))
+(signal 13)
+
+(vector-set! SIGNALHANDLERS 15 (lambda () (say "signal 15 TERM")  (shutdown)))
+(signal 15)
+
+
+(define (sayHelloWorld)
+  (say (vector-random
+   #("*PUSH* *SQUIRT* *SPANK* *WAAAAAAAAA*"
+     "*All Worldlians Want to Be Borned*"
+     "*Happy Birthday*"
+     "*I thought you were in Hong Kong*"))))
+
+(define (sayByeBye) (say "*POOF*"))
+
+(define (shutdown)
+  (or QUIETLOGIN (sayByeBye))
+  ((ipc 'qwrite) `(die ,(avatar 'dna))) ; Kill avatar's entity
+  (sleep 1000) ; wait for ipc to flush
+  (displayl "\e[" (Terminal 'THeight) "H\r\n\e[0m\e[?25h")
+  (quit))
 
 (or QUIETLOGIN (sayHelloWorld))
 (wrepl)
-(or QUIETLOGIN (sayByeBye))
-
-((ipc 'qwrite) `(die ,(avatar 'dna))) ; Kill avatar's entity
-(sleep 500) ; wait for ipc to flush
-
-(displayl "\e[" (Terminal 'THeight) "H\r\n\e[0m\e[?25h")
-(quit)
+(shutdown)

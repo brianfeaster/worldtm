@@ -110,6 +110,9 @@
 ;; Serializing
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
+(define (socket-port s)
+ (if (port? s) (vector-ref s 2) #f))
+
 
 (define (integer->char i) (vector-ref characters i))
 
@@ -129,7 +132,7 @@
 (define CHAR-CTRL-M   (integer->char #x0d))
 (define CHAR-CTRL-Q   (integer->char #x11))
 (define CHAR-CTRL-W   (integer->char #x17))
-(define CHAR-CTRL-ESC (integer->char #x1b))
+(define CHAR-ESC      (integer->char #x1b))
 (define CHAR-CTRL-_   (integer->char #x1f))
 (define CHAR-CTRL-?   (integer->char #x7f))
 
@@ -153,6 +156,7 @@
 (define (cddar x) (cdr (cdr (car x))))
 (define (cdddr x) (cdr (cdr (cdr x))))
 (define (length l) (if (null? l) 0 (+ 1 (length (cdr l)))))
+(define (last l) (if (pair? l) (if (null? (cdr l)) (car l) (last (cdr l))) l)) 
 
 (define (eqv? a b)
  (or (eq? a b)        ; Pointer (#\a #t #f () #() "")
