@@ -66,7 +66,7 @@
  ; Spawn two threads that propogate any incomming messages on this
  ; socket as well as send out any queued messages.
  (define (spawnCommunicators s)
-  (Display "\r\n\aSpawning communicator on:" s "\r\n")
+  (Display "\r\nSpawning communicator on:" s)
   (or (eof-object? s) (begin
    (display "'World1.0\r\n" s)
    ; Create a peer: #(socket '(queue) queue-semaphore)
@@ -111,26 +111,26 @@
  (define (lookForParent)
   (let ~ ((p (- MyPort 1)))
    (if (= MyPort FirstPort)
-     (Display "I'm the first peer and parent.\r\n")
+     (Display "\r\nI'm the first peer and parent.")
    (if (< p FirstPort)
      (begin 
-       (Display "No parents and I'm not the first port!  Attempting to move incomming socket...\r\n")
+       (Display "\r\nNo parents and I'm not the first port!  Attempting to move incomming socket...")
        (let ((s (open-socket FirstPort)))
-         (Display "open-socket " FirstPort "=>" s "\r\n")
+         (Display "\r\nopen-socket " FirstPort "=>" s "\r\n")
          (if (eof-object? s)
-             (begin (Display "First port unavailable...attempting to find a parent again...\r\n")
+             (begin (Display "\r\nFirst port unavailable...attempting to find a parent again...")
                     (lookForParent))
              (begin (close MyIncommingSocket)
                     (set! ParentSocket ())
                     (set! MyIncommingSocket s)
                     (set! MyPort FirstPort)))))
      (begin
-       (Display "Checking for parent client on port:" p "\r\n")
+       (Display "\r\nChecking for parent client on port:" p)
          (let ((s (open-stream (open-socket "localhost" p))))
            (if (eof-object? s)
              (~ (- p 1))
              (begin
-               (Display "Connecting to parent peer on port:" p "\r\n")
+               (Display "\r\nConnecting to parent peer on port:" p)
                (set! ParentSocket s)
                (spawnCommunicators s)))))))))
 
@@ -138,11 +138,11 @@
  ; Fire up thread that accepts incomming streams.
  (thread
    (let acceptChildren~ ()
-     (Display "acceptChildren~\r\n")
+     (Display "\r\nacceptChildren~")
      (spawnCommunicators (open-stream MyIncommingSocket))
      (acceptChildren~)))
 
- (Display "My IPC listener port:" MyPort "\r\n")
+ (Display "\r\nMy IPC listener port:" MyPort)
 
  (lookForParent)
 

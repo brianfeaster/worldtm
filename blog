@@ -1918,7 +1918,7 @@ call sysDumpCallStackCode()
 call vmDebugDumpCode(r1c, stdout)
 
 call vmDebugDumpCode(r1e, stdout)
-CALL MEMrBUfDump()
+call memRbuFDump()
 call wscmDumpEnv(r16)
 call wscmWrite(r1f, 0, 1)
 call wscmDumpTGE()
@@ -2021,3 +2021,12 @@ Mon Aug  2 16:48:59 EDT 2010
 
 Currently the field size is the same size as the canvas.  I've yet to implement
 a dynamic field and canvas or a map abstraction.
+
+
+Fri Aug  6 02:52:22 EDT 2010
+
+ * Create I/O that supports both file descriptors and FILE pointers.
+ * Continue working on star toplogy IPC.
+ * Ultima town-detailed map.
+ * Map cache
+ * Cats that change talk color.
