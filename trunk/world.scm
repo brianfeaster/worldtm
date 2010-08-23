@@ -2,6 +2,8 @@
 (define CELLANIMATION #t) 
 (define SCROLLINGMAP #t)
 (define KITTEHBRAIN  #f)
+(define VOICEDELIMETER "> ")
+(define DNA 0)
 
 (if QUIETLOGIN (load "ipc.scm" )(load "ipc.scm"))
 (load "window.scm")
@@ -31,7 +33,7 @@
 (define WinConsole ((Terminal 'WindowNew)
   0 0
   (- (Terminal 'THeight) 1)  (Terminal 'TWidth)
-  #x74))
+  #x0a))
 (define WinConsolePuts (WinConsole 'puts))
 (define (WinConsoleDisplay . e) (for-each (lambda (x) (WinConsolePuts (display->string x))) e))
 (define (WinConsoleWrite . e) (for-each (lambda (x) (WinConsolePuts (write->string x))) e))
@@ -472,6 +474,9 @@
     self) ))
 
 (define avatar (Avatar "Guest"))
+(set! DNA (avatar 'dna))
+
+
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Incomming IPC messages 
@@ -491,13 +496,13 @@
 
 (define (who)
  ((ipc 'qwrite)
- `(entity ,(avatar 'dna) ,(avatar 'name) ,@((avatar 'gps)) ,(avatar 'glyph))))
+ `(entity ,DNA ,(avatar 'name) ,@((avatar 'gps)) ,(avatar 'glyph))))
 
 ;; Call this 'move.  Entites move.  Back to the original ways?
 ;; was 'avatar
 (define (move dna z y x)
  (letrec ((entity (entitiesGet dna))
-          (thisIsMe (= dna (avatar 'dna)))
+          (thisIsMe (= dna DNA))
           (shouldScroll (and thisIsMe
            (or SCROLLINGMAP (< 10 (distance (list 0 (avatar 'y) (avatar 'x))
                                            (list 0 (+ PortY (/ PortH 2)) (+ PortX (/ PortW 2)))))))))
@@ -526,7 +531,7 @@
 
 (define (die dna)
  (let ((entity (entitiesGet dna))
-       (thisIsMe (= dna (avatar 'dna))))
+       (thisIsMe (= dna DNA)))
   (if (not (null? entity)) ; Ignore unknown entities
     (begin
       ; Remove from here
@@ -536,21 +541,25 @@
         (or thisIsMe (viewportRender (entity 'y) (entity 'x)))))))))
 
 
-(define (voice dna z y x level text)
+(define (voice dna level text)
+ (if (= dna 0)
+  (begin ; Message from the system
+    (WinChatDisplay "\r\n")
+    (WinChatSetColor 6) (WinChatDisplay ":")
+    (WinChatSetColor 9) (WinChatDisplay "W")
+    (WinChatSetColor 11) (WinChatDisplay "O")
+    (WinChatSetColor 10) (WinChatDisplay "R")
+    (WinChatSetColor 12) (WinChatDisplay "L")
+    (WinChatSetColor 13) (WinChatDisplay "D")
+    (WinChatSetColor 6) (WinChatDisplay ": ")
+    (WinChatSetColor 15) (WinChatDisplay text))
  (let ((entity (entitiesGet dna)))
-   (WinChatDisplay "\r\n")
    (WinChatSetColor (glyphColor0 (entity 'glyph)))
-   (if (null? entity)
-     (WinChatDisplay "???>")
-     (WinChatDisplay (entity 'name)))
+   (WinChatDisplay "\r\n" (if (null? entity) "???" (entity 'name)) VOICEDELIMETER)
    (WinChatSetColor (glyphColor1 (entity 'glyph)))
-   (WinChatDisplay " ")
-   (if (= level 100) (WinChatSetColor #x09))
+   (if (= level 100) (WinChatSetColor #x09)) ; Special color for certain messages.
    (WinChatDisplay text))
- ;(if (eqv? text "your turn") (thread (sayDesperate)))
- (if (and (!= dna (avatar 'dna))
-          (eqv? text "unatco"))
-     (say "no Savage")))
+ (if (and (!= dna DNA) (eqv? text "unatco")) (say "no Savage"))))
 
 
 
@@ -595,7 +604,7 @@
      'bumpIntoMountain
      (begin
       ((avatar 'move))
-      ((ipc 'qwrite) `(move ,(avatar 'dna) ,@((avatar 'gps))))
+      ((ipc 'qwrite) `(move ,DNA ,@((avatar 'gps))))
       ; Popup a message to a new window temporarily.
       (rem if (eqv? BUSHES   (field-ref (avatar 'z) (avatar 'y) (avatar 'x)))
        ((lambda ()
@@ -845,7 +854,7 @@
 ((WinHelp 'goto) 0 0)
 ((WinHelp 'puts) "         )) Help! ((")
 ((WinHelp 'set-color) #x20)
-((WinHelp 'puts) "\r\n? = toggle help window\r\nt = talk\r\nesc = exit talk\r\nm = toggle map\r\nW = toggle animation\r\n> = increase map size\r\n< = decrease map size\r\nq = quit\r\nhjkl = move\r\n^A = change color")
+((WinHelp 'puts) "\r\n? = toggle help window\r\nt = talk\r\nesc = exit talk\r\nm = toggle map\r\nW = toggle animation\r\n> = increase map size\r\n< = decrease map size\r\nq = quit\r\nhjkl = move\r\n^A = change color\r\np = whois present")
 ((WinHelp 'toggle))
 
 (define (help)
@@ -1016,13 +1025,17 @@
                    (glyphColor1 (avatar 'glyph)) (string-ref talkInput (if (> strLen 12) 12 11))))
       (thread (begin (sleep 500) (who)))))))
  (if tankIsListening (begin
+   (if (string=? "who" talkInput) ((ipc 'qwrite) '(say "I'm here!")))
    (if (string=? "load the jump program" talkInput) (tankTalk "I can't find the disk")
    (if (string=? "load ultima4" talkInput) (thread (load-ultima-world4))
    (if (string=? "load underworld" talkInput) (thread (load-ultima-underworld))
    (if (string=? "load ultima5" talkInput) (thread (load-ultima-world5)))))))))
 
-(define (say talkInput)
- ((ipc 'qwrite) (list 'voice (avatar 'dna) (avatar 'z) (avatar 'y) (avatar 'x) 10 talkInput)))
+(define (say talkInput . level)
+ ((ipc 'qwrite) (list 'voice DNA (if (null? level) 10 (car level)) talkInput)))
+
+(define (saySystem talkInput)
+ ((ipc 'qwrite) (list 'voice 0 10 talkInput)))
 
 (define replTalk
  (let ((talkInput ""))
@@ -1173,6 +1186,7 @@
 ;(setButton #\1 '(thread (sigwinch)))
 ;(setButton CHAR-CTRL-_ '(walk 4)) ; Sent by backspace?
 (setButton #\4 '(load-ultima-world4))
+(setButton #\p '((ipc 'qwrite) `(if (!= DNA ,DNA) ((ipc 'qwrite) (,'quasiquote (if (= DNA ,DNA) (voice 0 10 (string ,',(avatar 'name)" is here"))))))))
 
 (define (replCmd c)
  (define state 'cmd) ; state might be changed to 'done or 'talk.
@@ -1243,7 +1257,7 @@
    (sleep 200)
    ;(if (equal? ((kitty 'gps))
    ;            ((avatar 'gps)))
-   ;    ((ipc 'qwrite) `(voice ,(kitty 'dna) ,@((kitty 'gps)) 10 "Mrrreeeooowww!")))
+   ;    ((ipc 'qwrite) `(voice ,(kitty 'dna) 10 "Mrrreeeooowww!")))
    (if (> i (+ cycles (random 30)))
        ((ipc 'qwrite) `(die ,(kitty 'dna))) ; kill entity
        (~ (+ i 1))))))
@@ -1293,9 +1307,7 @@
      (~))))))))
 
 (define (sayDesperate)
-  (let ((cmd `(voice ,(avatar 'dna) ,(avatar 'z) ,(avatar 'y) ,(avatar 'x)
-                     10
-                     "desperate")))
+  (let ((cmd `(voice ,DNA 10 "desperate")))
    (sleep (random 500))
    ((ipc 'qwrite) cmd) (sleep 500)
    ((ipc 'qwrite) cmd) (sleep 500)))
@@ -1381,17 +1393,15 @@
 
 
 (define (sayHelloWorld)
-  (say (vector-random
-   #("*PUSH* *SQUIRT* *SPANK* *WAAAAAAAAA*"
-     "*All Worldlians Want to Be Borned*"
-     "*Happy Birthday*"
-     "*I thought you were in Hong Kong*"))))
+ ;(vector-random #("*PUSH* *SQUIRT* *SPANK* *WAAAAAAAAA*" "*All Worldlians Want to Be Borned*" "*Happy Birthday*" "*I thought you were in Hong Kong*"))
+  (saySystem (string (avatar 'name) " appears")))
 
-(define (sayByeBye) (say "*POOF*"))
+(define (sayByeBye)
+  (saySystem (string (avatar 'name) " exits")))
 
 (define (shutdown)
   (or QUIETLOGIN (sayByeBye))
-  ((ipc 'qwrite) `(die ,(avatar 'dna))) ; Kill avatar's entity
+  ((ipc 'qwrite) `(die ,DNA)) ; Kill avatar's entity
   (sleep 1000) ; wait for ipc to flush
   (displayl "\e[" (Terminal 'THeight) "H\r\n\e[0m\e[?25h")
   (quit))
