@@ -2,7 +2,7 @@
 (define CELLANIMATION #t) 
 (define SCROLLINGMAP #t)
 (define KITTEHBRAIN  #f)
-(define VOICEDELIMETER "> ")
+(define VOICEDELIMETER " ")
 (define DNA 0)
 
 (if QUIETLOGIN (load "ipc.scm" )(load "ipc.scm"))
@@ -33,7 +33,7 @@
 (define WinConsole ((Terminal 'WindowNew)
   0 0
   (- (Terminal 'THeight) 1)  (Terminal 'TWidth)
-  #x0a))
+  #x02))
 (define WinConsolePuts (WinConsole 'puts))
 (define (WinConsoleDisplay . e) (for-each (lambda (x) (WinConsolePuts (display->string x))) e))
 (define (WinConsoleWrite . e) (for-each (lambda (x) (WinConsolePuts (write->string x))) e))
@@ -280,9 +280,20 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Canvas
 ;;
-;; A canvas entry is a vector consisting of the current visibile cell and
-;; its Z coordinate.
-(define CanvasDimension FieldDimension)
+;; A canvas entry is a vector consisting of a cell and it's Z coordinate (the
+;; top most visible).  The canvas itself is a 2d quadrant dynamically updated
+;; with cells from the cell field agent.  Avatar movement will readjust the
+;; canvas' virtual position in the field's coordinate system as well as
+;; repopulate/cache the new quadrant areas in the canvas.  It will be either
+;; two or three (or four if the avatar 'warps' to a new area).
+;;
+;; Example:                         +--+--+    +--+--+
+;;   Assume avatar moved from a to  | a| b|    | e| b|
+;;   b in the canvas area.  e and f +--+--+ -> +--+--+
+;;   are cached in the area modulo  | c| d|    | f| c|
+;;   the field coordinates.         +--+--+    +--+--+
+(define CanvasQuadrantDimension 1) ; For now canvas is just one block
+(define CanvasDimension (* CanvasQuadrantDimension FieldDimension))
 
 (define CANVAS (make-vector-vector CanvasDimension CanvasDimension ()))
 
@@ -321,6 +332,7 @@
                    (modulo y CanvasDimension)
                    (modulo x CanvasDimension))
               1))
+
 (define (canvasCellHeightSet! y x h)
  (vector-set! (vector-vector-ref CANVAS
                  (modulo y CanvasDimension)
@@ -348,9 +360,11 @@
  (let ~dumpGlyphs ((y 0) (x 0))
   (if (!= y PortH) (if (= x PortW) (~dumpGlyphs (++ y) 0)
     (begin
-     (WinMapPutGlyph (canvasCellRef (+ PortY y) (+ PortX x)) y (* x 2))
+     (WinMapPutGlyph (canvasCellRef (+ PortY y) (+ PortX x))
+                     y
+                     (* x 2))
      (~dumpGlyphs y (++ x))))))
- ; DEBUG: Plot column
+ ; Plot column of cells at avatar's (y x) location.  For debugging.
  ((WinColumn 'home))
  (let ~ ((z 11))
   (let ((c (field-ref z y x)))
@@ -545,21 +559,21 @@
  (if (= dna 0)
   (begin ; Message from the system
     (WinChatDisplay "\r\n")
-    (WinChatSetColor 6) (WinChatDisplay ":")
+    ;(WinChatSetColor 6) (WinChatDisplay ":")
     (WinChatSetColor 9) (WinChatDisplay "W")
     (WinChatSetColor 11) (WinChatDisplay "O")
     (WinChatSetColor 10) (WinChatDisplay "R")
     (WinChatSetColor 12) (WinChatDisplay "L")
     (WinChatSetColor 13) (WinChatDisplay "D")
-    (WinChatSetColor 6) (WinChatDisplay ": ")
-    (WinChatSetColor 15) (WinChatDisplay text))
- (let ((entity (entitiesGet dna)))
-   (WinChatSetColor (glyphColor0 (entity 'glyph)))
-   (WinChatDisplay "\r\n" (if (null? entity) "???" (entity 'name)) VOICEDELIMETER)
-   (WinChatSetColor (glyphColor1 (entity 'glyph)))
-   (if (= level 100) (WinChatSetColor #x09)) ; Special color for certain messages.
-   (WinChatDisplay text))
- (if (and (!= dna DNA) (eqv? text "unatco")) (say "no Savage"))))
+    ;(WinChatSetColor 6) (WinChatDisplay ": ")
+    (WinChatSetColor 8) (WinChatDisplay VOICEDELIMETER)
+    (WinChatSetColor 7) (WinChatDisplay text))
+  (let ((entity (entitiesGet dna)))
+    (WinChatSetColor (glyphColor0 (entity 'glyph)))
+    (WinChatDisplay "\r\n" (if (null? entity) "???" (entity 'name)) VOICEDELIMETER)
+    (WinChatSetColor (glyphColor1 (entity 'glyph)))
+    (WinChatDisplay text)))
+ (if (and (!= dna DNA) (eqv? text "unatco")) (say "no Savage")))
 
 
 
@@ -600,7 +614,7 @@
    (if (< MAXCELL nextCell) ; Cell I'm walking into is probably an entity
     (begin
      ((ipc 'qwrite) `(force ,@((avatar 'gpsLook)) ,dir 10))) ; Push the entity that's in my way.
-    (if (pair? (memv nextCell (list MNTS HILLS WATER0 WATER1 WATER2)))
+    (if (pair? (memv nextCell (list XX MNTS HILLS WATER0 WATER1 WATER2)))
      'bumpIntoMountain
      (begin
       ((avatar 'move))
@@ -901,6 +915,8 @@
 ; Mapping from World[tm] (y x) corrdinates to Ultima4 map file byte index.
 ; i = (+ (modulo x 32) (* (/ x 32) 1024) (* (modulo y 32) 32) (* (/ y 32) 8192))
 
+; The ultima map file is an 8x8 array of 32x32 cells
+; so create a simpler 256x25 array of cells.
 (define U44MapVector
  (let ((fd (open "ultima4.map"))
        (timeStart (time))
@@ -917,6 +933,18 @@
                  (+ 0 (read-char fd))) ; Hack to convert char to integer
         (~ (+ i 1)))))))
 
+(define (load-ultima-world4)
+ (resetField)
+ (let ((bar (makeProgressBar 5 30 "Britannia 4"))
+       (timeStart (time)))
+  (let ~ ((y 0)(x 0)) (if (< y 256) (if (= 256 x) (~ (+ y 1) 0) (begin
+      (if (= 0 (modulo (+ x (* 256 y)) (/ 65536 20))) (bar))
+      (let ((c (+ 0 (U44MapVectorRef y x)))) ; Hack to convert char to integer
+        (setCell 1 y x c)
+        (if (not (null? (memv c (list FOREST BUSHES)))) (setCell 2 y x c)))
+      (~ y (+ x 1))))))
+  (WinChatDisplay "\r\nInitialized UltimaIV Map " (- (time) timeStart) "s.")
+  ((ipc 'qwrite) '(who))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Ultima city detail map.
@@ -955,25 +983,6 @@
           )))
       (~ y (+ x 1))))))
   (WinConsoleDisplay "\r\nInitialized UltimaIV Map " (- (time) timeStart) "s.")))
-
-(define (load-ultima-world4)
- (resetField)
- (let ((fd (open "ultima4.map"))
-       (bar (makeProgressBar 5 30 "Britannia 4"))
-       (timeStart (time)))
-  (let ~ ((i 0))
-     (or (= i 65536) (begin
-      (if (= 0 (modulo i (/ 65536 20))) (bar))
-      (let ((z 1)
-            (y (+ (modulo (/ i 32) 32) (* (/ i 8192) 32)))
-            (x (+ (modulo i 32) (* (modulo (/ i 1024) 8) 32)))
-            (c (+ 0 (read-char fd)))) ; Hack to convert char to integer
-        (setCell z       y x c)
-        (if (not (null? (memv c (list FOREST BUSHES))))
-          (setCell (+ z 1) y x c)))
-      (~ (+ i 1)))))
-  (WinChatDisplay "\r\nInitialized UltimaIV Map " (- (time) timeStart) "s.")
-  ((ipc 'qwrite) '(who))))
 
 
 (define (load-ultima-world5)
@@ -1357,7 +1366,7 @@
 ;(build-brick-room 15 35)
 (viewportReset (avatar 'y) (avatar 'x))
 ((WinMap 'toggle))
-(thread (if QUIETLOGIN (load-ultima-world4) (load-ultima-world4)))
+(thread (if QUIETLOGIN (load-ultima-world44) (load-ultima-world4)))
 
 
 ;(thread (snake 18 38 500))
@@ -1393,8 +1402,10 @@
 
 
 (define (sayHelloWorld)
- ;(vector-random #("*PUSH* *SQUIRT* *SPANK* *WAAAAAAAAA*" "*All Worldlians Want to Be Borned*" "*Happy Birthday*" "*I thought you were in Hong Kong*"))
-  (saySystem (string (avatar 'name) " appears")))
+ (saySystem (string
+     (avatar 'name)
+     " says "
+     (vector-random #("*PUSH* *SQUIRT* *SPANK* *WAAAAAAAAA*" "*All Worldlians Want to Be Borned*" "*Happy Birthday*" "*I thought you were in Hong Kong*")))))
 
 (define (sayByeBye)
   (saySystem (string (avatar 'name) " exits")))
@@ -1409,3 +1420,7 @@
 (or QUIETLOGIN (sayHelloWorld))
 (wrepl)
 (shutdown)
+
+; Redraw all entities in the EntityDB list.
+;(map (lambda (e) (apply move (cons (car e) (((cdr e) 'gps))))) EntityDB)
+
