@@ -2197,6 +2197,11 @@ void sysNewReal (void) {
 	objNewReal(strtof(r5,0));
 	DB("<--%s()", __func__);
 }
+void sysNewOct (void) {
+	DB("-->%s()", __func__);
+	objNewInt(strtol(r5+2,0,8));
+	DB("<--%s()", __func__);
+}
 void sysNewHex (void) {
 	DB("-->%s()", __func__);
 	objNewInt(strtol(r5+2,0,16));
@@ -2593,8 +2598,13 @@ void wscmCreateRead (void) {
 		BRA, ADDR, "done",
 		/* real? */
 	LABEL, "real",
-		BNEI0, SREAL, ADDR, "hex",
+		BNEI0, SREAL, ADDR, "oct",
 		SYSI, sysNewReal,
+		BRA, ADDR, "done",
+		/* oct number? */
+	LABEL, "oct",
+		BNEI0, SOCT, ADDR, "hex",
+		SYSI, sysNewOct,
 		BRA, ADDR, "done",
 		/* hex number? */
 	LABEL, "hex",

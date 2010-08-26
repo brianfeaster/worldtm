@@ -793,10 +793,10 @@
    ((WinMarquee 'goto) 1 2)
    (let ~ ((j 0))
      (WinMarqueeSetColor (vector-ref #(07 07 07 07 07 07 07 07   07 07 07
-                                       9  11 10 12 13 15 15 15 15 15)
+                                       9 11 10 12 5  1  2  6  4 7)
                                      (modulo (+ i j) 21)))
      (WinMarqueePutc (vector-ref #(#\W #\e #\l #\c #\o #\m #\e #\   #\t #\o #\ 
-                                   #\W #\o #\r #\l #\d #\  #\  #\  #\  #\ )
+                                   #\W #\o #\r #\l #\d #\[ #\t #\m #\] #\ )
                                  (modulo (+ i j) 21)))
      (if (< j 19) (~ (+ j 1)))) ; Marquee area width
    (if (< i 60) ; Msg scroll count
@@ -1195,7 +1195,7 @@
 ;(setButton #\1 '(thread (sigwinch)))
 ;(setButton CHAR-CTRL-_ '(walk 4)) ; Sent by backspace?
 (setButton #\4 '(load-ultima-world4))
-(setButton #\p '((ipc 'qwrite) `(if (!= DNA ,DNA) ((ipc 'qwrite) (,'quasiquote (if (= DNA ,DNA) (voice 0 10 (string ,',(avatar 'name)" is here"))))))))
+(setButton #\p '((ipc 'qwrite) `(if (!= DNA ,DNA) ((ipc 'qwrite) `(if (= DNA ,,DNA) (voice 0 10 (string ,(avatar 'name)" is present in world")))))))
 
 (define (replCmd c)
  (define state 'cmd) ; state might be changed to 'done or 'talk.

@@ -1250,21 +1250,24 @@ void compLetrec (Num flags) {
 	DB("<--%s", __func__);
 }
 
-/* Given (quasiquote <qq template>) in expr, create cons tree in r0.  Does
-   not handle properly (currently) nested unquotes within nested quasiquotes.
+/* Given <qq template> in expr, create cons tree in r0.
 */
-void compTransformQuasiquote (void) {
+void compTransformQuasiquote (int depth) {
+ int isUnquote, isQuasiquote;
 	DB("-->%s", __func__);
-	if (memObjectType(expr) == TPAIR) {
-		if (car(expr) == sunquote) {
+	if (memObjectType(expr) == TPAIR) { /* Is this (unquote ...) */
+		isUnquote    = (car(expr)==sunquote);
+		isQuasiquote = (car(expr)==squasiquote);
+		if (isUnquote && depth==0) {
 			/* (unquote atom) => atom */
 			r0 = cadr(expr);
 		} else if (TPAIR == memObjectType(car(expr))
-		           && caar(expr) == sunquotesplicing) {
+		           && caar(expr) == sunquotesplicing
+		           && depth==0) {
 			/* ((unquote-splicing template) . b) */
 			push(car(cdar(expr))); /* Save template */
 			expr=cdr(expr);  /* Consider b */
-			compTransformQuasiquote(); /* => b' */
+			compTransformQuasiquote(depth); /* => b' */
 			/* (append template b') */
 			r1=r0;     r2=null;  objCons12(); /* => (b') */
 			r1=pop();  r2=r0;    objCons12(); /* => (template b') */
@@ -1272,26 +1275,26 @@ void compTransformQuasiquote (void) {
 		} else { /* Transform (a . b) => (cons a' b') */
 			push(cdr(expr)); /* Save b */
 			expr=car(expr);  /* Consider a */
-			compTransformQuasiquote(); /* => a' */
+			compTransformQuasiquote(depth); /* => a' */
 			expr=pop();      /* Restore b */
 			push(r0);        /* Save a' */
-			compTransformQuasiquote(); /* => b' */
+			compTransformQuasiquote(depth - isUnquote + isQuasiquote); /* => b' */
 			r1=r0;     r2=null;  objCons12(); /* => (b') */
 			r1=pop();  r2=r0;    objCons12(); /* => (a' b') */
 			r1=scons;  r2=r0;    objCons12(); /* => (cons a' b') */
 		}
 	/* Transform atom into (quote atom) */
 	} else {
-		r1=expr;   r2=null;  objCons12(); // => (atom)
-		r1=squote; r2=r0;    objCons12(); // => (quote atom)
+		r1=expr;   r2=null;  objCons12(); // atom   => (atom)
+		r1=squote; r2=r0;    objCons12(); // (atom) => (quote atom)
 	}
 	DB("<--%s", __func__);
 }
 
 void compQuasiquote (Num flags) {
 	DB("-->%s", __func__);
-	expr = cadr(expr); // Consider <qq template>
-	compTransformQuasiquote();
+	expr = cadr(expr); // Given (quasiquote <qq template>) pass <qq template>
+	compTransformQuasiquote(0);
 	expr = r0;
 	DB("   %s quasiquote transformation => ", __func__);
 	DBE wscmWrite (expr, 0, 2);
