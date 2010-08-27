@@ -59,6 +59,12 @@
 ((WinMap 'toggle))
 ((WinMap 'cursor-visible) #f) ; Disable cursor in map window
 
+; Help Window.
+(define WinHelpBorder ((Terminal 'WindowNew) 4 19 14 32 #x20))
+(define WinHelp ((Terminal 'WindowNew) 5 20 12 30 #x0a))
+((WinHelpBorder 'toggle))
+((WinHelp 'toggle))
+
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -221,19 +227,19 @@
 ; above are assumed to be the lowest and higest specified cells in the vector.
 ; Setting a cell outside the explicit stack range expands the actual vector
 ; and adjusts the start-height value.
-(define (field-column y x)
+(define (fieldColumn y x)
  (vector-vector-ref FIELD (modulo y FieldDimension)
                           (modulo x FieldDimension)))
 
 ; Query the first cell at this location.  Mainly used as the object to display.
 (define (field-ref z y x)
- (letrec ((column   (field-column y x))
+ (letrec ((column   (fieldColumn y x))
           (elements (columnRef column z)))
    (if (pair? elements) (car elements) elements)));1st in improper list of objs
 
 ; Query the last cell at this location.  Used to get the base/non-entity object.
 (define (field-base-ref z y x)
- (letrec ((column   (field-column y x))
+ (letrec ((column   (fieldColumn y x))
           (elements (columnRef column z)))
    (last elements))) ; Last in improper list of objs
 
@@ -241,7 +247,7 @@
 ; Scan down map column starting at z for first visibile cell.  Return height.
 ; BF:  What should this return if z is below the bottom most explicit cell?
 (define (field-ref-top z y x)
- (letrec ((column (field-column y x))
+ (letrec ((column (fieldColumn y x))
           (top    (columnHeightTop column)) ;1st implicit top cell in column
           (bot    (columnHeightBottom column)));1st implicit bottom cell in col
  ; Adjust the z coor down to the first explicit cell in the column
@@ -281,10 +287,10 @@
 ;; Canvas
 ;;
 ;; A canvas entry is a vector consisting of a cell and it's Z coordinate (the
-;; top most visible).  The canvas itself is a 2d quadrant dynamically updated
+;; top most visible).  The canvas itself is a 2x2 block dynamically updated
 ;; with cells from the cell field agent.  Avatar movement will readjust the
 ;; canvas' virtual position in the field's coordinate system as well as
-;; repopulate/cache the new quadrant areas in the canvas.  It will be either
+;; repopulate/cache the new block areas in the canvas.  It will be either
 ;; two or three (or four if the avatar 'warps' to a new area).
 ;;
 ;; Example:                         +--+--+    +--+--+
@@ -292,52 +298,67 @@
 ;;   b in the canvas area.  e and f +--+--+ -> +--+--+
 ;;   are cached in the area modulo  | c| d|    | f| c|
 ;;   the field coordinates.         +--+--+    +--+--+
-(define CanvasQuadrantDimension 1) ; For now canvas is just one block
-(define CanvasDimension (* CanvasQuadrantDimension FieldDimension))
+
+(define CanvasBlockDimension 256) ; Each canvas block is 256x256 cells.
+(define CanvasBlockCount 2)       ; Canvas is made up of 2x2 blocks.
+(define CanvasDimension (* CanvasBlockCount CanvasBlockDimension)) ; 512x512
+(define CanvasCoordinates (cons 0 0)) ; Canvas coordinate in block space.  (1 1) would be (256 256) map space.
+
+; Get list of coordinate pairs of each block that make up the canvas.
+(define (canvasBlockCoordinates)
+ (let ((y (car CanvasCoordinates))
+       (x (cdr CanvasCoordinates)))
+ (list (cons y x) (cons y (+ x 1)) (cons (+ y 1) x) (cons (+ y 1) (+ x 1)))))
+
+; Return list of block coordinates which need to be updated
+; if we were to move the canvas to this new block location.
+(define (canvasMove y x)
+  (let ~ ((newBlocks (canvasBlockCoordinates)) ; Assume we need to replace all current blocks.
+          (current (list (cons y x) (cons y (+ x 1)) (cons (+ y 1) x) (cons (+ y 1) (+ x 1))))) ; Remove the blocks we already have from new block list.
+    (if (null? current)
+      newBlocks
+      (~ (list-delete newBlocks (car current)) (cdr current)))))
 
 (define CANVAS (make-vector-vector CanvasDimension CanvasDimension ()))
 
-; TODO this takes a long time.  Why?
-(define timeStart (time))
-(let ~ ((y 0)(x 0))
- (if (!= y CanvasDimension) (if (= x CanvasDimension) (~ (+ y 1) 0) (begin
-  ; Each canvas entry consists of a map cell, the cell height and
-  ; top most visible height.
-   (vector-vector-set! CANVAS y x 
-     (let ((top (field-ref-top 1000 y x)));What'll be higher than 1k?
-       (vector (cell-ref (field-ref top y x)) top)))
-   (~ y (+ x 1))))))
-;(WinChatDisplay "Initialized Canvas " (- (time) timeStart) " seconds")
+(define (canvasCell y x)
+  (car (vector-vector-ref CANVAS
+         (modulo y CanvasDimension)
+         (modulo x CanvasDimension))))
+
+(define (canvasHeight y x)
+  (cdr (vector-vector-ref CANVAS
+         (modulo y CanvasDimension)
+         (modulo x CanvasDimension))))
+
+(define (canvasCellSet y x c)
+  (set-car! (vector-vector-ref CANVAS
+              (modulo y CanvasDimension)
+              (modulo x CanvasDimension))
+            c))
+
+(define (canvasHeightSet y x h)
+ (set-cdr! (vector-vector-ref CANVAS
+             (modulo y CanvasDimension)
+             (modulo x CanvasDimension))
+           h))
 
 (define (canvasRender y x)
  (let ((top (field-ref-top 1000 y x)))
-  (canvasCellSet! y x (cell-ref (field-ref top y x)))
-  (canvasCellHeightSet! y x top)))
+  (canvasCellSet y x (cell-ref (field-ref top y x)))
+  (canvasHeightSet y x top)))
 
-(define (canvasCellRef y x)
-  (vector-ref
-     (vector-vector-ref CANVAS
-       (modulo y CanvasDimension)
-       (modulo x CanvasDimension))
-     0))
+; Initialize the canvas with the Construct[tm].
+(define timeStart (time))
 
-(define (canvasCellSet! y x c)
-  (vector-set! (vector-vector-ref CANVAS
-                     (modulo y CanvasDimension)
-                     (modulo x CanvasDimension))
-               0 c))
+(let ((defaultCell (cell-ref XX)))
+ (let ~ ((y 0)(x 0))
+  (if (!= y CanvasDimension) (if (= x CanvasDimension) (~ (+ y 1) 0) (begin
+   ; Each canvas entry consists of a map cell and its height.
+    (vector-vector-set! CANVAS y x (cons defaultCell 0))
+    (~ y (+ x 1)))))))
 
-(define (canvasCellHeightRef y x)
-  (vector-ref (vector-vector-ref CANVAS
-                   (modulo y CanvasDimension)
-                   (modulo x CanvasDimension))
-              1))
-
-(define (canvasCellHeightSet! y x h)
- (vector-set! (vector-vector-ref CANVAS
-                 (modulo y CanvasDimension)
-                 (modulo x CanvasDimension))
-              1 h))
+(WinConsoleDisplay "Initialized Canvas " (- (time) timeStart) " seconds")
 
 
 
@@ -360,7 +381,7 @@
  (let ~dumpGlyphs ((y 0) (x 0))
   (if (!= y PortH) (if (= x PortW) (~dumpGlyphs (++ y) 0)
     (begin
-     (WinMapPutGlyph (canvasCellRef (+ PortY y) (+ PortX x))
+     (WinMapPutGlyph (canvasCell (+ PortY y) (+ PortX x))
                      y
                      (* x 2))
      (~dumpGlyphs y (++ x))))))
@@ -391,7 +412,7 @@
  (let ((y (modulo (- gy PortY) FieldDimension)) ; Normalize avatar position.
        (x (modulo (- gx PortX) FieldDimension)))
   (and (< y PortH) (< x PortW)
-    (WinMapPutGlyph (canvasCellRef gy gx) y (* x 2)))))
+    (WinMapPutGlyph (canvasCell gy gx) y (* x 2)))))
 
 
 
@@ -498,14 +519,6 @@
 (define (entity dna name z y x glyph)
  (entitiesSet dna name z y x glyph)
  (move dna z y x))
- ;(WinChatSetColor #x0e)
- ;;(WinChatDisplay name))
- ;(WinChatSetColor #x07)
- ;(WinChatDisplay " is present in World[tm] as "))
- ;(WinChatSetColor (glyphColor0 glyph))
- ;(WinChatDisplay (glyphChar0 glyph))
- ;(WinChatSetColor (glyphColor1 glyph))
- ;(WinChatDisplay (glyphChar1 glyph)))
 
 
 (define (who)
@@ -527,13 +540,13 @@
     (begin
       ; Move from here
       (field-delete! (entity 'z) (entity 'y) (entity 'x) dna)
-      (if (>= (entity 'z) (canvasCellHeightRef (entity 'y) (entity 'x))) (begin
+      (if (>= (entity 'z) (canvasHeight (entity 'y) (entity 'x))) (begin
         (canvasRender (entity 'y) (entity 'x))
         (or shouldScroll (viewportRender (entity 'y) (entity 'x)))))
       ; Place here
       ((entity 'setLoc) z y x)
       (field-add! z y x dna)
-      (if (>= (entity 'z) (canvasCellHeightRef y x)) (begin
+      (if (>= (entity 'z) (canvasHeight y x)) (begin
         (canvasRender y x)
         (or shouldScroll (viewportRender y x))))
       (if shouldScroll
@@ -550,7 +563,7 @@
     (begin
       ; Remove from here
       (field-delete! (entity 'z) (entity 'y) (entity 'x) dna)
-      (if (>= (entity 'z) (canvasCellHeightRef (entity 'y) (entity 'x))) (begin
+      (if (>= (entity 'z) (canvasHeight (entity 'y) (entity 'x))) (begin
         (canvasRender (entity 'y) (entity 'x))
         (or thisIsMe (viewportRender (entity 'y) (entity 'x)))))))))
 
@@ -559,13 +572,11 @@
  (if (= dna 0)
   (begin ; Message from the system
     (WinChatDisplay "\r\n")
-    ;(WinChatSetColor 6) (WinChatDisplay ":")
     (WinChatSetColor 9) (WinChatDisplay "W")
     (WinChatSetColor 11) (WinChatDisplay "O")
     (WinChatSetColor 10) (WinChatDisplay "R")
     (WinChatSetColor 12) (WinChatDisplay "L")
     (WinChatSetColor 13) (WinChatDisplay "D")
-    ;(WinChatSetColor 6) (WinChatDisplay ": ")
     (WinChatSetColor 8) (WinChatDisplay VOICEDELIMETER)
     (WinChatSetColor 7) (WinChatDisplay text))
   (let ((entity (entitiesGet dna)))
@@ -603,34 +614,19 @@
 ; TODO: Implement coor+dir use new dir to field-ref location an dif > MAX_CELL ipc-write (force blah blah)
 
 (define (walk dir)
-; (if (not (eq? BRICK (field-ref (avatar 'z) (avatar 'y) (avatar 'x))))
-;   (begin
-     ;(WinChatDisplay (list (avatar 'z)":" (avatar 'y)":"(avatar 'x)"="))
-     ;(WinChatDisplay (list (field-ref 4 15 15) "," (field-ref 4 14 18)))
-     ;(WinChatDisplay (field-ref (avatar 'z) (avatar 'y) (avatar 'x)))
-     ;(WinChatDisplay "\r\n")))
  ((avatar 'face) dir) ; Turn avatar
  (let ((nextCell ((avatar 'look)))) ; Consider cell I'm walking into
    (if (< MAXCELL nextCell) ; Cell I'm walking into is probably an entity
     (begin
      ((ipc 'qwrite) `(force ,@((avatar 'gpsLook)) ,dir 10))) ; Push the entity that's in my way.
-    (if (pair? (memv nextCell (list XX MNTS HILLS WATER0 WATER1 WATER2)))
-     'bumpIntoMountain
+    (if (null? (memv nextCell (list XX MNTS HILLS WATER0 WATER1 WATER2)))
      (begin
       ((avatar 'move))
       ((ipc 'qwrite) `(move ,DNA ,@((avatar 'gps))))
-      ; Popup a message to a new window temporarily.
-      (rem if (eqv? BUSHES   (field-ref (avatar 'z) (avatar 'y) (avatar 'x)))
-       ((lambda ()
-          (define WinTemp ((Terminal 'WindowNew) 1 29 1 22 #x1b))
-          (define WinTempPutc (WinTemp 'putc))
-          (map WinTempPutc (string->list "Are we having fun yet?"))
-          (read-char stdin)
-          ((WinTemp 'delete)))))
       (if (eq? HELP (field-ref (avatar 'z) (avatar 'y) (avatar 'x)))  (help))
       (if (eq? SNAKE (field-ref (avatar 'z) (avatar 'y) (avatar 'x))) (thread (snake-random)))
       (if (eqv? BRIT2 (field-base-ref (avatar 'z) (avatar 'y) (avatar 'x))) (thread (spawnKitty)))
-      ;(WinConsoleWrite (field-column (avatar 'y) (avatar 'x)) (field-ref (avatar 'z) (avatar 'y) (avatar 'x)))
+      ;(WinConsoleWrite (fieldColumn (avatar 'y) (avatar 'x)) (field-ref (avatar 'z) (avatar 'y) (avatar 'x)))
       ; Dump our coordinates.
       ((WinStatus 'puts) "\r\n")
       ((WinStatus 'puts) (number->string (avatar 'z)))
@@ -653,17 +649,19 @@
               (glyphChar1 glyph))))
   (who))
 
-;(define (fortune)
-; (let ~ (( dv8 (open-socket "dv8.org" 80)))
-;  (sleep 10)
-;  (if (not (eof-object? dv8))
-;    (begin
-;      (send "GET /~shroom/fortune.cgi\n\n" dv8) (sleep 10)
-;      (let ~ ((c (read-char dv8)))
-;           (if (eof-object? c)
-;            (close dv8)
-;            (begin (speak c)
-;                   (~ (read-char dv8)))))))))
+(define (rollcall)
+ ((ipc 'qwrite) `(if (!= DNA ,DNA) ((ipc 'qwrite) `(if (= DNA ,,DNA) (voice 0 10 (string ,(avatar 'name)" is present in world")))))))
+ ;(WinChatSetColor #x0e)
+ ;;(WinChatDisplay name))
+ ;(WinChatSetColor #x07)
+ ;(WinChatDisplay " is present in World[tm] as "))
+ ;(WinChatSetColor (glyphColor0 glyph))
+ ;(WinChatDisplay (glyphChar0 glyph))
+ ;(WinChatSetColor (glyphColor1 glyph))
+ ;(WinChatDisplay (glyphChar1 glyph)))
+
+
+
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Get the wheels in motion
@@ -822,91 +820,47 @@
      (set! pos (+ pos 1))
      #t)))))
 
-(define (loading y x title)
- (let ((loadingbar (makeProgressBar y x "P R O G R E S S")))
-   (let ~ ()
-     (sleep 200)
-     (if (loadingbar) (~)))))
 
-(define (snake y x delay)
- (define Window3 ((Terminal 'WindowNew) y x 3 3 #x6b))
- (define Window3Puts (Window3 'puts))
- ((Window3 'alpha) 1 1 #f) ; Transparent window location.
- ((Window3 'cursor-visible) #f)
- (let ~ ((m 0))
-   ((Window3 'home)) (Window3Puts "oO ") (Window3Puts ".  ") (Window3Puts ".  ")
-   (sleep delay)
-   ((Window3 'home)) (Window3Puts ".oO") (Window3Puts ".  ") (Window3Puts "   ")
-   (sleep delay)
-   ((Window3 'home)) (Window3Puts "..o") (Window3Puts "  O") (Window3Puts "   ")
-   (sleep delay)
-   ((Window3 'home)) (Window3Puts " ..") (Window3Puts "  o") (Window3Puts "  O")
-   (sleep delay)
-   ((Window3 'home)) (Window3Puts "  .") (Window3Puts "  .") (Window3Puts " Oo")
-   (sleep delay)
-   ((Window3 'home)) (Window3Puts "   ") (Window3Puts "  .") (Window3Puts "Oo.")
-   (sleep delay)
-   ((Window3 'home)) (Window3Puts "   ") (Window3Puts "O  ") (Window3Puts "o..")
-   (sleep delay)
-   ((Window3 'home)) (Window3Puts "O  ") (Window3Puts "o  ") (Window3Puts ".. ")
-   (sleep delay)
-   (if (< m 10) (~ (+ m 1)))) ; Loop 10 times
- ((Window3 'delete)))
-
-(define (snake-random)
- (snake
-   (random (- (Terminal 'THeight) 3))
-   (random (- (Terminal 'TWidth) 3))
-   200))
-
-(define WinHelp ((Terminal 'WindowNew) 5 20 12 30 #x21))
-
+; Help window.  A bunch of button commands for now.
 ; Give the help window an artistic border.
-(map (lambda (x) ((WinHelp 'alpha) 0 x #f))
-     '(0 1 2 3 4 5 6 7 8 20 21 22 23 24 25 26 27 28 29))
 
-((WinHelp 'goto) 0 0)
-((WinHelp 'puts) "         )) Help! ((")
-((WinHelp 'set-color) #x20)
-((WinHelp 'puts) "\r\n? = toggle help window\r\nt = talk\r\nesc = exit talk\r\nm = toggle map\r\nW = toggle animation\r\n> = increase map size\r\n< = decrease map size\r\nq = quit\r\nhjkl = move\r\n^A = change color\r\np = whois present")
-((WinHelp 'toggle))
+; Give the window an 'artistic' border.
+(map (lambda (x) ((WinHelp 'alpha) 0 x #f)) '(0 1 2 3 4 5 6 7 8 21 22 23 24 25 26 27 28 29))
+
+(map (lambda (x) ((WinHelpBorder 'alpha) 0 x #f)) '(0 1 2 3 4 5 6 7 8 23 24 25 26 27 28 29 30 31))
+
+;((WinHelp 'goto) 0 0)
+;((WinHelp 'set-color) #x0a)
+
+((WinHelp 'puts) "          !! Help !!")
+((WinHelp 'set-color) #x0f)
+((WinHelp 'puts) "\r\n?  toggle help window")
+((WinHelp 'puts) "\r\nt  talk mode (esc to exit)")
+((WinHelp 'puts) "\r\nc  talk color")
+((WinHelp 'puts) "\r\nm  toggle map")
+((WinHelp 'puts) "\r\nW  toggle animation")
+((WinHelp 'puts) "\r\n>  increase map size")
+((WinHelp 'puts) "\r\n<  decrease map size")
+((WinHelp 'puts) "\r\np  present user list")
+((WinHelp 'puts) "\r\nq  quit World[tm]")
 
 (define (help)
- ; (WinHelp '(set! Y0 2))
- ; (WinHelp '(set! Y1 (+ Y0 WHeight)))
-  ((WinHelp 'toggle)))
+ ((WinHelp 'toggle))
+ ((WinHelpBorder 'toggle)))
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; Drop some cells on the map
+
+; Drop some cells on the map
 (define (dropCell y x cell)
  (let ((z (+ 1 (field-ref-top 1000 y x))))
   (field-set! z y x cell)
   (canvasRender y x)
   (viewportRender y x)))
 
+; Set map cell and force rendering of cell through entire pipeline.
 (define (setCell z y x cell)
   (field-set! z y x cell)
   (canvasRender y x)
   (viewportRender y x))
-
-(define (build-brick-room yy xx)
- (let ~ ((i 0))
-    ;(sleep 1000)
-    (dropCell yy         (+ xx i)        BRICK)
-    (dropCell (+ yy 10)  (+ 10 xx (- i)) BRICK)
-    (dropCell (+ 10 yy (- i)) xx         BRICK)
-    (dropCell (+ yy i)   (+ xx 10)       BRICK)
-    (if (< i 9) (~ (+ i 1)))))
-
-
-(define (build-island yy xx radius)
- (let ~ ((y (- radius))(x (- radius)))
-  (if (< y radius)
-  (if (= x radius) (~ (+ y 1) (- radius))
-   (begin
-    (if (> radius (sqrt (+ (^2 y) (^2 x))))
-        (dropCell (+ y yy) (+ x xx) SAND))
-    (~ y (+ x 1)) )))))
 
 ; Mapping from Ultima4 map file byte index to (y x) World[tm] coordinates.
 ;  y = (+ (modulo (/ i 32) 32) (* (/ i 8192) 32))
@@ -933,15 +887,15 @@
                  (+ 0 (read-char fd))) ; Hack to convert char to integer
         (~ (+ i 1)))))))
 
-(define (load-ultima-world4)
+(define (loadUltimaWorld4)
  (resetField)
  (let ((bar (makeProgressBar 5 30 "Britannia 4"))
        (timeStart (time)))
   (let ~ ((y 0)(x 0)) (if (< y 256) (if (= 256 x) (~ (+ y 1) 0) (begin
       (if (= 0 (modulo (+ x (* 256 y)) (/ 65536 20))) (bar))
       (let ((c (+ 0 (U44MapVectorRef y x)))) ; Hack to convert char to integer
-        (setCell 1 y x c)
-        (if (not (null? (memv c (list FOREST BUSHES)))) (setCell 2 y x c)))
+        (if (not (null? (memv c (list FOREST BUSHES)))) (setCell 2 y x c)) ; Forest trees are tall.
+        (setCell 1 y x c))
       (~ y (+ x 1))))))
   (WinChatDisplay "\r\nInitialized UltimaIV Map " (- (time) timeStart) "s.")
   ((ipc 'qwrite) '(who))))
@@ -1036,7 +990,7 @@
  (if tankIsListening (begin
    (if (string=? "who" talkInput) ((ipc 'qwrite) '(say "I'm here!")))
    (if (string=? "load the jump program" talkInput) (tankTalk "I can't find the disk")
-   (if (string=? "load ultima4" talkInput) (thread (load-ultima-world4))
+   (if (string=? "load ultima4" talkInput) (thread (loadUltimaWorld4))
    (if (string=? "load underworld" talkInput) (thread (load-ultima-underworld))
    (if (string=? "load ultima5" talkInput) (thread (load-ultima-world5)))))))))
 
@@ -1144,6 +1098,9 @@
    (if (procedure? val) (cons 'lambda (vector-ref (vector-ref (vector-ref Buttons ch) 0) 2))
    val))))
 
+
+(setButton #\p '(rollcall))
+(setButton #\c '(avatarColor))
 (setButton #\j '(walk 2))
 (setButton #\B '(walk 2))
 (setButton #\k '(walk 8))
@@ -1172,9 +1129,7 @@
 (setButton #\t '(begin
   (WinInputPuts (string ">" (replTalk 'getBuffer)))
   (set! state 'talk)))
-(setButton CHAR-CTRL-A '(avatarColor))
 (setButton CHAR-CTRL-F '(walkForever))
-(setButton CHAR-CTRL-K '((ipc 'qwrite) `(set! FIELD ,FIELD))) ; Send my plane out to IPC.
 (setButton CHAR-CTRL-L '(begin (viewportReset (avatar 'y) (avatar 'x)) ((WinChat 'repaint))))
 (setButton CHAR-CTRL-M '(begin ((WinStatus 'toggle)) ((WinColumn 'toggle))))
 (setButton CHAR-CTRL-Q '(set! state 'done))
@@ -1192,10 +1147,10 @@
 (setButton #\Q '(set! state 'done))
 (setButton eof '(set! state 'done))
 (setButton CHAR-CTRL-C '((WinConsole 'toggle)))
+(setButton #\4 '(loadUltimaWorld4))
+;(setButton CHAR-CTRL-K '((ipc 'qwrite) `(set! FIELD ,FIELD))) ; Send my plane out to IPC.
 ;(setButton #\1 '(thread (sigwinch)))
 ;(setButton CHAR-CTRL-_ '(walk 4)) ; Sent by backspace?
-(setButton #\4 '(load-ultima-world4))
-(setButton #\p '((ipc 'qwrite) `(if (!= DNA ,DNA) ((ipc 'qwrite) `(if (= DNA ,,DNA) (voice 0 10 (string ,(avatar 'name)" is present in world")))))))
 
 (define (replCmd c)
  (define state 'cmd) ; state might be changed to 'done or 'talk.
@@ -1335,16 +1290,14 @@
 ; Display some initial information
 (WinChatSetColor #x0b)
 ;((WinChat 'goto) 0 0)
-;(WinChatDisplay "   *** Welcome to the construct. ***")
-(WinChatDisplay "Welcome to World\r\n")
+(WinChatDisplay "Welcome to World\r\n") ; "   *** Welcome to the construct. ***"
 (WinChatDisplay "See http://code.google.com/p/worldtm\r\n")
 (WinChatDisplay "Hit ? to toggle the help window\r\n")
 (WinChatDisplay "Your name is " (avatar 'name))
 
 ; Create ipc object.  Pass in a debug message output port.
 ; for production world an 'empty' port is passed.
-; (define ipc (Ipc WinChatDisplay))
-(define ipc (Ipc WinConsoleDisplay))
+(define ipc (Ipc WinConsoleDisplay)) ; WinChatDisplay
 
 ; Always read and evaluate everything from IPC.
 (thread  (let ~ () 
@@ -1355,21 +1308,9 @@
 
 ((ipc 'qwrite) '(who))
 
-;(build-island 15 15 7) 
-;(dropCell 13 17 HELP)
-;(dropCell 16 18 SNAKE)
-;(dropCell 19 16 KITTY)
-;(dropCell 12 13 TV)
-;(dropCell 17 13 CHAIR)
-;(build-island 4 28 4) 
-;(build-island 20 30 5)
-;(build-brick-room 15 35)
 (viewportReset (avatar 'y) (avatar 'x))
 ((WinMap 'toggle))
-(thread (if QUIETLOGIN (load-ultima-world44) (load-ultima-world4)))
-
-
-;(thread (snake 18 38 500))
+(thread (if QUIETLOGIN (loadUltimaWorld4) (loadUltimaWorld4)))
 
 ; Redraw map resulting in animated cells.
 (thread (let ~ ()
@@ -1420,7 +1361,3 @@
 (or QUIETLOGIN (sayHelloWorld))
 (wrepl)
 (shutdown)
-
-; Redraw all entities in the EntityDB list.
-;(map (lambda (e) (apply move (cons (car e) (((cdr e) 'gps))))) EntityDB)
-
