@@ -160,7 +160,7 @@
      (set! needToScroll #f)
      (set! CurY (min y (- WHeight 1)))
      (set! CurX (min x (- WWidth 1))))
-   (define (set-color c) (set! COLOR c))
+   (define (set-color b f) (set! COLOR (+ (* 16 b) f)))
    (define (InsideWindow? gy gx)
      (and ENABLED
           (>= gy Y0)
