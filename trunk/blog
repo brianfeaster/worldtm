@@ -2042,3 +2042,16 @@ from the field structure which is a 4d vector of cells.  The field will be
 broken up into sections that will be individually loaded if the avatar
 moves out of bounds of the field area.  For now the field will be sectioned
 into quarters.
+
+
+Fri Aug 27 02:44:09 EDT 2010
+
+Glyph colors are treated in some cases as separate foreground and background
+colors.  Eventually I'd like to handle 256 color escape sequences.  Not sure
+if how I should encapsulate the color and if I should separate foreground and
+background colors.
+
+Currently working on refactoring glyphs and color atributes for window objects,
+entites and maps.  Colors were originally just 7 bit numbers.  256 color mode
+escape sequences allow 256 unique color values for both foreground and
+background.

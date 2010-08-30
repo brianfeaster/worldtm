@@ -70,14 +70,18 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Glyphs - Two characters including their color.
 ;;
-(define glyphNew vector)
-(define (glyphColor0 cell) (vector-ref cell 0))
-(define (glyphChar0  cell) (vector-ref cell 1))
-(define (glyphColor1 cell) (vector-ref cell 2))
-(define (glyphChar1  cell) (vector-ref cell 3))
+(define (glyphColorNew b f) (+ (* b 256) f))
 
-(define (colorForeground color) (modulo color 16))
-(define (colorBackground color) (/ color 16))
+(define glyphNew vector)
+(define (glyph0bg cell) (vector-ref cell 0))
+(define (glyph0fg cell) (vector-ref cell 1))
+(define (glyph0ch cell) (vector-ref cell 2))
+(define (glyph1bg cell) (vector-ref cell 3))
+(define (glyph1fg cell) (vector-ref cell 4))
+(define (glyph1ch cell) (vector-ref cell 5))
+
+;(define (colorForeground color) (modulo color 256))
+;(define (colorBackground color) (/ color 256))
 
 
 
@@ -85,7 +89,7 @@
 ;; Cells - For now cells are just glyphs...eventually smarter objects.
 ;;
 (define MAXCELL 1023)
-(define CELLS (make-vector (+ 1 MAXCELL) (glyphNew #x1b #\? #x31 #\?)))
+(define CELLS (make-vector (+ 1 MAXCELL) (glyphNew 1 11 #\? 3 1 #\?)))
 
 (define (cell-set! i c) (vector-set! CELLS i c))
 
@@ -94,44 +98,42 @@
     ((entitiesGet i) 'glyph)
     (vector-ref CELLS i)))
 
-(define AIR   MAXCELL)(cell-set! AIR        (glyphNew #x00 CHAR-CTRL-@ #x00 CHAR-CTRL-@))
-(define WATER0 0)     (cell-set! WATER0     (glyphNew #x04 #\\ #x04 #\/ #(#x04 #\/ #x04 #\\)))
-(define WATER1 1)     (cell-set! WATER1     (glyphNew #x04 #\~ #x04 #\~ #(#x04 #\- #x04 #\-) #(#x04 #\_ #x04 #\_)))
-(define WATER2 2)     (cell-set! WATER2     (glyphNew #x04 #\~ #x0c #\~ #(#x0c #\~ #x04 #\~)))
-(define POISON 3)     (cell-set! POISON     (glyphNew #x04 #\. #x02 #\.))
-(define GRASS 4)      (cell-set! GRASS      (glyphNew #x02 #\. #x02 #\.))
-(define BUSHES 5)     (cell-set! BUSHES     (glyphNew #x0a #\o #x0a #\o))
-(define FOREST 6)     (cell-set! FOREST     (glyphNew #x02 #\O #x02 #\O))
-(define HILLS 7)      (cell-set! HILLS      (glyphNew #x07 #\^ #x07 #\^))
-(define MNTS 8)       (cell-set! MNTS       (glyphNew #x0f #\/ #x0f #\\))
-(define DUNGEON 9)    (cell-set! DUNGEON    (glyphNew #x08 #\[ #x08 #\]))
-(define TOWN 10)      (cell-set! TOWN       (glyphNew #x29 #\[ #x29 #\]))
-(define CONSTRUCT 11) (cell-set! CONSTRUCT  (glyphNew #x1b #\? #x31 #\a))
-(define TOWN2 12)     (cell-set! TOWN2      (glyphNew #x23 #\[ #x23 #\]))
-(define BRIT1 13)     (cell-set! BRIT1      (glyphNew #x09 #\I #x09 #\I))
-(define BRIT2 14)     (cell-set! BRIT2      (glyphNew #x07 #\[ #x07 #\]))
-(define BRIT3 15)     (cell-set! BRIT3      (glyphNew #x09 #\I #x09 #\I))
-(define SAND 17)      (cell-set! SAND       (glyphNew #x1b #\? #x31 #\b))
-(define STONE 18)     (cell-set! STONE      (glyphNew #x07 #\[ #x07 #\]))
-(define BRICK 19)     (cell-set! BRICK      (glyphNew #x19 #\[ #x19 #\]))
-(define DIRT  20)     (cell-set! DIRT       (glyphNew #x03 #\, #x03 #\,))
-(define XX 21)        (cell-set! XX         (glyphNew #x70 #\  #x70 #\ ))
-(define BRIDGE 23)    (cell-set! BRIDGE     (glyphNew #x03 #\= #x03 #\=))
-(define CELLB 29)     (cell-set! CELLB      (glyphNew #x1b #\? #x31 #\c))
-(define SHRINE 30)    (cell-set! SHRINE     (glyphNew #x06 #\[ #x06 #\]))
-(define SAND2 37)     (cell-set! SAND2      (glyphNew #x03 #\, #x03 #\,))
-(define SAND3 50)     (cell-set! SAND3      (glyphNew #x03 #\. #x03 #\.))
-(define CELLD 61)     (cell-set! CELLD      (glyphNew #x1b #\? #x31 #\d))
-(define FIRE2 70)     (cell-set! FIRE2      (glyphNew #x01 #\^ #x01 #\^))
-(define FIRE  76)     (cell-set! FIRE       (glyphNew #x09 #\^ #x09 #\^))
-(define HELP  77)     (cell-set! HELP       (glyphNew #x1b #\? #x1b #\?))
-(define CHAIR 78)     (cell-set! CHAIR      (glyphNew #x19 #\P #x19 #\o))
-(define SNAKE 79)     (cell-set! SNAKE      (glyphNew #x6b #\O #x6b #\o #(#x6b #\o #x6b #\O)))
-(define KITTY 80)     (cell-set! KITTY      (glyphNew #x07 #\M #x07 #\e #(#x07 #\o #x07 #\w)))
-(define TV 90)        (cell-set! TV         (glyphNew #x71 #\[ #x71 #\]))
+(define AIR   MAXCELL)(cell-set! AIR        (glyphNew 0 0  CHAR-CTRL-@ 0 0 CHAR-CTRL-@))
+(define WATER0 0)     (cell-set! WATER0     (glyphNew 0 4  #\\ 0 4  #\/ #(0 4  #\/ 0 4 #\\)))
+(define WATER1 1)     (cell-set! WATER1     (glyphNew 0 4  #\~ 0 4  #\~ #(0 4  #\- 0 4 #\-) #(0 4  #\_ 0 4  #\_)))
+(define WATER2 2)     (cell-set! WATER2     (glyphNew 0 4  #\~ 0 12 #\~ #(0 12 #\~ 0 4 #\~)))
+(define POISON 3)     (cell-set! POISON     (glyphNew 0 4  #\. 0 2  #\.))
+(define GRASS 4)      (cell-set! GRASS      (glyphNew 0 2  #\. 0 2  #\.))
+(define BUSHES 5)     (cell-set! BUSHES     (glyphNew 0 10 #\o 0 10 #\o))
+(define FOREST 6)     (cell-set! FOREST     (glyphNew 0 2  #\O 0 2  #\O))
+(define HILLS 7)      (cell-set! HILLS      (glyphNew 0 7  #\^ 0 7  #\^))
+(define MNTS 8)       (cell-set! MNTS       (glyphNew 0 15 #\/ 0 15 #\\))
+(define DUNGEON 9)    (cell-set! DUNGEON    (glyphNew 0 8  #\[ 0 8  #\]))
+(define TOWN 10)      (cell-set! TOWN       (glyphNew 2 9  #\[ 2 9  #\]))
+(define CONSTRUCT 11) (cell-set! CONSTRUCT  (glyphNew 1 11 #\? 3 1  #\a))
+(define TOWN2 12)     (cell-set! TOWN2      (glyphNew 2 3  #\[ 2 3  #\]))
+(define BRIT1 13)     (cell-set! BRIT1      (glyphNew 0 9  #\I 0 9  #\I))
+(define BRIT2 14)     (cell-set! BRIT2      (glyphNew 0 7  #\[ 0 7  #\]))
+(define BRIT3 15)     (cell-set! BRIT3      (glyphNew 0 9  #\I 0 9  #\I))
+(define SAND 17)      (cell-set! SAND       (glyphNew 1 11 #\? 3 1  #\b))
+(define STONE 18)     (cell-set! STONE      (glyphNew 0 7  #\[ 0 7  #\]))
+(define BRICK 19)     (cell-set! BRICK      (glyphNew 1 9  #\[ 1 9  #\]))
+(define DIRT  20)     (cell-set! DIRT       (glyphNew 0 3  #\, 0 3  #\,))
+(define XX 21)        (cell-set! XX         (glyphNew 7 0  #\  7 0  #\ ))
+(define BRIDGE 23)    (cell-set! BRIDGE     (glyphNew 0 3  #\= 0 3  #\=))
+(define CELLB 29)     (cell-set! CELLB      (glyphNew 1 11 #\? 3 1  #\c))
+(define SHRINE 30)    (cell-set! SHRINE     (glyphNew 0 6  #\[ 0 6  #\]))
+(define SAND2 37)     (cell-set! SAND2      (glyphNew 0 3  #\, 0 3  #\,))
+(define SAND3 50)     (cell-set! SAND3      (glyphNew 0 3  #\. 0 3  #\.))
+(define CELLD 61)     (cell-set! CELLD      (glyphNew 1 11 #\? 3 1  #\d))
+(define FIRE2 70)     (cell-set! FIRE2      (glyphNew 0 1  #\^ 0 1  #\^))
+(define FIRE  76)     (cell-set! FIRE       (glyphNew 0 9  #\^ 0 9  #\^))
+(define HELP  77)     (cell-set! HELP       (glyphNew 1 11 #\? 1 11 #\?))
+(define CHAIR 78)     (cell-set! CHAIR      (glyphNew 1 9  #\P 1 9  #\o))
+(define SNAKE 79)     (cell-set! SNAKE      (glyphNew 6 11 #\O 6 11 #\o #(6 11 #\o 6 11 #\O)))
+(define KITTY 80)     (cell-set! KITTY      (glyphNew 0 7  #\M 0 7  #\e #(0 7  #\o 0 7  #\w)))
+(define TV 90)        (cell-set! TV         (glyphNew 7 1  #\[ 7 1  #\]))
 
-; Ultima cells
-;(0:34014 1:10336 2:1933 3:666 4:7159 5:4924 6:2304 7:2328 8:1745 9:7 10:7 11:3 12:4 13:1 14:1 15:1 23:17 29:1 30:7 61:1 70:7 76:70)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Column - Somewhat compact group of objects in one dimension.  Compressed
@@ -372,6 +374,7 @@
 (define PortH 0)
 (define PortW 0)
 
+; TODO BFEASTER BUG when redering another entitity world crashes.
 (define (viewportReset y x)
  (set! PortH (WinMap 'WHeight)) ; Adjust Viewport dimensions.
  (set! PortW (/ (WinMap 'WWidth) 2))
@@ -390,13 +393,13 @@
  (let ~ ((z 11))
   (let ((c (field-ref z y x)))
    (if (eq? AIR c)
-    (begin (WinColumnSetColor #x08)
+    (begin (WinColumnSetColor 0 8)
            (WinColumnPuts "()"))
     (begin (set! c (cell-ref c))
-           (WinColumnSetColor (glyphColor0 c))
-           (WinColumnPutc (glyphChar0 c))
-           (WinColumnSetColor (glyphColor1 c))
-           (WinColumnPutc (glyphChar1 c)))))
+           (WinColumnSetColor (glyph0bg c) (glyph0fg c))
+           (WinColumnPutc (glyph0ch c))
+           (WinColumnSetColor (glyph1bg c) (glyph1fg c))
+           (WinColumnPutc (glyph1ch c)))))
   (if (> z -6) (~ (- z 1)))))
 
 (define (viewportRender gy gx)
@@ -443,7 +446,7 @@
 (define EntityDB ())
 
 ; Create a default "nobody" entity.
-(define nobody (Entity 42 "nobody" 0 0 0 (glyphNew #x07 #\n #x07 #\o)))
+(define nobody (Entity 42 "nobody" 0 0 0 (glyphNew 0 7 #\n 0 7 #\o)))
 
 ; Update or create and add a new entity to the entity database.
 (define (entitiesSet dna name z y x glyph)
@@ -467,8 +470,7 @@
 (define (Avatar name) ; Inherits Entity
  ((Entity (random) name
    1 108 86
-   (glyphNew #x0f (string-ref name 0)
-             #x0f (string-ref name 1)))
+   (glyphNew 0 15 (string-ref name 0) 0 15 (string-ref name 1)))
   `(let ()
     (define (self msg) (eval msg))
     (define dir 0)
@@ -535,7 +537,7 @@
                                            (list 0 (+ PortY (/ PortH 2)) (+ PortX (/ PortW 2)))))))))
   (if (null? entity)
     (begin
-      (entitiesSet dna "??" z y x (glyphNew #x19 #\? #x19 #\?))
+      (entitiesSet dna "??" z y x (glyphNew 1 9 #\? 1 9 #\?))
       ((ipc 'qwrite) '(who)))
     (begin
       ; Move from here
@@ -572,17 +574,17 @@
  (if (= dna 0)
   (begin ; Message from the system
     (WinChatDisplay "\r\n")
-    (WinChatSetColor 9) (WinChatDisplay "W")
-    (WinChatSetColor 11) (WinChatDisplay "O")
-    (WinChatSetColor 10) (WinChatDisplay "R")
-    (WinChatSetColor 12) (WinChatDisplay "L")
-    (WinChatSetColor 13) (WinChatDisplay "D")
-    (WinChatSetColor 8) (WinChatDisplay VOICEDELIMETER)
-    (WinChatSetColor 7) (WinChatDisplay text))
+    (WinChatSetColor 0 9) (WinChatDisplay "W")
+    (WinChatSetColor 0 11) (WinChatDisplay "O")
+    (WinChatSetColor 0 10) (WinChatDisplay "R")
+    (WinChatSetColor 0 12) (WinChatDisplay "L")
+    (WinChatSetColor 0 13) (WinChatDisplay "D")
+    (WinChatSetColor 0 8) (WinChatDisplay VOICEDELIMETER)
+    (WinChatSetColor 0 7) (WinChatDisplay text))
   (let ((entity (entitiesGet dna)))
-    (WinChatSetColor (glyphColor0 (entity 'glyph)))
+    (WinChatSetColor (glyph0bg (entity 'glyph)) (glyph0fg (entity 'glyph)))
     (WinChatDisplay "\r\n" (if (null? entity) "???" (entity 'name)) VOICEDELIMETER)
-    (WinChatSetColor (glyphColor1 (entity 'glyph)))
+    (WinChatSetColor (glyph1bg (entity 'glyph)) (glyph0fg (entity 'glyph)))
     (WinChatDisplay text)))
  (if (and (!= dna DNA) (eqv? text "unatco")) (say "no Savage")))
 
@@ -593,16 +595,16 @@
 ;;
 (define AvatarDirectionGlyphs
  (vector
-   (glyphNew #x07 #\? #x07 #\?)
-   (glyphNew #x4f #\\ #x4f #\_)
-   (glyphNew #x4f #\\ #x4f #\/)
-   (glyphNew #x4f #\_ #x4f #\/)
-   (glyphNew #x4f #\< #x4f #\=)
-   (glyphNew #x4f #\o #x4f #\o)
-   (glyphNew #x4f #\= #x4f #\>)
-   (glyphNew #x4f #\/ #x4f #\~)
-   (glyphNew #x4f #\/ #x4f #\\)
-   (glyphNew #x4f #\~ #x4f #\\)))
+   (glyphNew 0 7  #\? 0 7  #\?)
+   (glyphNew 4 15 #\\ 4 15 #\_)
+   (glyphNew 4 15 #\\ 4 15 #\/)
+   (glyphNew 4 15 #\_ 4 15 #\/)
+   (glyphNew 4 15 #\< 4 15 #\=)
+   (glyphNew 4 15 #\o 4 15 #\o)
+   (glyphNew 4 15 #\= 4 15 #\>)
+   (glyphNew 4 15 #\/ 4 15 #\~)
+   (glyphNew 4 15 #\/ 4 15 #\\)
+   (glyphNew 4 15 #\~ 4 15 #\\)))
 
 ; BF: Should this be a thread?  At least move somewhere else.
 (define (refreshIfBeyondViewport)
@@ -637,16 +639,14 @@
 
 ; Change avatar color.  Will just cycle through all 16 avatar colors.
 (define (avatarColor)
- (letrec ((glyph (avatar 'glyph))
-          (color0 (glyphColor0 glyph))
-          (color1 (glyphColor1 glyph)))
+ (let ((glyph (avatar 'glyph)))
   ((avatar 'setGlyph)
-    (glyphNew (+ (* (colorBackground color0) 16)
-                 (modulo (+ (colorForeground color0) 1) 16))
-              (glyphChar0 glyph)
-              (+ (* (colorBackground color1) 16)
-                 (modulo (+ (colorForeground color1) 1) 16))
-              (glyphChar1 glyph))))
+    (glyphNew (bg0 (glyph0bg glyph))
+              (modulo (+ (glyph0fg glyph) 1) 16)
+              (glyph0ch glyph)
+              (bg1 (glyph1bg glyph))
+              (modulo (+ (glyph1fg glyph) 1) 16)
+              (glyph1ch glyph))))
   (who))
 
 (define (rollcall)
@@ -739,12 +739,12 @@
   ; consecutive glyph (stored as consecutive vectors of simple
   ; glyphs).
   (let ((t (time)) ; capture the time
-        (l (- (vector-length glyph) 3))) ; number of extra animation glyphs
-    (if (> (modulo t l) 0) (set! glyph (vector-ref glyph (+ 3 (modulo t l)))))
-    (WinMapSetColor (glyphColor0 glyph))
-    (WinMapPutc     (glyphChar0 glyph))
-    (WinMapSetColor (glyphColor1 glyph))
-    (WinMapPutc     (glyphChar1 glyph)))
+        (l (- (vector-length glyph) 5))) ; number of extra animation glyphs
+    (if (> (modulo t l) 0) (set! glyph (vector-ref glyph (+ 5 (modulo t l)))))
+    (WinMapSetColor (glyph0bg glyph) (glyph0fg glyph))
+    (WinMapPutc     (glyph0ch glyph))
+    (WinMapSetColor (glyph1bg glyph) (glyph1fg glyph))
+    (WinMapPutc     (glyph1ch glyph)))
   (semaphore-up MapWindowSemaphore))
 
 
@@ -775,7 +775,7 @@
  (let ~~ ((i -5))
    (sleep 200) ; Delay
    ((WinMarquee 'goto) 0 0)
-   (WinMarqueeSetColor #x0f)
+   (WinMarqueeSetColor 0 15)
    (if (= 0 (modulo i 4)) (begin
       (WinMarqueePuts "  +====================+")
       (WinMarqueePuts " /                    / ")
@@ -790,7 +790,7 @@
       (WinMarqueePuts "  +====================+"))))
    ((WinMarquee 'goto) 1 2)
    (let ~ ((j 0))
-     (WinMarqueeSetColor (vector-ref #(07 07 07 07 07 07 07 07   07 07 07
+     (WinMarqueeSetColor 0 (vector-ref #(07 07 07 07 07 07 07 07   07 07 07
                                        9 11 10 12 5  1  2  6  4 7)
                                      (modulo (+ i j) 21)))
      (WinMarqueePutc (vector-ref #(#\W #\e #\l #\c #\o #\m #\e #\   #\t #\o #\ 
@@ -809,7 +809,7 @@
   ((win 'puts) "|                    |")
   ((win 'puts) "+--------------------+")
   ((win 'goto) 0 2) ((win 'puts) title)
-  ((win 'goto) 1 1) ((win 'set-color) #x70)
+  ((win 'goto) 1 1) ((win 'set-color) 7 0)
   (lambda ()
    (if (= pos 20)
     (begin
@@ -830,10 +830,10 @@
 (map (lambda (x) ((WinHelpBorder 'alpha) 0 x #f)) '(0 1 2 3 4 5 6 7 8 23 24 25 26 27 28 29 30 31))
 
 ;((WinHelp 'goto) 0 0)
-;((WinHelp 'set-color) #x0a)
+;((WinHelp 'set-color) 0 10)
 
 ((WinHelp 'puts) "          !! Help !!")
-((WinHelp 'set-color) #x0f)
+((WinHelp 'set-color) 0 15)
 ((WinHelp 'puts) "\r\n?  toggle help window")
 ((WinHelp 'puts) "\r\nt  talk mode (esc to exit)")
 ((WinHelp 'puts) "\r\nc  talk color")
@@ -956,9 +956,9 @@
 
 (define (tankTalk str) (thread (begin
   (sleep 700)
-  (WinChatSetColor #x0f)
+  (WinChatSetColor 0 15)
   (WinChatDisplay "\r\nTank ")
-  (WinChatSetColor #x07)
+  (WinChatSetColor 0 7)
   (WinChatDisplay str))))
 
 (define tankHangupTime 0)
@@ -984,8 +984,12 @@
      (begin
       ((avatar `setNameGlyph)
          (substring talkInput 11 strLen)
-         (glyphNew (glyphColor0 (avatar 'glyph)) (string-ref talkInput 11)
-                   (glyphColor1 (avatar 'glyph)) (string-ref talkInput (if (> strLen 12) 12 11))))
+         (glyphNew (glyph0bg (avatar 'glyph))
+                   (glyph0fg (avatar 'glyph))
+                   (string-ref talkInput 11)
+                   (glyph1bg (avatar 'glyph))
+                   (glyph1fg (avatar 'glyph))
+                   (string-ref talkInput (if (> strLen 12) 12 11))))
       (thread (begin (sleep 500) (who)))))))
  (if tankIsListening (begin
    (if (string=? "who" talkInput) ((ipc 'qwrite) '(say "I'm here!")))
@@ -1188,7 +1192,7 @@
           (happyVector (vector 0 0 0 0 0 0 0 0))
           (dist 0))
  ; Tell everyone who this kitteh is.
- ((ipc 'qwrite) `(entity ,(kitty 'dna) "kitty" ,@((kitty 'gps)) ,(glyphNew #x07 #\K #x0f #\a)))
+ ((ipc 'qwrite) `(entity ,(kitty 'dna) "kitty" ,@((kitty 'gps)) ,(glyphNew 0 7 #\K 0 f #\a)))
  (let ~ ((i 0)) ; Main loop
    ; Distance from parent avatar
    (set! dist (distance ((kitty 'gps)) ((avatar 'gps))))
@@ -1257,10 +1261,10 @@
  (if walkForeverFlag
   (begin
    (set! walkForeverFlag #f)
-   (WinChatSetColor #x0a)
+   (WinChatSetColor 0 10)
    (WinChatDisplay "\r\nThus ends the journey"))
   (begin
-   (WinChatSetColor #x0a)
+   (WinChatSetColor 0 10)
    (WinChatDisplay "\r\nThe journey begins")
    (set! walkForeverFlag #t)
    (thread (let ~ ()
@@ -1285,10 +1289,13 @@
  (thread (welcome))
  (let ((name (boxInput "Enter your name")))
    (if (eq? name "") (set! name "Guest"))
-   ((avatar 'setNameGlyph) name (glyphNew #x0f (string-ref name 0) #x0f (string-ref name 1))))))
+   ((avatar 'setNameGlyph)
+      name
+      (glyphNew 0 15 (string-ref name 0)
+                0 15 (string-ref name 1))))))
 
 ; Display some initial information
-(WinChatSetColor #x0b)
+(WinChatSetColor 0 11)
 ;((WinChat 'goto) 0 0)
 (WinChatDisplay "Welcome to World\r\n") ; "   *** Welcome to the construct. ***"
 (WinChatDisplay "See http://code.google.com/p/worldtm\r\n")
