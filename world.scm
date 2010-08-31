@@ -70,7 +70,8 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Glyphs - Two characters including their color.
 ;;
-(define (glyphColorNew b f) (+ (* b 256) f))
+(define (glyphColorNew background foreground)
+  (+ (* background 256) foreground))
 
 (define glyphNew vector)
 (define (glyph0bg cell) (vector-ref cell 0))
@@ -1191,7 +1192,7 @@
           (happyVector (vector 0 0 0 0 0 0 0 0))
           (dist 0))
  ; Tell everyone who this kitteh is.
- ((ipc 'qwrite) `(entity ,(kitty 'dna) "kitty" ,@((kitty 'gps)) ,(glyphNew 0 7 #\K 0 f #\a)))
+ ((ipc 'qwrite) `(entity ,(kitty 'dna) "kitty" ,@((kitty 'gps)) ,(glyphNew 0 7 #\K 0 15 #\a)))
  (let ~ ((i 0)) ; Main loop
    ; Distance from parent avatar
    (set! dist (distance ((kitty 'gps)) ((avatar 'gps))))
