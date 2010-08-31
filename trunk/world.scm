@@ -374,7 +374,6 @@
 (define PortH 0)
 (define PortW 0)
 
-; TODO BFEASTER BUG when redering another entitity world crashes.
 (define (viewportReset y x)
  (set! PortH (WinMap 'WHeight)) ; Adjust Viewport dimensions.
  (set! PortW (/ (WinMap 'WWidth) 2))
@@ -641,10 +640,10 @@
 (define (avatarColor)
  (let ((glyph (avatar 'glyph)))
   ((avatar 'setGlyph)
-    (glyphNew (bg0 (glyph0bg glyph))
+    (glyphNew (glyph0bg glyph)
               (modulo (+ (glyph0fg glyph) 1) 16)
               (glyph0ch glyph)
-              (bg1 (glyph1bg glyph))
+              (glyph1bg glyph)
               (modulo (+ (glyph1fg glyph) 1) 16)
               (glyph1ch glyph))))
   (who))
