@@ -1309,11 +1309,11 @@ void sysQuit (void) { exit(0); }
 /* This can do anything.  I change it mainly for debugging and prototyping. */
 void sysFun (void) {
 	//vmDebugDumpCode(r1c, stderr);
+	memDebugDumpHeapHeaders(stderr);
+	memDebugDumpYoungHeap(stderr);
+	memValidateHeapStructures();
 	//memDebugDumpHeapHeaders(stderr);
-	//memDebugDumpYoungHeap(stderr);
-	//memDebugDumpHeapHeaders(stderr);
-	sysDumpCallStackCode();
-	*(int*)0=0;
+	//sysDumpCallStackCode();
 }
 
 /* Dump external representation of the local environment hierarchy to stdout. */
