@@ -81,9 +81,6 @@
 (define (glyph1fg cell) (vector-ref cell 4))
 (define (glyph1ch cell) (vector-ref cell 5))
 
-;(define (colorForeground color) (modulo color 256))
-;(define (colorBackground color) (/ color 256))
-
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -99,41 +96,41 @@
     ((entitiesGet i) 'glyph)
     (vector-ref CELLS i)))
 
-(define AIR   MAXCELL)(cell-set! AIR        (glyphNew 0 0  CHAR-CTRL-@ 0 0 CHAR-CTRL-@))
-(define WATER0 0)     (cell-set! WATER0     (glyphNew 0 4  #\\ 0 4  #\/ #(0 4  #\/ 0 4 #\\)))
-(define WATER1 1)     (cell-set! WATER1     (glyphNew 0 4  #\~ 0 4  #\~ #(0 4  #\- 0 4 #\-) #(0 4  #\_ 0 4  #\_)))
-(define WATER2 2)     (cell-set! WATER2     (glyphNew 0 4  #\~ 0 12 #\~ #(0 12 #\~ 0 4 #\~)))
-(define POISON 3)     (cell-set! POISON     (glyphNew 0 4  #\. 0 2  #\.))
-(define GRASS 4)      (cell-set! GRASS      (glyphNew 0 2  #\. 0 2  #\.))
-(define BUSHES 5)     (cell-set! BUSHES     (glyphNew 0 10 #\o 0 10 #\o))
-(define FOREST 6)     (cell-set! FOREST     (glyphNew 0 2  #\O 0 2  #\O))
-(define HILLS 7)      (cell-set! HILLS      (glyphNew 0 7  #\^ 0 7  #\^))
-(define MNTS 8)       (cell-set! MNTS       (glyphNew 0 15 #\/ 0 15 #\\))
-(define DUNGEON 9)    (cell-set! DUNGEON    (glyphNew 0 8  #\[ 0 8  #\]))
-(define TOWN 10)      (cell-set! TOWN       (glyphNew 2 9  #\[ 2 9  #\]))
-(define CONSTRUCT 11) (cell-set! CONSTRUCT  (glyphNew 1 11 #\? 3 1  #\a))
-(define TOWN2 12)     (cell-set! TOWN2      (glyphNew 2 3  #\[ 2 3  #\]))
-(define BRIT1 13)     (cell-set! BRIT1      (glyphNew 0 9  #\I 0 9  #\I))
-(define BRIT2 14)     (cell-set! BRIT2      (glyphNew 0 7  #\[ 0 7  #\]))
-(define BRIT3 15)     (cell-set! BRIT3      (glyphNew 0 9  #\I 0 9  #\I))
-(define SAND 17)      (cell-set! SAND       (glyphNew 1 11 #\? 3 1  #\b))
-(define STONE 18)     (cell-set! STONE      (glyphNew 0 7  #\[ 0 7  #\]))
-(define BRICK 19)     (cell-set! BRICK      (glyphNew 1 9  #\[ 1 9  #\]))
-(define DIRT  20)     (cell-set! DIRT       (glyphNew 0 3  #\, 0 3  #\,))
-(define XX 21)        (cell-set! XX         (glyphNew 7 0  #\  7 0  #\ ))
-(define BRIDGE 23)    (cell-set! BRIDGE     (glyphNew 0 3  #\= 0 3  #\=))
-(define CELLB 29)     (cell-set! CELLB      (glyphNew 1 11 #\? 3 1  #\c))
-(define SHRINE 30)    (cell-set! SHRINE     (glyphNew 0 6  #\[ 0 6  #\]))
-(define SAND2 37)     (cell-set! SAND2      (glyphNew 0 3  #\, 0 3  #\,))
-(define SAND3 50)     (cell-set! SAND3      (glyphNew 0 3  #\. 0 3  #\.))
-(define CELLD 61)     (cell-set! CELLD      (glyphNew 1 11 #\? 3 1  #\d))
-(define FIRE2 70)     (cell-set! FIRE2      (glyphNew 0 1  #\^ 0 1  #\^))
-(define FIRE  76)     (cell-set! FIRE       (glyphNew 0 9  #\^ 0 9  #\^))
-(define HELP  77)     (cell-set! HELP       (glyphNew 1 11 #\? 1 11 #\?))
-(define CHAIR 78)     (cell-set! CHAIR      (glyphNew 1 9  #\P 1 9  #\o))
-(define SNAKE 79)     (cell-set! SNAKE      (glyphNew 6 11 #\O 6 11 #\o #(6 11 #\o 6 11 #\O)))
-(define KITTY 80)     (cell-set! KITTY      (glyphNew 0 7  #\M 0 7  #\e #(0 7  #\o 0 7  #\w)))
-(define TV 90)        (cell-set! TV         (glyphNew 7 1  #\[ 7 1  #\]))
+(define AIR   MAXCELL)(cell-set! AIR       (glyphNew 0 0  CHAR-CTRL-@ 0 0 CHAR-CTRL-@))
+(define WATER0 0)     (cell-set! WATER0    (glyphNew 0 4  #\\ 0 4  #\/ #(0 4  #\/ 0 4 #\\)))
+(define WATER1 1)     (cell-set! WATER1    (glyphNew 0 4  #\~ 0 4  #\~ #(0 4  #\- 0 4 #\-) #(0 4  #\_ 0 4  #\_)))
+(define WATER2 2)     (cell-set! WATER2    (glyphNew 0 4  #\~ 0 12 #\~ #(0 12 #\~ 0 4 #\~)))
+(define POISON 3)     (cell-set! POISON    (glyphNew 0 4  #\. 0 2  #\.))
+(define GRASS  4)     (cell-set! GRASS     (glyphNew 0 2  #\. 0 2  #\.))
+(define BUSHES 5)     (cell-set! BUSHES    (glyphNew 0 10 #\o 0 10 #\o))
+(define FOREST 6)     (cell-set! FOREST    (glyphNew 0 2  #\O 0 2  #\O))
+(define HILLS  7)     (cell-set! HILLS     (glyphNew 0 7  #\^ 0 7  #\^))
+(define MNTS   8)     (cell-set! MNTS      (glyphNew 0 15 #\/ 0 15 #\\))
+(define DUNGEON 9)    (cell-set! DUNGEON   (glyphNew 0 8  #\[ 0 8  #\]))
+(define TOWN   10)    (cell-set! TOWN      (glyphNew 2 9  #\[ 2 9  #\]))
+(define CONSTRUCT 11) (cell-set! CONSTRUCT (glyphNew 1 11 #\? 3 1  #\a))
+(define TOWN2  12)    (cell-set! TOWN2     (glyphNew 2 3  #\[ 2 3  #\]))
+(define BRIT1  13)    (cell-set! BRIT1     (glyphNew 0 9  #\I 0 9  #\I))
+(define BRIT2  14)    (cell-set! BRIT2     (glyphNew 0 7  #\[ 0 7  #\]))
+(define BRIT3  15)    (cell-set! BRIT3     (glyphNew 0 9  #\I 0 9  #\I))
+(define SAND   17)    (cell-set! SAND      (glyphNew 1 11 #\? 3 1  #\b))
+(define STONE  18)    (cell-set! STONE     (glyphNew 0 7  #\[ 0 7  #\]))
+(define BRICK  19)    (cell-set! BRICK     (glyphNew 1 9  #\[ 1 9  #\]))
+(define DIRT   20)    (cell-set! DIRT      (glyphNew 0 3  #\, 0 3  #\,))
+(define XX     21)    (cell-set! XX        (glyphNew 7 0  #\  7 0  #\ ))
+(define BRIDGE 23)    (cell-set! BRIDGE    (glyphNew 0 3  #\= 0 3  #\=))
+(define CELLB  29)    (cell-set! CELLB     (glyphNew 1 11 #\? 3 1  #\c))
+(define SHRINE 30)    (cell-set! SHRINE    (glyphNew 0 6  #\[ 0 6  #\]))
+(define SAND2  37)    (cell-set! SAND2     (glyphNew 0 3  #\, 0 3  #\,))
+(define SAND3  50)    (cell-set! SAND3     (glyphNew 0 3  #\. 0 3  #\.))
+(define CELLD  61)    (cell-set! CELLD     (glyphNew 1 11 #\? 3 1  #\d))
+(define FIRE2  70)    (cell-set! FIRE2     (glyphNew 0 1  #\^ 0 1  #\^))
+(define FIRE   76)    (cell-set! FIRE      (glyphNew 0 9  #\^ 0 9  #\^))
+(define HELP   77)    (cell-set! HELP      (glyphNew 1 11 #\? 1 11 #\?))
+(define CHAIR  78)    (cell-set! CHAIR     (glyphNew 1 9  #\P 1 9  #\o))
+(define SNAKE  79)    (cell-set! SNAKE     (glyphNew 6 11 #\O 6 11 #\o #(6 11 #\o 6 11 #\O)))
+(define KITTY  80)    (cell-set! KITTY     (glyphNew 0 7  #\M 0 7  #\e #(0 7  #\o 0 7  #\w)))
+(define TV     90)    (cell-set! TV        (glyphNew 7 1  #\[ 7 1  #\]))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -205,24 +202,64 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Field - Maps will populate the field as if it were a local cache relative
-;;         to the avatar's position.  Plan on creating a 2x2 cache.
+;;         to the avatar's position.
 ;;
-(define FieldDimension 256) ; Field dimension
+;; A canvas entry is a vector consisting of a cell column.  The canvas itself
+;; is a 2x2 block dynamically updated with cells from a cell field agent.
+;; Avatar movement will readjust the field's virtual position in the map
+;; coordinate system as well as repopulate/cache the new block areas.
+;;
+;; Example:                          +--+--+    +--+--+
+;;   Assume avatar moved from a to   | a| b|    | e| b|
+;;   b in the field  area.  e and f  +--+--+ -> +--+--+
+;;   are cached in the area modulo   | c| d|    | f| c|
+;;   the field coordinates.          +--+--+    +--+--+
+;;
+(define FieldBlockDimension 256) ; Each field block is 256x256 columns
+(define FieldBlockCount 2)       ; A field is made up of 2x2 field blocks
+(define FieldSize (* FieldBlockCount FieldBlockDimension)) ; For now resulting field size is 512x512
+(define FieldBlockCoordinate (cons 0 0)) ; Canvas coordinate in block space.  (1 1) would be (256 256) map space.
+
+; Get list of coordinate pairs of each block that make up the canvas.
+(define (fieldCreateBlockList y x count)
+ (let ~ ((m 0) (n 0))
+  (if (= m count) '()
+  (if (= n count) (~ (+ m 1) 0)
+  (cons (cons (+ y m) (+ x n))
+        (~ m (+ n 1)))))))
+
+(define (canvasBlockCoordinates)
+ (fieldCreateBlockList (car FieldBlockCoordinate) (cdr FieldBlockCoordinate) FieldBlockCount))
+
+; Return list of block coordinates which need to be updated
+; if we were to move the canvas to this new block location.
+(define (canvasBlockCoordinatesNew y x)
+  (let ~ ((newBlocks (fieldCreateBlockList y x FieldBlockCount)) ; Blocks associated with new field block origin.
+          (currentBlocks (canvasBlockCoordinates))) ; Curent blocks associated with current field block coor.
+    (if (null? currentBlocks)
+      newBlocks
+      (~ (list-delete newBlocks (car currentBlocks))
+         (cdr currentBlocks)))))
+
+(define (fieldInside? y x)
+ (let ((fieldy (car FieldBlockCoordinate))
+       (fieldx (cdr FieldBlockCoordinate)))
+  (and (<=  (* FieldBlockDimension    fieldy) y)
+       (<=  (* FieldBlockDimension    fieldx) x)
+       (< y (* FieldBlockDimension (+ fieldy FieldBlockCount)))
+       (< x (* FieldBlockDimension (+ fieldx FieldBlockCount))))))
 
 ; Create default plane.
 (define FIELD ())
 
 (define (resetField)
  (set! FIELD
-  (vector-vector-map! 
-    (lambda (i)
-     ;(if (random-bool 2) (vector 2 XX GRASS AIR) (vector 2 XX DIRT  AIR))
-     ;(vector 2 XX  WATER  AIR AIR))
-     (vector -1 XX AIR))
-   (make-vector-vector FieldDimension FieldDimension ()))))
+   (vector-vector-map!
+     (lambda (i) (vector -1 XX AIR))
+     (make-vector-vector FieldSize FieldSize ()))))
+
 (resetField)
 
-;(vector-vector-map! (lambda (i) (display "\r\n") (display i) i) FIELD)
 
 ; Fields are 2d arrays of columns.  Columns are quasi-compressed stacks
 ; of cells that consist of a start height and specified stack of cells.
@@ -231,8 +268,8 @@
 ; Setting a cell outside the explicit stack range expands the actual vector
 ; and adjusts the start-height value.
 (define (fieldColumn y x)
- (vector-vector-ref FIELD (modulo y FieldDimension)
-                          (modulo x FieldDimension)))
+ (vector-vector-ref FIELD (modulo y FieldSize)
+                          (modulo x FieldSize)))
 
 ; Query the first cell at this location.  Mainly used as the object to display.
 (define (field-ref z y x)
@@ -262,24 +299,24 @@
 
 ; Replace all cells at this Z location with a single cell.
 (define (field-set! z y x c)
- (letrec ((fy (modulo y FieldDimension))
-          (fx (modulo x FieldDimension))
+ (letrec ((fy (modulo y FieldSize))
+          (fx (modulo x FieldSize))
           (column (vector-vector-ref FIELD fy fx)))
   (vector-vector-set! FIELD fy fx
      (columnSet column z c ))))
 
 ; Insert the cell at this Z location.  Creates a malformed list.
 (define (field-add! z y x c)
- (letrec ((fy (modulo y FieldDimension))
-          (fx (modulo x FieldDimension))
+ (letrec ((fy (modulo y FieldSize))
+          (fx (modulo x FieldSize))
           (column (vector-vector-ref FIELD fy fx)))
   (vector-vector-set! FIELD fy fx
      (columnSet column z (cons c (columnRef column z))))))
 
-; Remove the cell from themalformed list at this Z location.
+; Remove the cell from the malformed list at this Z location.
 (define (field-delete! z y x e)
- (letrec ((fy (modulo y FieldDimension))
-          (fx (modulo x FieldDimension))
+ (letrec ((fy (modulo y FieldSize))
+          (fx (modulo x FieldSize))
           (column (vector-vector-ref FIELD fy fx)))
   (vector-vector-set! FIELD fy fx
      (columnSet column z (list-delete (columnRef column z) e)))))
@@ -290,60 +327,29 @@
 ;; Canvas
 ;;
 ;; A canvas entry is a vector consisting of a cell and it's Z coordinate (the
-;; top most visible).  The canvas itself is a 2x2 block dynamically updated
-;; with cells from the cell field agent.  Avatar movement will readjust the
-;; canvas' virtual position in the field's coordinate system as well as
-;; repopulate/cache the new block areas in the canvas.  It will be either
-;; two or three (or four if the avatar 'warps' to a new area).
-;;
-;; Example:                         +--+--+    +--+--+
-;;   Assume avatar moved from a to  | a| b|    | e| b|
-;;   b in the canvas area.  e and f +--+--+ -> +--+--+
-;;   are cached in the area modulo  | c| d|    | f| c|
-;;   the field coordinates.         +--+--+    +--+--+
-
-(define CanvasBlockDimension 256) ; Each canvas block is 256x256 cells.
-(define CanvasBlockCount 2)       ; Canvas is made up of 2x2 blocks.
-(define CanvasDimension (* CanvasBlockCount CanvasBlockDimension)) ; 512x512
-(define CanvasCoordinates (cons 0 0)) ; Canvas coordinate in block space.  (1 1) would be (256 256) map space.
-
-; Get list of coordinate pairs of each block that make up the canvas.
-(define (canvasBlockCoordinates)
- (let ((y (car CanvasCoordinates))
-       (x (cdr CanvasCoordinates)))
- (list (cons y x) (cons y (+ x 1)) (cons (+ y 1) x) (cons (+ y 1) (+ x 1)))))
-
-; Return list of block coordinates which need to be updated
-; if we were to move the canvas to this new block location.
-(define (canvasMove y x)
-  (let ~ ((newBlocks (canvasBlockCoordinates)) ; Assume we need to replace all current blocks.
-          (current (list (cons y x) (cons y (+ x 1)) (cons (+ y 1) x) (cons (+ y 1) (+ x 1))))) ; Remove the blocks we already have from new block list.
-    (if (null? current)
-      newBlocks
-      (~ (list-delete newBlocks (car current)) (cdr current)))))
-
-(define CANVAS (make-vector-vector CanvasDimension CanvasDimension ()))
+;; top most visible).  The canvas itself is a flattened map field.
+(define CANVAS (make-vector-vector FieldSize FieldSize ()))
 
 (define (canvasCell y x)
   (car (vector-vector-ref CANVAS
-         (modulo y CanvasDimension)
-         (modulo x CanvasDimension))))
+         (modulo y FieldSize)
+         (modulo x FieldSize))))
 
 (define (canvasHeight y x)
   (cdr (vector-vector-ref CANVAS
-         (modulo y CanvasDimension)
-         (modulo x CanvasDimension))))
+         (modulo y FieldSize)
+         (modulo x FieldSize))))
 
 (define (canvasCellSet y x c)
   (set-car! (vector-vector-ref CANVAS
-              (modulo y CanvasDimension)
-              (modulo x CanvasDimension))
+              (modulo y FieldSize)
+              (modulo x FieldSize))
             c))
 
 (define (canvasHeightSet y x h)
  (set-cdr! (vector-vector-ref CANVAS
-             (modulo y CanvasDimension)
-             (modulo x CanvasDimension))
+             (modulo y FieldSize)
+             (modulo x FieldSize))
            h))
 
 (define (canvasRender y x)
@@ -354,12 +360,14 @@
 ; Initialize the canvas with the Construct[tm].
 (define timeStart (time))
 
-(let ((defaultCell (cell-ref XX)))
- (let ~ ((y 0)(x 0))
-  (if (!= y CanvasDimension) (if (= x CanvasDimension) (~ (+ y 1) 0) (begin
-   ; Each canvas entry consists of a map cell and its height.
-    (vector-vector-set! CANVAS y x (cons defaultCell 0))
-    (~ y (+ x 1)))))))
+(define (resetCanvas)
+ (let ((defaultCell (cell-ref XX)))
+  (let ~ ((y 0)(x 0))
+   (if (!= y FieldSize) (if (= x FieldSize) (~ (+ y 1) 0) (begin
+    ; Each canvas entry consists of a map cell and its height.
+     (vector-vector-set! CANVAS y x (cons defaultCell 0))
+     (~ y (+ x 1))))))))
+(resetCanvas)
 
 (WinConsoleDisplay "Initialized Canvas " (- (time) timeStart) " seconds")
 
@@ -412,8 +420,8 @@
  ; IE: (Cell % FieldWidth - Viewport % FieldWidth) % Fieldwidth < ViewportWidth
  ; But it would seem modulo distributes:  (a%m - b%m)%m == (a-b)%m%m == (a-b)%m
  ; so the actual computation is a bit simpler.  Smokin.
- (let ((y (modulo (- gy PortY) FieldDimension)) ; Normalize avatar position.
-       (x (modulo (- gx PortX) FieldDimension)))
+ (let ((y (modulo (- gy PortY) FieldSize)) ; Normalize avatar position.
+       (x (modulo (- gx PortX) FieldSize)))
   (and (< y PortH) (< x PortW)
     (WinMapPutGlyph (canvasCell gy gx) y (* x 2)))))
 
@@ -608,8 +616,8 @@
 
 ; BF: Should this be a thread?  At least move somewhere else.
 (define (refreshIfBeyondViewport)
- (let ((y (modulo (- (avatar 'y) PortY) FieldDimension));Normalize avatar position.
-   (x (modulo (- (avatar 'x) PortX) FieldDimension)))
+ (let ((y (modulo (- (avatar 'y) PortY) FieldSize));Normalize avatar position.
+   (x (modulo (- (avatar 'x) PortX) FieldSize)))
    (if (or (<= PortW x) (<= PortH y))
      (viewportReset (avatar 'y) (avatar 'x)))))
 
@@ -822,16 +830,13 @@
 
 
 ; Help window.  A bunch of button commands for now.
-; Give the help window an artistic border.
 
-; Give the window an 'artistic' border.
+; Give the windows an 'artistic' border.
 (map (lambda (x) ((WinHelp 'alpha) 0 x #f)) '(0 1 2 3 4 5 6 7 8 21 22 23 24 25 26 27 28 29))
-
 (map (lambda (x) ((WinHelpBorder 'alpha) 0 x #f)) '(0 1 2 3 4 5 6 7 8 23 24 25 26 27 28 29 30 31))
 
 ;((WinHelp 'goto) 0 0)
 ;((WinHelp 'set-color) 0 10)
-
 ((WinHelp 'puts) "          !! Help !!")
 ((WinHelp 'set-color) 0 15)
 ((WinHelp 'puts) "\r\n?  toggle help window")
@@ -849,7 +854,7 @@
  ((WinHelpBorder 'toggle)))
 
 
-; Drop some cells on the map
+; Drop a cell on the map
 (define (dropCell y x cell)
  (let ((z (+ 1 (field-ref-top 1000 y x))))
   (field-set! z y x cell)
@@ -905,7 +910,7 @@
 ;;
 ;; u4mapsize 256
 ;; u44cellsize 8 (But will be 32 the U4 town dimension)
-;; FieldDimension 256
+;; FieldSize 256
 ;; Lord British's castle (108 86)
 (define u4mapsize 256)
 (define u44cellsize 20)
@@ -1317,7 +1322,7 @@
 
 (viewportReset (avatar 'y) (avatar 'x))
 ((WinMap 'toggle))
-(thread (if QUIETLOGIN (loadUltimaWorld4) (loadUltimaWorld4)))
+;(thread (if QUIETLOGIN (loadUltimaWorld4) (loadUltimaWorld4)))
 
 ; Redraw map resulting in animated cells.
 (thread (let ~ ()

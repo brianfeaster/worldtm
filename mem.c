@@ -1,8 +1,8 @@
 #define DEBUG 0
-#define DEBUG_ASSERT 0
+#define DEBUG_ASSERT 1
 #define DEBUG_ASSERT_VECTOR 1
 #define DEBUG_ASSERT_STACK 1
-#define VALIDATE_HEAP 0
+#define VALIDATE_HEAP 1
 #define DB_MODULE "MEM "
 #include "debug.h"
 #include <errno.h>
@@ -55,7 +55,7 @@ const Num BLOCK_BYTE_SIZE         = 0x1000; //     4Kb 0x001000 2^12
 const Num HEAP_STATIC_BLOCK_COUNT =  0x008; //    32Kb 0x008000 2^15
 const Num HEAP_BLOCK_COUNT        =  0x400; // 4Mb     0x400000 2^22
 //const Num HEAP_INCREMENT_COUNT   = 0x040; //   256Kb 0x040000 2^18
-//const Num HEAP_DECREMENT_COUNT   = 0x010; //    64Kb 0x018000 2^16
+//const Num HEAP_DECREMENT_COUNT   = 0x010; //    64Kb 0x010000 2^16
 const Num STACK_LENGTH           = 0x04000; //    16Kb 0x004000 2^14
 
 
@@ -71,7 +71,7 @@ typedef struct {
 	Obj start;  /* Initial heap location. */
 	Obj next;   /* Next available heap location. */
 	Obj last;   /* One byte past the last heap location (exclusive). */
-	Num blockCount; /* Number of blocks this heap uses.  4096 assumed. */
+	Num blockCount; /* Number of blocks this heap uses.  4096 byte blocks assumed. */
 	Num finalizerCount; /* Number of finalizer types contained in this heap. */
 } Heap;
 
@@ -689,7 +689,6 @@ void memGarbageCollectInternal (Descriptor desc, Num byteSize) {
 
 	DB("::memGarbageCollectInternal()");
 //	fprintf (stderr, "-->memGarbageCollectInternal() %c\n", GarbageCollectionMode==GC_MODE_YOUNG?'y':'o');
-	//fprintf (stderr, "\a");
 
 	if (memPreGarbageCollect) memPreGarbageCollect();
 
@@ -711,8 +710,7 @@ void memGarbageCollectInternal (Descriptor desc, Num byteSize) {
 	   the usage is half this 'double' size, then the next GC will be a complete
 	   one (collect over young and old).
 	*/
-	memInitializeHeap (&heapNew, heapOld.blockCount + HEAP_BLOCK_COUNT
-	           + (byteSize+BLOCK_BYTE_SIZE)/BLOCK_BYTE_SIZE);
+	memInitializeHeap (&heapNew, heapOld.blockCount + heap.blockCount + HEAP_BLOCK_COUNT + (byteSize+BLOCK_BYTE_SIZE)/BLOCK_BYTE_SIZE);
 
 	/* Reset the global variable that specifies how many were needed. */
 	byteSize=0;
@@ -838,7 +836,7 @@ DB("   collecting and compacting mutated old object references...");
 	if (GarbageCollectionMode == GC_MODE_OLD) {
 		memFreeHeap (&heapOld);
 		memResetHeap(&heapOld);
-		/* Shrink oldHeap bounds to fit actual usage. */
+		/* Shrink newHeap (soon to be oldHeap) bounds to fit actual usage. */
 		memShrinkHeap(&heapNew, (heapNew.last-heapNew.next)/BLOCK_BYTE_SIZE);
 		/* Reassign new heap to old heap. */
 		heapOld = heapNew;
@@ -891,7 +889,6 @@ DB("   collecting and compacting mutated old object references...");
 #endif
 
 	//printf ("[count %d  heapOld %08x  heap %08x(%08x)  heapNew %08x  count %x]\n", garbageCollectionCount, heapOld.start, heap.start, heap.last-heap.start, heapNew.start, heapNew.blockCount);
-	//memDebugdumpAll();
 
 	DB("--memGarbageCollectInternal");
 }
@@ -952,7 +949,7 @@ void memDebugDumpObject (Obj o, FILE *stream) {
 
 	fcntl (0, F_SETFL, (fdState=fcntl(0, F_GETFL, 0))&~O_NONBLOCK);
 
-	if (!memIsObjectValid(o)) {
+	if (!memIsObjectValid(o) && !memIsObjectInHeap(&heapNew, o)) {
 		fprintf(stream, NL "???" OBJ, o);
 	}
 
