@@ -104,41 +104,8 @@
     (vector-ref CELLS i)))
 
 (define AIR   MAXCELL)(cell-set! AIR       (glyphNew 0 0  CHAR-CTRL-@ 0 0 CHAR-CTRL-@))
-(define WATER0 0)     (cell-set! WATER0    (glyphNew 0 4  #\\ 0 4  #\/ #(0 4  #\/ 0 4 #\\)))
-(define WATER1 1)     (cell-set! WATER1    (glyphNew 0 4  #\~ 0 4  #\~ #(0 4  #\- 0 4 #\-) #(0 4  #\_ 0 4  #\_)))
-(define WATER2 2)     (cell-set! WATER2    (glyphNew 0 4  #\~ 0 12 #\~ #(0 12 #\~ 0 4 #\~)))
-(define POISON 3)     (cell-set! POISON    (glyphNew 0 4  #\. 0 2  #\.))
-(define GRASS  4)     (cell-set! GRASS     (glyphNew 0 2  #\. 0 2  #\.))
-(define BUSHES 5)     (cell-set! BUSHES    (glyphNew 0 10 #\o 0 10 #\o))
-(define FOREST 6)     (cell-set! FOREST    (glyphNew 0 2  #\O 0 2  #\O))
-(define HILLS  7)     (cell-set! HILLS     (glyphNew 0 7  #\^ 0 7  #\^))
-(define MNTS   8)     (cell-set! MNTS      (glyphNew 0 15 #\/ 0 15 #\\))
-(define DUNGEON 9)    (cell-set! DUNGEON   (glyphNew 0 8  #\[ 0 8  #\]))
-(define TOWN   10)    (cell-set! TOWN      (glyphNew 2 9  #\[ 2 9  #\]))
-(define CONSTRUCT 11) (cell-set! CONSTRUCT (glyphNew 1 11 #\? 3 1  #\a))
-(define TOWN2  12)    (cell-set! TOWN2     (glyphNew 2 3  #\[ 2 3  #\]))
-(define BRIT1  13)    (cell-set! BRIT1     (glyphNew 0 9  #\I 0 9  #\I))
-(define BRIT2  14)    (cell-set! BRIT2     (glyphNew 0 7  #\[ 0 7  #\]))
-(define BRIT3  15)    (cell-set! BRIT3     (glyphNew 0 9  #\I 0 9  #\I))
-(define SAND   17)    (cell-set! SAND      (glyphNew 1 11 #\? 3 1  #\b))
-(define STONE  18)    (cell-set! STONE     (glyphNew 0 7  #\[ 0 7  #\]))
-(define BRICK  19)    (cell-set! BRICK     (glyphNew 1 9  #\[ 1 9  #\]))
-(define DIRT   20)    (cell-set! DIRT      (glyphNew 0 3  #\, 0 3  #\,))
-(define XX     21)    (cell-set! XX        (glyphNew 7 0  #\  7 0  #\ ))
-(define BRIDGE 23)    (cell-set! BRIDGE    (glyphNew 0 3  #\= 0 3  #\=))
-(define CELLB  29)    (cell-set! CELLB     (glyphNew 1 11 #\? 3 1  #\c))
-(define SHRINE 30)    (cell-set! SHRINE    (glyphNew 0 6  #\[ 0 6  #\]))
-(define SAND2  37)    (cell-set! SAND2     (glyphNew 0 3  #\, 0 3  #\,))
-(define SAND3  50)    (cell-set! SAND3     (glyphNew 0 3  #\. 0 3  #\.))
-(define CELLD  61)    (cell-set! CELLD     (glyphNew 1 11 #\? 3 1  #\d))
-(define FIRE2  70)    (cell-set! FIRE2     (glyphNew 0 1  #\^ 0 1  #\^))
-(define FIRE   76)    (cell-set! FIRE      (glyphNew 0 9  #\^ 0 9  #\^))
-(define HELP   77)    (cell-set! HELP      (glyphNew 1 11 #\? 1 11 #\?))
-(define CHAIR  78)    (cell-set! CHAIR     (glyphNew 1 9  #\P 1 9  #\o))
-(define SNAKE  79)    (cell-set! SNAKE     (glyphNew 6 11 #\O 6 11 #\o #(6 11 #\o 6 11 #\O)))
-(define KITTY  80)    (cell-set! KITTY     (glyphNew 0 7  #\M 0 7  #\e #(0 7  #\o 0 7  #\w)))
-(define TV     90)    (cell-set! TV        (glyphNew 7 1  #\[ 7 1  #\]))
 (define NOTHING 1000) (cell-set! NOTHING   (glyphNew 0 0  #\[ 0 0  #\]))
+(load "ultima4.cells")
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -249,13 +216,14 @@
         (~ m (+ n 1)))))))
 
 ; Return list of block coordinates which need to be updated
-; if we were to move the canvas to this new block location.
+; if we were to move the current field blocks to this new
+; field blocks location.
 (define (canvasBlockCoordinatesNew y x)
   (let ~ ((newBlocks (fieldCreateBlockList y x)) ; Blocks associated with new field block origin.
           (currentBlocks FieldBlockCoordinates)) ; Curent blocks associated with current field block coor.
     (if (null? currentBlocks)
       newBlocks
-      (~ (list-delete newBlocks (car currentBlocks))
+      (~ (list-delete newBlocks (car currentBlocks)) ; Remove current blocks from new block list.
          (cdr currentBlocks)))))
 
 (define (fieldTopBottomBuffer y x)
@@ -447,6 +415,25 @@
        (x (modulo (- gx PortX) FieldSize)))
   (and (< y PortH) (< x PortW)
     (WinMapPutGlyph (canvasCell gy gx) y (* x 2)))))
+
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Map manipulation
+;;
+
+; Drop a cell on the map
+(define (dropCell y x cell)
+ (let ((z (+ 1 (field-ref-top 1000 y x))))
+  (field-set! z y x cell)
+  (canvasRender y x)
+  (viewportRender y x)))
+
+; Set map cell and force rendering of cell through entire pipeline.
+(define (setCell z y x cell)
+  (field-set! z y x cell)
+  (canvasRender y x)
+  (viewportRender y x))
 
 
 
@@ -847,40 +834,32 @@
      #t)))))
 
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; Map stuff
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Ultima city detail map.
 ;;
+;; Mapping from Ultima4 map file byte index to (y x) World[tm] coordinates.
+;;  y = (+ (modulo (/ i 32) 32) (* (/ i 8192) 32))
+;;  x = (+ (modulo i 32) (* (modulo (/ i 1024) 8) 32))
+;; Mapping from World[tm] (y x) corrdinates to Ultima4 map file byte index.
+;; i = (+ (modulo x 32) (* (/ x 32) 1024) (* (modulo y 32) 32) (* (/ y 32) 8192))
+;;
+;; Lord British's castle (108 86)
 
-; Drop a cell on the map
-(define (dropCell y x cell)
- (let ((z (+ 1 (field-ref-top 1000 y x))))
-  (field-set! z y x cell)
-  (canvasRender y x)
-  (viewportRender y x)))
+(define U4MapSize 256) ; Size of the map file.
+(define U4MapCellSize 32) ; Size of each map file cell in the World map.
+(define U4Size (* U4MapSize U4MapCellSize))
 
-; Set map cell and force rendering of cell through entire pipeline.
-(define (setCell z y x cell)
-  (field-set! z y x cell)
-  (canvasRender y x)
-  (viewportRender y x))
-
-; Mapping from Ultima4 map file byte index to (y x) World[tm] coordinates.
-;  y = (+ (modulo (/ i 32) 32) (* (/ i 8192) 32))
-;  x = (+ (modulo i 32) (* (modulo (/ i 1024) 8) 32))
-
-; Mapping from World[tm] (y x) corrdinates to Ultima4 map file byte index.
-; i = (+ (modulo x 32) (* (/ x 32) 1024) (* (modulo y 32) 32) (* (/ y 32) 8192))
-
-; The Ultima4 map file is an 8x8 array of 32x32 cells
+; The Ultima4 map file is 8x8 blocks of 32x32 cells
 ; so create a simpler 256x25 array of cell numbers.
-(define U44MapVector
+(define U4MapVector
  (let ((fd (open "ultima4.map"))
        (timeStart (time))
        (vec (make-vector 65536 DIRT)))
   (let ~ ((i 0))
      (if (= i 65536)
       (begin ; return the vector
-       (WinConsoleDisplay "\r\nInitialized U44MapVector " (- (time) timeStart) "s.")
+       (WinConsoleDisplay "\r\nInitialized U4MapVector " (- (time) timeStart) "s.")
        vec)
       (begin
         (vector-set! vec
@@ -889,58 +868,22 @@
                  (+ 0 (read-char fd))) ; Hack to convert char to integer
         (~ (+ i 1)))))))
 
-(define (loadUltimaWorld4)
- (resetField)
- (let ((bar (makeProgressBar 5 30 "Britannia 4"))
-       (timeStart (time)))
-  (let ~ ((y 0)(x 0)) (if (< y 256) (if (= 256 x) (~ (+ y 1) 0) (begin
-      (if (= 0 (modulo (+ x (* 256 y)) (/ 65536 20))) (bar))
-      (let ((c (U44MapVectorRef y x))) ; Hack to convert char to integer
-        (if (not (null? (memv c (list FOREST BUSHES)))) (setCell 2 y x c)) ; Forest trees are tall.
-        (setCell 1 y x c))
-      (~ y (+ x 1))))))
-  (WinChatDisplay "\r\nInitialized UltimaIV Map " (- (time) timeStart) "s.")
-  ((ipc 'qwrite) '(who))))
+(define (U4MapCell y x)
+ (vector-ref U4MapVector (+ (* 256 (modulo y 256)) (modulo x 256))))
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; Ultima city detail map.
-;;
-;; u4mapsize 256
-;; u44cellsize 8 (But will be 32 the U4 town dimension)
-;; FieldSize 256
-;; Lord British's castle (108 86)
-(define u4mapsize 256)
-(define u44cellsize 20)
-(define u44height (* u44cellsize u4mapsize))
-(define u44width  (* u44cellsize u4mapsize))
-(define (U44MapVectorRef y x) (vector-ref U44MapVector (+ (* 256 (modulo y 256)) (modulo x 256))))
-(define U44MapVectorRefDir
- (let ((yd (vector 0 -1 -1 -1  0  1 1 1)) (xd (vector 1  1  0 -1 -1 -1 0 1)))
-  (lambda (y x d)
-    (set! d (modulo d 8))
-    (vector-ref U44MapVector
-                 (+ (* 256 (modulo (+ y (vector-ref yd d)) 256))
-                    (modulo (+ x (vector-ref xd d)) 256))))))
+(define lcbfd (open "lcb1.ult"))
+(define (U4Lcb1MapCell y x)
+ (and (< y 0) (<= 32 y) (< x 0) (<= 32 x) (WinChatDisplay "lcb1 coordinates out of range") (quit))
+ (seek lcbfd (+ (* y 32) x))
+ (+ 0 (read-char lcbfd))) ; Hack to convert char to integer
 
-(define (load-ultima-world44)
- (resetField)
- (let ((bar (makeProgressBar 5 30 "Britannia 4"))
-       (timeStart (time)))
-  (let ~ ((y 0)(x 0)) (or (= y 256) (if (= x 256) (~ (+ y 1) 0) (begin
-      (if (= 0 (modulo (+ (* 256 y) x) (/ 65536 20))) (bar)) ; Update progress bar.
-      (setCell 1 y x
-        (let ((yy (/ (+ y (* 108 (- u44cellsize 1)) ) u44cellsize))
-              (xx (/ (+ x (*  86 (- u44cellsize 1)) ) u44cellsize)))
-         (let ((dist (distance
-                      (list 0 y x)
-                      (list 0 (+ 20 (* (/ y u44cellsize) u44cellsize))
-                              (+ 20 (* (/ x u44cellsize) u44cellsize))))))
-          (if (< dist 100) (U44MapVectorRef yy xx) HELP) ; BF TODO WORKING
-          )))
-      (~ y (+ x 1))))))
-  (WinConsoleDisplay "\r\nInitialized UltimaIV Map " (- (time) timeStart) "s.")))
+; Get the map cell in the direction from this location.
+(define (U4MapCellDir y x d)
+ (U4MapCell (+ y (vector-ref #(0 -1 -1 -1  0  1 1 1) d))
+            (+ x (vector-ref #(1  1  0 -1 -1 -1 0 1) d))))
 
-
+; I will load the ultima5 map some day.  The ovl is a 16x16
+; array indexing the 16x16 cell arrays in the map file.
 (define (load-ultima-world5)
  (let ((fdm (open "ultima5.map"))
        (fdi (open "ultima5.ovl"))
@@ -955,8 +898,8 @@
         (+ 0 (read-char fdm))))))
    (~ y (+ x 1))))))))
 
-; ; ; ; ; ; ; ; ; ; ; ; ; ; ; ; ; ; ; ; ; ; ; ; ; ; ; ; ; ; ; ; ; ; ; ; ; ; ; ;
-; TODO BFEASTER Map agent development.
+
+; Debugging.  Update field blocks with numbered cells.
 (define updateFieldBlocks (let ((nextCell 99)) (lambda (y0 x0)
   (letrec ((y1 (+ FieldBlockSize y0)) ; Lower left map coordinates of block
            (x1 (+ FieldBlockSize x0))
@@ -966,43 +909,58 @@
    (cell-set! cell glyph)
    (loop2 y0 y1 x0 x1 (lambda (y x) (setCell 0 y x cell))) ))))
 
-(define (inUltimaRange? y x)
- (and (<= 0 y)
-      (< y 256)
-      (<= 0 x)
-      (< x 256)))
+(define (inUltima4Range? y x) (and (<= 0 y) (< y U4Size) (<= 0 x) (< x U4Size)))
+
+(define (inUltima4RangeLcb1? y x)
+ (and (<= (* 107 U4MapCellSize) y)
+      (< y (* 108 U4MapCellSize))
+      (<= (* 86 U4MapCellSize) x)
+      (< x (* 87 U4MapCellSize))))
+
+; Outdated?
+(define (load-ultima-world44)
+ (resetField)
+  (let ~ ((y 0)(x 0)) (or (= y 256) (if (= x 256) (~ (+ y 1) 0) (begin
+      (setCell 1 y x
+        (let ((yy (/ (+ y (* 108 (- U4MapCellSize 1)) ) U4MapCellSize))
+              (xx (/ (+ x (*  86 (- U4MapCellSize 1)) ) U4MapCellSize)))
+         (let ((dist (distance
+                      (list 0 y x)
+                      (list 0 (+ 20 (* (/ y U4MapCellSize) U4MapCellSize))
+                              (+ 20 (* (/ x U4MapCellSize) U4MapCellSize))))))
+          (if (< dist 100) (U4MapCell yy xx) HELP)
+          )))
+      (~ y (+ x 1)))))))
+
+;(if (not (null? (memv c (list FOREST BUSHES)))) (setCell 2 y x (U4MapCell y x))) ; Forest trees are tall.
 
 (define (updateFieldBlocksU4 y0 x0)
   (loop2 y0 (+ y0 FieldBlockSize)
          x0 (+ x0 FieldBlockSize)
      (lambda (y x)
-        (if (inUltimaRange? y x)
-          (begin
-            ;(if (not (null? (memv c (list FOREST BUSHES)))) (setCell 2 y x (U44MapVectorRef y x))) ; Forest trees are tall.
-            (setCell 1 y x (U44MapVectorRef y x)))
+        (if (inUltima4Range? y x)
+          (if (inUltima4RangeLcb1? y x)
+            (setCell 1 y x (U4Lcb1MapCell (- y (* 107 U4MapCellSize)) (- x (* 86 U4MapCellSize))))
+            (setCell 1 y x (U4MapCell (/ y U4MapCellSize) (/ x U4MapCellSize))))
           (setCell 1 y x NOTHING)))))
 
+; Field block updater.
 (thread (let ~ ()
-(sleep 500)
-(letrec ((avty (avatar 'y))
-         (avtx (avatar 'x))
-         (blky (/ (if (< avty 0) (- avty FieldBlockSize) avty) FieldBlockSize))
-         (blkx (/ (if (< avtx 0) (- avtx FieldBlockSize) avtx) FieldBlockSize)))
-
+ (sleep 500)
+ (letrec ((avty (avatar 'y))
+          (avtx (avatar 'x))
+          (blky (/ (if (< avty 0) (- avty FieldBlockSize) avty) FieldBlockSize))
+          (blkx (/ (if (< avtx 0) (- avtx FieldBlockSize) avtx) FieldBlockSize)))
   ; Create the first block list and load each block.  Occurs once.
   (if (null? FieldBlockCoordinates ) (begin
      (set! FieldBlockCoordinates (fieldCreateBlockList blky blkx))
      (map (lambda (b) (updateFieldBlocksU4 (* FieldBlockSize (car b)) (* FieldBlockSize (cdr b))))
           FieldBlockCoordinates)))
-
-  ;(WinChatDisplay"\r\n" (list (list avty avtx) (list blky blkx )) "\r\n" FieldBlockCoordinates)
-
   (let ((bounds (append (fieldTopBottomBuffer avty avtx)
                         (fieldLeftRightBuffer avty avtx))))
    (if (pair? bounds) (begin
-     ;(WinChatDisplay "\r\n" bounds)
-     (let ((yb (fieldBlockY)) ; Assume new block origin at same place.
-           (xb (fieldBlockX)))
+     (let ((yb (fieldBlockY))  ; Assume new block origin at same place
+           (xb (fieldBlockX))) ; then adjust based on new position.
       (if (pair? (memq 'bottom bounds)) (set! yb (- blky (- FieldBlockCount 2))))
       (if (pair? (memq 'top bounds))    (set! yb (- blky 1)))
       (if (pair? (memq 'right bounds))  (set! xb (- blkx (- FieldBlockCount 2))))
@@ -1010,10 +968,8 @@
       (map (lambda (b) (updateFieldBlocksU4 (* FieldBlockSize (car b)) (* FieldBlockSize (cdr b))))
            (canvasBlockCoordinatesNew yb xb))
       ; Set block coordinate list after the unloaded blocks have been loaded.
-      (set! FieldBlockCoordinates (fieldCreateBlockList yb xb))))))
-
-)(~)))
-; ; ; ; ; ; ; ; ; ; ; ; ; ; ; ; ; ; ; ; ; ; ; ; ; ; ; ; ; ; ; ; ; ; ; ; ; ; ; ;
+      (set! FieldBlockCoordinates (fieldCreateBlockList yb xb)))))))
+ (~)))
 
 
 
@@ -1111,7 +1067,6 @@
 (setButton #\Q '(set! state 'done))
 (setButton eof '(set! state 'done))
 (setButton CHAR-CTRL-C '((WinConsole 'toggle)))
-(setButton #\4 '(loadUltimaWorld4))
 ;(setButton CHAR-CTRL-K '((ipc 'qwrite) `(set! FIELD ,FIELD))) ; Send my plane out to IPC.
 ;(setButton #\1 '(thread (sigwinch)))
 ;(setButton CHAR-CTRL-_ '(walk 4)) ; Sent by backspace?
@@ -1310,9 +1265,8 @@
  (if tankIsListening (begin
    (if (string=? "who" talkInput) ((ipc 'qwrite) '(say "I'm here!")))
    (if (string=? "load the jump program" talkInput) (tankTalk "I can't find the disk")
-   (if (string=? "load ultima4" talkInput) (thread (loadUltimaWorld4))
    (if (string=? "load underworld" talkInput) (thread (load-ultima-underworld))
-   (if (string=? "load ultima5" talkInput) (thread (load-ultima-world5)))))))))
+   (if (string=? "load ultima5" talkInput) (thread (load-ultima-world5))))))))
 
 
 
@@ -1445,6 +1399,9 @@
 (WinChatDisplay "Hit ? to toggle the help window\r\n")
 (WinChatDisplay "Your name is " (avatar 'name))
 
+; Move avatar to entrance of Lord British's castle
+((avatar 'jump) (avatar 'z) (* 108 U4MapCellSize) (* 86 U4MapCellSize))
+
 ; Create ipc object.  Pass in a debug message output port.
 ; for production world an 'empty' port is passed.
 (define ipc (Ipc WinConsoleDisplay)) ; WinChatDisplay
@@ -1460,7 +1417,6 @@
 
 (viewportReset (avatar 'y) (avatar 'x))
 ((WinMap 'toggle))
-;(thread (if QUIETLOGIN (loadUltimaWorld4) (loadUltimaWorld4)))
 
 ; Redraw map resulting in animated cells.
 (thread (let ~ ()
