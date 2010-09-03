@@ -254,6 +254,15 @@
      (begin (f (car l))
             (for-each f (cdr l)))))
 
+(define (loop2 y0 y1 x0 x1 fn)
+ (let ~ ((y y0) (x x0))
+  (if (!= y y1)
+    (if (= x x1)
+      (~ (+ y 1) x0)
+      (begin
+        (fn y x)
+        (~ y (+ x 1)))))))
+
 (define (vector-vector-ref v i1 i2)
  (vector-ref (vector-ref v i1) i2))
  

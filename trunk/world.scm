@@ -65,6 +65,13 @@
 ((WinHelpBorder 'toggle))
 ((WinHelp 'toggle))
 
+;; Stats window
+(define WinStatus ((Terminal 'WindowNew)
+   (WinMap 'Y0) (- (Terminal 'TWidth) 16)
+   1            14
+   #x4e))
+((WinStatus 'toggle))
+
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -131,6 +138,7 @@
 (define SNAKE  79)    (cell-set! SNAKE     (glyphNew 6 11 #\O 6 11 #\o #(6 11 #\o 6 11 #\O)))
 (define KITTY  80)    (cell-set! KITTY     (glyphNew 0 7  #\M 0 7  #\e #(0 7  #\o 0 7  #\w)))
 (define TV     90)    (cell-set! TV        (glyphNew 7 1  #\[ 7 1  #\]))
+(define NOTHING 1000) (cell-set! NOTHING   (glyphNew 0 0  #\[ 0 0  #\]))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -215,39 +223,54 @@
 ;;   are cached in the area modulo   | c| d|    | f| c|
 ;;   the field coordinates.          +--+--+    +--+--+
 ;;
-(define FieldBlockDimension 256) ; Each field block is 256x256 columns
+(define FieldBlockSize 64) ; Each field block is 256x256 columns
 (define FieldBlockCount 2)       ; A field is made up of 2x2 field blocks
-(define FieldSize (* FieldBlockCount FieldBlockDimension)) ; For now resulting field size is 512x512
-(define FieldBlockCoordinate (cons 0 0)) ; Canvas coordinate in block space.  (1 1) would be (256 256) map space.
+(define FieldSize (* FieldBlockCount FieldBlockSize)) ; For now resulting field size is 512x512
+(define FieldBlockCoordinates ()) ; Canvas coordinates in block space.  (1 1) would be (256 256) map space.
 
-; Get list of coordinate pairs of each block that make up the canvas.
-(define (fieldCreateBlockList y x count)
+; The first pair of field block coordinates is always the upper left corner.
+(define (fieldBlockY) (car (car FieldBlockCoordinates)))
+(define (fieldBlockX) (cdr (car FieldBlockCoordinates)))
+
+(define (fieldInside? y x)
+ (and (pair? FieldBlockCoordinates)
+      (<= (fieldBlockY) y)
+      (< y (+ (fieldBlockY) FieldSize))
+      (<= (fieldBlockX) x)
+      (< x (+ (fieldBlockX) FieldSize))))
+
+; Generate a list of coordinate pairs of each block
+; that make up the canvas at the specified location.
+(define (fieldCreateBlockList y x)
  (let ~ ((m 0) (n 0))
-  (if (= m count) '()
-  (if (= n count) (~ (+ m 1) 0)
+  (if (= m FieldBlockCount) '()
+  (if (= n FieldBlockCount) (~ (+ m 1) 0)
   (cons (cons (+ y m) (+ x n))
         (~ m (+ n 1)))))))
-
-(define (canvasBlockCoordinates)
- (fieldCreateBlockList (car FieldBlockCoordinate) (cdr FieldBlockCoordinate) FieldBlockCount))
 
 ; Return list of block coordinates which need to be updated
 ; if we were to move the canvas to this new block location.
 (define (canvasBlockCoordinatesNew y x)
-  (let ~ ((newBlocks (fieldCreateBlockList y x FieldBlockCount)) ; Blocks associated with new field block origin.
-          (currentBlocks (canvasBlockCoordinates))) ; Curent blocks associated with current field block coor.
+  (let ~ ((newBlocks (fieldCreateBlockList y x)) ; Blocks associated with new field block origin.
+          (currentBlocks FieldBlockCoordinates)) ; Curent blocks associated with current field block coor.
     (if (null? currentBlocks)
       newBlocks
       (~ (list-delete newBlocks (car currentBlocks))
          (cdr currentBlocks)))))
 
-(define (fieldInside? y x)
- (let ((fieldy (car FieldBlockCoordinate))
-       (fieldx (cdr FieldBlockCoordinate)))
-  (and (<=  (* FieldBlockDimension    fieldy) y)
-       (<=  (* FieldBlockDimension    fieldx) x)
-       (< y (* FieldBlockDimension (+ fieldy FieldBlockCount)))
-       (< x (* FieldBlockDimension (+ fieldx FieldBlockCount))))))
+(define (fieldTopBottomBuffer y x)
+ (let ((fieldy (fieldBlockY))
+       (buffer (/ FieldBlockSize 4)))
+  (if (< y (+ (* FieldBlockSize   fieldy) buffer)) '(top)
+  (if (<= (- (* FieldBlockSize (+ fieldy FieldBlockCount)) buffer) y) '(bottom)
+  ()))))
+
+(define (fieldLeftRightBuffer y x)
+ (let ((fieldx (fieldBlockX))
+       (buffer (/ FieldBlockSize 4)))
+  (if (< x (+ (* FieldBlockSize   fieldx) buffer)) '(left)
+  (if (<= (- (* FieldBlockSize (+ fieldx FieldBlockCount)) buffer) x) '(right)
+  ()))))
 
 ; Create default plane.
 (define FIELD ())
@@ -524,6 +547,78 @@
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Keyboard Input
+;;
+(define AvatarDirectionGlyphs
+ (vector
+   (glyphNew 0 7  #\? 0 7  #\?)
+   (glyphNew 4 15 #\\ 4 15 #\_)
+   (glyphNew 4 15 #\\ 4 15 #\/)
+   (glyphNew 4 15 #\_ 4 15 #\/)
+   (glyphNew 4 15 #\< 4 15 #\=)
+   (glyphNew 4 15 #\o 4 15 #\o)
+   (glyphNew 4 15 #\= 4 15 #\>)
+   (glyphNew 4 15 #\/ 4 15 #\~)
+   (glyphNew 4 15 #\/ 4 15 #\\)
+   (glyphNew 4 15 #\~ 4 15 #\\)))
+
+; BF: Should this be a thread?  At least move somewhere else.
+(define (refreshIfBeyondViewport)
+ (let ((y (modulo (- (avatar 'y) PortY) FieldSize));Normalize avatar position.
+   (x (modulo (- (avatar 'x) PortX) FieldSize)))
+   (if (or (<= PortW x) (<= PortH y))
+     (viewportReset (avatar 'y) (avatar 'x)))))
+
+; TODO: Implement coor+dir use new dir to field-ref location an dif > MAX_CELL ipc-write (force blah blah)
+
+(define (walk dir)
+ ((avatar 'face) dir) ; Turn avatar
+ (let ((nextCell ((avatar 'look)))) ; Consider cell I'm walking into
+   (if (< MAXCELL nextCell) ; Cell I'm walking into is probably an entity
+    (begin
+     ((ipc 'qwrite) `(force ,@((avatar 'gpsLook)) ,dir 10))) ; Push the entity that's in my way.
+    (if (null? (memv nextCell (list XX MNTS HILLS WATER0 WATER1 WATER2)))
+     (begin
+      ((avatar 'move))
+      ((ipc 'qwrite) `(move ,DNA ,@((avatar 'gps))))
+      (if (eq? HELP (field-ref (avatar 'z) (avatar 'y) (avatar 'x)))  (help))
+      (if (eq? SNAKE (field-ref (avatar 'z) (avatar 'y) (avatar 'x))) (thread (snake-random)))
+      (if (eqv? BRIT2 (field-base-ref (avatar 'z) (avatar 'y) (avatar 'x))) (thread (spawnKitty)))
+      ;(WinConsoleWrite (fieldColumn (avatar 'y) (avatar 'x)) (field-ref (avatar 'z) (avatar 'y) (avatar 'x)))
+      ; Dump our coordinates.
+      ((WinStatus 'puts) "\r\n")
+      ((WinStatus 'puts) (number->string (avatar 'z) 16))
+      ((WinStatus 'puts) " ")
+      ((WinStatus 'puts) (number->string (avatar 'y) 16))
+      ((WinStatus 'puts) " ")
+      ((WinStatus 'puts) (number->string (avatar 'x) 16)))))))
+
+; Change avatar color.  Will just cycle through all 16 avatar colors.
+(define (avatarColor)
+ (let ((glyph (avatar 'glyph)))
+  ((avatar 'setGlyph)
+    (glyphNew (glyph0bg glyph)
+              (modulo (+ (glyph0fg glyph) 1) 16)
+              (glyph0ch glyph)
+              (glyph1bg glyph)
+              (modulo (+ (glyph1fg glyph) 1) 16)
+              (glyph1ch glyph))))
+  (who))
+
+(define (rollcall)
+ ((ipc 'qwrite) `(if (!= DNA ,DNA) ((ipc 'qwrite) `(if (= DNA ,,DNA) (voice 0 10 (string ,(avatar 'name)" is present in world")))))))
+ ;(WinChatSetColor #x0e)
+ ;;(WinChatDisplay name))
+ ;(WinChatSetColor #x07)
+ ;(WinChatDisplay " is present in World[tm] as "))
+ ;(WinChatSetColor (glyphColor0 glyph))
+ ;(WinChatDisplay (glyphChar0 glyph))
+ ;(WinChatSetColor (glyphColor1 glyph))
+ ;(WinChatDisplay (glyphChar1 glyph)))
+
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Incomming IPC messages 
 ;;
 (define (entity dna name z y x glyph)
@@ -598,84 +693,9 @@
 
 
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; Keyboard Input
-;;
-(define AvatarDirectionGlyphs
- (vector
-   (glyphNew 0 7  #\? 0 7  #\?)
-   (glyphNew 4 15 #\\ 4 15 #\_)
-   (glyphNew 4 15 #\\ 4 15 #\/)
-   (glyphNew 4 15 #\_ 4 15 #\/)
-   (glyphNew 4 15 #\< 4 15 #\=)
-   (glyphNew 4 15 #\o 4 15 #\o)
-   (glyphNew 4 15 #\= 4 15 #\>)
-   (glyphNew 4 15 #\/ 4 15 #\~)
-   (glyphNew 4 15 #\/ 4 15 #\\)
-   (glyphNew 4 15 #\~ 4 15 #\\)))
-
-; BF: Should this be a thread?  At least move somewhere else.
-(define (refreshIfBeyondViewport)
- (let ((y (modulo (- (avatar 'y) PortY) FieldSize));Normalize avatar position.
-   (x (modulo (- (avatar 'x) PortX) FieldSize)))
-   (if (or (<= PortW x) (<= PortH y))
-     (viewportReset (avatar 'y) (avatar 'x)))))
-
-; TODO: Implement coor+dir use new dir to field-ref location an dif > MAX_CELL ipc-write (force blah blah)
-
-(define (walk dir)
- ((avatar 'face) dir) ; Turn avatar
- (let ((nextCell ((avatar 'look)))) ; Consider cell I'm walking into
-   (if (< MAXCELL nextCell) ; Cell I'm walking into is probably an entity
-    (begin
-     ((ipc 'qwrite) `(force ,@((avatar 'gpsLook)) ,dir 10))) ; Push the entity that's in my way.
-    (if (null? (memv nextCell (list XX MNTS HILLS WATER0 WATER1 WATER2)))
-     (begin
-      ((avatar 'move))
-      ((ipc 'qwrite) `(move ,DNA ,@((avatar 'gps))))
-      (if (eq? HELP (field-ref (avatar 'z) (avatar 'y) (avatar 'x)))  (help))
-      (if (eq? SNAKE (field-ref (avatar 'z) (avatar 'y) (avatar 'x))) (thread (snake-random)))
-      (if (eqv? BRIT2 (field-base-ref (avatar 'z) (avatar 'y) (avatar 'x))) (thread (spawnKitty)))
-      ;(WinConsoleWrite (fieldColumn (avatar 'y) (avatar 'x)) (field-ref (avatar 'z) (avatar 'y) (avatar 'x)))
-      ; Dump our coordinates.
-      ((WinStatus 'puts) "\r\n")
-      ((WinStatus 'puts) (number->string (avatar 'z)))
-      ((WinStatus 'puts) " ")
-      ((WinStatus 'puts) (number->string (avatar 'y)))
-      ((WinStatus 'puts) " ")
-      ((WinStatus 'puts) (number->string (avatar 'x))))))))
-
-; Change avatar color.  Will just cycle through all 16 avatar colors.
-(define (avatarColor)
- (let ((glyph (avatar 'glyph)))
-  ((avatar 'setGlyph)
-    (glyphNew (glyph0bg glyph)
-              (modulo (+ (glyph0fg glyph) 1) 16)
-              (glyph0ch glyph)
-              (glyph1bg glyph)
-              (modulo (+ (glyph1fg glyph) 1) 16)
-              (glyph1ch glyph))))
-  (who))
-
-(define (rollcall)
- ((ipc 'qwrite) `(if (!= DNA ,DNA) ((ipc 'qwrite) `(if (= DNA ,,DNA) (voice 0 10 (string ,(avatar 'name)" is present in world")))))))
- ;(WinChatSetColor #x0e)
- ;;(WinChatDisplay name))
- ;(WinChatSetColor #x07)
- ;(WinChatDisplay " is present in World[tm] as "))
- ;(WinChatSetColor (glyphColor0 glyph))
- ;(WinChatDisplay (glyphChar0 glyph))
- ;(WinChatSetColor (glyphColor1 glyph))
- ;(WinChatDisplay (glyphChar1 glyph)))
-
-
-
-
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Get the wheels in motion
 ;;
-
-;; Map window
 
 ; Make Map window circular!
 (define (circularize . val)
@@ -765,8 +785,6 @@
 
 
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; stuff
 (define (welcome)
  (define WinMarquee
   ((Terminal 'WindowNew)
@@ -829,30 +847,9 @@
      #t)))))
 
 
-; Help window.  A bunch of button commands for now.
-
-; Give the windows an 'artistic' border.
-(map (lambda (x) ((WinHelp 'alpha) 0 x #f)) '(0 1 2 3 4 5 6 7 8 21 22 23 24 25 26 27 28 29))
-(map (lambda (x) ((WinHelpBorder 'alpha) 0 x #f)) '(0 1 2 3 4 5 6 7 8 23 24 25 26 27 28 29 30 31))
-
-;((WinHelp 'goto) 0 0)
-;((WinHelp 'set-color) 0 10)
-((WinHelp 'puts) "          !! Help !!")
-((WinHelp 'set-color) 0 15)
-((WinHelp 'puts) "\r\n?  toggle help window")
-((WinHelp 'puts) "\r\nt  talk mode (esc to exit)")
-((WinHelp 'puts) "\r\nc  talk color")
-((WinHelp 'puts) "\r\nm  toggle map")
-((WinHelp 'puts) "\r\nW  toggle animation")
-((WinHelp 'puts) "\r\n>  increase map size")
-((WinHelp 'puts) "\r\n<  decrease map size")
-((WinHelp 'puts) "\r\np  present user list")
-((WinHelp 'puts) "\r\nq  quit World[tm]")
-
-(define (help)
- ((WinHelp 'toggle))
- ((WinHelpBorder 'toggle)))
-
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Map stuff
+;;
 
 ; Drop a cell on the map
 (define (dropCell y x cell)
@@ -874,8 +871,8 @@
 ; Mapping from World[tm] (y x) corrdinates to Ultima4 map file byte index.
 ; i = (+ (modulo x 32) (* (/ x 32) 1024) (* (modulo y 32) 32) (* (/ y 32) 8192))
 
-; The ultima map file is an 8x8 array of 32x32 cells
-; so create a simpler 256x25 array of cells.
+; The Ultima4 map file is an 8x8 array of 32x32 cells
+; so create a simpler 256x25 array of cell numbers.
 (define U44MapVector
  (let ((fd (open "ultima4.map"))
        (timeStart (time))
@@ -898,7 +895,7 @@
        (timeStart (time)))
   (let ~ ((y 0)(x 0)) (if (< y 256) (if (= 256 x) (~ (+ y 1) 0) (begin
       (if (= 0 (modulo (+ x (* 256 y)) (/ 65536 20))) (bar))
-      (let ((c (+ 0 (U44MapVectorRef y x)))) ; Hack to convert char to integer
+      (let ((c (U44MapVectorRef y x))) ; Hack to convert char to integer
         (if (not (null? (memv c (list FOREST BUSHES)))) (setCell 2 y x c)) ; Forest trees are tall.
         (setCell 1 y x c))
       (~ y (+ x 1))))))
@@ -958,136 +955,95 @@
         (+ 0 (read-char fdm))))))
    (~ y (+ x 1))))))))
 
+; ; ; ; ; ; ; ; ; ; ; ; ; ; ; ; ; ; ; ; ; ; ; ; ; ; ; ; ; ; ; ; ; ; ; ; ; ; ; ;
+; TODO BFEASTER Map agent development.
+(define updateFieldBlocks (let ((nextCell 99)) (lambda (y0 x0)
+  (letrec ((y1 (+ FieldBlockSize y0)) ; Lower left map coordinates of block
+           (x1 (+ FieldBlockSize x0))
+           (cell (set! nextCell (+ 1 nextCell)))
+           (glyph (glyphNew 0 (+ 1 (modulo cell 7) 1) (integer->char (+ 48 (/ (- cell 100)      10)))
+                            0 (+ 1 (modulo cell 7) 1) (integer->char (+ 48 (modulo (- cell 100) 10))))))
+   (cell-set! cell glyph)
+   (loop2 y0 y1 x0 x1 (lambda (y x) (setCell 0 y x cell))) ))))
 
-(define (tankTalk str) (thread (begin
-  (sleep 700)
-  (WinChatSetColor 0 15)
-  (WinChatDisplay "\r\nTank ")
-  (WinChatSetColor 0 7)
-  (WinChatDisplay str))))
+(define (inUltimaRange? y x)
+ (and (<= 0 y)
+      (< y 256)
+      (<= 0 x)
+      (< x 256)))
 
-(define tankHangupTime 0)
-(define tankIsListening #f)
+(define (updateFieldBlocksU4 y0 x0)
+  (loop2 y0 (+ y0 FieldBlockSize)
+         x0 (+ x0 FieldBlockSize)
+     (lambda (y x)
+        (if (inUltimaRange? y x)
+          (begin
+            ;(if (not (null? (memv c (list FOREST BUSHES)))) (setCell 2 y x (U44MapVectorRef y x))) ; Forest trees are tall.
+            (setCell 1 y x (U44MapVectorRef y x)))
+          (setCell 1 y x NOTHING)))))
 
-(define (tankStartListening)
-  (set! tankHangupTime (+ 10 (time)))
-  (tankTalk "Operator")
-  (if (not tankIsListening) (begin (thread (let ~ ()
-    (set! tankIsListening #t)
-    (sleep 12000)
-    (if (< (time) tankHangupTime)
-      (~)
-      (begin
-       (tankTalk "*CLICK*")
-       (set! tankIsListening #f))))))))
+(thread (let ~ ()
+(sleep 500)
+(letrec ((avty (avatar 'y))
+         (avtx (avatar 'x))
+         (blky (/ (if (< avty 0) (- avty FieldBlockSize) avty) FieldBlockSize))
+         (blkx (/ (if (< avtx 0) (- avtx FieldBlockSize) avtx) FieldBlockSize)))
 
-(define (tankTheOperator talkInput)
- (if (string=? talkInput "tank") (tankStartListening)
- (let ((strLen (string-length talkInput)))
-  (if (and (> strLen 11)
-           (string=? "my name is " (substring talkInput 0 11)))
-     (begin
-      ((avatar `setNameGlyph)
-         (substring talkInput 11 strLen)
-         (glyphNew (glyph0bg (avatar 'glyph))
-                   (glyph0fg (avatar 'glyph))
-                   (string-ref talkInput 11)
-                   (glyph1bg (avatar 'glyph))
-                   (glyph1fg (avatar 'glyph))
-                   (string-ref talkInput (if (> strLen 12) 12 11))))
-      (thread (begin (sleep 500) (who)))))))
- (if tankIsListening (begin
-   (if (string=? "who" talkInput) ((ipc 'qwrite) '(say "I'm here!")))
-   (if (string=? "load the jump program" talkInput) (tankTalk "I can't find the disk")
-   (if (string=? "load ultima4" talkInput) (thread (loadUltimaWorld4))
-   (if (string=? "load underworld" talkInput) (thread (load-ultima-underworld))
-   (if (string=? "load ultima5" talkInput) (thread (load-ultima-world5)))))))))
+  ; Create the first block list and load each block.  Occurs once.
+  (if (null? FieldBlockCoordinates ) (begin
+     (set! FieldBlockCoordinates (fieldCreateBlockList blky blkx))
+     (map (lambda (b) (updateFieldBlocksU4 (* FieldBlockSize (car b)) (* FieldBlockSize (cdr b))))
+          FieldBlockCoordinates)))
 
-(define (say talkInput . level)
- ((ipc 'qwrite) (list 'voice DNA (if (null? level) 10 (car level)) talkInput)))
+  ;(WinChatDisplay"\r\n" (list (list avty avtx) (list blky blkx )) "\r\n" FieldBlockCoordinates)
 
-(define (saySystem talkInput)
- ((ipc 'qwrite) (list 'voice 0 10 talkInput)))
+  (let ((bounds (append (fieldTopBottomBuffer avty avtx)
+                        (fieldLeftRightBuffer avty avtx))))
+   (if (pair? bounds) (begin
+     ;(WinChatDisplay "\r\n" bounds)
+     (let ((yb (fieldBlockY)) ; Assume new block origin at same place.
+           (xb (fieldBlockX)))
+      (if (pair? (memq 'bottom bounds)) (set! yb (- blky (- FieldBlockCount 2))))
+      (if (pair? (memq 'top bounds))    (set! yb (- blky 1)))
+      (if (pair? (memq 'right bounds))  (set! xb (- blkx (- FieldBlockCount 2))))
+      (if (pair? (memq 'left bounds))   (set! xb (- blkx 1)))
+      (map (lambda (b) (updateFieldBlocksU4 (* FieldBlockSize (car b)) (* FieldBlockSize (cdr b))))
+           (canvasBlockCoordinatesNew yb xb))
+      ; Set block coordinate list after the unloaded blocks have been loaded.
+      (set! FieldBlockCoordinates (fieldCreateBlockList yb xb))))))
 
-(define replTalk
- (let ((talkInput ""))
-  (lambda (c)
-   (if (eq? c 'getBuffer) talkInput ; Return input buffer contents.
-   ; backspace
-   (if (or (eq? c CHAR-CTRL-H)
-           (eq? c CHAR-CTRL-_)
-           (eq? c CHAR-CTRL-?))
-       (begin
-        (if (not (eq? "" talkInput))
-         (begin ((WinInput 'backspace) #\ )
-                (set! talkInput (substring talkInput 0 (- (string-length talkInput) 1)))))
-        'talk)
-   ; Send Chatter
-   (if (or (eq? c RETURN) 
-           (eq? c NEWLINE))
-     (begin
-       ; Perform actions based on talk phrases.
-       (tankTheOperator talkInput)
-       ; Toggle help window if certain phrase entered
-       (if (string=? "?" talkInput) (help))
-       ; Send talk chatter to IPC or evaluate expression
-       (if (and (not (eq? "" talkInput))
-                (eq? #\: (string-ref talkInput 0)))
-           (begin (WinChatDisplay "\r\n")
-                  (WinChatDisplay talkInput)
-                  (WinChatDisplay "=>")
-                  (WinChatDisplay 
-                    (call/cc (lambda (c) ; Return here if an error occurs
-                       (vector-set! ERRORS (tid) c)
-                       (eval (read-string (cdr-string talkInput)))))))
-           (say talkInput))
-       (WinInputPuts "\r\n>")
-       (set! talkInput "")
-       'talk)
-   ; Quit chat mode.
-   (if (or (eq? c CHAR-ESC) ; Escape char
-           (eq? c CHAR-CTRL-I)) ; Tab char
-     (begin (WinInputPuts "\r\n")
-            'cmd)
-   (if (and (>= c #\ )(<= c #\~))
-       (begin (WinInputPutc c)
-              (set! talkInput (string talkInput c))
-              'talk)
-   'talk))))))))
+)(~)))
+; ; ; ; ; ; ; ; ; ; ; ; ; ; ; ; ; ; ; ; ; ; ; ; ; ; ; ; ; ; ; ; ; ; ; ; ; ; ; ;
 
-(define (boxInput title)
- (define box
-  ((Terminal 'WindowNew)
-    (/ (Terminal 'THeight) 2)  (- (/ (Terminal 'TWidth) 2) 10)
-    3  20
-    #x0f))
- (define puts (box 'puts))
- (define putc (box 'putc))
- (define setcolor (box 'set-color))
- (define str "")
- ;((box 'cursor-visible) #f)
- (puts "+------------------+")
- (puts "|                  |")
- (puts "+------------------+")
- ((box 'goto) 0 2) (puts title)
- ((box 'goto) 1 1)
- (let ~ ((c (read-char stdin)))
-   (or (eq? c RETURN) (eq? c NEWLINE)
-    (begin
-     (if (or (eq? c CHAR-CTRL-H) ; Rubout characters
-             (eq? c CHAR-CTRL-_)
-             (eq? c CHAR-CTRL-?))
-       (if (eq? str "") "" (begin
-             ((box 'backspace) #\ )
-             (set! str (substring str 0 (- (string-length str) 1)))))
-       (if (and (< (string-length str) 18) ; Name length limit
-                (<= #\! c) (<= c #\~))     ; Name character restriction
-            (begin
-             (putc c)
-             (set! str (string str c)))))
-     (~ (read-char stdin)))))
- ((box 'delete))
- str)
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Help window.  A bunch of button commands for now.
+
+; Give the windows an 'artistic' border.
+(map (lambda (x) ((WinHelp 'alpha) 0 x #f)) '(0 1 2 3 4 5 6 7 8 21 22 23 24 25 26 27 28 29))
+(map (lambda (x) ((WinHelpBorder 'alpha) 0 x #f)) '(0 1 2 3 4 5 6 7 8 23 24 25 26 27 28 29 30 31))
+
+;((WinHelp 'goto) 0 0)
+;((WinHelp 'set-color) 0 10)
+((WinHelp 'puts) "          !! Help !!")
+((WinHelp 'set-color) 0 15)
+((WinHelp 'puts) "\r\n?  toggle help window")
+((WinHelp 'puts) "\r\nt  talk mode (esc to exit)")
+((WinHelp 'puts) "\r\nc  talk color")
+((WinHelp 'puts) "\r\nm  toggle map")
+((WinHelp 'puts) "\r\nW  toggle animation")
+((WinHelp 'puts) "\r\n>  increase map size")
+((WinHelp 'puts) "\r\n<  decrease map size")
+((WinHelp 'puts) "\r\np  present user list")
+((WinHelp 'puts) "\r\nq  quit World[tm]")
+
+(define (help)
+ ((WinHelp 'toggle))
+ ((WinHelpBorder 'toggle)))
+
+
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Buttons
 (define Buttons (make-vector 257 (lambda())))
@@ -1099,14 +1055,13 @@
 (define (showButtons) (set! ShowButtons (not ShowButtons)))
 
 ; Consider the button value.  If data just return the expression.  Otherwise
-; assume a closure.  Consider the closure, closure's code, the code's pre-compiled
-; expression and return it.
+; assume a closure.  Consider the closure -> closure's code -> the code's pre-compiled
+; expression and return it (hack).
 (define (getButton ch)
  (let ((val (vector-ref Buttons ch)))
    (if (pair? val)  val
    (if (procedure? val) (cons 'lambda (vector-ref (vector-ref (vector-ref Buttons ch) 0) 2))
    val))))
-
 
 (setButton #\p '(rollcall))
 (setButton #\c '(avatarColor))
@@ -1161,6 +1116,103 @@
 ;(setButton #\1 '(thread (sigwinch)))
 ;(setButton CHAR-CTRL-_ '(walk 4)) ; Sent by backspace?
 
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Typing and talking
+
+(define replTalk
+ (let ((talkInput ""))
+  (lambda (c)
+   (if (eq? c 'getBuffer) talkInput ; Return input buffer contents.
+   ; backspace
+   (if (or (eq? c CHAR-CTRL-H)
+           (eq? c CHAR-CTRL-_)
+           (eq? c CHAR-CTRL-?))
+       (begin
+        (if (not (eq? "" talkInput))
+         (begin ((WinInput 'backspace) #\ )
+                (set! talkInput (substring talkInput 0 (- (string-length talkInput) 1)))))
+        'talk)
+   ; Send Chatter
+   (if (or (eq? c RETURN) 
+           (eq? c NEWLINE))
+     (begin
+       ; Perform actions based on talk phrases.
+       (tankTheOperator talkInput)
+       ; Toggle help window if certain phrase entered
+       (if (string=? "?" talkInput) (help))
+       ; Send talk chatter to IPC or evaluate expression
+       (if (and (not (eq? "" talkInput))
+                (eq? #\: (string-ref talkInput 0)))
+           (begin (WinChatDisplay "\r\n")
+                  (WinChatDisplay talkInput)
+                  (WinChatDisplay "=>")
+                  (WinChatDisplay 
+                    (call/cc (lambda (c) ; Return here if an error occurs
+                       (vector-set! ERRORS (tid) c)
+                       (eval (read-string (cdr-string talkInput)))))))
+           (say talkInput))
+       (WinInputPuts "\r\n>")
+       (set! talkInput "")
+       'talk)
+   ; Quit chat mode.
+   (if (or (eq? c CHAR-ESC) ; Escape char
+           (eq? c CHAR-CTRL-I)) ; Tab char
+     (begin (WinInputPuts "\r\n")
+            'cmd)
+   (if (and (>= c #\ )(<= c #\~))
+       (begin (WinInputPutc c)
+              (set! talkInput (string talkInput c))
+              'talk)
+   'talk))))))))
+
+(define replTalk
+ (let ((talkInput ""))
+  (lambda (c)
+   (if (eq? c 'getBuffer) talkInput ; Return input buffer contents.
+   ; backspace
+   (if (or (eq? c CHAR-CTRL-H)
+           (eq? c CHAR-CTRL-_)
+           (eq? c CHAR-CTRL-?))
+       (begin
+        (if (not (eq? "" talkInput))
+         (begin ((WinInput 'backspace) #\ )
+                (set! talkInput (substring talkInput 0 (- (string-length talkInput) 1)))))
+        'talk)
+   ; Send Chatter
+   (if (or (eq? c RETURN) 
+           (eq? c NEWLINE))
+     (begin
+       ; Perform actions based on talk phrases.
+       (tankTheOperator talkInput)
+       ; Toggle help window if certain phrase entered
+       (if (string=? "?" talkInput) (help))
+       ; Send talk chatter to IPC or evaluate expression
+       (if (and (not (eq? "" talkInput))
+                (eq? #\: (string-ref talkInput 0)))
+           (begin (WinChatDisplay "\r\n")
+                  (WinChatDisplay talkInput)
+                  (WinChatDisplay "=>")
+                  (WinChatDisplay 
+                    (call/cc (lambda (c) ; Return here if an error occurs
+                       (vector-set! ERRORS (tid) c)
+                       (eval (read-string (cdr-string talkInput)))))))
+           (say talkInput))
+       (WinInputPuts "\r\n>")
+       (set! talkInput "")
+       'talk)
+   ; Quit chat mode.
+   (if (or (eq? c CHAR-ESC) ; Escape char
+           (eq? c CHAR-CTRL-I)) ; Tab char
+     (begin (WinInputPuts "\r\n")
+            'cmd)
+   (if (and (>= c #\ )(<= c #\~))
+       (begin (WinInputPutc c)
+              (set! talkInput (string talkInput c))
+              'talk)
+   'talk))))))))
+
 (define (replCmd c)
  (define state 'cmd) ; state might be changed to 'done or 'talk.
  (let ((button (vector-ref Buttons c)))
@@ -1175,18 +1227,128 @@
   (lambda ()
    (if (not (eq? state 'done)) ; Exit if state is done.
      (let ((c (read-char stdin)))
-       (if (eq? state 'talk)
-           (set! state (replTalk c))
-           (if (eq? state 'cmd)  (set! state (replCmd c))))
+       (if (eq? state 'talk) (set! state (replTalk c))
+        (if (eq? state 'cmd) (set! state (replCmd c))))
        (wrepl))))))
 
-;; Stats window
-(define WinStatus ((Terminal 'WindowNew)
-   (WinMap 'Y0) (- (Terminal 'TWidth) 12)
-   1            12
-   #x43))
-((WinStatus 'toggle))
+(define (boxInput title)
+ (define box
+  ((Terminal 'WindowNew)
+    (/ (Terminal 'THeight) 2)  (- (/ (Terminal 'TWidth) 2) 10)
+    3  20
+    #x0f))
+ (define puts (box 'puts))
+ (define putc (box 'putc))
+ (define setcolor (box 'set-color))
+ (define str "")
+ ;((box 'cursor-visible) #f)
+ (puts "+------------------+")
+ (puts "|                  |")
+ (puts "+------------------+")
+ ((box 'goto) 0 2) (puts title)
+ ((box 'goto) 1 1)
+ (let ~ ((c (read-char stdin)))
+   (or (eq? c RETURN) (eq? c NEWLINE)
+    (begin
+     (if (or (eq? c CHAR-CTRL-H) ; Rubout characters
+             (eq? c CHAR-CTRL-_)
+             (eq? c CHAR-CTRL-?))
+       (if (eq? str "") "" (begin
+             ((box 'backspace) #\ )
+             (set! str (substring str 0 (- (string-length str) 1)))))
+       (if (and (< (string-length str) 18) ; Name length limit
+                (<= #\! c) (<= c #\~))     ; Name character restriction
+            (begin
+             (putc c)
+             (set! str (string str c)))))
+     (~ (read-char stdin)))))
+ ((box 'delete))
+ str)
 
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Tank.  The first interactive user agent.
+
+(define (tankTalk str) (thread (begin
+  (sleep 700)
+  (WinChatSetColor 0 15)
+  (WinChatDisplay "\r\nTank ")
+  (WinChatSetColor 0 7)
+  (WinChatDisplay str))))
+
+(define tankHangupTime 0)
+(define tankIsListening #f)
+
+(define (tankStartListening)
+  (set! tankHangupTime (+ 10 (time)))
+  (tankTalk "Operator")
+  (if (not tankIsListening) (begin (thread (let ~ ()
+    (set! tankIsListening #t)
+    (sleep 12000)
+    (if (< (time) tankHangupTime)
+      (~)
+      (begin
+       (tankTalk "*CLICK*")
+       (set! tankIsListening #f))))))))
+
+(define (tankTheOperator talkInput)
+ (if (string=? talkInput "tank") (tankStartListening)
+ (let ((strLen (string-length talkInput)))
+  (if (and (> strLen 11)
+           (string=? "my name is " (substring talkInput 0 11)))
+     (begin
+      ((avatar `setNameGlyph)
+         (substring talkInput 11 strLen)
+         (glyphNew (glyph0bg (avatar 'glyph))
+                   (glyph0fg (avatar 'glyph))
+                   (string-ref talkInput 11)
+                   (glyph1bg (avatar 'glyph))
+                   (glyph1fg (avatar 'glyph))
+                   (string-ref talkInput (if (> strLen 12) 12 11))))
+      (thread (begin (sleep 500) (who)))))))
+ (if tankIsListening (begin
+   (if (string=? "who" talkInput) ((ipc 'qwrite) '(say "I'm here!")))
+   (if (string=? "load the jump program" talkInput) (tankTalk "I can't find the disk")
+   (if (string=? "load ultima4" talkInput) (thread (loadUltimaWorld4))
+   (if (string=? "load underworld" talkInput) (thread (load-ultima-underworld))
+   (if (string=? "load ultima5" talkInput) (thread (load-ultima-world5)))))))))
+
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Screen redraw signal handler
+(define (handleTerminalResize)
+  (WinChatDisplay "\r\n" (terminal-size))
+  ((Terminal 'ResetTerminal))
+  ((WinChat 'resize)  (- (Terminal 'THeight) 1) (Terminal 'TWidth))
+  ((WinMap 'move)     0 (- (Terminal 'TWidth) (WinMap 'WWidth) 2))
+  ((WinColumn 'move)  1 (- (Terminal 'TWidth) 2) )
+  ((WinStatus 'move)  (WinMap 'Y0) (- (Terminal 'TWidth) 12))
+  ((WinInput 'resize) 1 (Terminal 'TWidth))
+  ((WinInput 'move)   (- (Terminal 'THeight) 1) 0))
+
+(define sigwinch
+ (let ((sig28Semaphore (open-semaphore 1)))
+  (lambda ()
+   (semaphore-down sig28Semaphore)
+   (handleTerminalResize)
+   (semaphore-up sig28Semaphore))))
+
+(vector-set! SIGNALHANDLERS 28 (lambda () (sigwinch) (unthread)))
+(signal 28)
+
+
+
+(define (say talkInput . level)
+ ((ipc 'qwrite) (list 'voice DNA (if (null? level) 10 (car level)) talkInput)))
+
+(define (saySystem talkInput)
+ ((ipc 'qwrite) (list 'voice 0 10 talkInput)))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Prototypes and fun things.
 
 ;; Walking kitty soldier
 (define (spawnKitty . cycles)
@@ -1236,32 +1398,6 @@
        (~ (+ i 1))))))
 
 
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-; Screen redraw signal handler
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-(define (handleTerminalResize)
-  (WinChatDisplay "\r\n" (terminal-size))
-  ((Terminal 'ResetTerminal))
-  ((WinChat 'resize)  (- (Terminal 'THeight) 1) (Terminal 'TWidth))
-  ((WinMap 'move)     0 (- (Terminal 'TWidth) (WinMap 'WWidth) 2))
-  ((WinColumn 'move)  1 (- (Terminal 'TWidth) 2) )
-  ((WinStatus 'move)  (WinMap 'Y0) (- (Terminal 'TWidth) 12))
-  ((WinInput 'resize) 1 (Terminal 'TWidth))
-  ((WinInput 'move)   (- (Terminal 'THeight) 1) 0))
-
-
-(define sigwinch
- (let ((sig28Semaphore (open-semaphore 1)))
-  (lambda ()
-   (semaphore-down sig28Semaphore)
-   (handleTerminalResize)
-   (semaphore-up sig28Semaphore))))
-
-(vector-set! SIGNALHANDLERS 28 (lambda () (sigwinch) (unthread)))
-(signal 28)
-
-
 (define walkForever (let ((walkForeverFlag #f)) (lambda ()
  (if walkForeverFlag
   (begin
@@ -1279,11 +1415,13 @@
      (sleep 500)
      (~))))))))
 
+
 (define (sayDesperate)
   (let ((cmd `(voice ,DNA 10 "desperate")))
    (sleep (random 500))
    ((ipc 'qwrite) cmd) (sleep 500)
    ((ipc 'qwrite) cmd) (sleep 500)))
+
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
