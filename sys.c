@@ -2184,7 +2184,7 @@ void sysNewCharacter (void) {
 void sysNewInteger (void) {
 	DB("-->sysNewInteger()");
 	*((char*)r5+(Int)r6)=0;
-	objNewInt(strtol(r5,0,10));
+	objNewInt(strtol(r5+(*(char*)r5=='#'?2:0),0,10));
 	DB("<--sysNewInteger()");
 }
 void sysNewBinary (void) {
