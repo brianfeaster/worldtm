@@ -2103,14 +2103,14 @@ void sysTerminalSize (void) {
 void sysStringRef (void) {
  Int offset;
  Obj o;
-	DB("-->sysStringRef()");
+	DB("-->%s", __func__);
 	if (wscmAssertArgumentCount(2, __func__)) return;
 	offset = *(Int*)pop();
 	o=pop();
 	/* A (negative? offset) implies (absolute offset) from end. */
 	if (offset < 0) offset = memObjectLength(o)+offset;
-	r0 = memVectorObject(characters, *((char*)o+offset));
-	DB("<--sysStringRef()");
+	r0 = memVectorObject(characters, *((Chr*)o+offset));
+	DB("<--%s", __func__);
 }
 
 void sysStringSetB (void) {
