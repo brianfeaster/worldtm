@@ -94,7 +94,7 @@
 ;; Cells - For now cells are just glyphs...eventually smarter objects.
 ;;
 (define MAXCELL 1023)
-(define CELLS (make-vector (+ 1 MAXCELL) (glyphNew 1 11 #\? 3 1 #\?)))
+(define CELLS (make-vector (+ 1 MAXCELL) (glyphNew 0 8 #\x 0 8 #\x))) ; Default cell.
 
 (define (cell-set! i c) (vector-set! CELLS i c))
 
@@ -571,7 +571,7 @@
    (if (< MAXCELL nextCell) ; Cell I'm walking into is probably an entity
     (begin
      ((ipc 'qwrite) `(force ,@((avatar 'gpsLook)) ,dir 10))) ; Push the entity that's in my way.
-    (if (null? (memv nextCell (list XX MNTS HILLS WATER0 WATER1 WATER2 BRICKC COLUMN)))
+    (if (null? (memv nextCell (list XX MNTS HILLS WATER0 WATER1 WATER2 BRICKC COLUMN WINDOW DOORL)))
      (begin
       ((avatar 'move))
       ((ipc 'qwrite) `(move ,DNA ,@((avatar 'gps))))
