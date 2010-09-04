@@ -393,12 +393,19 @@
   (let ((c (field-ref z y x)))
    (if (eq? AIR c)
     (begin (WinColumnSetColor 0 8)
-           (WinColumnPuts "()"))
+           (WinColumnPuts "()  "))
     (begin (set! c (cell-ref c))
            (WinColumnSetColor (glyph0bg c) (glyph0fg c))
            (WinColumnPutc (glyph0ch c))
            (WinColumnSetColor (glyph1bg c) (glyph1fg c))
-           (WinColumnPutc (glyph1ch c)))))
+           (WinColumnPutc (glyph1ch c))
+           (WinColumnSetColor 0 7)
+           (set! c (field-base-ref z y x))
+           (if (and (<= 0 c) (< c 256))
+            (begin
+             (if (< c 10) (WinColumnPuts "0"))
+             (WinColumnPuts (number->string c 16)))
+            (WinColumnPuts "  ") ))))
   (if (> z -6) (~ (- z 1)))))
 
 (define (viewportRender gy gx)
@@ -564,7 +571,7 @@
    (if (< MAXCELL nextCell) ; Cell I'm walking into is probably an entity
     (begin
      ((ipc 'qwrite) `(force ,@((avatar 'gpsLook)) ,dir 10))) ; Push the entity that's in my way.
-    (if (null? (memv nextCell (list XX MNTS HILLS WATER0 WATER1 WATER2)))
+    (if (null? (memv nextCell (list XX MNTS HILLS WATER0 WATER1 WATER2 BRICKC COLUMN)))
      (begin
       ((avatar 'move))
       ((ipc 'qwrite) `(move ,DNA ,@((avatar 'gps))))
@@ -764,10 +771,10 @@
 
 
 ;; Map column debug window
-(define WinColumn ((Terminal 'WindowNew) 1 (- (Terminal 'TWidth) 2) 18 2 #x5b))
+(define WinColumn ((Terminal 'WindowNew) 1 (- (Terminal 'TWidth) 4) 18 4 #x5b))
 ((WinColumn 'toggle))
 (define WinColumnPutc (WinColumn 'putc))
-(define WinColumnPuts (WinColumn 'puts))
+(define (WinColumnPuts . l) (for-each (WinColumn 'puts) l))
 (define WinColumnSetColor (WinColumn 'set-color))
 
 
