@@ -403,7 +403,7 @@
            (set! c (field-base-ref z y x))
            (if (and (<= 0 c) (< c 256))
             (begin
-             (if (< c 10) (WinColumnPuts "0"))
+             (if (< c 16) (WinColumnPuts "0"))
              (WinColumnPuts (number->string c 16)))
             (WinColumnPuts "  ") ))))
   (if (> z -6) (~ (- z 1)))))
@@ -884,6 +884,12 @@
  (seek lcbfd (+ (* y 32) x))
  (+ 0 (read-char lcbfd))) ; Hack to convert char to integer
 
+(define britainfd (open "britain.ult"))
+(define (U4BritainMapCell y x)
+ (and (< y 0) (<= 32 y) (< x 0) (<= 32 x) (WinChatDisplay "Britain coordinates out of range") (quit))
+ (seek britainfd (+ (* y 32) x))
+ (+ 0 (read-char britainfd))) ; Hack to convert char to integer
+
 ; Get the map cell in the direction from this location.
 (define (U4MapCellDir y x d)
  (U4MapCell (+ y (vector-ref #(0 -1 -1 -1  0  1 1 1) d))
@@ -924,6 +930,12 @@
       (<= (* 86 U4MapCellSize) x)
       (< x (* 87 U4MapCellSize))))
 
+(define (inUltima4RangeBritain? y x)
+ (and (<= (* 106 U4MapCellSize) y)
+      (< y (* 107 U4MapCellSize))
+      (<= (* 82 U4MapCellSize) x)
+      (< x (* 83 U4MapCellSize))))
+
 ; Outdated?
 (define (load-ultima-world44)
  (resetField)
@@ -947,8 +959,10 @@
      (lambda (y x)
         (if (inUltima4Range? y x)
           (if (inUltima4RangeLcb1? y x)
-            (setCell 1 y x (U4Lcb1MapCell (- y (* 107 U4MapCellSize)) (- x (* 86 U4MapCellSize))))
-            (setCell 1 y x (U4MapCell (/ y U4MapCellSize) (/ x U4MapCellSize))))
+            (setCell 1 y x (U4Lcb1MapCell (- y (* 107 U4MapCellSize)) (- x (* 86 U4MapCellSize)))) ; LB castle
+            (if (inUltima4RangeBritain? y x)
+              (setCell 1 y x (U4BritainMapCell (- y (* 107 U4MapCellSize)) (- x (* 86 U4MapCellSize)))) ; Britain
+              (setCell 1 y x (U4MapCell (/ y U4MapCellSize) (/ x U4MapCellSize))))) ; Regular cell
           (setCell 1 y x NOTHING)))))
 
 ; Field block updater.
