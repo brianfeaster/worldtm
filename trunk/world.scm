@@ -961,7 +961,7 @@
           (if (inUltima4RangeLcb1? y x)
             (setCell 1 y x (U4Lcb1MapCell (- y (* 107 U4MapCellSize)) (- x (* 86 U4MapCellSize)))) ; LB castle
             (if (inUltima4RangeBritain? y x)
-              (setCell 1 y x (U4BritainMapCell (- y (* 107 U4MapCellSize)) (- x (* 86 U4MapCellSize)))) ; Britain
+              (setCell 1 y x (U4BritainMapCell (- y (* 106 U4MapCellSize)) (- x (* 82 U4MapCellSize)))) ; Britain
               (setCell 1 y x (U4MapCell (/ y U4MapCellSize) (/ x U4MapCellSize))))) ; Regular cell
           (setCell 1 y x NOTHING)))))
 
