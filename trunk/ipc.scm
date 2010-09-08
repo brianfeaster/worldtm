@@ -1,4 +1,118 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; IPC II
+;;
+;; Star topology.  Hub is always listening on the first port 7155.
+;;
+(define (Ipc Display . port)
+ (define HubPort (if (null? port) 7155 (car port))) ; IPC HUB port
+ (define HubSocket ()) ; HUB socket
+ (define MsgQueueSemaphore (open-semaphore 0))
+ (define MsgQueue (list 'empty))  ; Queues are (empty) (ignore 1st 2nd)
+ (define Peers ())     ; Peers are a list of #(socket (queue) queue-semaphore)
+ (define PeersSemaphore (open-semaphore 1))
+
+ (define (Displayl . l) (for-each Display l))
+
+ (define (qwrite e) ; Append e to each peer's outgoing message queue.
+  (map (lambda (p)
+         (append! (vector-ref p 1) (list e))
+         (semaphore-up (peerSemaphore p)))
+        Peers)
+  (msgQueueAdd e))
+
+ (define (qread)    ; Read from my incomming message queue.
+   (semaphore-down MsgQueueSemaphore)
+   (let ((e (cadr MsgQueue)))
+     (set! MsgQueue (cdr MsgQueue))
+     e))
+
+ (define (msgQueueAdd e)
+   (append! MsgQueue (list e))
+   (semaphore-up MsgQueueSemaphore))
+  
+ (define (peersAdd peer)
+   (set! Peers (cons peer Peers)))
+
+ (define (peersDelete peer)
+   (semaphore-down PeersSemaphore)
+   (set! Peers (list-delete Peers peer)) ; Remove this peer from the global peer list.
+   (semaphore-up PeersSemaphore))
+
+ ; Peers are #(socket list-of-messages message-sempahore-counter)
+ (define (peerCreate s)
+   (vector s (list 'empty) (open-semaphore 0)))
+ (define (peerSocket p) (vector-ref p 0))
+ (define (peerMessages p) (vector-ref p 1))
+ (define (peerSemaphore p) (vector-ref p 2))
+
+ ; Spawn two threads that propogate any incomming messages on this
+ ; socket as well as send out any queued messages.
+ (define (spawnCommunicators stream)
+   (Displayl "\r\n::(spawnCommunicators)  stream " stream)
+   (display "'(World 1 0 2)" stream) ; Identify myself to peer.
+   (let ((peer (peerCreate stream))) ; Create a peer: #(socket '(queue) queue-semaphore)
+     (peersAdd peer)
+     ; Read from peer and forward to every other peer's queue.
+     (thread (let reader~ ((e (read (peerSocket peer))))
+       (if (eof-object? e)
+         (begin
+           (Display "\r\n::(spawnCommunicators) Removing peer " peer)
+           (peersDelete peer)
+           (vector-set! peer 0 #f) ; BF TODO Required to remove socket from peer?
+           (if (eof-object? HubSocket) (createHub)))
+         (begin
+           ; Relay message to every other peer
+           (map (lambda (p)
+                  (append! (peerMessages p) (list e))
+                  (semaphore-up (peerSemaphore p)))
+                (list-delete Peers peer))
+           ; Add message to my local IO queue
+           (msgQueueAdd e)
+           (reader~ (read (peerSocket peer)))))))
+     ; Write to peer anything in its queue.
+     (thread (let writer~ ()
+       (if (peerSocket peer)
+         (begin
+           (semaphore-down (peerSemaphore peer))
+           (write (cadr (peerMessages peer))
+                  (peerSocket peer))
+           (send " " (peerSocket peer))
+           (vector-set! peer 1 (cdr (peerMessages peer)))
+           (writer~)))))))
+
+ (define (createHub)
+   (set! HubSocket (open-socket HubPort))
+   (Displayl "\r\n::(createHub)  HubSocket=" HubSocket)
+   (if (eof-object? HubSocket)
+     ; Open communication to existing hub.  Eventually the threads
+     ; handling I/O to the hub will close or fail and createHub will
+     ; be called again.
+     (spawnCommunicators (open-stream (open-socket "localhost" HubPort)))
+
+     ; Acquired the hub socket port so act as the hub from now on.  Continusouly
+     ; accept incomming peer connections and add to message queue.
+     (begin
+      (Displayl "\r\n::(createHub)  Accepting connections as hub port")
+      (thread
+       (let acceptPeers~ ()
+        (spawnCommunicators (open-stream HubSocket))
+        (acceptPeers~))))))
+
+ ; DEBUG give a constant update of the object's state
+ (rem thread (let ~ ()
+  (Displayl "\n::Ipc peers")
+  (map (lambda (s) (Displayl "\n  " s)) Peers)
+  (sleep 1000)
+  (~)))
+
+ ; Start the engine
+ (createHub)
+
+(lambda (c) (eval c)))
+
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; IPC
 ;;
 ;; Moving from star-topology to tree.  The ipc object will connect to the
@@ -14,7 +128,7 @@
 ;; Ipc Object:
 ;;
 ;; The Ipc object when instantiated will attempt to connect to existing
-(define (Ipc Display . port)
+(rem define (IpcTree Display . port)
  (define FirstPort (if (null? port) 7155 (car port)))
  (define PortCount 50) ; Only allow 50 Worldlians per server
  (define LastPort  (+ FirstPort PortCount -1))
