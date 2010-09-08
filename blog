@@ -2055,3 +2055,36 @@ Currently working on refactoring glyphs and color atributes for window objects,
 entites and maps.  Colors were originally just 7 bit numbers.  256 color mode
 escape sequences allow 256 unique color values for both foreground and
 background.
+
+
+Wed Sep  8 02:04:27 EDT 2010
+
+Lord Neko nothing dead
+Lord Neko how about a zombie
+Lord Neko i'm reworking the IPC
+Lord Neko star topology
+Lord Neko then a map server/agent
+Lord Neko then map lighting
+Lord Neko then some NPCs
+Lord Neko i need to get this all in by code complete
+Lord Neko and unit tests
+Lord Neko and regtests
+Lord Neko and IBM keeps calling at 6am
+WORLD Richard is present in world
+WORLD Guest is present in world
+Lord Neko hacker!
+Lord Neko my name is Lord Hacker
+Lord Hacker bow to my ping flood
+alwaysScroll #f
+WORLD Guest says *All Worldlians Want to Be Borned*
+WORLD Guest exits
+Lord Hacker oh dang
+Lord Hacker crazy hackers
+Lord Hacker Lord Lowerd
+Lord Hacker word
+Richard so, are you going to use a ray-tracer for the map lighting?
+Richard gaah... resized the termnal again!
+Lord Hacker no it'll be distanc from light source
+Lord Hacker simple fornow
+Lord Hacker although since there aren't that many pixels anyways itshouldn't take that much
+Lord Hacker ok i'll add "window history" to the todo list

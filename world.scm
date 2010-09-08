@@ -5,7 +5,7 @@
 (define VOICEDELIMETER " ")
 (define DNA 0)
 
-(if QUIETLOGIN (load "ipc.scm" )(load "ipc.scm"))
+(if QUIETLOGIN (load "ipc2.scm" )(load "ipc.scm"))
 (load "window.scm")
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -94,18 +94,43 @@
 ;; Cells - For now cells are just glyphs...eventually smarter objects.
 ;;
 (define MAXCELL 1023)
-(define CELLS (make-vector (+ 1 MAXCELL) (glyphNew 0 8 #\x 0 8 #\x))) ; Default cell.
 
-(define (cell-set! i c) (vector-set! CELLS i c))
+(define CELLS
+ (let ((cells (make-vector (+ 1 MAXCELL))))
+  (vector-map! (lambda (i) (cons 'NOTHING (glyphNew 0 8 #\x 0 8 #\x)))
+               cells)
+  cells))
 
-(define (cell-ref i)
-  (if (< MAXCELL i) ; An index larger than MAXCEL is assumbed to be an entity object.
-    ((entitiesGet i) 'glyph)
-    (vector-ref CELLS i)))
+(define (cellSet      i symb glyph) (vector-set! CELLS i (cons symb glyph)))
+(define (cellSetGlyph i glyph)      (set-cdr! (vector-ref CELLS i) glyph))
 
-(define AIR   MAXCELL)(cell-set! AIR       (glyphNew 0 0  CHAR-CTRL-@ 0 0 CHAR-CTRL-@))
-(define NOTHING 1000) (cell-set! NOTHING   (glyphNew 0 0  #\[ 0 0  #\]))
+; Get the cell index of this cell symbol
+(define (cellIndex symb)
+  (let ~ ((i 0)
+          (cell (vector-ref CELLS 0)))
+   (if (< MAXCELL i) #f
+   (if (eq? symb (car cell)) i
+   (~ (+ i 1) (vector-ref CELLS (+ i 1)))))))
+
+; Get the cell glyph given its index or symbol
+(define (cellGlyph i)
+  (if (integer? i)
+    (if (< MAXCELL i) ; An index larger than MAXCEL is assumbed to be an entity object.
+      ((entitiesGet i) 'glyph)
+      (cdr (vector-ref CELLS i)))
+    (let ((index (cellIndex i)))
+     (if index
+        (cdr (vector-ref CELLS index))
+        #f))))
+
+(cellSet MAXCELL 'air (glyphNew 0 0  CHAR-CTRL-@ 0 0 CHAR-CTRL-@))
 (load "ultima4.cells")
+
+; Some often used cell indices.
+(define cellXX (cellIndex 'xx))
+(define cellAIR (cellIndex 'air))
+(define cellWATER1 (cellIndex 'water1))
+(define cellBRICK (cellIndex 'brick))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -246,7 +271,7 @@
 (define (resetField)
  (set! FIELD
    (vector-vector-map!
-     (lambda (i) (vector -1 XX AIR))
+     (lambda (i) (vector -1 cellXX cellAIR))
      (make-vector-vector FieldSize FieldSize ()))))
 
 (resetField)
@@ -283,7 +308,7 @@
           (bot    (columnHeightBottom column)));1st implicit bottom cell in col
  ; Adjust the z coor down to the first explicit cell in the column
  (let findNonAir ((z (if (>= z top) (set! z (- top 1)))))
-   (if (or (not (eq? (columnRef column z) AIR))
+   (if (or (not (eq? (columnRef column z) cellAIR))
            (<= z bot))
        (if (pair? z) (car z) z) ; Return first in improper list of objects.
        (findNonAir (- z 1))))))
@@ -345,14 +370,14 @@
 
 (define (canvasRender y x)
  (let ((top (field-ref-top 1000 y x)))
-  (canvasCellSet y x (cell-ref (field-ref top y x)))
+  (canvasCellSet y x (cellGlyph (field-ref top y x)))
   (canvasHeightSet y x top)))
 
 ; Initialize the canvas with the Construct[tm].
 (define timeStart (time))
 
 (define (resetCanvas)
- (let ((defaultCell (cell-ref XX)))
+ (let ((defaultCell (cellGlyph 'xx)))
   (let ~ ((y 0)(x 0))
    (if (!= y FieldSize) (if (= x FieldSize) (~ (+ y 1) 0) (begin
     ; Each canvas entry consists of a map cell and its height.
@@ -391,10 +416,10 @@
  ((WinColumn 'home))
  (let ~ ((z 11))
   (let ((c (field-ref z y x)))
-   (if (eq? AIR c)
+   (if (eq? cellAIR c)
     (begin (WinColumnSetColor 0 8)
            (WinColumnPuts "()  "))
-    (begin (set! c (cell-ref c))
+    (begin (set! c (cellGlyph c))
            (WinColumnSetColor (glyph0bg c) (glyph0fg c))
            (WinColumnPutc (glyph0ch c))
            (WinColumnSetColor (glyph1bg c) (glyph1fg c))
@@ -521,7 +546,7 @@
         (let ((c (field-ref z y x)))
           (apply setLoc loc) ; restore old location.
           c)))
-    (define cell BRICK)
+    (define cell cellBRICK)
     (define (gpsLook)
       (if (= dir 0) (list (+ z -1) y      x)
       (if (= dir 1) (list z        (++ y) (-- x))
@@ -565,19 +590,32 @@
 
 ; TODO: Implement coor+dir use new dir to field-ref location an dif > MAX_CELL ipc-write (force blah blah)
 
+(define SOLIDCELLS (list
+ (cellIndex 'xx)
+ (cellIndex 'mnts)
+ (cellIndex 'hills)
+ (cellIndex 'water0)
+ (cellIndex 'water1)
+ (cellIndex 'water2)
+ (cellIndex 'brickc)
+ (cellIndex 'column)
+ (cellIndex 'window)
+ (cellIndex 'doorl)))
+
 (define (walk dir)
  ((avatar 'face) dir) ; Turn avatar
  (let ((nextCell ((avatar 'look)))) ; Consider cell I'm walking into
    (if (< MAXCELL nextCell) ; Cell I'm walking into is probably an entity
-    (begin
-     ((ipc 'qwrite) `(force ,@((avatar 'gpsLook)) ,dir 10))) ; Push the entity that's in my way.
-    (if (null? (memv nextCell (list XX MNTS HILLS WATER0 WATER1 WATER2 BRICKC COLUMN WINDOW DOORL)))
+    ; Push the entity that's in my way
+    ((ipc 'qwrite) `(force ,@((avatar 'gpsLook)) ,dir 10))
+    ; Walk normally
+    (if (null? (memv nextCell SOLIDCELLS))
      (begin
       ((avatar 'move))
       ((ipc 'qwrite) `(move ,DNA ,@((avatar 'gps))))
-      (if (eq? HELP (field-ref (avatar 'z) (avatar 'y) (avatar 'x)))  (help))
-      (if (eq? SNAKE (field-ref (avatar 'z) (avatar 'y) (avatar 'x))) (thread (snake-random)))
-      (if (eqv? BRIT2 (field-base-ref (avatar 'z) (avatar 'y) (avatar 'x))) (thread (spawnKitty)))
+      (if (eq? (cellIndex 'help) (field-ref (avatar 'z) (avatar 'y) (avatar 'x)))  (help))
+      (if (eq? (cellIndex 'snake) (field-ref (avatar 'z) (avatar 'y) (avatar 'x))) (thread (snake-random)))
+      (if (eqv? (cellIndex 'brit2) (field-base-ref (avatar 'z) (avatar 'y) (avatar 'x))) (thread (spawnKitty)))
       ;(WinConsoleWrite (fieldColumn (avatar 'y) (avatar 'x)) (field-ref (avatar 'z) (avatar 'y) (avatar 'x)))
       ; Dump our coordinates.
       ((WinStatus 'puts) "\r\n")
@@ -861,14 +899,10 @@
 ; so create a simpler 256x25 array of cell numbers.
 (define U4MapVector
  (let ((fd (open "ultima4.map"))
-       (timeStart (time))
-       (vec (make-vector 65536 DIRT)))
+       (vec (make-vector 65536)))
   (let ~ ((i 0))
-     (if (= i 65536)
-      (begin ; return the vector
-       (WinConsoleDisplay "\r\nInitialized U4MapVector " (- (time) timeStart) "s.")
-       vec)
-      (begin
+     (if (= i 65536) vec ; Return the vector
+     (begin
         (vector-set! vec
                  (+ (* 256 (+ (modulo (/ i 32) 32) (* (/ i 8192) 32)))
                     (+ (modulo i 32) (* (modulo (/ i 1024) 8) 32)))
@@ -906,7 +940,7 @@
    (let ((index (begin (seek fdi (+ (/ x 16) (* (/ y 16) 16)))
                        (+ 0 (read-char fdi)))))
     (setCell 2 y x 
-      (if (= 255 index) WATER1 (begin
+      (if (= 255 index) cellWATER1 (begin
         (seek fdm (+ (* index 256) (modulo x 16) (* (modulo y 16) 16)))
         (+ 0 (read-char fdm))))))
    (~ y (+ x 1))))))))
@@ -916,10 +950,10 @@
 (define updateFieldBlocks (let ((nextCell 99)) (lambda (y0 x0)
   (letrec ((y1 (+ FieldBlockSize y0)) ; Lower left map coordinates of block
            (x1 (+ FieldBlockSize x0))
-           (cell (set! nextCell (+ 1 nextCell)))
+           (cellGlyph (set! nextCell (+ 1 nextCell)))
            (glyph (glyphNew 0 (+ 1 (modulo cell 7) 1) (integer->char (+ 48 (/ (- cell 100)      10)))
                             0 (+ 1 (modulo cell 7) 1) (integer->char (+ 48 (modulo (- cell 100) 10))))))
-   (cell-set! cell glyph)
+   (cellSet cell glyph)
    (loop2 y0 y1 x0 x1 (lambda (y x) (setCell 0 y x cell))) ))))
 
 (define (inUltima4Range? y x) (and (<= 0 y) (< y U4Size) (<= 0 x) (< x U4Size)))
@@ -947,22 +981,27 @@
                       (list 0 y x)
                       (list 0 (+ 20 (* (/ y U4MapCellSize) U4MapCellSize))
                               (+ 20 (* (/ x U4MapCellSize) U4MapCellSize))))))
-          (if (< dist 100) (U4MapCell yy xx) HELP)
+          (if (< dist 100) (U4MapCell yy xx) (cellIndex 'help))
           )))
       (~ y (+ x 1)))))))
-
-;(if (not (null? (memv c (list FOREST BUSHES)))) (setCell 2 y x (U4MapCell y x))) ; Forest trees are tall.
 
 (define (updateFieldBlocksU4 y0 x0)
   (loop2 y0 (+ y0 FieldBlockSize)
          x0 (+ x0 FieldBlockSize)
      (lambda (y x)
         (if (inUltima4Range? y x)
-          (if (inUltima4RangeLcb1? y x)
-            (setCell 1 y x (U4Lcb1MapCell (- y (* 107 U4MapCellSize)) (- x (* 86 U4MapCellSize)))) ; LB castle
+          (begin
+            (if (inUltima4RangeLcb1? y x)
+              (setCell 1 y x (U4Lcb1MapCell (- y (* 107 U4MapCellSize)) (- x (* 86 U4MapCellSize)))) ; LB castle
             (if (inUltima4RangeBritain? y x)
               (setCell 1 y x (U4BritainMapCell (- y (* 106 U4MapCellSize)) (- x (* 82 U4MapCellSize)))) ; Britain
-              (setCell 1 y x (U4MapCell (/ y U4MapCellSize) (/ x U4MapCellSize))))) ; Regular cell
+            (letrec ((ty (- y (* (/ y U4MapCellSize) U4MapCellSize) (/ U4MapCellSize 2)))
+                     (tx (- x (* (/ x U4MapCellSize) U4MapCellSize) (/ U4MapCellSize 2)))
+                     (dist (sqrt (+ (* ty ty) (* tx tx)))))
+               (setCell 1 y x
+                 (if (and #f (= 0 (random 6)) (> dist 14)) ; border of cells get random adjacent glyphs.
+                     79
+                     (U4MapCell (/ y U4MapCellSize) (/ x U4MapCellSize)))))))) ; Regular cell
           (setCell 1 y x NOTHING)))))
 
 ; Field block updater.
@@ -970,13 +1009,14 @@
  (sleep 500)
  (letrec ((avty (avatar 'y))
           (avtx (avatar 'x))
-          (blky (/ (if (< avty 0) (- avty FieldBlockSize) avty) FieldBlockSize))
-          (blkx (/ (if (< avtx 0) (- avtx FieldBlockSize) avtx) FieldBlockSize)))
+          (blky (+ (/ (if (< avty 0) (- avty FieldBlockSize) avty) FieldBlockSize) -0)) ; TODO Field block synchronization is off.  On startup loads twice.  If ofset is -1, doesn't cache correctly with avatar movement.
+          (blkx (+ (/ (if (< avtx 0) (- avtx FieldBlockSize) avtx) FieldBlockSize) -0)))
   ; Create the first block list and load each block.  Occurs once.
   (if (null? FieldBlockCoordinates ) (begin
      (set! FieldBlockCoordinates (fieldCreateBlockList blky blkx))
      (map (lambda (b) (updateFieldBlocksU4 (* FieldBlockSize (car b)) (* FieldBlockSize (cdr b))))
           FieldBlockCoordinates)))
+  ; Forever updated the field blocks.
   (let ((bounds (append (fieldTopBottomBuffer avty avtx)
                         (fieldLeftRightBuffer avty avtx))))
    (if (pair? bounds) (begin
@@ -1074,7 +1114,7 @@
 (setButton CHAR-CTRL-L '(begin (viewportReset (avatar 'y) (avatar 'x)) ((WinChat 'repaint))))
 (setButton CHAR-CTRL-M '(begin ((WinStatus 'toggle)) ((WinColumn 'toggle))))
 (setButton CHAR-CTRL-Q '(set! state 'done))
-(setButton #\d '((ipc 'qwrite) `(dropCell ,(avatar 'y) ,(avatar 'x) BRICK)))
+(setButton #\d '((ipc 'qwrite) `(dropCell ,(avatar 'y) ,(avatar 'x) (cellIndex 'brick))))
 (setButton #\g 
    '(let ((o (field-ref (avatar 'z) (avatar 'y) (avatar 'x))))
      (field-delete!  (avatar 'z) (avatar 'y) (avatar 'x) o)
@@ -1425,7 +1465,8 @@
 
 ; Create ipc object.  Pass in a debug message output port.
 ; for production world an 'empty' port is passed.
-(define ipc (Ipc WinConsoleDisplay)) ; WinChatDisplay
+(define ipc (Ipc WinConsoleDisplay))
+;(define ipc (Ipc WinChatDisplay))
 
 ; Always read and evaluate everything from IPC.
 (thread  (let ~ () 
@@ -1462,8 +1503,8 @@
 (vector-set! SIGNALHANDLERS 6 (lambda () (say "signal 6 ABRT")  (shutdown)))
 (signal 6)
 
-(vector-set! SIGNALHANDLERS 13 (lambda () (say "signal 13 PIPE")  (shutdown)))
-(signal 13)
+;(vector-set! SIGNALHANDLERS 13 (lambda () (say "signal 13 PIPE")  (shutdown)))
+;(signal 13)
 
 (vector-set! SIGNALHANDLERS 15 (lambda () (say "signal 15 TERM")  (shutdown)))
 (signal 15)
@@ -1473,7 +1514,7 @@
  (saySystem (string
      (avatar 'name)
      " says "
-     (vector-random #("*PUSH* *SQUIRT* *SPANK* *WAAAAAAAAA*" "*All Worldlians Want to Be Borned*" "*Happy Birthday*" "*I thought you were in Hong Kong*")))))
+     (vector-random #("*PUSH* *SQUIRT* *SPANK* *WAAAAAAAAA*" "*All Worldlians Want to Get Borned*" "*Happy Birthday*" "*I thought you were in Hong Kong*")))))
 
 (define (sayByeBye)
   (saySystem (string (avatar 'name) " exits")))

@@ -3,6 +3,7 @@
 #include "debug.h"
 
 #include <assert.h>
+#include <sys/stat.h>
 #include "sys.h"
 
 const int MaxSemaphoreCount=64;
@@ -223,15 +224,15 @@ Int wscmWriteR (Obj a, long islist, FILE *stream, Int max) {
 			break;
 		case TPORT:
 		case TSOCKET:
-			count += fprintf(stream, "#SOCKET< DESC ");
+			count += fprintf(stream, "#SOCKET<DESC:");
 			count += wscmWriteR(memVectorObject(a, 0), 0, stream, max);
-			count += fprintf(stream, "  ADDR ");
+			count += fprintf(stream, " ADDR:");
 			count += wscmWriteR(memVectorObject(a, 1), 0, stream, max);
-			count += fprintf(stream, "  PORT ");
+			count += fprintf(stream, " PORT:");
 			count += wscmWriteR(memVectorObject(a, 2), 0, stream, max);
-			count += fprintf(stream, "  STATE ");
+			count += fprintf(stream, " STATE:");
 			count += wscmWriteR(memVectorObject(a, 3), 0, stream, max);
-			count += fprintf(stream, "  NEXT ");
+			count += fprintf(stream, " NEXT:");
 			count += wscmWriteR(memVectorObject(a, 4), 0, stream, max);
 			count += fprintf(stream, ">");
 			break;
@@ -1882,7 +1883,7 @@ void sysOpen (void) {
 	if (wscmAssertArgumentCount(1, __func__)) return;
 	r2=pop(); /* Filename */
 	memcpy(name, r2, memObjectLength(r2));
-	r1 = (Obj)(Int)open(name, O_CREAT|O_RDWR);
+	r1 = (Obj)(Int)open(name, O_CREAT|O_RDWR, S_IRUSR|S_IWUSR);
 	if ((Int)r1==-1) {
 		fprintf (stderr, "ERROR: sysOpen() Unable to open local file.");
 		r0 = false;
