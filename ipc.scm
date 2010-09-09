@@ -115,12 +115,12 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; IPC
 ;;
-;; Moving from star-topology to tree.  The ipc object will connect to the
-;; lowest port number available and setup a listener for incomming child
-;; connections.  It will also scan down from its port for a parent to connect
-;; to.  The lowest port connection will never have a parent connection.  Any
-;; other port will attempt to find a parent and if none found will try to grab
-;; the 'parent' port.  If successful it will 'dis-own' its children and become
+;; Tree topology IPC network.  The ipc object will connect to the lowest
+;; port number available and setup a listener for incomming child conections.
+;; It will also scan down from its port for a parent to connect to.  The
+;; lowest port connection will never have a parent connection.  Any other
+;; port will attempt to find a parent and if none found will try to grab the
+;; 'parent' port.  If successful it will 'dis-own' its children and become
 ;; the new parent.  The disowned children will need to find new parents.
 ;;
 ;; Rather than a time stamp, clients will only connect to ports below it.
