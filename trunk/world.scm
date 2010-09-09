@@ -5,7 +5,7 @@
 (define VOICEDELIMETER " ")
 (define DNA 0)
 
-(if QUIETLOGIN (load "ipc2.scm" )(load "ipc.scm"))
+(load "ipc.scm")
 (load "window.scm")
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -97,7 +97,7 @@
 
 (define CELLS
  (let ((cells (make-vector (+ 1 MAXCELL))))
-  (vector-map! (lambda (i) (cons 'NOTHING (glyphNew 0 8 #\x 0 8 #\x)))
+  (vector-map! (lambda (i) (cons 'NOTHING (glyphNew 0 7 #\x 0 7 #\x)))
                cells)
   cells))
 

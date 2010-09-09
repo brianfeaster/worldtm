@@ -158,6 +158,9 @@
 (define (length l) (if (null? l) 0 (+ 1 (length (cdr l)))))
 (define (last l) (if (pair? l) (if (null? (cdr l)) (car l) (last (cdr l))) l)) 
 
+(define (car-string str) (string-ref str 0))
+(define (cdr-string str) (substring str 1 (string-length str)))
+
 (define (eqv? a b)
  (or (eq? a b)        ; Pointer (#\a #t #f () #() "")
      (= a b)          ; Numeric 1
@@ -169,33 +172,6 @@
           (pair? l2)
           (equal? (car l1) (car l2))
           (equal? (cdr l1) (cdr l2)))))
-
-(define (car-string str) (string-ref str 0))
-(define (cdr-string str) (substring str 1 (string-length str)))
-
-(define (string->list s)
- (let ~ ((i 0)
-         (l (string-length s)))
-  (if (= i l) '()
-      (cons (string-ref s i) (~ (+ i 1) l)))))
-
-(define (vector->list v)
- (let ~ ((i 0)
-         (l (vector-length v)))
-  (if (= i l) '()
-      (cons (vector-ref v i) (~ (+ i 1) l)))))
-
-; Returns a pair containing the string split on the first delimeter character.
-;   (strtok "abc-123" #\-)  =>  ("abc" . "123")
-;   (strtok "abc=123" #\-)  =>  ("abc=123")
-(define (strtok str delimeter)
- (let ((len (string-length str)))
- (let ~ ((i 0))
-   (if (= i len) (cons str ())
-   (if (eq? (string-ref str i) delimeter)
-       (cons (substring str 0 i)
-             (substring str (+ i 1) len))
-   (~ (+ i 1)))))))
 
 (define (memq o l)
  (if (null? l) ()
@@ -226,6 +202,30 @@
  (if (null? l) ()
   (if (equal? o (caar l)) (car l)
    (assoc o (cdr l)))))
+
+(define (string->list s)
+ (let ~ ((i 0)
+         (l (string-length s)))
+  (if (= i l) '()
+      (cons (string-ref s i) (~ (+ i 1) l)))))
+
+(define (vector->list v)
+ (let ~ ((i 0)
+         (l (vector-length v)))
+  (if (= i l) '()
+      (cons (vector-ref v i) (~ (+ i 1) l)))))
+
+; Returns a pair containing the string split on the first delimeter character.
+;   (strtok "abc-123" #\-)  =>  ("abc" . "123")
+;   (strtok "abc=123" #\-)  =>  ("abc=123")
+(define (strtok str delimeter)
+ (let ((len (string-length str)))
+ (let ~ ((i 0))
+   (if (= i len) (cons str ())
+   (if (eq? (string-ref str i) delimeter)
+       (cons (substring str 0 i)
+             (substring str (+ i 1) len))
+   (~ (+ i 1)))))))
 
 (define (make-vector-vector y x a)
  (let ((v (make-vector y ())))
