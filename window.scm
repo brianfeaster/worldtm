@@ -329,21 +329,40 @@
    ;;
    (define Buffer (let ((parent self)) (lambda ()
      (define (self msg) (eval msg))
-     (define BUFF ()) ; List of every line sent.
+     (define Buffer (list "")) ; List of every line sent.
+     (define (parseString str)
+       (let ~ ((charList (string->list str)) ; List of chars to parse
+               (line (car Buffer)))          ; Current text line
+          (if (null? charList)
+            (set-car! Buffer line) ; Save currently parsed line back to buffer.
+            (let ((ch (car charList)))
+              (if (pair? (memq ch (list RETURN NEWLINE)))
+                (begin
+                  (if (not (eq? line ""))
+                    (set! Buffer (cons "" (cons line (cdr Buffer))))) ; Add new line to line bufer
+                  (set! line ""))
+                (begin
+                  (set! line (string line ch)))) ; Add char to parsed line
+              (~ (cdr charList)
+                 line)))))
+     (define (redrawBuffer)
+       (let ~ ((c Wheight) (b Buffer))
+         (if (or (= c 1) (null? (cdr b)))
+           (home)
+           (~ (- c 1) (cdr b)))
+         (if (not (eq? "" (car b)))
+           (begin
+             (if (or (!= TY 0) (!= TX 0)) (begin (return) (newline))) ; Don't newline if home
+             ((parent 'puts) (car b))))))
      (define (puts str)
-       (set! BUFF (cons str BUFF))
+       (parseString str)
        ((parent 'puts) str))
      (define (resize h w)
        ((parent 'resize) h w)
-       (let ~ ((c Wheight) (b BUFF))
-         (if (or (<= c 0) (null? (cdr b)))
-           (home)
-           (~ (- c 1)
-              (if (null? b) () (cdr b))))
-         ((parent 'puts) (car b))))
+       (redrawBuffer))
      (define (moveresize y x h w)
        ((parent 'moveresize) y x h w)
-       (for-each (parent 'puts) BUFF))
+       (redrawBuffer))
      self)))
    ;;
    ;; Buffer_subclass
