@@ -16,9 +16,9 @@
 (define Terminal (Terminal))
 
 ; Chat window.
-(define WinChat ((Terminal 'WindowNew)
+(define WinChat ((Terminal 'BufferNew)
   0 0
-  (- (Terminal 'THeight) 1)  (Terminal 'TWidth)
+  (- (Terminal 'Theight) 1)  (Terminal 'Twidth)
   #x0f))
 (define WinChatPutc (WinChat 'putc))
 (define WinChatPuts (WinChat 'puts))
@@ -32,7 +32,7 @@
 ; Console window
 (define WinConsole ((Terminal 'WindowNew)
   0 0
-  (- (Terminal 'THeight) 1)  (Terminal 'TWidth)
+  (- (Terminal 'Theight) 1)  (Terminal 'Twidth)
   #x02))
 (define WinConsolePuts (WinConsole 'puts))
 (define (WinConsoleDisplay . e) (for-each (lambda (x) (WinConsolePuts (display->string x))) e))
@@ -41,8 +41,8 @@
 
 ; Input Window
 (define WinInput ((Terminal 'WindowNew)
-  (- (Terminal 'THeight) 1) 0
-  1 (Terminal 'TWidth)
+  (- (Terminal 'Theight) 1) 0
+  1 (Terminal 'Twidth)
   #x4a))
 (define WinInputPutc (WinInput 'putc))
 (define WinInputPuts (WinInput 'puts))
@@ -50,10 +50,10 @@
 
 ; Map Window. Initial map size is 20 or terminal width/height.
 (define WinMap
- (let ((MapSize (min 28 (min (- (Terminal 'THeight) 1)
-                             (/ (Terminal 'TWidth) 2)))))
+ (let ((MapSize (min 28 (min (- (Terminal 'Theight) 1)
+                             (/ (Terminal 'Twidth) 2)))))
   ((Terminal 'WindowNew)
-    0 (- (Terminal 'TWidth) (* MapSize 2)) ; Position of the map window
+    0 (- (Terminal 'Twidth) (* MapSize 2)) ; Position of the map window
     (+ MapSize 0) (* 2 MapSize)
     #x17 'NOREFRESH)))
 ((WinMap 'toggle))
@@ -67,7 +67,7 @@
 
 ;; Stats window
 (define WinStatus ((Terminal 'WindowNew)
-   (WinMap 'Y0) (- (Terminal 'TWidth) 16)
+   (WinMap 'Y0) (- (Terminal 'Twidth) 16)
    1            14
    #x4e))
 ((WinStatus 'toggle))
@@ -400,8 +400,8 @@
 (define PortW 0)
 
 (define (viewportReset y x)
- (set! PortH (WinMap 'WHeight)) ; Adjust Viewport dimensions.
- (set! PortW (/ (WinMap 'WWidth) 2))
+ (set! PortH (WinMap 'Wheight)) ; Adjust Viewport dimensions.
+ (set! PortW (/ (WinMap 'Wwidth) 2))
  (set! PortY (- y (/ PortH 2)))     ; Center Viewport around Avatar.
  (set! PortX (- x (/ PortW 2)))
  ;((WinMap 'home))
@@ -733,18 +733,18 @@
 (define (circularize . val)
  (set! val (not (null? val))) ; Default to disabling circular corners of map.
  (let ~ ((y 0)(x 0))
-  (if (< y (/ (WinMap 'WHeight) 2))
-  (if (= x (/ (WinMap 'WWidth) 2)) (~ (+ y 1) 0)
+  (if (< y (/ (WinMap 'Wheight) 2))
+  (if (= x (/ (WinMap 'Wwidth) 2)) (~ (+ y 1) 0)
    (begin
-    (if (> (sqrt (+ (* 4 (^2 (- y (/ (WinMap 'WHeight) 2))))
-                    (^2 (- x  (/ (WinMap 'WWidth) 2)))))
-           (+ 0 (WinMap 'WHeight)))
+    (if (> (sqrt (+ (* 4 (^2 (- y (/ (WinMap 'Wheight) 2))))
+                    (^2 (- x  (/ (WinMap 'Wwidth) 2)))))
+           (+ 0 (WinMap 'Wheight)))
         (begin 
           ((WinMap 'alpha) y x val)
-          ((WinMap 'alpha) y (- (WinMap 'WWidth) x 1) val)
-          ((WinMap 'alpha) (- (WinMap 'WHeight) y 1) x val)
-          ((WinMap 'alpha) (- (WinMap 'WHeight) y 1)
-                           (- (WinMap 'WWidth) x 1) val)
+          ((WinMap 'alpha) y (- (WinMap 'Wwidth) x 1) val)
+          ((WinMap 'alpha) (- (WinMap 'Wheight) y 1) x val)
+          ((WinMap 'alpha) (- (WinMap 'Wheight) y 1)
+                           (- (WinMap 'Wwidth) x 1) val)
           ))
     (~ y (+ x 1)))))))
 
@@ -754,31 +754,31 @@
 (define deltaMoveTime (+ 62 (utime))) ; Double click 1/16 sec.
 
 (define (winMapBigger)
- (if (< (WinMap 'WHeight) (Terminal 'THeight)) (begin
+ (if (< (WinMap 'Wheight) (Terminal 'Theight)) (begin
   ;((WinMap 'toggle))
   ((WinMap 'home))
   (if (< (utime) deltaMoveTime)
     ((WinMap 'moveresize) ; Full resize.
-       0 (- (Terminal 'TWidth) (WinMap 'WWidth) 2)
-             (min (/ (Terminal 'TWidth) 2) (- (Terminal 'THeight) 1))
-       (* 2  (min (/ (Terminal 'TWidth) 2) (- (Terminal 'THeight) 1)))))
+       0 (- (Terminal 'Twidth) (WinMap 'Wwidth) 2)
+             (min (/ (Terminal 'Twidth) 2) (- (Terminal 'Theight) 1))
+       (* 2  (min (/ (Terminal 'Twidth) 2) (- (Terminal 'Theight) 1)))))
     ((WinMap 'moveresize) ; Resize by one.
-       0 (- (Terminal 'TWidth) (WinMap 'WWidth) 2)
-       (+ 1 (WinMap 'WHeight))
-       (+ 2 (WinMap 'WWidth)))
+       0 (- (Terminal 'Twidth) (WinMap 'Wwidth) 2)
+       (+ 1 (WinMap 'Wheight))
+       (+ 2 (WinMap 'Wwidth)))
   (circularize)
   (viewportReset (avatar 'y) (avatar 'x))
   ;((WinMap 'toggle))
   (set! deltaMoveTime (+ 250 (utime))))))
 
 (define (winMapSmaller)
- (if (< 5 (WinMap 'WHeight)) (begin
+ (if (< 5 (WinMap 'Wheight)) (begin
   ;((WinMap 'toggle))
   ((WinMap 'home))
   ((WinMap 'moveresize)
-     0 (- (Terminal 'TWidth) (WinMap 'WWidth) -2)
-     (+ -1 (WinMap 'WHeight))
-     (+ -2 (WinMap 'WWidth)))
+     0 (- (Terminal 'Twidth) (WinMap 'Wwidth) -2)
+     (+ -1 (WinMap 'Wheight))
+     (+ -2 (WinMap 'Wwidth)))
   (circularize)
   (viewportReset (avatar 'y) (avatar 'x))
   ;((WinMap 'toggle))
@@ -809,7 +809,7 @@
 
 
 ;; Map column debug window
-(define WinColumn ((Terminal 'WindowNew) 1 (- (Terminal 'TWidth) 4) 18 4 #x5b))
+(define WinColumn ((Terminal 'WindowNew) 1 (- (Terminal 'Twidth) 4) 18 4 #x5b))
 ((WinColumn 'toggle))
 (define WinColumnPutc (WinColumn 'putc))
 (define (WinColumnPuts . l) (for-each (WinColumn 'puts) l))
@@ -820,7 +820,7 @@
 (define (welcome)
  (define WinMarquee
   ((Terminal 'WindowNew)
-    (/ (Terminal 'THeight) 3)  (- (/ (Terminal 'TWidth) 2) 12)
+    (/ (Terminal 'Theight) 3)  (- (/ (Terminal 'Twidth) 2) 12)
     3  24
     #x0f))
  (define WinMarqueePuts (WinMarquee 'puts))
@@ -1130,6 +1130,7 @@
 (setButton CHAR-CTRL-C '((WinConsole 'toggle)))
 ;(setButton CHAR-CTRL-K '((ipc 'qwrite) `(set! FIELD ,FIELD))) ; Send my plane out to IPC.
 ;(setButton #\1 '(thread (sigwinch)))
+(setButton #\1 '((WinChat 'resize) (WinChat 'Wheight) (WinChat 'Wwidth)))
 ;(setButton CHAR-CTRL-_ '(walk 4)) ; Sent by backspace?
 
 
@@ -1250,7 +1251,7 @@
 (define (boxInput title)
  (define box
   ((Terminal 'WindowNew)
-    (/ (Terminal 'THeight) 2)  (- (/ (Terminal 'TWidth) 2) 10)
+    (/ (Terminal 'Theight) 2)  (- (/ (Terminal 'Twidth) 2) 10)
     3  20
     #x0f))
  (define puts (box 'puts))
@@ -1336,12 +1337,12 @@
 (define (handleTerminalResize)
   (WinChatDisplay "\r\n" (terminal-size))
   ((Terminal 'ResetTerminal))
-  ((WinChat 'resize)  (- (Terminal 'THeight) 1) (Terminal 'TWidth))
-  ((WinMap 'move)     0 (- (Terminal 'TWidth) (WinMap 'WWidth) 2))
-  ((WinColumn 'move)  1 (- (Terminal 'TWidth) 2) )
-  ((WinStatus 'move)  (WinMap 'Y0) (- (Terminal 'TWidth) 12))
-  ((WinInput 'resize) 1 (Terminal 'TWidth))
-  ((WinInput 'move)   (- (Terminal 'THeight) 1) 0))
+  ((WinChat 'resize)  (- (Terminal 'Theight) 1) (Terminal 'Twidth))
+  ((WinMap 'move)     0 (- (Terminal 'Twidth) (WinMap 'Wwidth) 2))
+  ((WinColumn 'move)  1 (- (Terminal 'Twidth) 2) )
+  ((WinStatus 'move)  (WinMap 'Y0) (- (Terminal 'Twidth) 12))
+  ((WinInput 'resize) 1 (Terminal 'Twidth))
+  ((WinInput 'move)   (- (Terminal 'Theight) 1) 0))
 
 (define sigwinch
  (let ((sig28Semaphore (open-semaphore 1)))
@@ -1523,7 +1524,7 @@
   (or QUIETLOGIN (sayByeBye))
   ((ipc 'qwrite) `(die ,DNA)) ; Kill avatar's entity
   (sleep 1000) ; wait for ipc to flush
-  (displayl "\e[" (Terminal 'THeight) "H\r\n\e[0m\e[?25h")
+  (displayl "\e[" (Terminal 'Theight) "H\r\n\e[0m\e[?25h")
   (quit))
 
 (or QUIETLOGIN (sayHelloWorld))
