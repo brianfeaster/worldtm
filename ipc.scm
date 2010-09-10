@@ -49,7 +49,7 @@
  ; socket as well as send out any queued messages.
  (define (spawnCommunicators stream)
    (Displayl "\r\n::(spawnCommunicators)  stream " stream)
-   (display "'(World 1 0 2)" stream) ; Identify myself to peer.
+   (display "'(World 5 2 0)" stream) ; Identify myself to peer.
    (let ((peer (peerCreate stream))) ; Create a peer: #(socket '(queue) queue-semaphore)
      (peersAdd peer)
      ; Read from peer and forward to every other peer's queue.

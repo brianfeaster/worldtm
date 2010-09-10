@@ -254,6 +254,20 @@
      (begin (f (car l))
             (for-each f (cdr l)))))
 
+(define (loop a fn)
+ (let ~ ((i 0))
+  (if (!= i a)
+   (begin
+     (fn i)
+     (~ (+ i 1))))))
+
+(define (loop1 a b fn)
+ (let ~ ((a a))
+  (if (!= a b)
+   (begin
+     (fn a)
+     (~ (+ a 1))))))
+
 (define (loop2 y0 y1 x0 x1 fn)
  (let ~ ((y y0) (x x0))
   (if (!= y y1)
