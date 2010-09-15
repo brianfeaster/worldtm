@@ -2904,7 +2904,7 @@ void wscmInitialize (void) {
 	wscmCreateRead();  wscmDefine("read");
 	wscmCreateRepl();  wscmDefine("repl2");
 	r0=semaphores;  wscmDefine("semaphores");
-	r0=eof; wscmDefine("eof");
+	r0=eof; wscmDefine("#eof");
 
 	/* Signal handler vector */
 	i=32;
