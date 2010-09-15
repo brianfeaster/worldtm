@@ -2105,3 +2105,22 @@ Brian i'm thinking the window should support both direct character drawing and "
 Brian maybe even go so far as to support editor like functionality
 Brian insert line, delete line, scroll window, append/del char
 Brian i'm liking this idea
+
+
+Mon Sep 13 13:24:28 EDT 2010
+
+block 54 43
+block 54 44
+block 55 43
+block 55 44
+block 53 42
+block 53 43
+block 54 42
+
+
+Wed Sep 15 01:00:14 EDT 2010
+
+Rewriting the IPC module with properly abstracted queues and a better organized
+class.  Each IPC node will once again have a listener socket but it will close
+the connection after reading one expression.  This will be used by agent
+processes that need to efficiently send expressions to individual processes.

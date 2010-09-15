@@ -4,6 +4,7 @@
 (define KITTEHBRAIN  #f)
 (define VOICEDELIMETER " ")
 (define DNA 0)
+(define ActivityTime (time))
 
 (load "ipc.scm")
 (load "window.scm")
@@ -67,10 +68,11 @@
 
 ;; Stats window
 (define WinStatus ((Terminal 'WindowNew)
-   (WinMap 'Y0) (- (Terminal 'Twidth) 16)
-   1            14
+   (WinMap 'Y0) (- (Terminal 'Twidth) 17)
+   2            14
    #x4e))
 ((WinStatus 'toggle))
+(define (WinStatusDisplay . e) (for-each (lambda (x) ((WinStatus 'puts) (display->string x))) e))
 
 
 
@@ -615,15 +617,15 @@
       ((ipc 'qwrite) `(move ,DNA ,@((avatar 'gps))))
       (if (eq? (cellIndex 'help) (field-ref (avatar 'z) (avatar 'y) (avatar 'x)))  (help))
       (if (eq? (cellIndex 'snake) (field-ref (avatar 'z) (avatar 'y) (avatar 'x))) (thread (snake-random)))
-      (if (eqv? (cellIndex 'brit2) (field-base-ref (avatar 'z) (avatar 'y) (avatar 'x))) (thread (spawnKitty)))
+      ;(if (eqv? (cellIndex 'brit2) (field-base-ref (avatar 'z) (avatar 'y) (avatar 'x))) (thread (spawnKitty)))
       ;(WinConsoleWrite (fieldColumn (avatar 'y) (avatar 'x)) (field-ref (avatar 'z) (avatar 'y) (avatar 'x)))
       ; Dump our coordinates.
-      ((WinStatus 'puts) "\r\n")
-      ((WinStatus 'puts) (number->string (avatar 'z) 16))
-      ((WinStatus 'puts) " ")
-      ((WinStatus 'puts) (number->string (avatar 'y) 16))
-      ((WinStatus 'puts) " ")
-      ((WinStatus 'puts) (number->string (avatar 'x) 16)))))))
+      (WinStatusDisplay "\r\n"
+         (number->string (avatar 'z) 16) " "
+         (number->string (avatar 'y) 16) " "
+         (number->string (avatar 'x) 16) "\r\n"
+         (number->string (/ (avatar 'y) FieldBlockSize) 16) " "
+         (number->string (/ (avatar 'x) FieldBlockSize) 16)))))))
 
 ; Change avatar color.  Will just cycle through all 16 avatar colors.
 (define (avatarColor)
@@ -638,7 +640,7 @@
   (who))
 
 (define (rollcall)
- ((ipc 'qwrite) `(if (!= DNA ,DNA) ((ipc 'qwrite) `(if (= DNA ,,DNA) (voice 0 10 (string ,(avatar 'name)" is present in world")))))))
+ ((ipc 'qwrite) `(if (!= DNA ,DNA) ((ipc 'qwrite) `(if (= DNA ,,DNA) (voice 0 10 (string ,(avatar 'name)" is present in world " ,(let ((t (- (time) ActivityTime))) (if (< t 60) (string (number->string t) "s")(string (number->string (/ t 60)) "m"))))))))))
  ;(WinChatSetColor #x0e)
  ;;(WinChatDisplay name))
  ;(WinChatSetColor #x07)
@@ -926,8 +928,8 @@
 
 ; Get the map cell in the direction from this location.
 (define (U4MapCellDir y x d)
- (U4MapCell (+ y (vector-ref #(0 -1 -1 -1  0  1 1 1) d))
-            (+ x (vector-ref #(1  1  0 -1 -1 -1 0 1) d))))
+ (U4MapCell (+ y (vector-ref #(0 -1 -1 -1  0  1 1 1 0) d))
+            (+ x (vector-ref #(1  1  0 -1 -1 -1 0 1 0) d))))
 
 ; I will load the ultima5 map some day.  The ovl is a 16x16
 ; array indexing the 16x16 cell arrays in the map file.
@@ -970,7 +972,7 @@
       (<= (* 82 U4MapCellSize) x)
       (< x (* 83 U4MapCellSize))))
 
-; Outdated?
+;-Outdated---------------------------------------------------
 (define (load-ultima-world44)
  (resetField)
   (let ~ ((y 0)(x 0)) (or (= y 256) (if (= x 256) (~ (+ y 1) 0) (begin
@@ -981,11 +983,12 @@
                       (list 0 y x)
                       (list 0 (+ 20 (* (/ y U4MapCellSize) U4MapCellSize))
                               (+ 20 (* (/ x U4MapCellSize) U4MapCellSize))))))
-          (if (< dist 100) (U4MapCell yy xx) (cellIndex 'help))
-          )))
+          (if (< dist 100) (U4MapCell yy xx) (cellIndex 'help)))))
       (~ y (+ x 1)))))))
+;-Outdated---------------------------------------------------
 
 (define (updateFieldBlocksU4 y0 x0)
+  (WinChatDisplay "block " (/ y0 FieldBlockSize) " " (/ x0 FieldBlockSize)  "\r\n")
   (loop2 y0 (+ y0 FieldBlockSize)
          x0 (+ x0 FieldBlockSize)
      (lambda (y x)
@@ -995,16 +998,22 @@
               (setCell 1 y x (U4Lcb1MapCell (- y (* 107 U4MapCellSize)) (- x (* 86 U4MapCellSize)))) ; LB castle
             (if (inUltima4RangeBritain? y x)
               (setCell 1 y x (U4BritainMapCell (- y (* 106 U4MapCellSize)) (- x (* 82 U4MapCellSize)))) ; Britain
-            (letrec ((ty (- y (* (/ y U4MapCellSize) U4MapCellSize) (/ U4MapCellSize 2)))
+            (letrec ((ty (- y (* (/ y U4MapCellSize) U4MapCellSize) (/ U4MapCellSize 2))) ; Compute radius from center of block
                      (tx (- x (* (/ x U4MapCellSize) U4MapCellSize) (/ U4MapCellSize 2)))
                      (dist (sqrt (+ (* ty ty) (* tx tx)))))
                (setCell 1 y x
-                 (if (and #f (= 0 (random 6)) (> dist 14)) ; border of cells get random adjacent glyphs.
-                     79
+                 (if (and #f (= 0 (random 2)) (> dist 15)) ; DISABLED border of cells get random adjacent glyphs.
+                     (U4MapCellDir (/ y U4MapCellSize) (/ x U4MapCellSize)
+                       (let ((m (- (modulo y U4MapCellSize) (/ U4MapCellSize 2))) ; Translate block coord to origin
+                             (n (- (modulo x U4MapCellSize) (/ U4MapCellSize 2))))
+                        (if (< m -9) (if (< n -9) 3 (if (< 9 n) 1 2))
+                        (if (< 10 m) (if (< n -9) 5 (if (< 9 n) 7 6))
+                        (if (< n -9) 4 (if (< 9 n) 0 8))))))
                      (U4MapCell (/ y U4MapCellSize) (/ x U4MapCellSize)))))))) ; Regular cell
           (setCell 1 y x NOTHING)))))
 
-; Field block updater.
+; Field block updater.  This will eventually be replaced with
+; a map agent handler.
 (thread (let ~ ()
  (sleep 500)
  (letrec ((avty (avatar 'y))
@@ -1114,7 +1123,7 @@
 (setButton CHAR-CTRL-L '(begin (viewportReset (avatar 'y) (avatar 'x)) ((WinChat 'repaint))))
 (setButton CHAR-CTRL-M '(begin ((WinStatus 'toggle)) ((WinColumn 'toggle))))
 (setButton CHAR-CTRL-Q '(set! state 'done))
-(setButton #\d '((ipc 'qwrite) `(dropCell ,(avatar 'y) ,(avatar 'x) (cellIndex 'brick))))
+(setButton #\d '((ipc 'qwrite) `(dropCell ,(avatar 'y) ,(avatar 'x) (cellIndex 'campfire))))
 (setButton #\g 
    '(let ((o (field-ref (avatar 'z) (avatar 'y) (avatar 'x))))
      (field-delete!  (avatar 'z) (avatar 'y) (avatar 'x) o)
@@ -1126,7 +1135,7 @@
 (setButton #\Z '(circularize #t))
 (setButton #\q '(set! state 'done))
 (setButton #\Q '(set! state 'done))
-(setButton eof '(set! state 'done))
+(setButton #eof '(set! state 'done))
 (setButton CHAR-CTRL-C '((WinConsole 'toggle)))
 ;(setButton CHAR-CTRL-K '((ipc 'qwrite) `(set! FIELD ,FIELD))) ; Send my plane out to IPC.
 ;(setButton #\1 '(thread (sigwinch)))
@@ -1137,52 +1146,6 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Typing and talking
-
-(define replTalk
- (let ((talkInput ""))
-  (lambda (c)
-   (if (eq? c 'getBuffer) talkInput ; Return input buffer contents.
-   ; backspace
-   (if (or (eq? c CHAR-CTRL-H)
-           (eq? c CHAR-CTRL-_)
-           (eq? c CHAR-CTRL-?))
-       (begin
-        (if (not (eq? "" talkInput))
-         (begin ((WinInput 'backspace) #\ )
-                (set! talkInput (substring talkInput 0 (- (string-length talkInput) 1)))))
-        'talk)
-   ; Send Chatter
-   (if (or (eq? c RETURN) 
-           (eq? c NEWLINE))
-     (begin
-       ; Perform actions based on talk phrases.
-       (tankTheOperator talkInput)
-       ; Toggle help window if certain phrase entered
-       (if (string=? "?" talkInput) (help))
-       ; Send talk chatter to IPC or evaluate expression
-       (if (and (not (eq? "" talkInput))
-                (eq? #\: (string-ref talkInput 0)))
-           (begin (WinChatDisplay "\r\n")
-                  (WinChatDisplay talkInput)
-                  (WinChatDisplay "=>")
-                  (WinChatDisplay 
-                    (call/cc (lambda (c) ; Return here if an error occurs
-                       (vector-set! ERRORS (tid) c)
-                       (eval (read-string (cdr-string talkInput)))))))
-           (say talkInput))
-       (WinInputPuts "\r\n>")
-       (set! talkInput "")
-       'talk)
-   ; Quit chat mode.
-   (if (or (eq? c CHAR-ESC) ; Escape char
-           (eq? c CHAR-CTRL-I)) ; Tab char
-     (begin (WinInputPuts "\r\n")
-            'cmd)
-   (if (and (>= c #\ )(<= c #\~))
-       (begin (WinInputPutc c)
-              (set! talkInput (string talkInput c))
-              'talk)
-   'talk))))))))
 
 (define replTalk
  (let ((talkInput ""))
@@ -1244,6 +1207,7 @@
   (lambda ()
    (if (not (eq? state 'done)) ; Exit if state is done.
      (let ((c (read-char stdin)))
+       (set! ActivityTime (time))
        (if (eq? state 'talk) (set! state (replTalk c))
         (if (eq? state 'cmd) (set! state (replCmd c))))
        (wrepl))))))
@@ -1335,12 +1299,12 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Screen redraw signal handler
 (define (handleTerminalResize)
-  (WinChatDisplay "\r\n" (terminal-size))
+  ;(WinChatDisplay "\r\n" (terminal-size))
   ((Terminal 'ResetTerminal))
   ((WinChat 'resize)  (- (Terminal 'Theight) 1) (Terminal 'Twidth))
   ((WinMap 'move)     0 (- (Terminal 'Twidth) (WinMap 'Wwidth) 2))
   ((WinColumn 'move)  1 (- (Terminal 'Twidth) 2) )
-  ((WinStatus 'move)  (WinMap 'Y0) (- (Terminal 'Twidth) 12))
+  ((WinStatus 'move)  (WinMap 'Y0) (- (Terminal 'Twidth) 17))
   ((WinInput 'resize) 1 (Terminal 'Twidth))
   ((WinInput 'move)   (- (Terminal 'Theight) 1) 0))
 
@@ -1453,6 +1417,13 @@
       (glyphNew 0 15 (string-ref name 0)
                 0 15 (string-ref name 1))))))
 
+
+; Create ipc object.  Pass in a debug message output port.
+; for production world an 'empty' port is passed.
+(define ipc (Ipc WinConsoleDisplay))
+;(define ipc (Ipc WinChatDisplay))
+((ipc 'qwrite) '(who))
+
 ; Display some initial information
 (WinChatSetColor 0 11)
 ;((WinChat 'goto) 0 0)
@@ -1464,19 +1435,12 @@
 ; Move avatar to entrance of Lord British's castle
 ((avatar 'jump) (avatar 'z) (* 108 U4MapCellSize) (* 86 U4MapCellSize))
 
-; Create ipc object.  Pass in a debug message output port.
-; for production world an 'empty' port is passed.
-(define ipc (Ipc WinConsoleDisplay))
-;(define ipc (Ipc WinChatDisplay))
-
 ; Always read and evaluate everything from IPC.
 (thread  (let ~ () 
  (let ((sexp ((ipc 'qread))))
     (WinConsoleWrite sexp)
     (eval sexp)
     (~))))
-
-((ipc 'qwrite) '(who))
 
 (viewportReset (avatar 'y) (avatar 'x))
 ((WinMap 'toggle))

@@ -1,263 +1,162 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; IPC II
+;; IPC Object
 ;;
-;; Star topology.  Hub is always listening on the first port 7155.
+;; Star topology.  Hub is always listening on the first port 7155.  Each
+;; instance also has a "single connection one read" listener.
 ;;
-(define (Ipc Display . port)
- (define HubPort (if (null? port) 7155 (car port))) ; IPC HUB port
- (define HubSocket ()) ; HUB socket
- (define MsgQueueSemaphore (open-semaphore 0))
- (define MsgQueue (list 'empty))  ; Queues are (empty) (ignore 1st 2nd)
- (define Peers ())     ; Peers are a list of #(socket (queue) queue-semaphore)
+(define (Ipc Display . portNum)
+ (define (Displayl . l) (for-each Display l))
+ (define HubPort (if (null? portNum) 8155 (car portNum)))
+ (define HubSocket #eof) ; If not eof then this IPC instance is the hub socket.
+ (define PrivatePort (+ 1 HubPort))
+ (define PrivateSocket
+   (let ~ ()
+    (let ((s (open-socket PrivatePort)))
+     (if (port? s) s
+         (begin
+           (set! PrivatePort (+ 1 PrivatePort))
+           (if (< (+ 50 HubPort) PrivatePort)
+               (begin (display "ERROR: Ipc: exceeded maximum port")
+                      (quit))
+               (~)))))))
+
+ ; == Queue object ============================================================
+ (define (QueueCreate)
+   (let ((q (list () 'queue)))
+     (set-car! q (cdr q))
+     q))
+
+ (define (QueueAdd q e)
+   (let ((oldTail (car q))
+         (newTail (cons e ())))
+     (set-cdr! oldTail newTail)
+     (set-car! q newTail)))
+
+ (define (QueueGet q)
+   (if (eq? (car q) (cdr q)) (begin
+    (display "QueueGet on an empty queue!!!")
+    (quit)))
+   (set-cdr! q (cddr q))
+   (cadr q))
+
+ (define (QueueEmpty? q) (eq? (car q) (cdr q)))
+
+ ; == Peer structure ==========================================================
+ ; A peer is a  #(socket  message-queue  message-queue-semaphore)
+ (define (peerCreate s) (vector s (QueueCreate) (open-semaphore 0)))
+ (define (peerSocket p) (vector-ref p 0))
+ (define (peerQueue p) (vector-ref p 1))
+ (define (peerSemaphore p) (vector-ref p 2))
+
+ ; == Peer lists ==============================================================
+ (define PeerList ())
  (define PeersSemaphore (open-semaphore 1))
 
- (define (Displayl . l) (for-each Display l))
-
- (define (qwrite e) ; Append e to each peer's outgoing message queue.
-  (map (lambda (p)
-         (append! (vector-ref p 1) (list e))
-         (semaphore-up (peerSemaphore p)))
-        Peers)
-  (msgQueueAdd e))
-
- (define (qread)    ; Read from my incomming message queue.
-   (semaphore-down MsgQueueSemaphore)
-   (let ((e (cadr MsgQueue)))
-     (set! MsgQueue (cdr MsgQueue))
-     e))
-
- (define (msgQueueAdd e)
-   (append! MsgQueue (list e))
-   (semaphore-up MsgQueueSemaphore))
-  
  (define (peersAdd peer)
-   (set! Peers (cons peer Peers)))
+   (semaphore-down PeersSemaphore)
+   (set! PeerList (cons peer PeerList))
+   (semaphore-up PeersSemaphore))
 
  (define (peersDelete peer)
    (semaphore-down PeersSemaphore)
-   (set! Peers (list-delete Peers peer)) ; Remove this peer from the global peer list.
+   (set! PeerList (list-delete PeerList peer))
    (semaphore-up PeersSemaphore))
 
- ; Peers are #(socket list-of-messages message-sempahore-counter)
- (define (peerCreate s)
-   (vector s (list 'empty) (open-semaphore 0)))
- (define (peerSocket p) (vector-ref p 0))
- (define (peerMessages p) (vector-ref p 1))
- (define (peerSemaphore p) (vector-ref p 2))
+ ;=== Message_Queues ==========================================================
+ (define MsgQueue (QueueCreate))
+ (define MsgQueueSemaphore (open-semaphore 0))
 
- ; Spawn two threads that propogate any incomming messages on this
- ; socket as well as send out any queued messages.
- (define (spawnCommunicators stream)
-   (Displayl "\r\n::(spawnCommunicators)  stream " stream)
-   (display "'(World 5 2 0)" stream) ; Identify myself to peer.
-   (let ((peer (peerCreate stream))) ; Create a peer: #(socket '(queue) queue-semaphore)
-     (peersAdd peer)
-     ; Read from peer and forward to every other peer's queue.
-     (thread (let reader~ ((e (read (peerSocket peer))))
-       (if (eof-object? e)
-         (begin
-           (Display "\r\n::(spawnCommunicators) Removing peer " peer)
-           (peersDelete peer)
-           (vector-set! peer 0 #f) ; BF TODO Required to remove socket from peer?
-           (if (eof-object? HubSocket) (createHub)))
-         (begin
-           ; Relay message to every other peer
-           (map (lambda (p)
-                  (append! (peerMessages p) (list e))
-                  (semaphore-up (peerSemaphore p)))
-                (list-delete Peers peer))
-           ; Add message to my local IO queue
-           (msgQueueAdd e)
-           (reader~ (read (peerSocket peer)))))))
-     ; Write to peer anything in its queue.
-     (thread (let writer~ ()
-       (if (peerSocket peer)
-         (begin
-           (semaphore-down (peerSemaphore peer))
-           (write (cadr (peerMessages peer))
-                  (peerSocket peer))
-           (send " " (peerSocket peer))
-           (vector-set! peer 1 (cdr (peerMessages peer)))
-           (writer~)))))))
+ (define (qread)    ; Read from my incomming message queue.
+   (semaphore-down MsgQueueSemaphore)
+   (QueueGet MsgQueue))
+
+ ; Append e to each peer's outgoing message queue as well as my own.
+ (define (qwrite e)
+  (map (lambda (p)
+         (QueueAdd (peerQueue p) e)
+         (semaphore-up (peerSemaphore p)))
+       PeerList)
+  (msgQueueAdd e))
+
+ (define (msgQueueAdd e)
+   (QueueAdd MsgQueue e)
+   (semaphore-up MsgQueueSemaphore))
+
+ ; == Socket communication ====================================================
+
+ ; Read from peer's socket and add to this object's I/O queue as well as every
+ ; other queue in the peer list.
+ (define (peerReaderLoop peer)
+   (Displayl "\r\n::(peerReaderLoop) " peer "  ")
+   (let ~ ((e (read (peerSocket peer))))
+     (if (eof-object? e)
+       (begin
+         (peersDelete peer)
+         (vector-set! peer 0 #f)) ; BF TODO Required to remove socket from peer?
+       (begin
+         ; Relay message to every other peer
+         (map (lambda (p)
+                (QueueAdd (peerQueue p) e)
+                (semaphore-up (peerSemaphore p)))
+              (list-delete PeerList peer))
+         ; Add message to my local I/O queue
+         (msgQueueAdd e)
+         (~ (read (peerSocket peer)))))))
+
+ ; Write to peer's socket anything in its queue.
+ (define (peerWriterLoop peer)
+   (Displayl "\r\n::(peerWriterLoop) " peer "  ")
+   (let ~ ()
+     (if (peerSocket peer) (begin
+       (semaphore-down (peerSemaphore peer))
+       (write (QueueGet (peerQueue peer))
+              (peerSocket peer))
+       (send " " (peerSocket peer))
+       (~)))))
 
  (define (createHub)
    (set! HubSocket (open-socket HubPort))
-   (Displayl "\r\n::(createHub)  HubSocket=" HubSocket)
    (if (eof-object? HubSocket)
-     ; Open communication to existing hub.  Eventually the threads
+     ; Open a connection to existing hub port.  Eventually the threads
      ; handling I/O to the hub will close or fail and createHub will
      ; be called again.
-     (spawnCommunicators (open-stream (open-socket "localhost" HubPort)))
+     (let ((hub (peerCreate (open-stream (open-socket "localhost" HubPort)))))
+       (Displayl "\r\n::(createHub) Connected to hub " hub "  ")
+       (display "'(World 5 3 0)" (peerSocket hub)) ; Identify myself to the hub.
+       (peersAdd hub)
+       (thread
+         (peerWriterLoop hub))
+       (thread
+         (peerReaderLoop hub)
+         (Displayl "\r\n::(createHub) Disconnected from hub " hub "  ")
+         (createHub)))
 
      ; Acquired the hub socket port so act as the hub from now on.  Continusouly
      ; accept incomming peer connections and add to message queue.
-     (begin
-      (Displayl "\r\n::(createHub)  Accepting connections as hub port")
-      (thread
-       (let acceptPeers~ ()
-        (spawnCommunicators (open-stream HubSocket))
-        (acceptPeers~))))))
-
- ; DEBUG give a constant update of the object's state
- (rem thread (let ~ ()
-  (Displayl "\n::Ipc peers")
-  (map (lambda (s) (Displayl "\n  " s)) Peers)
-  (sleep 1000)
-  (~)))
+     (thread
+      (Displayl "\r\n::(createHub) Hub accepting peer connections  ")
+      (let ~ ()
+        (let ((peer (peerCreate (open-stream HubSocket))))
+          (Displayl "\r\n::(createHub) Hub accepted peer " peer "  ")
+          (display "'(World 5 3 0)" (peerSocket peer)) ; Identify myself to the hub.
+          (peersAdd peer)
+          (thread
+            (peerWriterLoop peer))
+          (thread
+            (peerReaderLoop peer)
+            (Displayl "\r\n::(createHub) Hub Disconnected from peer " peer "  "))
+          (~))))))
 
  ; Start the engine
  (createHub)
 
-(lambda (c) (eval c)))
-
-
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; IPC
-;;
-;; Tree topology IPC network.  The ipc object will connect to the lowest
-;; port number available and setup a listener for incomming child conections.
-;; It will also scan down from its port for a parent to connect to.  The
-;; lowest port connection will never have a parent connection.  Any other
-;; port will attempt to find a parent and if none found will try to grab the
-;; 'parent' port.  If successful it will 'dis-own' its children and become
-;; the new parent.  The disowned children will need to find new parents.
-;;
-;; Rather than a time stamp, clients will only connect to ports below it.
-;;
-;; Ipc Object:
-;;
-;; The Ipc object when instantiated will attempt to connect to existing
-(rem define (IpcTree Display . port)
- (define FirstPort (if (null? port) 7155 (car port)))
- (define PortCount 50) ; Only allow 50 Worldlians per server
- (define LastPort  (+ FirstPort PortCount -1))
- (define MyPort FirstPort)
- (define MyIncommingSocket
-   (let findAvailablePort~ ()
-    (let ((s (open-socket MyPort)))
-     (if (eof-object? s)
-         (begin
-           (set! MyPort (+ 1 MyPort))
-           (if (= MyPort LastPort)
-               (begin (display "ERROR: Ipc: exceeded maximum port")
-                      (quit))
-               (findAvailablePort~)))
-         s))))
- (define ParentSocket ())
- (define Peers ()) ; Peers are #(socket (queue) queue-semaphore)
- (define PeerCount 0)
- (define MsgQueueSemaphore (open-semaphore 0))
- (define MsgQueue (list 'empty))  ; Queues are (empty) (ignore 1st 2nd)
-
- (define (qwrite e) ; Append e to each peer's outgoing message queue.
-  (map (lambda (p)
-         (append! (vector-ref p 1) (list e))
-         (semaphore-up (vector-ref p 2)))
-        Peers)
-  (msgQueueAdd e))
-
- (define (qread)    ; Read from my incomming message queue.
-   (semaphore-down MsgQueueSemaphore)
-   (let ((e (cadr MsgQueue)))
-     (set! MsgQueue (cdr MsgQueue))
-     e))
-
- (define (msgQueueAdd e)
-   (append! MsgQueue (list e))
-   (semaphore-up MsgQueueSemaphore))
-  
- (define (peersAdd peer)
-   (set! Peers (cons peer Peers)))
-
- (define PeersSemaphore (open-semaphore 1))
-
- (define (peersDelete peer)
-   (semaphore-down PeersSemaphore)
-   (set! Peers (list-delete Peers peer))
-   (semaphore-up PeersSemaphore))
-
- ; Spawn two threads that propogate any incomming messages on this
- ; socket as well as send out any queued messages.
- (define (spawnCommunicators s)
-  (Display "\r\nSpawning communicator on:" s)
-  (or (eof-object? s) (begin
-   (display "'World1.0\r\n" s)
-   ; Create a peer: #(socket '(queue) queue-semaphore)
-   (let ((peer (vector s (list 'empty) (open-semaphore 0))))
-     (peersAdd peer)
-     ;(printl "Peers list now:" Peers)
-     ; Read from peer and re-send to every other peer.
-     ;(printl "spawning reader")
-     (thread (let reader~ ((e (read (vector-ref peer 0))))
-       ;(printl "Communicator: reader: received:" e)
-       ;(printl "Appending original peers list:"Peers)
-       ;(printl "Appending to peers:"(list-delete Peers peer))
-       (if (eof-object? e)
-         (begin
-           (Display "\r\nRemoving communicator on:" s)
-           (if (eq? ParentSocket (vector-ref peer 0))
-             (begin (peersDelete peer)
-                    (vector-set! peer 0 #f)
-                    (lookForParent))
-             (peersDelete peer)))
-         (begin
-           ; Relay message to every other peer
-           (map (lambda (p)
-                  (append! (vector-ref p 1) (list e))
-                  (semaphore-up (vector-ref p 2)))
-                (list-delete Peers peer))
-           ; Add message to my local IO queue
-           (msgQueueAdd e)
-           (reader~ (read (vector-ref peer 0)))))))
-     ; Write to peer anything in its queue.
-     (thread (let writer~ ()
-       (if (vector-ref peer 0)
-         (begin
-           (semaphore-down (vector-ref peer 2))
-           (write (cadr (vector-ref peer 1))
-                  (vector-ref peer 0))
-           (send " " (vector-ref peer 0))
-           (vector-set! peer 1 (cdr (vector-ref peer 1)))
-           (writer~)))))))))
-
- ; Connect to first existing peer listening on a port below mine.
- (define (lookForParent)
-  (let ~ ((p (- MyPort 1)))
-   (if (= MyPort FirstPort)
-     (Display "\r\nI'm the first peer and parent.")
-   (if (< p FirstPort)
-     (begin 
-       (Display "\r\nNo parents and I'm not the first port!  Attempting to move incomming socket...")
-       (let ((s (open-socket FirstPort)))
-         (Display "\r\nopen-socket " FirstPort "=>" s "\r\n")
-         (if (eof-object? s)
-             (begin (Display "\r\nFirst port unavailable...attempting to find a parent again...")
-                    (lookForParent))
-             (begin (close MyIncommingSocket)
-                    (set! ParentSocket ())
-                    (set! MyIncommingSocket s)
-                    (set! MyPort FirstPort)))))
-     (begin
-       (Display "\r\nChecking for parent client on port:" p)
-         (let ((s (open-stream (open-socket "localhost" p))))
-           (if (eof-object? s)
-             (~ (- p 1))
-             (begin
-               (Display "\r\nConnecting to parent peer on port:" p)
-               (set! ParentSocket s)
-               (spawnCommunicators s)))))))))
-
- ; Have already created a local socket but not yet accepted any connections.
- ; Fire up thread that accepts incomming streams.
- (thread
-   (let acceptChildren~ ()
-     (Display "\r\nacceptChildren~")
-     (spawnCommunicators (open-stream MyIncommingSocket))
-     (acceptChildren~)))
-
- (Display "\r\nMy IPC listener port:" MyPort)
-
- (lookForParent)
+ (Displayl "\r\n::IPC Private socket " PrivateSocket "  ")
+ (thread (let ~ ()
+   (letrec ((s (open-stream PrivateSocket))
+            (e (read s)))
+     (Displayl "\r\n::IPC Private socket " PrivateSocket " received " e ".  ")
+     (or (eof-object? e) (msgQueueAdd e))
+     (close s)
+     (~))))
 
 (lambda (c) (eval c)))
