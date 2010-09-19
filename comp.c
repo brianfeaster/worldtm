@@ -285,8 +285,6 @@ void compTransformInternalDefinitions(void) {
  TODO: 'specialize' this with emitted VM code
 */
 
-/* OUTDATED: If not enough arguments passed, stuff stack with nulls. */
-
 void compLambdaBody (Num flags) {
  Int opcodeStart;
 	DB("-->%s", __func__);
@@ -297,7 +295,7 @@ void compLambdaBody (Num flags) {
 	push(asmstack);
 	memNewStack(); asmstack=r0;
 
-	/* The first opcode emitted is a branch over the next bogu instruction.  The
+	/* The first opcode emitted is a branch over the next bogus instruction.  The
 	   instruction is really the original expression being compiled.  This is a
 	   quick and dirty debugging aid. */
 	asmAsm(
@@ -319,7 +317,7 @@ void compLambdaBody (Num flags) {
 		   function above). */
 		opcodeStart = memStackLength(asmstack);
 		asmAsm (
-			LDI50, 1l,   /* Temporarily save lexical environment to r5. */
+			LDI50, 1l,  /* Temporarily save lexical environment to r5. */
 			MVI0, null, /* Initial formal argument 'rest' value (empty list). */
 			/* r3 is non-dotted formal argument length. */
 			BLTI1, r3, ADDR, "notEnoughArguments",

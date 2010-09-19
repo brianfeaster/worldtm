@@ -1432,11 +1432,14 @@
 ((avatar 'jump) (avatar 'z) (* 108 U4MapCellSize) (* 86 U4MapCellSize))
 
 ; Always read and evaluate everything from IPC.
-(thread  (let ~ () 
- (let ((sexp ((ipc 'qread))))
-    (WinConsoleWrite sexp)
-    (eval sexp)
-    (~))))
+(thread 
+ (let ((s (call/cc (lambda (c) (vector-set! ERRORS (tid) c) 'starting))))
+   (or (eq? s 'starting) (WinChatDisplay "\r\nIPC-REPL-ERROR::" s)))
+ (let ~ () 
+  (let ((sexp ((ipc 'qread))))
+     (WinConsoleWrite sexp)
+     (eval sexp)
+     (~))))
 
 (viewportReset (avatar 'y) (avatar 'x))
 ((WinMap 'toggle))

@@ -1272,11 +1272,14 @@ void wscmSchedule (void) {
 
 /* Force a call to the error continuation.  This better be defined in
    The Global Environment.  R1 contains number of expressions on stack
-	to display as part of the error handling.
+	to display as part of the error handling.  R0 holds the invalid
+	operator.
 */
 void wscmError (void) {
- Int argument_count = (Int)r1;
+ Int argument_count;
 	DB("-->%s", __func__);
+	r4=r0; /* Keep track of operator */
+	argument_count = (Int)r1;
 	/* Look up error function/continuation in ERRORS vector in TGE. */
 	objNewSymbol ((Str)"ERRORS", 6);  r1=r0;  wscmTGEFind(); r0=car(r0);
 	/* Set the code register and IP:
@@ -1285,19 +1288,24 @@ void wscmError (void) {
 	     r0            The ERRORS vector
 	     (vector-ref   ERRORS-vector thread-number) closure
 	     (car closure) Closure's code block.  Cdr is parent env. */
-	code = car(memVectorObject(r0, (Int)cdr(car(running))));
+	r3 = memVectorObject(r0, (Int)cdr(car(running))); /* ERRORS[pid] */
+	code = car(r3);
 	ip=0;
-	/* Listify arguments. */
+	/* Listify arguments as well as the operator. */
 	r2 = null;
 	while (argument_count--) {
 		r1=pop();
 		objCons12();
 		r2 = r0;
 	}
+	r1=r4; /* restore operator */
+	objCons12();
+	r2 = r0;
+
 	push(r2);
 	/* Set the number of arguments. */
 	r1=(Obj)1;
-	r0=null;
+	r0=r3; /* r0 needs to be the closure */
 	DB("<--%s", __func__);
 }
 
@@ -2053,7 +2061,7 @@ void sysIllegalOperator (void) {
 	write(2, "(", 1);
 	wscmWrite (r0, stderr);
 	i=(Int)r1;
-	while (i--) {
+	while (0 < i--) {
 		write (2, " ", 1);
 		wscmWrite (memStackObject(stack, i), stderr);
 	}
@@ -2061,8 +2069,8 @@ void sysIllegalOperator (void) {
 	/* Dump virtual machine state and code block. */
 	//r0=code; vmDebugDumpCode(r0);
 	/* No need to pop stack since calling error continuation. */
-	r0=nullstr;
-	r1 = (Obj)1;
+	//r0=nullstr;
+	//r1 = (Obj)1;
 	wscmError();
 }
 

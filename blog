@@ -2145,3 +2145,17 @@ crashes due to apply overflowing the stack when i attempt to stringify all the
 sub strings that display->string creates.
 
 TODO: The TAILCALL bitfield is unsigned but should be Num.
+
+World crashes when :(saySystem '(0)) is evaluted at the talk prompt.
+
+need to add these to  wscmError (I forget what the 1st instruction loading r5
+is for and why i need to ignore it when calling the continuation.
+				memVectorSet(code, 3, NOP);
+				memVectorSet(code, 4, NOP);
+
+Actually I just needed to clean up the sysIllegalOperator and wscmError
+functions.  They now behave correctly and will collect the operator and operand
+values and send them as a list to the global error handler.  Each thread ID
+has its own error handler closure stored in the global ERROR vector.  It is
+usually mutated from within a continuation call.  The default error handler
+behavior is to display the operator/operand list and quit.
