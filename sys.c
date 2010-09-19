@@ -91,8 +91,8 @@ Int wscmAssertArgumentCountMin (Num min, const char *functionName) {
 }
 
 /* Pop stack operand arguments into a new list.
-		Uses:  r1 operand count
-		Overwrites: r2
+		Requires:  r1 operand count
+		Mutates: r2
 		Returns: r0 new list
 */
 void sysList (void) {
@@ -926,21 +926,24 @@ void wscmMoveToQueue (Obj thread, Obj queue, Obj state) {
 	DB("<--%s", __func__);
 }
 
-/* Create a new thread who's code is passed in r0.
-	Uses: r0 r1 r2
+/* Creates a new thread object which is inserted into the running queue.
+
+	Requires: r0 code block
+	Mutates: r0 r1 r2
+	Returns: r0 thread id
 */
 void wscmNewThread (void) {
  Int id;
 	DB("-->%s", __func__);
 
-	/* Find next available thread id.  Thread table's initial entry
+	/* Find next available thread id.  Thread table's first entry
 	   is the count so index range is 1 to MAX_THREADS inclusive. */
 	for (id=1; memVectorObject(threads, id) != null; ++id);
 	assert(id <= MAX_THREADS);
 	DB("\nOS    Thread id: %d\n", id);
 
-	r1=r0; /* Move code block to r1. */
 	/* Create thread's stack (in an un-running state). */
+	r1=r0; /* Code block */
 	memNewStack(); r2=r0;
 	memStackPush(r2, env); /* Initial environment. */
 	memStackPush(r2, 0);   /* Initial ip. */
@@ -956,22 +959,22 @@ void wscmNewThread (void) {
 	memStackPush(r2, 0);   /* Initial r2. */
 	memStackPush(r2, 0);   /* Initial r1. */
 	memStackPush(r2, 0);   /* Initial r0. */
-	/* Create thread descriptor #( #<stack> id 'state). */
+
+	/* Create thread descriptor #( #<stack> tid 'state) and add to thread table vector */
 	objNewVector(3);
-	memVectorSet(r0, 0, r2);      /* Set stack. */
-	memVectorSet(r0, 1, (Obj)id); /* Set id. */
-	memVectorSet(r0, 2, sready);  /* Set 'ready' state. */
-	/* Set in thread vector table. */
+	memVectorSet(r0, 0, r2);      /* Set stack */
+	memVectorSet(r0, 1, (Obj)id); /* Set id */
+	memVectorSet(r0, 2, sready);  /* Set 'ready' state */
+
+	/* Add thread descriptor to thread table vector and increment count */
 	memVectorSet(threads, id, r0);
-	/* Increment thread count. */
 	memVectorSet(threads, 0, memVectorObject(threads, 0)+1);
-	/* Create new doubly linked list queue element for this thread
-	   descriptor. */
-	r1=r0;
+
+	/* Create new doubly linked list queue element for this thread descriptor and
+	   insert into the ready queue before the current running thread */
+	r1=r0; /* Thread descriptor */
 	objNewVector(3);
 	memVectorSet(r0, 0, r1);
-	/* Insert the queue element into ready queue just before the
-	   current runnning thread.  A new queue entry is created. */
 	wscmInsertThread (r0, running);
 
 	objNewInt(id);
@@ -1325,6 +1328,7 @@ void sysQuit (void) { exit(0); }
 
 /* This can do anything.  I change it mainly for debugging and prototyping. */
 void sysFun (void) {
+ Int i;
 	//vmDebugDumpCode(r1c, stderr);
 	//memDebugDumpHeapHeaders(stderr);
 	//memDebugDumpYoungHeap(stderr);
@@ -1332,6 +1336,7 @@ void sysFun (void) {
 	//memDebugDumpHeapHeaders(stderr);
 	//sysDumpCallStackCode();
 	fprintf (stderr, "[%d]", memStackLength(stack));
+	for (i=memStackLength(stack)-1; 0<=i; --i) wscmWrite(memStackObject(stack, i), stdout);
 }
 
 /* Dump external representation of the local environment hierarchy to stdout. */
@@ -2454,7 +2459,7 @@ void wscmDefineSyscall (Func function, char* symbol) {
 }
 
 /* Bind symbol, created from 'sym', in TGE and assign object in r0 to the location.
-	Overwrites: r1 r2
+	Mutates: r1 r2
 	Returns: r0
 */
 void wscmDefine (char* sym) {

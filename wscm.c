@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include "sys.h"
 
+
 /* Weird hack that implements a read-eval-print loop as a syscall.  The strange
    thing about it is that the entire process is started from this syscall
    rather than starting everything with a call to the virtual machine vmRun.
@@ -14,46 +15,50 @@
    mode.
 */
 void wscmCReadEvalPrintLoop (void) {
-	/* Read Eval Print Loop.  stdin must be blocking to work.
-	*/
+ Int i;
 	yyrestart(0);     /* Tell scanner to use stdin as input. */
 	wscmNewThread();  /* Create a new thread. */
 	wscmSchedule();   /* Prepare it for the VM. */
-	/* Blocking thread that reads input and evalautes in the global
-	   environment. */
 	while (r0 != eof) {
-		env = tge;
-		DB("MAIN Parsing======================");
-		//DBE wscmDumpEnv(env);
-		DBE wscmWrite(stack, stderr), write (2, "\n", 1);
-		DBE wscmWrite(ready, stderr), write (2, "\n", 1);
-		DBE wscmWrite(sleeping, stderr), write (2, "\n", 1);
-		DBE wscmWrite(blocked, stderr);
+		env = tge; /* Evaluate in TGE */
+		//DBE wscmDumpTGE();
+		//DBE wscmWrite(ready, stderr), write (2, "\n", 1);
+		//DBE wscmWrite(sleeping, stderr), write (2, "\n", 1);
+		//DBE wscmWrite(blocked, stderr);
+		DB("== Parsing ======================");
 		write (1, "\nC>", 3);
 		yyparse();/* Expr read into r0. */
-		DB("MAIN Compiling==================== <= ");
+		DB("== Compiling ====================\n");
+
 		DBE wscmWrite(r0, stderr);
 		compCompile();   /* Expr in r0 compiled into VM runable code in r0. */
 		code=r0; ip=0;
-		DB("MAIN Running======================");
-		DBE wscmWrite(code, stderr);DBE write (2, "\n", 1);
+
+		DB("== Running ======================\n");
+		DBE wscmWrite(code, stderr);
 		vmDebugDumpCode(code, stderr);
+
+		DB("== Output ======================\n");
 		vmRun();
-		//wscmDisplay(stack, 0, 2);
-		//DBE memDebugDumpHeapStructures ();
-		DB("MAIN Output======================");
 		wscmDisplay(r0, 0, 1);
+
+		DB("== Debug =======================");
+		DBE memDebugDumpHeapHeaders(stdout);
+		DBE wscmWrite(stack, stderr);
+		DBE for (i=memStackLength(stack)-1; 0<=i; --i) wscmWrite(memStackObject(stack, i), stdout);
 	}
 	sysUnthread();
 	printf ("WEL loop done\n");
 }
 
+
 /* Uses legacy C-based parsing code to parse a string.  It's then compiled
    into a thread and the virtual machine started up.
 */
 void wscmStringReadEvalPrintLoop (void) {
-	DB("::wscmSringReadEvalPrintLoop  calling vmRun()");
-
+	DB("::%s", __func__);
+	/* Must disable stdio blocking since wscheme implements its own blocknig I/O */
+	fcntl (0, F_SETFL, fcntl(0, F_GETFL, 0)|O_NONBLOCK);
 	yy_scan_string ((Str)
 "(let ~ ((FILE:SCM.SCM (open-file \"scm.scm\")))\
     (if (eof-object? (eval (read FILE:SCM.SCM)))\
@@ -61,16 +66,12 @@ void wscmStringReadEvalPrintLoop (void) {
         (~ FILE:SCM.SCM)))");
 	yyparse();
 	compCompile();
-
-	//DB("  calling vmDebugDump()\n");
-	//vmDebugDump(); /* THIS IS CRASHING */
-
 	wscmNewThread();
 	wscmSchedule();
-	DB("  calling vmRun()");
 	vmRun();
-	DB("  --wscmSringReadEvalPrintLoop  calling vmRun()");
+	DB("  --%s", __func__);
 }
+
 
 /* Bind wscheme's command line arguments to the vector 'argv
 */
@@ -84,23 +85,23 @@ void wscmBindArgs (int argc, char *argv[]) {
 	r0=r1; wscmDefine ("argv"); 
 }
 
+
 int main (int argc, char *argv[]) {
-	wscmInitialize();
 	setbuf(stdout, NULL);
 	signal(SIGPIPE, SIG_IGN);
-	fcntl (0, F_SETFL, fcntl(0, F_GETFL, 0)|O_NONBLOCK);
 	srandom(time(NULL));
+	wscmInitialize();
 	wscmBindArgs(argc, argv);
 
 	/* Three ways of firing up a repl. */
 
-	/* REPL in C. */
-	//wscmCReadEvalPrintLoop(); return 0;
-
-	/* REPL as inlined scheme. */
+	/* REPL as compiled inlined scheme with asynchronous threads */
 	wscmStringReadEvalPrintLoop(); return 0;
 
-	/* Bind symbol 'in and assign the stdin port or the filename passed as arg
+	/* REPL in a blocking C loop */
+	//wscmCReadEvalPrintLoop(); return 0;
+
+	/* Bind symbol 'input and assign the stdin port or the filename passed as arg
 	   1 to wscm. */
 	if (argc==2) {
 		/* Create port object, push the argument, set arg count to 1 then
@@ -109,7 +110,7 @@ int main (int argc, char *argv[]) {
 		push(r0);  r1=(Obj)1;  sysOpen();
 		/* Assign port to existing binding. */
 		if ((r3=r0) != false) {
-			objNewSymbol ((Str)"in", 2);  r1=r0;  wscmTGEFind();
+			objNewSymbol ((Str)"input", 5);  r1=r0;  wscmTGEFind();
 			memVectorSet(r0, 0, r3);
 		}
 	}
