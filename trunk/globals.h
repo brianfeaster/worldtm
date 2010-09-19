@@ -3,24 +3,24 @@
 
 /* Register aliases.
 */
-#define semaphores r9  /* WSCM: semaphore counters. */
-#define blocked    r10 /* WSCM: I/O and Semaphore blocked threads. */
-#define threads    r11 /* WSCM: Thread vector.  An id implementation. */
-#define sleeping   r12 /* WSCM: Sleeping thread. */
-#define running    r13 /* WSCM: Current thread. */
-#define ready      r14 /* WSCM: Thread list. */
+#define semaphores r9  /* WSCM: semaphore counters */
+#define blocked    r10 /* WSCM: I/O and Semaphore blocked threads */
+#define threads    r11 /* WSCM: Thread vector */
+#define sleeping   r12 /* WSCM: Sleeping thread */
+#define running    r13 /* WSCM: Current thread */
+#define ready      r14 /* WSCM: Thread list */
 
-#define retenv     r15 /* VM: Caller's environment.*/
-#define env        r16 /* WSCM: Current active environment. */
-#define tge        r17 /* WSCM: Global environment. */
+#define retenv     r15 /* VM: Caller's environment */
+#define env        r16 /* WSCM: Current active environment */
+#define tge        r17 /* WSCM: Global environment */
 #define expr       r18 /* WSCM: Expression being compiled */
-#define symbols    r19 /* OBJ: Symbol table used by scanner and OS. */
-#define asmstack   r1a /* VM: Opcode stack where machine code is emitted. */
+#define symbols    r19 /* OBJ: Symbol table used by scanner and OS */
+#define asmstack   r1a /* VM: Opcode stack where machine code is emitted */
 #define ip         r1b /* VM: Current running program instruction pointer */
-#define code       r1c /* VM: Currently running code object. */
-#define retip      r1d /* VM: Caller's ip. */
-#define retcode    r1e /* VM: Caller's code block. */
-#define stack      r1f /* VM: Global stack used by VM. */
+#define code       r1c /* VM: Currently running code object */
+#define retip      r1d /* VM: Caller's ip */
+#define retcode    r1e /* VM: Caller's code block */
+#define stack      r1f /* VM: Global stack used by VM */
 
 
 /* C Type declarations representing the number of bits for unsigned, signed and

@@ -1748,7 +1748,6 @@ Int compCompile (void) {
 	DB ("::%s", __func__);
 	//env = tge;               /* We'll be using a pseudo env (r16=r17). */
 	expr = r0;                 /* Move expression to expr (r18). */
-	push(expr);						/* Keep track of expression (for debugging). */
 	asmAsm ( /* Keep track of original expression for debugging. */
 		BRA, 8,
 		expr,
