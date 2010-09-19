@@ -41,7 +41,7 @@ void wscmSleepThread (void);
 void wscmScheduleSleeping (void);
 void wscmScheduleBlocked (void);
 void wscmSchedule (void);
-void wscmError (void);
+void sysError (void);
 void sysUnthread (void);
 void sysSchedule (void);
 void catchSignal (int sig);

@@ -11,7 +11,7 @@ void sysCompile (void);
 void wscmWrite (Obj a, long islist, Int fd);
 Int  wscmEnvFind (void);
 void wscmTGEFind (void);
-void wscmError (void);
+void sysError (void);
 void sysTGELookup (void);
 void wscmTGEBind (void);
 void sysTGEMutate (void);
@@ -333,7 +333,7 @@ void compLambdaBody (Num flags) {
 			MVI0, "Not enough arguments to closure",
 			PUSH0,
 			MVI1, 1l,
-			SYSI, wscmError, // TODO BF First attempt at error correction.
+			SYSI, sysError, // TODO BF First attempt at error correction.
 			PUSH0,
 			ADDI1, 1l,
 			BNEI1, r3, ADDR, "notEnoughArguments",
@@ -660,7 +660,7 @@ void compCar (Num flags) {
 		MVI0, expr,
 		PUSH0,
 		MVI1, 2l,
-		SYSI, wscmError,
+		SYSI, sysError,
 		LABEL, "car",
 		LDI00, 0l, /* Perform car. */
 		END
