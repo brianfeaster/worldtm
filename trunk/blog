@@ -2117,6 +2117,9 @@ block 53 42
 block 53 43
 block 54 42
 
+Initial blocks loaded when World starts up.  Should only be four but the
+calculation to determine which blocks to load doesn't consider the
+
 
 Wed Sep 15 01:00:14 EDT 2010
 
@@ -2124,3 +2127,21 @@ Rewriting the IPC module with properly abstracted queues and a better organized
 class.  Each IPC node will once again have a listener socket but it will close
 the connection after reading one expression.  This will be used by agent
 processes that need to efficiently send expressions to individual processes.
+
+
+Fri Sep 17 01:46:45 EDT 2010
+
+I need to fix file I/O before I start work on the map agent.
+
+I replaced open syscall with open-file and open-new-file.  Both open the file
+read/write.  I still need to fix the scheme atom serializer as it will crash
+wscheme with a stack overflow if the object is to large.
+
+
+Sat Sep 18 22:46:33 EDT 2010
+
+Remove deep recursive behavior of puts for the window puts classes.  It still
+crashes due to apply overflowing the stack when i attempt to stringify all the
+sub strings that display->string creates.
+
+TODO: The TAILCALL bitfield is unsigned but should be Num.

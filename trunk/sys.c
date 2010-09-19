@@ -1310,11 +1310,12 @@ void sysQuit (void) { exit(0); }
 /* This can do anything.  I change it mainly for debugging and prototyping. */
 void sysFun (void) {
 	//vmDebugDumpCode(r1c, stderr);
-	memDebugDumpHeapHeaders(stderr);
-	memDebugDumpYoungHeap(stderr);
-	memValidateHeapStructures();
+	//memDebugDumpHeapHeaders(stderr);
+	//memDebugDumpYoungHeap(stderr);
+	//memValidateHeapStructures();
 	//memDebugDumpHeapHeaders(stderr);
 	//sysDumpCallStackCode();
+	fprintf (stderr, "[%d]", memStackLength(stack));
 }
 
 /* Dump external representation of the local environment hierarchy to stdout. */
@@ -1877,23 +1878,49 @@ void sysOpenStream (void) {
 	DB("<--%s", __func__);
 }
 
-void sysOpen (void) {
- char name[160]={0};
-	DB("SYS -->%s", __func__);
+/* Create a file object used for file I/O.
+	For now all files are opened for reading and writing.
+*/
+void sysOpen (int oflag, mode_t mode) {
+ Chr name[160]={0};
+ Int i, filenameLen;
+	DB("::%s", __func__);
 	if (wscmAssertArgumentCount(1, __func__)) return;
-	r2=pop(); /* Filename */
-	memcpy(name, r2, memObjectLength(r2));
-	r1 = (Obj)(Int)open(name, O_CREAT|O_RDWR, S_IRUSR|S_IWUSR);
+
+	/* Consider filename */
+	r2=pop();
+	filenameLen = memObjectLength(r2);
+
+	/* Make sure string is terminated and replace all / with ! */
+	assert(0<filenameLen  && filenameLen<160);
+	memcpy(name, r2, filenameLen);
+	name[filenameLen]=0;
+	for (i=0; i<filenameLen; ++i) if (name[i]=='/') name[i]='!';
+
+	DB ("  Filename [%s]", name);
+	objNewString(name, filenameLen);
+	r2=r0;
+
+	r1 = (Obj)(Int)open((char*)name, oflag, mode);
+
 	if ((Int)r1==-1) {
-		fprintf (stderr, "ERROR: sysOpen() Unable to open local file.");
+		fprintf (stderr, "ERROR: sysOpen() Unable to open local file %d::%s.", errno, strerror(errno));
 		r0 = false;
 	} else {
-		objNewInt(O_RDWR);  r3=r0;
+		objNewInt(oflag);  r3=r0;
 		r4=sopen;
 		r5=false;
 		objNewPort();
 	}
-	DB("SYS <--%s", __func__);
+	DB("  --%s", __func__);
+}
+
+void sysOpenFile (void) {
+	sysOpen(O_CREAT|O_RDWR, S_IRUSR|S_IWUSR);
+}
+
+void sysOpenNewFile (void) {
+	sysOpen(O_CREAT|O_TRUNC|O_RDWR, S_IRUSR|S_IWUSR);
 }
 
 void sysClose(void) {
@@ -2131,7 +2158,8 @@ void sysStringSetB (void) {
 void sysVectorLength (void) {
 	DB("-->%s", __func__);
 	if (wscmAssertArgumentCount(1, __func__)) return;
-	objNewInt(memObjectLength(pop()));
+	r0 = pop();
+	objNewInt(r0==nullvec?0:memObjectLength(r0));
 	DB("<--%s", __func__);
 }
 
@@ -2425,8 +2453,9 @@ void wscmDefineSyscall (Func function, char* symbol) {
 	DBE wscmWrite (r1, stderr);
 }
 
-/* Bind symbol, created from 'sym', in TGE and assign object in r0 to
-   the location.
+/* Bind symbol, created from 'sym', in TGE and assign object in r0 to the location.
+	Overwrites: r1 r2
+	Returns: r0
 */
 void wscmDefine (char* sym) {
 	DB("-->%s", __func__);
@@ -2854,7 +2883,8 @@ void wscmInitialize (void) {
 	wscmDefineSyscall (sysUnthread, "unthread");
 	wscmDefineSyscall (sysOpenSocket, "open-socket");
 	wscmDefineSyscall (sysOpenStream, "open-stream");
-	wscmDefineSyscall (sysOpen, "open");
+	wscmDefineSyscall (sysOpenFile, "open-file");
+	wscmDefineSyscall (sysOpenNewFile, "open-new-file");
 	wscmDefineSyscall (sysClose, "close");
 	wscmDefineSyscall (sysRecv, "recv");
 	wscmDefineSyscall (sysReadChar, "read-char");
@@ -2877,21 +2907,16 @@ void wscmInitialize (void) {
 	wscmDefineSyscall (sysSignal, "signal");
 	wscmDefineSyscall (sysToggleDebug, "toggle-debug");
 
-	objNewInt(42); wscmDefine ("y");
-	objNewInt(1); wscmDefine ("x");
-
-	r1=(Obj)0;
-	objNewSymbol ((Str)"stdin", 5);
-	r2=r3=r0;
-	r4 = sopen;
-	objNewPort();  r3=r0; wscmDefine("stdin");
-	                 r0=r3; wscmDefine("in"); /* Also bind to 'in */
+	r1=(Obj)0; /* Descriptor */
+	objNewSymbol ((Str)"stdin", 5);  r2=r3=r0; /* Address and port */
+	r4 = sopen; /* State */
+	objNewPort(); r3=r0; wscmDefine("stdin");
+	r0=r3; wscmDefine("in"); /* Also bind to 'in */
 
 	r1=(Obj)1;
-	objNewSymbol ((Str)"stdout", 6);
-	r2=r3=r0;
+	objNewSymbol ((Str)"stdout", 6);  r2=r3=r0;
 	r4 = sopen;
-	objNewPort ();   wscmDefine("stdout");
+	objNewPort ();  wscmDefine("stdout");
 
 	r1=(Obj)2;
 	objNewSymbol ((Str)"stderr", 6);
@@ -2905,6 +2930,8 @@ void wscmInitialize (void) {
 	wscmCreateRepl();  wscmDefine("repl2");
 	r0=semaphores;  wscmDefine("semaphores");
 	r0=eof; wscmDefine("#eof");
+	objNewInt(42); wscmDefine ("y");
+	objNewInt(1); wscmDefine ("x");
 
 	/* Signal handler vector */
 	i=32;

@@ -23,7 +23,7 @@ void asmAsm (Obj o,...) {
 
 
 void asmCompileAsmstack (Int opcodeStart) {
- Int j, i, opcodeEnd, opcodeWrite, labelCount=0, addrCount=0;
+ Int j, i, opcodeEnd, opcodeWrite, labelCount=0, addrCount=0, len;
 	DB(TAB0"::%s", __func__);
 	memStackPush(stack, r0);
 	memStackPush(stack, r1);
@@ -33,6 +33,31 @@ void asmCompileAsmstack (Int opcodeStart) {
 	memNewVector(TVECTOR, 80); r2=r0;
 	/* Store for instruction addresses and LABELS */
 	memNewVector(TVECTOR, 80); r3=r0;
+
+	/* Remove occurrances of pop_15/1e/1d push_1d/1e/15
+	// Debug dump un-assembled code stack.
+	memNewVector(TCODE, len=(memStackLength(asmstack)-opcodeStart));
+	memcpy(r0, asmstack+8, len*8);
+	vmDebugDumpCode(r0, stderr);
+
+	opcodeEnd = memStackLength(asmstack)+1;
+	opcodeWrite = opcodeStart+1l;
+	for (i=opcodeWrite; i<opcodeEnd; i++) {
+		printf ("looking "INT"\r\n", i);
+		if (POP15 == memVectorObject(asmstack, i)    && POP1E == memVectorObject(asmstack, i+1)  && POP1D == memVectorObject(asmstack, i+2) &&
+		    PUSH1D == memVectorObject(asmstack, i+3) && PUSH1E == memVectorObject(asmstack, i+4) && PUSH15 == memVectorObject(asmstack, i+5)) {
+			i += 6;
+			fprintf (stderr, "\r\nFound it at "INT"\r\n", opcodeWrite);
+			vmDebugDumpCode(asmstack, stderr);
+			exit(0);
+		} else {
+			memVectorSet(asmstack, opcodeWrite++, memVectorObject(asmstack, i));
+		}
+	}
+	// 'Pop' unused opcodes off stack leaving the freshly compiled code behind.
+	*(Obj*)asmstack = asmstack + 8 * (opcodeWrite-1);
+	 */
+
 	/* Compress stack of opcodes onto itself moving the label and address info
 	   to their respective lists.  Iterating over the stack but treating it
 	   like a vector thus the shifting by one (skipping over the stack objects
@@ -55,7 +80,7 @@ void asmCompileAsmstack (Int opcodeStart) {
 			/* Store opcode address. */
 			memVectorSet(r3, addrCount++, (Obj)opcodeWrite);
 			/* TODO Store a 0 for the branch offset for now (could just as well
-			   just increment the opcodeWrite address. */
+			   just increment the opcodeWrite address without mutating the value. */
 			memVectorSet(asmstack, opcodeWrite++, (Obj)0);
 		} else {
 			//DB(TAB1 "%x opcode %08x", opcodeWrite, r0);

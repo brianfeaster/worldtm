@@ -248,7 +248,7 @@
          (set! TX (+ 1 TX))
          (if (>= TX Wwidth)
            (if (= TY (- Wheight 1))
-               (set! needToScroll #t) ; TODO remove this line then develop a framework to debug the issue.
+               (set! needToScroll #t) ; TODO remove this line then develop a framework to debug the ensuing issue
                (begin 
                  (return)
                  (newline))))))))))
@@ -258,7 +258,7 @@
      (semaphore-up WindowSemaphore))
    (define (puts str)
      (semaphore-down WindowSemaphore)
-     (for-each putchar (string->list str))
+     (loop (string-length str) (lambda (i) (putchar (string-ref str i))))
      (semaphore-up WindowSemaphore))
    (define (toggle . state)
      (set! ENABLED (if (null? state) (not ENABLED) (car state)))
@@ -329,22 +329,21 @@
    ;;
    (define Buffer (let ((parent self)) (lambda ()
      (define (self msg) (eval msg))
-     (define Buffer (list "")) ; List of every line sent.
+     (define Buffer (list "")) ; List of every line sent.  Append a new empty string.
      (define (parseString str)
-       (let ~ ((charList (string->list str)) ; List of chars to parse
-               (line (car Buffer)))          ; Current text line
-          (if (null? charList)
-            (set-car! Buffer line) ; Save currently parsed line back to buffer.
-            (let ((ch (car charList)))
+       (let ~ ((i 0)
+               (len (string-length str))
+               (line (car Buffer))) ; Current new empty string text line
+          (if (= i len)
+            (set-car! Buffer line) ; Save currently parsed line back to buffer
+            (let ((ch (string-ref str i))) ; Otherwise process the next character
               (if (pair? (memq ch (list RETURN NEWLINE)))
                 (begin
                   (if (not (eq? line ""))
                     (set! Buffer (cons "" (cons line (cdr Buffer))))) ; Add new line to line bufer
                   (set! line ""))
-                (begin
-                  (set! line (string line ch)))) ; Add char to parsed line
-              (~ (cdr charList)
-                 line)))))
+                (set! line (string line ch))) ; Add char to parsed line
+              (~ (+ i 1) len line)))))
      (define (redrawBuffer)
        (let ~ ((c Wheight) (b Buffer))
          (if (or (= c 1) (null? (cdr b)))

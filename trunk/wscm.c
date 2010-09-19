@@ -55,7 +55,7 @@ void wscmStringReadEvalPrintLoop (void) {
 	DB("::wscmSringReadEvalPrintLoop  calling vmRun()");
 
 	yy_scan_string ((Str)
-"(let ~ ((FILE:SCM.SCM (open \"scm.scm\")))\
+"(let ~ ((FILE:SCM.SCM (open-file \"scm.scm\")))\
     (if (eof-object? (eval (read FILE:SCM.SCM)))\
         (send \"\r\nbye.\r\n\" stdout)\
         (~ FILE:SCM.SCM)))");

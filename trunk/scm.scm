@@ -27,26 +27,26 @@
                      r
                      (cons " . " (display-list-serialize (cdr o) r))))))
 
-(define (display-list-serialize-vector v i max r)
- (display-list-serialize
-   (vector-ref v i) (if (< i max)
-                        (cons " "
-                              (display-list-serialize-vector v (+ i 1) max r))
-                        r)))
+(define (display-list-serialize-vector v r)
+ (let ~ ((i (- (vector-length v) 1))
+         (r (cons ")" r)))
+ (if (= i 0)
+   (cons "#(" (display-list-serialize (vector-ref v 0) r))
+   (~ (- i 1)
+      (cons " " (display-list-serialize (vector-ref v i) r))))))
 
 ; Return flatten list of strings representing o (object)'s external
 ; represenation.  Recursive so r (result) must initially be NULL.
 (define (display-list-serialize o r)
  (if (pair? o)
-     (if (and (= (car o) 'quote)
+     (if (and (eq? (car o) 'quote)
                  (pair? (cdr o)))
          (cons "'" (display-list-serialize (car (cdr o)) r))
          (cons "(" (display-list-serialize-list o (cons ")" r))))
  (if (vector? o)
-     (if (= o #())
-       (cons #() r)
-       (cons "#(" (display-list-serialize-vector o 0 (- (vector-length o) 1)
-                                                 (cons ")" r))))
+     (if (eq? o #())
+       (cons "#()" r)
+       (display-list-serialize-vector o r))
  (if (port? o)
      (list "#PORT<"
            (serialize-display (vector-ref o 0)) " "
@@ -56,14 +56,14 @@
            (serialize-display (vector-ref o 4)) ">")
  (cons (serialize-display o) r)))))
 
-; Display an object to a string.
-(define (display->string x)
- (apply string (display-list-serialize x ())))
+; Serialize an object into a list of strings.
+(define (display->strings x)
+ (display-list-serialize x ()))
 
 (define (display x . p)
  (set! p (if (null? p) stdout (car p))) ; Default port is STDIN.
  (for-each (lambda (s) (send s p))
-           (display-list-serialize x ())))
+           (display->strings x)))
 
 
 
@@ -76,36 +76,37 @@
                      r
                      (cons " . " (write-list-serialize (cdr o) r))))))
 
-(define (write-list-serialize-vector v i max r)
- (write-list-serialize
-   (vector-ref v i) (if (< i max)
-                        (cons " "
-                              (write-list-serialize-vector v (+ i 1) max r))
-                        r)))
+(define (write-list-serialize-vector v r)
+ (let ~ ((i (- (vector-length v) 1))
+         (r (cons ")" r)))
+ (if (= i 0)
+   (cons "#(" (write-list-serialize (vector-ref v 0) r))
+   (~ (- i 1)
+      (cons " " (write-list-serialize (vector-ref v i) r))))))
+
 
 ; Return flatten list of strings representing o (object)'s external
 ; represenation.  Recursive so r (result) must initially be NULL.
 (define (write-list-serialize o r)
  (if (pair? o)
-     (if (and (= (car o) 'quote)
+     (if (and (eq? (car o) 'quote)
                  (pair? (cdr o)))
          (cons "'" (write-list-serialize (car (cdr o)) r))
          (cons "(" (write-list-serialize-list o (cons ")" r))))
  (if (vector? o)
-     (if (= o #())
-       (cons #() r)
-       (cons "#(" (write-list-serialize-vector o 0 (- (vector-length o) 1)
-                                                 (cons ")" r))))
+     (if (eq? o #())
+       (cons "#()" r)
+       (write-list-serialize-vector o r))
  (cons (serialize-write o) r))))
 
 ; write an object to a string.
-(define (write->string x)
- (apply string (write-list-serialize x ())))
+(define (write->strings x)
+  (write-list-serialize x ()))
 
 (define (write x . p)
  (set! p (if (null? p) stdout (car p))) ; Default port is STDIN.
  (for-each (lambda (s) (send s p))
-           (write-list-serialize x ())))
+           (write->strings x)))
 
 ;; Serializing
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -343,6 +344,15 @@
           (~ (cdr l) (cons (car l) r))))
      l))
 
+(define (vector-reverse vec)
+ (letrec ((len (vector-length vec))
+          (v (make-vector len)))
+  (let ~ ((i 0))
+    (if (= i len) v ; return reversed vector
+     (begin
+      (vector-set! v (- len i 1) (vector-ref vec i))
+      (~ (+ i 1)))))))
+
 ; Return new list omitting 1st occurance of e in l.
 (define (list-delete l e)
  (if (pair? l)
@@ -381,7 +391,7 @@
 ;(define (eval-string s) (eval (read-string s)))
 
 (define (load fn)
- (if (string? fn) (load (open fn))
+ (if (string? fn) (load (open-file fn))
  (if (not fn) (displayl "*load done*")
  (let ((exp (read fn)))
    (or (eof-object? exp)
