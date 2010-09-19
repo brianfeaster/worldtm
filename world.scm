@@ -25,9 +25,9 @@
 (define WinChatPuts (WinChat 'puts))
 (define WinChatSetColor (WinChat 'set-color))
 (define (WinChatDisplay . l)
-  (for-each (lambda (o) (WinChatPuts (display->string o))) l))
+  (for-each (lambda (o) (for-each WinChatPuts (display->strings o))) l))
 (define (WinChatWrite o)
-  ((WinChat 'puts) (write->string o)))
+  (for-each (WinChat 'puts) (write->strings o)))
 (WinChat '(set! ScrollbackHack #t))
 
 ; Console window
@@ -36,8 +36,8 @@
   (- (Terminal 'Theight) 1)  (Terminal 'Twidth)
   #x02))
 (define WinConsolePuts (WinConsole 'puts))
-(define (WinConsoleDisplay . e) (for-each (lambda (x) (WinConsolePuts (display->string x))) e))
-(define (WinConsoleWrite . e) (for-each (lambda (x) (WinConsolePuts (write->string x))) e))
+(define (WinConsoleDisplay . e) (for-each (lambda (x) (for-each WinConsolePuts (display->strings x))) e))
+(define (WinConsoleWrite . e) (for-each (lambda (x) (for-each WinConsolePuts (write->strings x))) e))
 ((WinConsole 'toggle))
 
 ; Input Window
@@ -72,7 +72,7 @@
    2            14
    #x4e))
 ((WinStatus 'toggle))
-(define (WinStatusDisplay . e) (for-each (lambda (x) ((WinStatus 'puts) (display->string x))) e))
+(define (WinStatusDisplay . e) (for-each (lambda (x) (for-each (WinStatus 'puts) (display->strings x))) e))
 
 
 
@@ -253,6 +253,16 @@
       (~ (list-delete newBlocks (car currentBlocks)) ; Remove current blocks from new block list.
          (cdr currentBlocks)))))
 
+; Determine if the coordinate is above or below the inner field block area.
+; An avatar that moves outside of the inner field range will cause the
+; field to load new blocks.
+; BF: TODO: Implement map to field block coordinates.
+;
+;  +-----+<---Field range
+;  |+---+|
+;  ||   |<---Inner field range
+;  |+---+|
+;  +-----+
 (define (fieldTopBottomBuffer y x)
  (let ((fieldy (fieldBlockY))
        (buffer (/ FieldBlockSize 4)))
@@ -570,19 +580,6 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Keyboard Input
 ;;
-(define AvatarDirectionGlyphs
- (vector
-   (glyphNew 0 7  #\? 0 7  #\?)
-   (glyphNew 4 15 #\\ 4 15 #\_)
-   (glyphNew 4 15 #\\ 4 15 #\/)
-   (glyphNew 4 15 #\_ 4 15 #\/)
-   (glyphNew 4 15 #\< 4 15 #\=)
-   (glyphNew 4 15 #\o 4 15 #\o)
-   (glyphNew 4 15 #\= 4 15 #\>)
-   (glyphNew 4 15 #\/ 4 15 #\~)
-   (glyphNew 4 15 #\/ 4 15 #\\)
-   (glyphNew 4 15 #\~ 4 15 #\\)))
-
 ; BF: Should this be a thread?  At least move somewhere else.
 (define (refreshIfBeyondViewport)
  (let ((y (modulo (- (avatar 'y) PortY) FieldSize));Normalize avatar position.
@@ -900,7 +897,7 @@
 ; The Ultima4 map file is 8x8 blocks of 32x32 cells
 ; so create a simpler 256x25 array of cell numbers.
 (define U4MapVector
- (let ((fd (open "ultima4.map"))
+ (let ((fd (open-file "ultima4.map"))
        (vec (make-vector 65536)))
   (let ~ ((i 0))
      (if (= i 65536) vec ; Return the vector
@@ -914,13 +911,13 @@
 (define (U4MapCell y x)
  (vector-ref U4MapVector (+ (* 256 (modulo y 256)) (modulo x 256))))
 
-(define lcbfd (open "lcb1.ult"))
+(define lcbfd (open-file "lcb1.ult"))
 (define (U4Lcb1MapCell y x)
  (and (< y 0) (<= 32 y) (< x 0) (<= 32 x) (WinChatDisplay "lcb1 coordinates out of range") (quit))
  (seek lcbfd (+ (* y 32) x))
  (+ 0 (read-char lcbfd))) ; Hack to convert char to integer
 
-(define britainfd (open "britain.ult"))
+(define britainfd (open-file "britain.ult"))
 (define (U4BritainMapCell y x)
  (and (< y 0) (<= 32 y) (< x 0) (<= 32 x) (WinChatDisplay "Britain coordinates out of range") (quit))
  (seek britainfd (+ (* y 32) x))
@@ -934,8 +931,8 @@
 ; I will load the ultima5 map some day.  The ovl is a 16x16
 ; array indexing the 16x16 cell arrays in the map file.
 (define (load-ultima-world5)
- (let ((fdm (open "ultima5.map"))
-       (fdi (open "ultima5.ovl"))
+ (let ((fdm (open-file "ultima5.map"))
+       (fdi (open-file "ultima5.ovl"))
        (bar (makeProgressBar 1 30 "Britannia 4")))
  (let ~ ((y 0) (x 0)) (if (< y 256) (if (= x 256) (~ (+ y 1) 0) (begin
    (if (and (= x 255) (= 0 (modulo y 12))) (bar)) ; Progress bar
@@ -988,7 +985,7 @@
 ;-Outdated---------------------------------------------------
 
 (define (updateFieldBlocksU4 y0 x0)
-  (WinChatDisplay "block " (/ y0 FieldBlockSize) " " (/ x0 FieldBlockSize)  "\r\n")
+  ;(WinChatDisplay "block " (/ y0 FieldBlockSize) " " (/ x0 FieldBlockSize)  "\r\n")
   (loop2 y0 (+ y0 FieldBlockSize)
          x0 (+ x0 FieldBlockSize)
      (lambda (y x)
@@ -1012,8 +1009,7 @@
                      (U4MapCell (/ y U4MapCellSize) (/ x U4MapCellSize)))))))) ; Regular cell
           (setCell 1 y x NOTHING)))))
 
-; Field block updater.  This will eventually be replaced with
-; a map agent handler.
+; Field block updater.  This will eventually be replaced with a map agent handler.
 (thread (let ~ ()
  (sleep 500)
  (letrec ((avty (avatar 'y))
@@ -1038,7 +1034,8 @@
       (map (lambda (b) (updateFieldBlocksU4 (* FieldBlockSize (car b)) (* FieldBlockSize (cdr b))))
            (canvasBlockCoordinatesNew yb xb))
       ; Set block coordinate list after the unloaded blocks have been loaded.
-      (set! FieldBlockCoordinates (fieldCreateBlockList yb xb)))))))
+      (set! FieldBlockCoordinates (fieldCreateBlockList yb xb))
+      ((ipc 'qwrite) '(who)))))))
  (~)))
 
 
@@ -1174,7 +1171,7 @@
            (begin (WinChatDisplay "\r\n")
                   (WinChatDisplay talkInput)
                   (WinChatDisplay "=>")
-                  (WinChatDisplay 
+                  (WinChatDisplay
                     (call/cc (lambda (c) ; Return here if an error occurs
                        (vector-set! ERRORS (tid) c)
                        (eval (read-string (cdr-string talkInput)))))))
@@ -1422,7 +1419,6 @@
 ; for production world an 'empty' port is passed.
 (define ipc (Ipc WinConsoleDisplay))
 ;(define ipc (Ipc WinChatDisplay))
-((ipc 'qwrite) '(who))
 
 ; Display some initial information
 (WinChatSetColor 0 11)
@@ -1492,5 +1488,6 @@
   (quit))
 
 (or QUIETLOGIN (sayHelloWorld))
+((ipc 'qwrite) '(who))
 (wrepl)
 (shutdown)

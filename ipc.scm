@@ -6,7 +6,7 @@
 ;;
 (define (Ipc Display . portNum)
  (define (Displayl . l) (for-each Display l))
- (define HubPort (if (null? portNum) 8155 (car portNum)))
+ (define HubPort (if (null? portNum) 7155 (car portNum)))
  (define HubSocket #eof) ; If not eof then this IPC instance is the hub socket.
  (define PrivatePort (+ 1 HubPort))
  (define PrivateSocket
@@ -150,6 +150,7 @@
  ; Start the engine
  (createHub)
 
+ ; The private local socket is continuously opened, read from once and queued then closed.
  (Displayl "\r\n::IPC Private socket " PrivateSocket "  ")
  (thread (let ~ ()
    (letrec ((s (open-stream PrivateSocket))
