@@ -30,6 +30,7 @@ typedef Num Descriptor;
 typedef Num Type;       // Highest byte of descriptor.
 typedef Num LengthType; // Remaining bytes of descriptor.
 
+extern const Num ObjSize;
 
 
 /* Registers:  These make up the root set for the garbage collector.  All

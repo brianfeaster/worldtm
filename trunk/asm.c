@@ -23,7 +23,7 @@ void asmAsm (Obj o,...) {
 
 
 void asmCompileAsmstack (Int opcodeStart) {
- Int j, i, opcodeEnd, opcodeWrite, labelCount=0, addrCount=0, len;
+ Int j, i, opcodeEnd, opcodeWrite, labelCount=0, addrCount=0;
 	DB(TAB0"::%s", __func__);
 	memStackPush(stack, r0);
 	memStackPush(stack, r1);
@@ -37,7 +37,7 @@ void asmCompileAsmstack (Int opcodeStart) {
 	/* Remove occurrances of pop_15/1e/1d push_1d/1e/15
 	// Debug dump un-assembled code stack.
 	memNewVector(TCODE, len=(memStackLength(asmstack)-opcodeStart));
-	memcpy(r0, asmstack+8, len*8);
+	memcpy(r0, asmstack+ObjSize, len*ObjSize);
 	vmDebugDumpCode(r0, stderr);
 
 	opcodeEnd = memStackLength(asmstack)+1;

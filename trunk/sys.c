@@ -90,6 +90,17 @@ Int wscmAssertArgumentCountMin (Num min, const char *functionName) {
 	return -1;
 }
 
+/* Pop stack operand arguments into a new list.
+		Uses:  r1 operand count
+		Overwrites: r2
+		Returns: r0 new list
+*/
+void sysList (void) {
+ Int count = (Int)r1;
+	r0=null;
+	while (count--) { r1=pop(); r2=r0; objCons12(); }
+}
+
 
 
 /******************************************************************************
@@ -614,7 +625,7 @@ void wscmOpenLocalSocket (void) {
 	if (memObjectType(r3=pop()) != TINTEGER) {
 		r0 = "Invalid argument to wscmOpenLocalSocket().";
 		r1 = (Obj)1;
-		wscmError();
+		sysError();
 		return;
 	}
 
@@ -1273,40 +1284,37 @@ void wscmSchedule (void) {
 /* Force a call to the error continuation.  This better be defined in
    The Global Environment.  R1 contains number of expressions on stack
 	to display as part of the error handling.  R0 holds the invalid
-	operator.
+	operator or message.
 */
-void wscmError (void) {
- Int argument_count;
-	DB("-->%s", __func__);
-	r4=r0; /* Keep track of operator */
-	argument_count = (Int)r1;
-	/* Look up error function/continuation in ERRORS vector in TGE. */
-	objNewSymbol ((Str)"ERRORS", 6);  r1=r0;  wscmTGEFind(); r0=car(r0);
-	/* Set the code register and IP:
-	     (car running) The thread
-	     (cdr thread)  Thread number
-	     r0            The ERRORS vector
-	     (vector-ref   ERRORS-vector thread-number) closure
-	     (car closure) Closure's code block.  Cdr is parent env. */
-	r3 = memVectorObject(r0, (Int)cdr(car(running))); /* ERRORS[pid] */
-	code = car(r3);
-	ip=0;
-	/* Listify arguments as well as the operator. */
-	r2 = null;
-	while (argument_count--) {
-		r1=pop();
-		objCons12();
-		r2 = r0;
-	}
-	r1=r4; /* restore operator */
-	objCons12();
-	r2 = r0;
+void sysError (void) {
+ Int tid;
+	DB("::%s", __func__);
 
-	push(r2);
-	/* Set the number of arguments. */
+	/* Create list in r4 of the operator and stack operand arguments.
+	   Operator is in r0, operands are on the stack and r1 is operand count. */
+	r3=r0;
+	sysList();
+	r1=r3; r2=r0; objCons12(); r3=r0;
+	
+	/* Look up error function/continuation in ERRORS vector
+	   in TGE and set the code register and IP:
+	     r0            The ERRORS vector  of closures/continuations
+	     (car running) The current thread
+	     (cdr thread)  Current thread ID
+	     (car closure) Code block
+	     (cdr closure) Parent environment */
+	objNewSymbol ((Str)"ERRORS", 6);  r1=r0;  wscmTGEFind(); r0=car(r0);
+	tid = (Int)cdr(car(running));
+	/* r0 needs to remain the closure when a code block is first run
+	   since it needs to initially extend the lexical environment */
+	r0 = memVectorObject(r0, tid);
+	code=car(r0);  ip=0;
+
+	/* Push operand and set operand count */
+	push(r3);
 	r1=(Obj)1;
-	r0=r3; /* r0 needs to be the closure */
-	DB("<--%s", __func__);
+
+	DB("  --%s", __func__);
 }
 
 /******************************************************************************
@@ -1380,7 +1388,7 @@ void sysCreateContinuation (void) {
 	push(code);
 	length = memStackLength(stack);
 	objNewVector(length);
-	memcpy(r0, stack+8, length*8);
+	memcpy(r0, stack+ObjSize, length*ObjSize);
 	pop(); pop(); pop(); pop(); pop(); pop();
 	r1=r0;
 	/* r1 now has a copy of the stack */
@@ -1459,7 +1467,7 @@ void sysSubString (void) {
 			objNewString((u8*)"Invalid range to substring.", 27);  push(r0);
 			push(r2); push(r1);
 			r1 = (Obj)3;
-			wscmError();
+			sysError();
 		} else {
 			memNewArray(TSTRING, end-start);
 			r1=pop();
@@ -1835,17 +1843,6 @@ void sysUnthread (void) {
 	DB("SYS <--sysUnthread");
 }
 
-/* Shhh.  This is a secret.
-*/
-void sysList (void) {
- Int argc = (Int)r1;
-	DB("-->%s", __func__);
-	r2 = null;
-	while (argc--) { r1=pop();  objCons12();  r2=r0; }
-	r0 = r2;
-	DB("<--%s", __func__);
-}
-
 void sysOpenSocket (void) {
 	DB("-->%s", __func__);
 	if (1 == (Int)r1)
@@ -1857,7 +1854,7 @@ void sysOpenSocket (void) {
 		objNewString((u8*)"Invalid arguments to open-socket:", 33);  push(r0);
 		push(r1);
 		r1 = (Obj)2;
-		wscmError();
+		sysError();
 	}
 	DB("<--%s", __func__);
 }
@@ -1868,7 +1865,7 @@ void sysOpenStream (void) {
 	    || memObjectType(r1=pop()) != TPORT) {
 		r0 = "Invalid arguments to open-stream.\n";
 		r1 = (Obj)1;
-		wscmError();
+		sysError();
 		goto ret;
 	}
 	if (memVectorObject(r1, 3) == sconnecting)
@@ -1880,7 +1877,7 @@ void sysOpenStream (void) {
 	else {
 		r0 = "Invalid port state to open-stream.\n";
 		r1 = (Obj)1;
-		wscmError();
+		sysError();
 	}
  ret:
 	DB("<--%s", __func__);
@@ -2066,12 +2063,7 @@ void sysIllegalOperator (void) {
 		wscmWrite (memStackObject(stack, i), stderr);
 	}
 	write(2, ")", 1);
-	/* Dump virtual machine state and code block. */
-	//r0=code; vmDebugDumpCode(r0);
-	/* No need to pop stack since calling error continuation. */
-	//r0=nullstr;
-	//r1 = (Obj)1;
-	wscmError();
+	sysError();
 }
 
 /* Run time symbol lookup syscall.  If a symbol in r1 found in TGE mutate code
@@ -2261,7 +2253,7 @@ void sysCompile (void) {
 	);
 	if (compExpression(0))
 	{
-		wscmError();
+		sysError();
 		//asmNewCode();
 		goto ret;
 	}
@@ -2734,7 +2726,7 @@ void wscmCreateRead (void) {
 void wscmCreateRepl (void) {
 	DB("-->%s\n", __func__);
 	objNewSymbol ((Str)"\nVM>", 4);  r2=r0;
-	objNewSymbol ((Str)"in", 2);  r1=r0;  wscmTGEFind(); r3=car(r0);
+	objNewSymbol ((Str)"stdin", 5);  r1=r0;  wscmTGEFind(); r3=car(r0);
 	objNewSymbol ((Str)"read", 4);  r1=r0;  wscmTGEFind();  r4=caar(r0);
 	objNewString ((Str)"bye\n", 4);  r5=r0;
 	objNewString ((Str)"Entering REPL\n", 14);  r6=r0;
@@ -2849,7 +2841,7 @@ void wscmInitialize (void) {
 	r1=r0;  r2=null;  objCons12();  env=tge=r0;
 
 	/* Bind usefull values r2=value r1=symbol. */
-	wscmDefineSyscall (wscmError, "error");
+	wscmDefineSyscall (sysError, "error");
 	wscmDefineSyscall (sysQuit, "quit");
 	wscmDefineSyscall (sysFun, "fun");
 	wscmDefineSyscall (sysDumpEnv, "env");
@@ -2915,11 +2907,11 @@ void wscmInitialize (void) {
 	wscmDefineSyscall (sysSignal, "signal");
 	wscmDefineSyscall (sysToggleDebug, "toggle-debug");
 
+	/* Create the standard I/O port object */
 	r1=(Obj)0; /* Descriptor */
 	objNewSymbol ((Str)"stdin", 5);  r2=r3=r0; /* Address and port */
 	r4 = sopen; /* State */
-	objNewPort(); r3=r0; wscmDefine("stdin");
-	r0=r3; wscmDefine("in"); /* Also bind to 'in */
+	objNewPort(); wscmDefine("stdin");
 
 	r1=(Obj)1;
 	objNewSymbol ((Str)"stdout", 6);  r2=r3=r0;
