@@ -2148,10 +2148,9 @@ TODO: The TAILCALL bitfield is unsigned but should be Num.
 
 World crashes when :(saySystem '(0)) is evaluted at the talk prompt.
 
-need to add these to  wscmError (I forget what the 1st instruction loading r5
-is for and why i need to ignore it when calling the continuation.
-				memVectorSet(code, 3, NOP);
-				memVectorSet(code, 4, NOP);
+I think I need to add these to  wscmError (I forget what the 1st instruction
+loading r5 is for and why i need to ignore it when calling the continuation.
+   memVectorSet(code, 3, NOP); memVectorSet(code, 4, NOP);
 
 Actually I just needed to clean up the sysIllegalOperator and wscmError
 functions.  They now behave correctly and will collect the operator and operand

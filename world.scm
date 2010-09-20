@@ -1,3 +1,24 @@
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; World -- Table of Contents
+;;  Windows
+;;   Glyphs_and_cells
+;;   Column
+;;   Field
+;;   Canvas
+;;   Viewport
+;;   Map_manipulation
+;;   Ultima_city_detail_map
+;;  Entites_and_avatar
+;;   Window_functions_and_initialization
+;;   Incomming_IPC_messages
+;;  Button_commands
+;;  Buttons
+;;  Typing_and_talking
+;;   Prototypes_and_fun_things
+;;   Start_everything
+;;
+(load "ipc.scm")
+(load "window.scm")
 (define QUIETLOGIN (not (null? (memv "silent" (vector->list argv)))))
 (define CELLANIMATION #t) 
 (define SCROLLINGMAP #t)
@@ -6,16 +27,13 @@
 (define DNA 0)
 (define ActivityTime (time))
 
-(load "ipc.scm")
-(load "window.scm")
+
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; Create terminal windows
-
-; Force just only one instance of the Terminal object
-; by setting the object value to an instance of itself.
-(define Terminal (Terminal))
-
+;; Windows
+;;
+(define Terminal (Terminal)) ; Force only one instance of the Terminal object by
+                             ; setting the object value to an instance of itself.
 ; Chat window.
 (define WinChat ((Terminal 'BufferNew)
   0 0
@@ -56,9 +74,11 @@
   ((Terminal 'WindowNew)
     0 (- (Terminal 'Twidth) (* MapSize 2)) ; Position of the map window
     (+ MapSize 0) (* 2 MapSize)
-    #x17 'NOREFRESH)))
+    #x0f 'NOREFRESH)))
 ((WinMap 'toggle))
 ((WinMap 'cursor-visible) #f) ; Disable cursor in map window
+(define WinMapSetColor (WinMap 'set-color))
+(define WinMapPutc (WinMap 'putc))
 
 ; Help Window.
 (define WinHelpBorder ((Terminal 'WindowNew) 4 19 14 32 #x20))
@@ -74,14 +94,19 @@
 ((WinStatus 'toggle))
 (define (WinStatusDisplay . e) (for-each (lambda (x) (for-each (WinStatus 'puts) (display->strings x))) e))
 
+;; Map column debug window
+(define WinColumn ((Terminal 'WindowNew) 1 (- (Terminal 'Twidth) 4) 18 4 #x5b))
+((WinColumn 'toggle))
+(define WinColumnPutc (WinColumn 'putc))
+(define (WinColumnPuts . l) (for-each (WinColumn 'puts) l))
+(define WinColumnSetColor (WinColumn 'set-color))
+
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; Glyphs - Two characters including their color.
+;; Glyphs_and_cells
 ;;
-(define (glyphColorNew background foreground)
-  (+ (* background 256) foreground))
-
+;Glyphs are two multi-colored characters.
 (define glyphNew vector)
 (define (glyph0bg cell) (vector-ref cell 0))
 (define (glyph0fg cell) (vector-ref cell 1))
@@ -90,42 +115,35 @@
 (define (glyph1fg cell) (vector-ref cell 4))
 (define (glyph1ch cell) (vector-ref cell 5))
 
+;Cells are a pair (symbol . glyph) for now (eventually smarter objects)
+(define CellMax 1023)
 
+(define Cells (make-vector (+ 1 CellMax) (cons 'NOTHING (glyphNew 0 7 #\x 0 7 #\x))))
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; Cells - For now cells are just glyphs...eventually smarter objects.
-;;
-(define MAXCELL 1023)
-
-(define CELLS
- (let ((cells (make-vector (+ 1 MAXCELL))))
-  (vector-map! (lambda (i) (cons 'NOTHING (glyphNew 0 7 #\x 0 7 #\x)))
-               cells)
-  cells))
-
-(define (cellSet      i symb glyph) (vector-set! CELLS i (cons symb glyph)))
-(define (cellSetGlyph i glyph)      (set-cdr! (vector-ref CELLS i) glyph))
+; Set the cell's symbol and/or glyph
+(define (cellSet      i symb glyph) (vector-set! Cells i (cons symb glyph)))
+(define (cellSetGlyph i glyph)      (set-cdr! (vector-ref Cells i) glyph))
 
 ; Get the cell index of this cell symbol
 (define (cellIndex symb)
   (let ~ ((i 0)
-          (cell (vector-ref CELLS 0)))
-   (if (< MAXCELL i) #f
+          (cell (vector-ref Cells 0)))
+   (if (< CellMax i) #f
    (if (eq? symb (car cell)) i
-   (~ (+ i 1) (vector-ref CELLS (+ i 1)))))))
+   (~ (+ i 1) (vector-ref Cells (+ i 1)))))))
 
 ; Get the cell glyph given its index or symbol
 (define (cellGlyph i)
   (if (integer? i)
-    (if (< MAXCELL i) ; An index larger than MAXCEL is assumbed to be an entity object.
+    (if (< CellMax i) ; An index larger than MAXCEL is assumbed to be an entity object.
       ((entitiesGet i) 'glyph)
-      (cdr (vector-ref CELLS i)))
+      (cdr (vector-ref Cells i)))
     (let ((index (cellIndex i)))
      (if index
-        (cdr (vector-ref CELLS index))
+        (cdr (vector-ref Cells index))
         #f))))
 
-(cellSet MAXCELL 'air (glyphNew 0 0  CHAR-CTRL-@ 0 0 CHAR-CTRL-@))
+(cellSet CellMax 'air (glyphNew 0 0  CHAR-CTRL-@ 0 0 CHAR-CTRL-@))
 (load "ultima4.cells")
 
 ; Some often used cell indices.
@@ -135,8 +153,10 @@
 (define cellBRICK (cellIndex 'brick))
 
 
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; Column - Somewhat compact group of objects in one dimension.  Compressed
+;; Column
+;;  Somewhat compact group of objects in one dimension.  Compressed
 ;;  by including all values within a range with the objects below and above
 ;;  the range the first and last values in the vector.
 ;;
@@ -202,9 +222,11 @@
     c))
 
 
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; Field - Maps will populate the field as if it were a local cache relative
-;;         to the avatar's position.
+;; Field
+;; Maps will populate the field as if it were a local cache relative
+;; to the avatar's position.
 ;;
 ;; A canvas entry is a vector consisting of a cell column.  The canvas itself
 ;; is a 2x2 block dynamically updated with cells from a cell field agent.
@@ -256,7 +278,7 @@
 ; Determine if the coordinate is above or below the inner field block area.
 ; An avatar that moves outside of the inner field range will cause the
 ; field to load new blocks.
-; BF: TODO: Implement map to field block coordinates.
+; TODO Implement map to field block coordinates.
 ;
 ;  +-----+<---Field range
 ;  |+---+|
@@ -288,7 +310,6 @@
 
 (resetField)
 
-
 ; Fields are 2d arrays of columns.  Columns are quasi-compressed stacks
 ; of cells that consist of a start height and specified stack of cells.
 ; #(3 1 1 2) would be cells (1 1 2) starting at z=4=(3+1). Cells below and
@@ -311,9 +332,8 @@
           (elements (columnRef column z)))
    (last elements))) ; Last in improper list of objs
 
-
 ; Scan down map column starting at z for first visibile cell.  Return height.
-; BF:  What should this return if z is below the bottom most explicit cell?
+; TODO  What should this return if z is below the bottom most explicit cell?
 (define (field-ref-top z y x)
  (letrec ((column (fieldColumn y x))
           (top    (columnHeightTop column)) ;1st implicit top cell in column
@@ -353,9 +373,9 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Canvas
-;;
 ;; A canvas entry is a vector consisting of a cell and it's Z coordinate (the
 ;; top most visible).  The canvas itself is a flattened map field.
+;;
 (define CANVAS (make-vector-vector FieldSize FieldSize ()))
 
 (define (canvasCell y x)
@@ -385,9 +405,7 @@
   (canvasCellSet y x (cellGlyph (field-ref top y x)))
   (canvasHeightSet y x top)))
 
-; Initialize the canvas with the Construct[tm].
-(define timeStart (time))
-
+; Initialize the canvas which is a vector of pairs (cellGlyph . cellHeight)
 (define (resetCanvas)
  (let ((defaultCell (cellGlyph 'xx)))
   (let ~ ((y 0)(x 0))
@@ -395,8 +413,9 @@
     ; Each canvas entry consists of a map cell and its height.
      (vector-vector-set! CANVAS y x (cons defaultCell 0))
      (~ y (+ x 1))))))))
-(resetCanvas)
 
+(define timeStart (time))
+(resetCanvas)
 (WinConsoleDisplay "Initialized Canvas " (- (time) timeStart) " seconds")
 
 
@@ -404,6 +423,21 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Viewport
 ;;
+(define (WinMapPutGlyph glyph y x)
+  (semaphore-down MapWindowSemaphore)
+  ((WinMap 'goto) y x)
+  ; Animation hack.  Every second use the default glyph or each
+  ; consecutive glyph (stored as consecutive vectors of simple
+  ; glyphs).
+  (let ((t (time)) ; capture the time
+        (l (- (vector-length glyph) 5))) ; number of extra animation glyphs
+    (if (> (modulo t l) 0) (set! glyph (vector-ref glyph (+ 5 (modulo t l)))))
+    (WinMapSetColor (glyph0bg glyph) (glyph0fg glyph))
+    (WinMapPutc     (glyph0ch glyph))
+    (WinMapSetColor (glyph1bg glyph) (glyph1fg glyph))
+    (WinMapPutc     (glyph1ch glyph)))
+  (semaphore-up MapWindowSemaphore))
+
 (define MapWindowSemaphore (open-semaphore 1))
 
 (define PortY 0)
@@ -412,18 +446,15 @@
 (define PortW 0)
 
 (define (viewportReset y x)
- (set! PortH (WinMap 'Wheight)) ; Adjust Viewport dimensions.
+ (set! PortH (WinMap 'Wheight)) ; Adjust Viewport dimensions
  (set! PortW (/ (WinMap 'Wwidth) 2))
- (set! PortY (- y (/ PortH 2)))     ; Center Viewport around Avatar.
+ (set! PortY (- y (/ PortH 2)))     ; Center Viewport around Avatar
  (set! PortX (- x (/ PortW 2)))
  ;((WinMap 'home))
- (let ~dumpGlyphs ((y 0) (x 0))
-  (if (!= y PortH) (if (= x PortW) (~dumpGlyphs (++ y) 0)
-    (begin
-     (WinMapPutGlyph (canvasCell (+ PortY y) (+ PortX x))
-                     y
-                     (* x 2))
-     (~dumpGlyphs y (++ x))))))
+ (loop2 0 PortH 0 PortW (lambda (y x) ; Render glyphs in viewport
+   (WinMapPutGlyph (canvasCell (+ PortY y) (+ PortX x))
+                   y
+                   (* x 2))))
  ; Plot column of cells at avatar's (y x) location.  For debugging.
  ((WinColumn 'home))
  (let ~ ((z 11))
@@ -463,9 +494,8 @@
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; Map manipulation
+;; Map_manipulation
 ;;
-
 ; Drop a cell on the map
 (define (dropCell y x cell)
  (let ((z (+ 1 (field-ref-top 1000 y x))))
@@ -482,405 +512,7 @@
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; Entites - Simple objects more dynamic than just cells.
-;;
-(define (Entity dna name z y x glyph)
- (define (self msg) (eval msg))
- (define (setAll name0 z0 y0 x0 glyph0)
-  (set! name name0)
-  (set! z z0)
-  (set! y y0)
-  (set! x x0)
-  (set! glyph glyph0))
- (define (setGlyph glyph0)
-  (set! glyph glyph0))
- (define (setNameGlyph name0 glyph0)
-  (set! name name0)
-  (set! glyph glyph0))
- (define (setLoc z0 y0 x0)
-  (set! z z0)
-  (set! y y0)
-  (set! x x0))
- (define (gps) (list z y x))
- self)
-
-; Association list of entites to their DNA values.
-(define EntityDB ())
-
-; Create a default "nobody" entity.
-(define nobody (Entity 42 "nobody" 0 0 0 (glyphNew 0 7 #\n 0 7 #\o)))
-
-; Update or create and add a new entity to the entity database.
-(define (entitiesSet dna name z y x glyph)
- (let ((ent (assv dna EntityDB)))
-  (if (null? ent)
-      (set! EntityDB (cons (cons dna (Entity dna name z y x glyph))
-                           EntityDB))
-      (((cdr ent) 'setAll) name z y x glyph)))) ; Clone the remote entitiy locally.
-
-; Lookup entity, or null, in database.
-(define (entitiesGet dna)
- (let ((e (assv dna EntityDB)))
-   (if (null? e)
-       nobody
-       (cdr e))))
-
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; Avatar
-;;
-(define (Avatar name) ; Inherits Entity
- ((Entity (random) name
-   1 108 86
-   (glyphNew 0 15 (string-ref name 0) 0 15 (string-ref name 1)))
-  `(let ()
-    (define (self msg) (eval msg))
-    (define dir 0)
-    (define (jump zz yy xx) (set! z zz) (set! y yy) (set! x xx))
-    (define (face dirNew) (set! dir dirNew))
-    (define (move)
-      (if (= dir 0) (jump (+ z -1) y      x)
-      (if (= dir 1) (jump z        (++ y) (-- x))
-      (if (= dir 2) (jump z        (++ y) x)
-      (if (= dir 3) (jump z        (++ y) (++ x))
-      (if (= dir 4) (jump z        y      (-- x))
-      (if (= dir 5) (jump (+ z 1)  y      x)
-      (if (= dir 6) (jump z        y      (++ x))
-      (if (= dir 7) (jump z        (-- y) (-- x))
-      (if (= dir 8) (jump z        (-- y) x)
-      (if (= dir 9) (jump z        (-- y) (++ x)))))))))))))
-    (define (walk dir)
-     (face dir)
-     (move))
-    (define (look)
-      (let ((loc (gps)))
-        (move) ; temporarily walk to this location
-        (let ((c (field-ref z y x)))
-          (apply setLoc loc) ; restore old location.
-          c)))
-    (define cell cellBRICK)
-    (define (gpsLook)
-      (if (= dir 0) (list (+ z -1) y      x)
-      (if (= dir 1) (list z        (++ y) (-- x))
-      (if (= dir 2) (list z        (++ y) x)
-      (if (= dir 3) (list z        (++ y) (++ x))
-      (if (= dir 4) (list z        y      (-- x))
-      (if (= dir 5) (list (+ z 1)  y      x)
-      (if (= dir 6) (list z        y      (++ x))
-      (if (= dir 7) (list z        (-- y) (-- x))
-      (if (= dir 8) (list z        (-- y) x)
-      (if (= dir 9) (list z        (-- y) (++ x)))))))))))))
-    self) ))
-
-(define avatar (Avatar "Guest"))
-(set! DNA (avatar 'dna))
-
-
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; Keyboard Input
-;;
-; BF: Should this be a thread?  At least move somewhere else.
-(define (refreshIfBeyondViewport)
- (let ((y (modulo (- (avatar 'y) PortY) FieldSize));Normalize avatar position.
-   (x (modulo (- (avatar 'x) PortX) FieldSize)))
-   (if (or (<= PortW x) (<= PortH y))
-     (viewportReset (avatar 'y) (avatar 'x)))))
-
-; TODO: Implement coor+dir use new dir to field-ref location an dif > MAX_CELL ipc-write (force blah blah)
-
-(define SOLIDCELLS (list
- (cellIndex 'xx)
- (cellIndex 'mnts)
- (cellIndex 'hills)
- (cellIndex 'water0)
- (cellIndex 'water1)
- (cellIndex 'water2)
- (cellIndex 'brickc)
- (cellIndex 'column)
- (cellIndex 'window)
- (cellIndex 'doorl)))
-
-(define (walk dir)
- ((avatar 'face) dir) ; Turn avatar
- (let ((nextCell ((avatar 'look)))) ; Consider cell I'm walking into
-   (if (< MAXCELL nextCell) ; Cell I'm walking into is probably an entity
-    ; Push the entity that's in my way
-    ((ipc 'qwrite) `(force ,@((avatar 'gpsLook)) ,dir 10))
-    ; Walk normally
-    (if (null? (memv nextCell SOLIDCELLS))
-     (begin
-      ((avatar 'move))
-      ((ipc 'qwrite) `(move ,DNA ,@((avatar 'gps))))
-      (if (eq? (cellIndex 'help) (field-ref (avatar 'z) (avatar 'y) (avatar 'x)))  (help))
-      (if (eq? (cellIndex 'snake) (field-ref (avatar 'z) (avatar 'y) (avatar 'x))) (thread (snake-random)))
-      ;(if (eqv? (cellIndex 'brit2) (field-base-ref (avatar 'z) (avatar 'y) (avatar 'x))) (thread (spawnKitty)))
-      ;(WinConsoleWrite (fieldColumn (avatar 'y) (avatar 'x)) (field-ref (avatar 'z) (avatar 'y) (avatar 'x)))
-      ; Dump our coordinates.
-      (WinStatusDisplay "\r\n"
-         (number->string (avatar 'z) 16) " "
-         (number->string (avatar 'y) 16) " "
-         (number->string (avatar 'x) 16) "\r\n"
-         (number->string (/ (avatar 'y) FieldBlockSize) 16) " "
-         (number->string (/ (avatar 'x) FieldBlockSize) 16)))))))
-
-; Change avatar color.  Will just cycle through all 16 avatar colors.
-(define (avatarColor)
- (let ((glyph (avatar 'glyph)))
-  ((avatar 'setGlyph)
-    (glyphNew (glyph0bg glyph)
-              (modulo (+ (glyph0fg glyph) 1) 16)
-              (glyph0ch glyph)
-              (glyph1bg glyph)
-              (modulo (+ (glyph1fg glyph) 1) 16)
-              (glyph1ch glyph))))
-  (who))
-
-(define (rollcall)
- ((ipc 'qwrite) `(if (!= DNA ,DNA) ((ipc 'qwrite) `(if (= DNA ,,DNA) (voice 0 10 (string ,(avatar 'name)" is present in world " ,(let ((t (- (time) ActivityTime))) (if (< t 60) (string (number->string t) "s")(string (number->string (/ t 60)) "m"))))))))))
- ;(WinChatSetColor #x0e)
- ;;(WinChatDisplay name))
- ;(WinChatSetColor #x07)
- ;(WinChatDisplay " is present in World[tm] as "))
- ;(WinChatSetColor (glyphColor0 glyph))
- ;(WinChatDisplay (glyphChar0 glyph))
- ;(WinChatSetColor (glyphColor1 glyph))
- ;(WinChatDisplay (glyphChar1 glyph)))
-
-
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; Incomming IPC messages 
-;;
-(define (entity dna name z y x glyph)
- (entitiesSet dna name z y x glyph)
- (move dna z y x))
-
-
-(define (who)
- ((ipc 'qwrite)
- `(entity ,DNA ,(avatar 'name) ,@((avatar 'gps)) ,(avatar 'glyph))))
-
-;; Call this 'move.  Entites move.  Back to the original ways?
-;; was 'avatar
-(define (move dna z y x)
- (letrec ((entity (entitiesGet dna))
-          (thisIsMe (= dna DNA))
-          (shouldScroll (and thisIsMe
-           (or SCROLLINGMAP (< 10 (distance (list 0 (avatar 'y) (avatar 'x))
-                                           (list 0 (+ PortY (/ PortH 2)) (+ PortX (/ PortW 2)))))))))
-  (if (null? entity)
-    (begin
-      (entitiesSet dna "??" z y x (glyphNew 1 9 #\? 1 9 #\?))
-      ((ipc 'qwrite) '(who)))
-    (begin
-      ; Move from here
-      (field-delete! (entity 'z) (entity 'y) (entity 'x) dna)
-      (if (>= (entity 'z) (canvasHeight (entity 'y) (entity 'x))) (begin
-        (canvasRender (entity 'y) (entity 'x))
-        (or shouldScroll (viewportRender (entity 'y) (entity 'x)))))
-      ; Place here
-      ((entity 'setLoc) z y x)
-      (field-add! z y x dna)
-      (if (>= (entity 'z) (canvasHeight y x)) (begin
-        (canvasRender y x)
-        (or shouldScroll (viewportRender y x))))
-      (if shouldScroll
-        (viewportReset (avatar 'y) (avatar 'x)))))))
-
-(define (force z y x dir str)
- (if (and (= z (avatar 'z)) (= y (avatar 'y)) (= x (avatar 'x)))
-   (walk dir)))
-
-(define (die dna)
- (let ((entity (entitiesGet dna))
-       (thisIsMe (= dna DNA)))
-  (if (not (null? entity)) ; Ignore unknown entities
-    (begin
-      ; Remove from here
-      (field-delete! (entity 'z) (entity 'y) (entity 'x) dna)
-      (if (>= (entity 'z) (canvasHeight (entity 'y) (entity 'x))) (begin
-        (canvasRender (entity 'y) (entity 'x))
-        (or thisIsMe (viewportRender (entity 'y) (entity 'x)))))))))
-
-
-(define (voice dna level text)
- (if (= dna 0)
-  (begin ; Message from the system
-    (WinChatDisplay "\r\n")
-    (WinChatSetColor 0 9) (WinChatDisplay "W")
-    (WinChatSetColor 0 11) (WinChatDisplay "O")
-    (WinChatSetColor 0 10) (WinChatDisplay "R")
-    (WinChatSetColor 0 12) (WinChatDisplay "L")
-    (WinChatSetColor 0 13) (WinChatDisplay "D")
-    (WinChatSetColor 0 8) (WinChatDisplay VOICEDELIMETER)
-    (WinChatSetColor 0 7) (WinChatDisplay text))
-  (let ((entity (entitiesGet dna)))
-    (WinChatSetColor (glyph0bg (entity 'glyph)) (glyph0fg (entity 'glyph)))
-    (WinChatDisplay "\r\n" (if (null? entity) "???" (entity 'name)) VOICEDELIMETER)
-    (WinChatSetColor (glyph1bg (entity 'glyph)) (glyph0fg (entity 'glyph)))
-    (WinChatDisplay text)))
- (if (and (!= dna DNA) (eqv? text "unatco")) (say "no Savage")))
-
-
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; Get the wheels in motion
-;;
-
-; Make Map window circular!
-(define (circularize . val)
- (set! val (not (null? val))) ; Default to disabling circular corners of map.
- (let ~ ((y 0)(x 0))
-  (if (< y (/ (WinMap 'Wheight) 2))
-  (if (= x (/ (WinMap 'Wwidth) 2)) (~ (+ y 1) 0)
-   (begin
-    (if (> (sqrt (+ (* 4 (^2 (- y (/ (WinMap 'Wheight) 2))))
-                    (^2 (- x  (/ (WinMap 'Wwidth) 2)))))
-           (+ 0 (WinMap 'Wheight)))
-        (begin 
-          ((WinMap 'alpha) y x val)
-          ((WinMap 'alpha) y (- (WinMap 'Wwidth) x 1) val)
-          ((WinMap 'alpha) (- (WinMap 'Wheight) y 1) x val)
-          ((WinMap 'alpha) (- (WinMap 'Wheight) y 1)
-                           (- (WinMap 'Wwidth) x 1) val)
-          ))
-    (~ y (+ x 1)))))))
-
-(circularize)
-
-
-(define deltaMoveTime (+ 62 (utime))) ; Double click 1/16 sec.
-
-(define (winMapBigger)
- (if (< (WinMap 'Wheight) (Terminal 'Theight)) (begin
-  ;((WinMap 'toggle))
-  ((WinMap 'home))
-  (if (< (utime) deltaMoveTime)
-    ((WinMap 'moveresize) ; Full resize.
-       0 (- (Terminal 'Twidth) (WinMap 'Wwidth) 2)
-             (min (/ (Terminal 'Twidth) 2) (- (Terminal 'Theight) 1))
-       (* 2  (min (/ (Terminal 'Twidth) 2) (- (Terminal 'Theight) 1)))))
-    ((WinMap 'moveresize) ; Resize by one.
-       0 (- (Terminal 'Twidth) (WinMap 'Wwidth) 2)
-       (+ 1 (WinMap 'Wheight))
-       (+ 2 (WinMap 'Wwidth)))
-  (circularize)
-  (viewportReset (avatar 'y) (avatar 'x))
-  ;((WinMap 'toggle))
-  (set! deltaMoveTime (+ 250 (utime))))))
-
-(define (winMapSmaller)
- (if (< 5 (WinMap 'Wheight)) (begin
-  ;((WinMap 'toggle))
-  ((WinMap 'home))
-  ((WinMap 'moveresize)
-     0 (- (Terminal 'Twidth) (WinMap 'Wwidth) -2)
-     (+ -1 (WinMap 'Wheight))
-     (+ -2 (WinMap 'Wwidth)))
-  (circularize)
-  (viewportReset (avatar 'y) (avatar 'x))
-  ;((WinMap 'toggle))
-)))
-
-(define (winMapUp)  ((WinMap 'move)  (+ -1 (WinMap 'Y0)) (WinMap 'X0)))
-(define (winMapDown) ((WinMap 'move)  (+  1 (WinMap 'Y0)) (WinMap 'X0)))
-(define (winMapLeft)    ((WinMap 'move) (WinMap 'Y0) (+ -1 (WinMap 'X0))))
-(define (winMapRight)  ((WinMap 'move) (WinMap 'Y0) (+  1 (WinMap 'X0))))
-
- 
-(define WinMapSetColor (WinMap 'set-color))
-(define WinMapPutc (WinMap 'putc))
-(define (WinMapPutGlyph glyph y x)
-  (semaphore-down MapWindowSemaphore)
-  ((WinMap 'goto) y x)
-  ; Animation hack.  Every second use the default glyph or each
-  ; consecutive glyph (stored as consecutive vectors of simple
-  ; glyphs).
-  (let ((t (time)) ; capture the time
-        (l (- (vector-length glyph) 5))) ; number of extra animation glyphs
-    (if (> (modulo t l) 0) (set! glyph (vector-ref glyph (+ 5 (modulo t l)))))
-    (WinMapSetColor (glyph0bg glyph) (glyph0fg glyph))
-    (WinMapPutc     (glyph0ch glyph))
-    (WinMapSetColor (glyph1bg glyph) (glyph1fg glyph))
-    (WinMapPutc     (glyph1ch glyph)))
-  (semaphore-up MapWindowSemaphore))
-
-
-;; Map column debug window
-(define WinColumn ((Terminal 'WindowNew) 1 (- (Terminal 'Twidth) 4) 18 4 #x5b))
-((WinColumn 'toggle))
-(define WinColumnPutc (WinColumn 'putc))
-(define (WinColumnPuts . l) (for-each (WinColumn 'puts) l))
-(define WinColumnSetColor (WinColumn 'set-color))
-
-
-
-(define (welcome)
- (define WinMarquee
-  ((Terminal 'WindowNew)
-    (/ (Terminal 'Theight) 3)  (- (/ (Terminal 'Twidth) 2) 12)
-    3  24
-    #x0f))
- (define WinMarqueePuts (WinMarquee 'puts))
- (define WinMarqueePutc (WinMarquee 'putc))
- (define WinMarqueeSetColor (WinMarquee 'set-color))
- ((WinMarquee 'cursor-visible) #f) ; Disable cursor in map window.
- (WinMarqueePuts " +====================+ ")
- (WinMarqueePuts " |                    | ")
- (WinMarqueePuts " +====================+ ")
- (let ~~ ((i -5))
-   (sleep 200) ; Delay
-   ((WinMarquee 'goto) 0 0)
-   (WinMarqueeSetColor 0 15)
-   (if (= 0 (modulo i 4)) (begin
-      (WinMarqueePuts "  +====================+")
-      (WinMarqueePuts " /                    / ")
-      (WinMarqueePuts "+====================+  "))
-   (if (or (= 3 (modulo i 4)) (= 1 (modulo i 4))) (begin
-      (WinMarqueePuts " +====================+ ")
-      (WinMarqueePuts " |                    | ")
-      (WinMarqueePuts " +====================+ "))
-   (begin
-      (WinMarqueePuts "+====================+  ")
-      (WinMarqueePuts " \\                    \\ ")
-      (WinMarqueePuts "  +====================+"))))
-   ((WinMarquee 'goto) 1 2)
-   (let ~ ((j 0))
-     (WinMarqueeSetColor 0 (vector-ref #(07 07 07 07 07 07 07 07   07 07 07
-                                       9 11 10 12 5  1  2  6  4 7)
-                                     (modulo (+ i j) 21)))
-     (WinMarqueePutc (vector-ref #(#\W #\e #\l #\c #\o #\m #\e #\   #\t #\o #\ 
-                                   #\W #\o #\r #\l #\d #\[ #\t #\m #\] #\ )
-                                 (modulo (+ i j) 21)))
-     (if (< j 19) (~ (+ j 1)))) ; Marquee area width
-   (if (< i 60) ; Msg scroll count
-       (~~ (+ i 1))))
- ((WinMarquee 'delete)))
-
-(define (makeProgressBar y x title)
- (let ((win ((Terminal 'WindowNew) y x 3 22 #x4a))
-       (pos 0))
-  ((win 'cursor-visible) #f)
-  ((win 'puts) "+--------------------+")
-  ((win 'puts) "|                    |")
-  ((win 'puts) "+--------------------+")
-  ((win 'goto) 0 2) ((win 'puts) title)
-  ((win 'goto) 1 1) ((win 'set-color) 7 0)
-  (lambda ()
-   (if (= pos 20)
-    (begin
-     ((win 'delete))
-     #f)
-    (begin
-     ((win 'putc) #\ )
-     (set! pos (+ pos 1))
-     #t)))))
-
-
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; Ultima city detail map.
+;; Ultima_city_detail_map
 ;;
 ;; Mapping from Ultima4 map file byte index to (y x) World[tm] coordinates.
 ;;  y = (+ (modulo (/ i 32) 32) (* (/ i 8192) 32))
@@ -1041,14 +673,105 @@
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; Help window.  A bunch of button commands for now.
+;; Entites_and_avatar
+;; Simple objects more dynamic than just cells.
+;;
+(define (Entity dna name z y x glyph)
+ (define (self msg) (eval msg))
+ (define (setAll name0 z0 y0 x0 glyph0)
+  (set! name name0)
+  (set! z z0)
+  (set! y y0)
+  (set! x x0)
+  (set! glyph glyph0))
+ (define (setGlyph glyph0)
+  (set! glyph glyph0))
+ (define (setNameGlyph name0 glyph0)
+  (set! name name0)
+  (set! glyph glyph0))
+ (define (setLoc z0 y0 x0)
+  (set! z z0)
+  (set! y y0)
+  (set! x x0))
+ (define (gps) (list z y x))
+ self)
 
-; Give the windows an 'artistic' border.
+; Association list of entites to their DNA values.
+(define EntityDB ())
+
+; Create a default "nobody" entity.
+(define nobody (Entity 42 "nobody" 0 0 0 (glyphNew 0 7 #\n 0 7 #\o)))
+
+; Update or create and add a new entity to the entity database.
+(define (entitiesSet dna name z y x glyph)
+ (let ((ent (assv dna EntityDB)))
+  (if (null? ent)
+      (set! EntityDB (cons (cons dna (Entity dna name z y x glyph))
+                           EntityDB))
+      (((cdr ent) 'setAll) name z y x glyph)))) ; Clone the remote entitiy locally.
+
+; Lookup entity, or null, in database.
+(define (entitiesGet dna)
+ (let ((e (assv dna EntityDB)))
+   (if (null? e)
+       nobody
+       (cdr e))))
+
+; The user's avatar
+(define (Avatar name) ; Inherits Entity
+ ((Entity (random) name
+   1 108 86
+   (glyphNew 0 15 (string-ref name 0) 0 15 (string-ref name 1)))
+  `(let ()
+    (define (self msg) (eval msg))
+    (define dir 0)
+    (define (jump zz yy xx) (set! z zz) (set! y yy) (set! x xx))
+    (define (face dirNew) (set! dir dirNew))
+    (define (move)
+      (if (= dir 0) (jump (+ z -1) y      x)
+      (if (= dir 1) (jump z        (++ y) (-- x))
+      (if (= dir 2) (jump z        (++ y) x)
+      (if (= dir 3) (jump z        (++ y) (++ x))
+      (if (= dir 4) (jump z        y      (-- x))
+      (if (= dir 5) (jump (+ z 1)  y      x)
+      (if (= dir 6) (jump z        y      (++ x))
+      (if (= dir 7) (jump z        (-- y) (-- x))
+      (if (= dir 8) (jump z        (-- y) x)
+      (if (= dir 9) (jump z        (-- y) (++ x)))))))))))))
+    (define (walk dir)
+     (face dir)
+     (move))
+    (define (look)
+      (let ((loc (gps)))
+        (move) ; temporarily walk to this location
+        (let ((c (field-ref z y x)))
+          (apply setLoc loc) ; restore old location.
+          c)))
+    (define cell cellBRICK)
+    (define (gpsLook)
+      (if (= dir 0) (list (+ z -1) y      x)
+      (if (= dir 1) (list z        (++ y) (-- x))
+      (if (= dir 2) (list z        (++ y) x)
+      (if (= dir 3) (list z        (++ y) (++ x))
+      (if (= dir 4) (list z        y      (-- x))
+      (if (= dir 5) (list (+ z 1)  y      x)
+      (if (= dir 6) (list z        y      (++ x))
+      (if (= dir 7) (list z        (-- y) (-- x))
+      (if (= dir 8) (list z        (-- y) x)
+      (if (= dir 9) (list z        (-- y) (++ x)))))))))))))
+    self) ))
+
+(define avatar (Avatar "Guest"))
+(set! DNA (avatar 'dna))
+
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Window_functions_and_initialization
+;;
+; Setup the help windows with an artistic border and prerender the help text
 (map (lambda (x) ((WinHelp 'alpha) 0 x #f)) '(0 1 2 3 4 5 6 7 8 21 22 23 24 25 26 27 28 29))
 (map (lambda (x) ((WinHelpBorder 'alpha) 0 x #f)) '(0 1 2 3 4 5 6 7 8 23 24 25 26 27 28 29 30 31))
-
-;((WinHelp 'goto) 0 0)
-;((WinHelp 'set-color) 0 10)
 ((WinHelp 'puts) "          !! Help !!")
 ((WinHelp 'set-color) 0 15)
 ((WinHelp 'puts) "\r\n?  toggle help window")
@@ -1061,14 +784,328 @@
 ((WinHelp 'puts) "\r\np  present user list")
 ((WinHelp 'puts) "\r\nq  quit World[tm]")
 
+; Make Map window circular
+(define (circularize . val)
+ (set! val (not (null? val))) ; Default to disabling circular corners of map.
+ (let ~ ((y 0)(x 0))
+  (if (< y (/ (WinMap 'Wheight) 2))
+  (if (= x (/ (WinMap 'Wwidth) 2)) (~ (+ y 1) 0)
+   (begin
+    (if (> (sqrt (+ (* 4 (^2 (- y (/ (WinMap 'Wheight) 2))))
+                    (^2 (- x  (/ (WinMap 'Wwidth) 2)))))
+           (+ 0 (WinMap 'Wheight)))
+        (begin 
+          ((WinMap 'alpha) y x val)
+          ((WinMap 'alpha) y (- (WinMap 'Wwidth) x 1) val)
+          ((WinMap 'alpha) (- (WinMap 'Wheight) y 1) x val)
+          ((WinMap 'alpha) (- (WinMap 'Wheight) y 1)
+                           (- (WinMap 'Wwidth) x 1) val)
+          ))
+    (~ y (+ x 1)))))))
+(circularize)
+
+
+; Screen redraw function and signal handler
+(define (handleTerminalResize)
+  (WinConsoleDisplay "\r\nSIGWINCH::TerminalSize=" (terminal-size))
+  ((Terminal 'ResetTerminal))
+  ((WinChat 'resize)  (- (Terminal 'Theight) 1) (Terminal 'Twidth))
+  ((WinMap 'move)     0 (- (Terminal 'Twidth) (WinMap 'Wwidth) 2))
+  ((WinColumn 'move)  1 (- (Terminal 'Twidth) 2) )
+  ((WinStatus 'move)  (WinMap 'Y0) (- (Terminal 'Twidth) 17))
+  ((WinInput 'resize) 1 (Terminal 'Twidth))
+  ((WinInput 'move)   (- (Terminal 'Theight) 1) 0))
+
+(define sigwinch
+ (let ((sig28Semaphore (open-semaphore 1)))
+  (lambda ()
+   (semaphore-down sig28Semaphore)
+   (handleTerminalResize)
+   (semaphore-up sig28Semaphore))))
+
+(signal-set 28 (lambda () (sigwinch) (unthread)))
+
+
+; Welcome message marquee displayed when connecting.
+(define (welcome)
+ (define WinMarquee
+  ((Terminal 'WindowNew)
+    (/ (Terminal 'Theight) 3)  (- (/ (Terminal 'Twidth) 2) 12)
+    3  24
+    #x0f))
+ (define WinMarqueePuts (WinMarquee 'puts))
+ (define WinMarqueePutc (WinMarquee 'putc))
+ (define WinMarqueeSetColor (WinMarquee 'set-color))
+ ((WinMarquee 'cursor-visible) #f) ; Disable cursor in map window.
+ (WinMarqueePuts " +====================+ ")
+ (WinMarqueePuts " |                    | ")
+ (WinMarqueePuts " +====================+ ")
+ (let ~~ ((i -5))
+   (sleep 200) ; Delay
+   ((WinMarquee 'goto) 0 0)
+   (WinMarqueeSetColor 0 15)
+   (if (= 0 (modulo i 4)) (begin
+      (WinMarqueePuts "  +====================+")
+      (WinMarqueePuts " /                    / ")
+      (WinMarqueePuts "+====================+  "))
+   (if (or (= 3 (modulo i 4)) (= 1 (modulo i 4))) (begin
+      (WinMarqueePuts " +====================+ ")
+      (WinMarqueePuts " |                    | ")
+      (WinMarqueePuts " +====================+ "))
+   (begin
+      (WinMarqueePuts "+====================+  ")
+      (WinMarqueePuts " \\                    \\ ")
+      (WinMarqueePuts "  +====================+"))))
+   ((WinMarquee 'goto) 1 2)
+   (let ~ ((j 0))
+     (WinMarqueeSetColor 0 (vector-ref #(07 07 07 07 07 07 07 07   07 07 07
+                                       9 11 10 12 5  1  2  6  4 7)
+                                     (modulo (+ i j) 21)))
+     (WinMarqueePutc (vector-ref #(#\W #\e #\l #\c #\o #\m #\e #\   #\t #\o #\ 
+                                   #\W #\o #\r #\l #\d #\[ #\t #\m #\] #\ )
+                                 (modulo (+ i j) 21)))
+     (if (< j 19) (~ (+ j 1)))) ; Marquee area width
+   (if (< i 60) ; Msg scroll count
+       (~~ (+ i 1))))
+ ((WinMarquee 'delete)))
+
+(define (makeProgressBar y x title)
+ (let ((win ((Terminal 'WindowNew) y x 3 22 #x4a))
+       (pos 0))
+  ((win 'cursor-visible) #f)
+  ((win 'puts) "+--------------------+")
+  ((win 'puts) "|                    |")
+  ((win 'puts) "+--------------------+")
+  ((win 'goto) 0 2) ((win 'puts) title)
+  ((win 'goto) 1 1) ((win 'set-color) 7 0)
+  (lambda ()
+   (if (= pos 20)
+    (begin
+     ((win 'delete))
+     #f)
+    (begin
+     ((win 'putc) #\ )
+     (set! pos (+ pos 1))
+     #t)))))
+
+(define (boxInput title)
+ (define box
+  ((Terminal 'WindowNew)
+    (/ (Terminal 'Theight) 2)  (- (/ (Terminal 'Twidth) 2) 10)
+    3  20
+    #x0f))
+ (define puts (box 'puts))
+ (define putc (box 'putc))
+ (define setcolor (box 'set-color))
+ (define str "")
+ ;((box 'cursor-visible) #f)
+ (puts "+------------------+")
+ (puts "|                  |")
+ (puts "+------------------+")
+ ((box 'goto) 0 2) (puts title)
+ ((box 'goto) 1 1)
+ (let ~ ((c (read-char stdin)))
+   (or (eq? c RETURN) (eq? c NEWLINE)
+    (begin
+     (if (or (eq? c CHAR-CTRL-H) ; Rubout characters
+             (eq? c CHAR-CTRL-_)
+             (eq? c CHAR-CTRL-?))
+       (if (eq? str "") "" (begin
+             ((box 'backspace) #\ )
+             (set! str (substring str 0 (- (string-length str) 1)))))
+       (if (and (< (string-length str) 18) ; Name length limit
+                (<= #\! c) (<= c #\~))     ; Name character restriction
+            (begin
+             (putc c)
+             (set! str (string str c)))))
+     (~ (read-char stdin)))))
+ ((box 'delete))
+ str)
+
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Incomming_IPC_messages
+;;
+(define (who)
+ ((ipc 'qwrite)
+ `(entity ,DNA ,(avatar 'name) ,@((avatar 'gps)) ,(avatar 'glyph))))
+
+;; Entitity movement
+(define (move dna z y x)
+ (letrec ((entity (entitiesGet dna))
+          (thisIsMe (= dna DNA))
+          (shouldScroll (and thisIsMe
+           (or SCROLLINGMAP (< 10 (distance (list 0 (avatar 'y) (avatar 'x))
+                                           (list 0 (+ PortY (/ PortH 2)) (+ PortX (/ PortW 2)))))))))
+  (if (null? entity)
+    (begin
+      (entitiesSet dna "??" z y x (glyphNew 1 9 #\? 1 9 #\?))
+      ((ipc 'qwrite) '(who)))
+    (begin
+      ; Move from here
+      (field-delete! (entity 'z) (entity 'y) (entity 'x) dna)
+      (if (>= (entity 'z) (canvasHeight (entity 'y) (entity 'x))) (begin
+        (canvasRender (entity 'y) (entity 'x))
+        (or shouldScroll (viewportRender (entity 'y) (entity 'x)))))
+      ; Place here
+      ((entity 'setLoc) z y x)
+      (field-add! z y x dna)
+      (if (>= (entity 'z) (canvasHeight y x)) (begin
+        (canvasRender y x)
+        (or shouldScroll (viewportRender y x))))
+      (if shouldScroll
+        (viewportReset (avatar 'y) (avatar 'x)))))))
+
+(define (entity dna name z y x glyph)
+ (entitiesSet dna name z y x glyph)
+ (move dna z y x))
+
+(define (die dna)
+ (let ((entity (entitiesGet dna))
+       (thisIsMe (= dna DNA)))
+  (if (not (null? entity)) ; Ignore unknown entities
+    (begin
+      ; Remove from here
+      (field-delete! (entity 'z) (entity 'y) (entity 'x) dna)
+      (if (>= (entity 'z) (canvasHeight (entity 'y) (entity 'x))) (begin
+        (canvasRender (entity 'y) (entity 'x))
+        (or thisIsMe (viewportRender (entity 'y) (entity 'x)))))))))
+
+(define (force z y x dir str)
+ (if (and (= z (avatar 'z)) (= y (avatar 'y)) (= x (avatar 'x)))
+   (walk dir)))
+
+(define (voice dna level text)
+ (if (= dna 0)
+  (begin ; Message from the system
+    (WinChatDisplay "\r\n")
+    (WinChatSetColor 0 9) (WinChatDisplay "W")
+    (WinChatSetColor 0 11) (WinChatDisplay "O")
+    (WinChatSetColor 0 10) (WinChatDisplay "R")
+    (WinChatSetColor 0 12) (WinChatDisplay "L")
+    (WinChatSetColor 0 13) (WinChatDisplay "D")
+    (WinChatSetColor 0 8) (WinChatDisplay VOICEDELIMETER)
+    (WinChatSetColor 0 7) (WinChatDisplay text))
+  (let ((entity (entitiesGet dna)))
+    (WinChatSetColor (glyph0bg (entity 'glyph)) (glyph0fg (entity 'glyph)))
+    (WinChatDisplay "\r\n" (if (null? entity) "???" (entity 'name)) VOICEDELIMETER)
+    (WinChatSetColor (glyph1bg (entity 'glyph)) (glyph0fg (entity 'glyph)))
+    (WinChatDisplay text)))
+ (if (and (!= dna DNA) (eqv? text "unatco")) (say "no Savage")))
+
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Button_commands
+;;
+; Toggle the help window
 (define (help)
  ((WinHelp 'toggle))
  ((WinHelpBorder 'toggle)))
+
+(define deltaMoveTime (+ 62 (utime))) ; Double click 1/16 sec.
+
+(define (winMapBigger)
+ (if (< (WinMap 'Wheight) (Terminal 'Theight)) (begin
+  ;((WinMap 'toggle))
+  ((WinMap 'home))
+  (if (< (utime) deltaMoveTime)
+    ((WinMap 'moveresize) ; Full resize.
+       0 (- (Terminal 'Twidth) (WinMap 'Wwidth) 2)
+             (min (/ (Terminal 'Twidth) 2) (- (Terminal 'Theight) 1))
+       (* 2  (min (/ (Terminal 'Twidth) 2) (- (Terminal 'Theight) 1)))))
+    ((WinMap 'moveresize) ; Resize by one.
+       0 (- (Terminal 'Twidth) (WinMap 'Wwidth) 2)
+       (+ 1 (WinMap 'Wheight))
+       (+ 2 (WinMap 'Wwidth)))
+  (circularize)
+  (viewportReset (avatar 'y) (avatar 'x))
+  ;((WinMap 'toggle))
+  (set! deltaMoveTime (+ 250 (utime))))))
+
+(define (winMapSmaller)
+ (if (< 5 (WinMap 'Wheight)) (begin
+  ;((WinMap 'toggle))
+  ((WinMap 'home))
+  ((WinMap 'moveresize)
+     0 (- (Terminal 'Twidth) (WinMap 'Wwidth) -2)
+     (+ -1 (WinMap 'Wheight))
+     (+ -2 (WinMap 'Wwidth)))
+  (circularize)
+  (viewportReset (avatar 'y) (avatar 'x))
+  ;((WinMap 'toggle))
+)))
+
+(define (winMapUp)  ((WinMap 'move)  (+ -1 (WinMap 'Y0)) (WinMap 'X0)))
+(define (winMapDown) ((WinMap 'move)  (+  1 (WinMap 'Y0)) (WinMap 'X0)))
+(define (winMapLeft)    ((WinMap 'move) (WinMap 'Y0) (+ -1 (WinMap 'X0))))
+(define (winMapRight)  ((WinMap 'move) (WinMap 'Y0) (+  1 (WinMap 'X0))))
+ 
+; Should this be a thread?  At least move somewhere else.
+;(define (refreshIfBeyondViewport)
+; (let ((y (modulo (- (avatar 'y) PortY) FieldSize));Normalize avatar position.
+;   (x (modulo (- (avatar 'x) PortX) FieldSize)))
+;   (if (or (<= PortW x) (<= PortH y))
+;     (viewportReset (avatar 'y) (avatar 'x)))))
+
+; TODO Implement coor+dir use new dir to field-ref location an dif > MAX_CELL ipc-write (force blah blah)
+
+(define SOLIDCELLS (list
+ (cellIndex 'xx)
+ (cellIndex 'mnts)
+ (cellIndex 'hills)
+ (cellIndex 'water0)
+ (cellIndex 'water1)
+ (cellIndex 'water2)
+ (cellIndex 'brickc)
+ (cellIndex 'column)
+ (cellIndex 'window)
+ (cellIndex 'doorl)))
+
+(define (walk dir)
+ ((avatar 'face) dir) ; Turn avatar
+ (let ((nextCell ((avatar 'look)))) ; Consider cell I'm walking into
+   (if (< CellMax nextCell) ; Cell I'm walking into is probably an entity
+    ; Push the entity that's in my way
+    ((ipc 'qwrite) `(force ,@((avatar 'gpsLook)) ,dir 10))
+    ; Walk normally
+    (if (null? (memv nextCell SOLIDCELLS))
+     (begin
+      ((avatar 'move))
+      ((ipc 'qwrite) `(move ,DNA ,@((avatar 'gps))))
+      (if (eq? (cellIndex 'help) (field-ref (avatar 'z) (avatar 'y) (avatar 'x)))  (help))
+      (if (eq? (cellIndex 'snake) (field-ref (avatar 'z) (avatar 'y) (avatar 'x))) (thread (snake-random)))
+      ;(if (eqv? (cellIndex 'brit2) (field-base-ref (avatar 'z) (avatar 'y) (avatar 'x))) (thread (spawnKitty)))
+      ;(WinConsoleWrite (fieldColumn (avatar 'y) (avatar 'x)) (field-ref (avatar 'z) (avatar 'y) (avatar 'x)))
+      ; Dump our coordinates.
+      (WinStatusDisplay "\r\n"
+         (number->string (avatar 'z) 16) " "
+         (number->string (avatar 'y) 16) " "
+         (number->string (avatar 'x) 16) "\r\n"
+         (number->string (/ (avatar 'y) FieldBlockSize) 16) " "
+         (number->string (/ (avatar 'x) FieldBlockSize) 16)))))))
+
+; Change avatar color.  Will just cycle through all 16 avatar colors.
+(define (avatarColor)
+ (let ((glyph (avatar 'glyph)))
+  ((avatar 'setGlyph) (glyphNew
+    (glyph0bg glyph)
+    (modulo (+ (glyph0fg glyph) 1) 16)
+    (glyph0ch glyph)
+    (glyph1bg glyph)
+    (modulo (+ (glyph1fg glyph) 1) 16)
+    (glyph1ch glyph))))
+  (who))
+
+(define (rollcall)
+ ((ipc 'qwrite) `(if (!= DNA ,DNA) ((ipc 'qwrite) `(if (= DNA ,,DNA) (voice 0 10 (string ,(avatar 'name)" is present in world " ,(let ((t (- (time) ActivityTime))) (if (< t 60) (string (number->string t) "s")(string (number->string (/ t 60)) "m"))))))))))
 
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Buttons
+;;
 (define Buttons (make-vector 257 (lambda())))
 
 (define (setButton ch exp)
@@ -1142,7 +1179,22 @@
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; Typing and talking
+;; Typing_and_talking
+;;
+(define (say talkInput . level)
+ ((ipc 'qwrite) (list 'voice DNA (if (null? level) 10 (car level)) talkInput)))
+
+(define (saySystem talkInput)
+ ((ipc 'qwrite) (list 'voice 0 10 talkInput)))
+
+(define (sayHelloWorld)
+ (saySystem (string
+     (avatar 'name)
+     " says "
+     (vector-random #("*PUSH* *SQUIRT* *SPANK* *WAAAAAAAAA*" "*All Worldlians Want to Get Borned*" "*Happy Birthday*" "*I thought you were in Hong Kong*")))))
+
+(define (sayByeBye)
+  (saySystem (string (avatar 'name) " exits")))
 
 (define replTalk
  (let ((talkInput ""))
@@ -1209,123 +1261,10 @@
         (if (eq? state 'cmd) (set! state (replCmd c))))
        (wrepl))))))
 
-(define (boxInput title)
- (define box
-  ((Terminal 'WindowNew)
-    (/ (Terminal 'Theight) 2)  (- (/ (Terminal 'Twidth) 2) 10)
-    3  20
-    #x0f))
- (define puts (box 'puts))
- (define putc (box 'putc))
- (define setcolor (box 'set-color))
- (define str "")
- ;((box 'cursor-visible) #f)
- (puts "+------------------+")
- (puts "|                  |")
- (puts "+------------------+")
- ((box 'goto) 0 2) (puts title)
- ((box 'goto) 1 1)
- (let ~ ((c (read-char stdin)))
-   (or (eq? c RETURN) (eq? c NEWLINE)
-    (begin
-     (if (or (eq? c CHAR-CTRL-H) ; Rubout characters
-             (eq? c CHAR-CTRL-_)
-             (eq? c CHAR-CTRL-?))
-       (if (eq? str "") "" (begin
-             ((box 'backspace) #\ )
-             (set! str (substring str 0 (- (string-length str) 1)))))
-       (if (and (< (string-length str) 18) ; Name length limit
-                (<= #\! c) (<= c #\~))     ; Name character restriction
-            (begin
-             (putc c)
-             (set! str (string str c)))))
-     (~ (read-char stdin)))))
- ((box 'delete))
- str)
-
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; Tank.  The first interactive user agent.
-
-(define (tankTalk str) (thread (begin
-  (sleep 700)
-  (WinChatSetColor 0 15)
-  (WinChatDisplay "\r\nTank ")
-  (WinChatSetColor 0 7)
-  (WinChatDisplay str))))
-
-(define tankHangupTime 0)
-(define tankIsListening #f)
-
-(define (tankStartListening)
-  (set! tankHangupTime (+ 10 (time)))
-  (tankTalk "Operator")
-  (if (not tankIsListening) (begin (thread (let ~ ()
-    (set! tankIsListening #t)
-    (sleep 12000)
-    (if (< (time) tankHangupTime)
-      (~)
-      (begin
-       (tankTalk "*CLICK*")
-       (set! tankIsListening #f))))))))
-
-(define (tankTheOperator talkInput)
- (if (string=? talkInput "tank") (tankStartListening)
- (let ((strLen (string-length talkInput)))
-  (if (and (> strLen 11)
-           (string=? "my name is " (substring talkInput 0 11)))
-     (begin
-      ((avatar `setNameGlyph)
-         (substring talkInput 11 strLen)
-         (glyphNew (glyph0bg (avatar 'glyph))
-                   (glyph0fg (avatar 'glyph))
-                   (string-ref talkInput 11)
-                   (glyph1bg (avatar 'glyph))
-                   (glyph1fg (avatar 'glyph))
-                   (string-ref talkInput (if (> strLen 12) 12 11))))
-      (thread (begin (sleep 500) (who)))))))
- (if tankIsListening (begin
-   (if (string=? "who" talkInput) ((ipc 'qwrite) '(say "I'm here!")))
-   (if (string=? "load the jump program" talkInput) (tankTalk "I can't find the disk")
-   (if (string=? "load underworld" talkInput) (thread (load-ultima-underworld))
-   (if (string=? "load ultima5" talkInput) (thread (load-ultima-world5))))))))
-
-
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; Screen redraw signal handler
-(define (handleTerminalResize)
-  ;(WinChatDisplay "\r\n" (terminal-size))
-  ((Terminal 'ResetTerminal))
-  ((WinChat 'resize)  (- (Terminal 'Theight) 1) (Terminal 'Twidth))
-  ((WinMap 'move)     0 (- (Terminal 'Twidth) (WinMap 'Wwidth) 2))
-  ((WinColumn 'move)  1 (- (Terminal 'Twidth) 2) )
-  ((WinStatus 'move)  (WinMap 'Y0) (- (Terminal 'Twidth) 17))
-  ((WinInput 'resize) 1 (Terminal 'Twidth))
-  ((WinInput 'move)   (- (Terminal 'Theight) 1) 0))
-
-(define sigwinch
- (let ((sig28Semaphore (open-semaphore 1)))
-  (lambda ()
-   (semaphore-down sig28Semaphore)
-   (handleTerminalResize)
-   (semaphore-up sig28Semaphore))))
-
-(vector-set! SIGNALHANDLERS 28 (lambda () (sigwinch) (unthread)))
-(signal 28)
-
-
-
-(define (say talkInput . level)
- ((ipc 'qwrite) (list 'voice DNA (if (null? level) 10 (car level)) talkInput)))
-
-(define (saySystem talkInput)
- ((ipc 'qwrite) (list 'voice 0 10 talkInput)))
-
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; Prototypes and fun things.
+;; Prototypes_and_fun_things
 
 ;; Walking kitty soldier
 (define (spawnKitty . cycles)
@@ -1400,9 +1339,54 @@
    ((ipc 'qwrite) cmd) (sleep 500)))
 
 
+; Tank agent - The first interactive user agent.
+(define (tankTalk str) (thread (begin
+  (sleep 700)
+  (WinChatSetColor 0 15)
+  (WinChatDisplay "\r\nTank ")
+  (WinChatSetColor 0 7)
+  (WinChatDisplay str))))
+
+(define tankHangupTime 0)
+(define tankIsListening #f)
+
+(define (tankStartListening)
+  (set! tankHangupTime (+ 10 (time)))
+  (tankTalk "Operator")
+  (if (not tankIsListening) (begin (thread (let ~ ()
+    (set! tankIsListening #t)
+    (sleep 12000)
+    (if (< (time) tankHangupTime)
+      (~)
+      (begin
+       (tankTalk "*CLICK*")
+       (set! tankIsListening #f))))))))
+
+(define (tankTheOperator talkInput)
+ (if (string=? talkInput "tank") (tankStartListening)
+ (let ((strLen (string-length talkInput)))
+  (if (and (> strLen 11)
+           (string=? "my name is " (substring talkInput 0 11)))
+     (begin
+      ((avatar `setNameGlyph)
+         (substring talkInput 11 strLen)
+         (glyphNew (glyph0bg (avatar 'glyph))
+                   (glyph0fg (avatar 'glyph))
+                   (string-ref talkInput 11)
+                   (glyph1bg (avatar 'glyph))
+                   (glyph1fg (avatar 'glyph))
+                   (string-ref talkInput (if (> strLen 12) 12 11))))
+      (thread (begin (sleep 500) (who)))))))
+ (if tankIsListening (begin
+   (if (string=? "who" talkInput) ((ipc 'qwrite) '(say "I'm here!")))
+   (if (string=? "load the jump program" talkInput) (tankTalk "I can't find the disk")
+   (if (string=? "load underworld" talkInput) (thread (load-ultima-underworld))
+   (if (string=? "load ultima5" talkInput) (thread (load-ultima-world5))))))))
+
+
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; Start everything
+;; Start_everything
 
 ; Welcome marquee and login box
 (if (not QUIETLOGIN ) (begin
@@ -1414,11 +1398,9 @@
       (glyphNew 0 15 (string-ref name 0)
                 0 15 (string-ref name 1))))))
 
-
 ; Create ipc object.  Pass in a debug message output port.
 ; for production world an 'empty' port is passed.
 (define ipc (Ipc WinConsoleDisplay))
-;(define ipc (Ipc WinChatDisplay))
 
 ; Display some initial information
 (WinChatSetColor 0 11)
@@ -1433,16 +1415,14 @@
 
 ; Always read and evaluate everything from IPC.
 (thread 
+ ; Set the thread's error handler to a continuation so any user or IPC scheme error is caught.
  (let ((s (call/cc (lambda (c) (vector-set! ERRORS (tid) c) 'starting))))
-   (or (eq? s 'starting) (WinChatDisplay "\r\nIPC-REPL-ERROR::" s)))
+    (or (eq? s 'starting) (WinChatDisplay "\r\nIPC-REPL-ERROR::" s)))
  (let ~ () 
   (let ((sexp ((ipc 'qread))))
      (WinConsoleWrite sexp)
      (eval sexp)
      (~))))
-
-(viewportReset (avatar 'y) (avatar 'x))
-((WinMap 'toggle))
 
 ; Redraw map resulting in animated cells.
 (thread (let ~ ()
@@ -1450,38 +1430,7 @@
    (if CELLANIMATION (viewportReset (avatar 'y) (avatar 'x)))
    (~)))
 
-; Catch the terminal hangup signal so that normal shutdown can occur.
-(define (registerSignalHandler sig msg)
- (vector-set! SIGNALHANDLERS sig (lambda () (say msg) (shutdown)))
- (signal sig))
-
-(vector-set! SIGNALHANDLERS 1 (lambda () (say "signal 1 HUP")  (shutdown)))
-(signal 1)
-
-(vector-set! SIGNALHANDLERS 2 (lambda () (say "signal 2 INT")  (shutdown)))
-(signal 2)
-
-(vector-set! SIGNALHANDLERS 3 (lambda () (say "signal 3 QUIT")  (shutdown)))
-(signal 3)
-
-(vector-set! SIGNALHANDLERS 6 (lambda () (say "signal 6 ABRT")  (shutdown)))
-(signal 6)
-
-;(vector-set! SIGNALHANDLERS 13 (lambda () (say "signal 13 PIPE")  (shutdown)))
-;(signal 13)
-
-(vector-set! SIGNALHANDLERS 15 (lambda () (say "signal 15 TERM")  (shutdown)))
-(signal 15)
-
-
-(define (sayHelloWorld)
- (saySystem (string
-     (avatar 'name)
-     " says "
-     (vector-random #("*PUSH* *SQUIRT* *SPANK* *WAAAAAAAAA*" "*All Worldlians Want to Get Borned*" "*Happy Birthday*" "*I thought you were in Hong Kong*")))))
-
-(define (sayByeBye)
-  (saySystem (string (avatar 'name) " exits")))
+((WinMap 'toggle))
 
 (define (shutdown)
   (or QUIETLOGIN (sayByeBye))
@@ -1489,6 +1438,15 @@
   (sleep 1000) ; wait for ipc to flush
   (displayl "\e[" (Terminal 'Theight) "H\r\n\e[0m\e[?25h")
   (quit))
+
+; Catch some signal so that normal shutdown can occur
+; TODO buggy repeated calls to the same handler occurs with I/O signals
+(signal-set 1 (lambda () (say "signal 1 HUP")  (shutdown)))
+(signal-set 2 (lambda () (say "signal 2 INT")  (shutdown)))
+(signal-set 3 (lambda () (say "signal 3 QUIT")  (shutdown)))
+(signal-set 6 (lambda () (say "signal 6 ABRT")  (shutdown)))
+;(signal-set 13 (lambda () (say "signal 13 PIPE")  (shutdown)))
+(signal-set 15 (lambda () (say "signal 15 TERM")  (shutdown)))
 
 (or QUIETLOGIN (sayHelloWorld))
 ((ipc 'qwrite) '(who))
