@@ -1,24 +1,25 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; World -- Table of Contents
-;;  Windows
-;;   Glyphs_and_cells
-;;   Column
-;;   Field
-;;   Canvas
-;;   Viewport
-;;   Map_manipulation
-;;   Ultima_city_detail_map
-;;  Entites_and_avatar
-;;   Window_functions_and_initialization
-;;   Incomming_IPC_messages
-;;  Button_commands
-;;  Buttons
-;;  Typing_and_talking
-;;   Prototypes_and_fun_things
-;;   Start_everything
+;; World
+;;   Windows
+;;    Glyphs_and_cells
+;;    Column
+;;    Field
+;;    Canvas
+;;    Viewport
+;;    Map_manipulation
+;;    Ultima_city_detail_map
+;;   Entites_and_avatar
+;;    Window_functions_and_initialization
+;;    Incomming_IPC_messages
+;;   Button_commands
+;;   Buttons
+;;   Typing_and_talking
+;;    Prototypes_and_fun_things
+;;    Start_everything
 ;;
 (load "ipc.scm")
 (load "window.scm")
+(load "entity.scm")
 (define QUIETLOGIN (not (null? (memv "silent" (vector->list argv)))))
 (define CELLANIMATION #t) 
 (define SCROLLINGMAP #t)
@@ -676,25 +677,6 @@
 ;; Entites_and_avatar
 ;; Simple objects more dynamic than just cells.
 ;;
-(define (Entity dna name z y x glyph)
- (define (self msg) (eval msg))
- (define (setAll name0 z0 y0 x0 glyph0)
-  (set! name name0)
-  (set! z z0)
-  (set! y y0)
-  (set! x x0)
-  (set! glyph glyph0))
- (define (setGlyph glyph0)
-  (set! glyph glyph0))
- (define (setNameGlyph name0 glyph0)
-  (set! name name0)
-  (set! glyph glyph0))
- (define (setLoc z0 y0 x0)
-  (set! z z0)
-  (set! y y0)
-  (set! x x0))
- (define (gps) (list z y x))
- self)
 
 ; Association list of entites to their DNA values.
 (define EntityDB ())
@@ -1387,7 +1369,7 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Start_everything
-
+;;
 ; Welcome marquee and login box
 (if (not QUIETLOGIN ) (begin
  (thread (welcome))
