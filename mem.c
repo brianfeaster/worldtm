@@ -1,8 +1,8 @@
 #define DEBUG 0
-#define DEBUG_ASSERT 1
-#define DEBUG_ASSERT_VECTOR 1
-#define DEBUG_ASSERT_STACK 1
-#define VALIDATE_HEAP 1
+#define DEBUG_ASSERT 0
+#define DEBUG_ASSERT_VECTOR 0
+#define DEBUG_ASSERT_STACK 0
+#define VALIDATE_HEAP 0
 #define DB_MODULE "MEM "
 #include "debug.h"
 #include <errno.h>
