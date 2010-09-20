@@ -418,12 +418,9 @@
 
 (define gc garbage-collect)
 
-(vector-set! SIGNALHANDLERS 28 (lambda ()
- (let ~ ((i 0)) (if (= i 0) (fun)) (if (< i 1000000) (~ (+ i 1))))
- (display (terminal-size))
- (unthread)))
-
-(signal 28)
+(define (signal-set num func)
+ (vector-set! SIGNALHANDLERS num func)
+ (signal num))
 
 ; If wscm is run with a command line argument that isn't a switch, then 
 ; assume it's a file to run otherwise begin the REPL.
