@@ -1,8 +1,8 @@
 #define DEBUG 0
-#define DEBUG_ASSERT 0
-#define DEBUG_ASSERT_VECTOR 0
-#define DEBUG_ASSERT_STACK 0
-#define VALIDATE_HEAP 0
+#define DEBUG_ASSERT 1
+#define DEBUG_ASSERT_VECTOR 1
+#define DEBUG_ASSERT_STACK 1
+#define VALIDATE_HEAP 1
 #define DB_MODULE "MEM "
 #include "debug.h"
 #include <errno.h>
@@ -34,7 +34,7 @@
             as number of characters).  Mainly used for external representations of objects.
 
             Note: the array length might be smaller than the object's count.  There
-            might be other meta data associated with the object so size will return.
+            might be other meta data associated with the object that size will return.
 */
 #include <stdio.h>
 #include <stdlib.h>

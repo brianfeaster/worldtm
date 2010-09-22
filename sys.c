@@ -2311,11 +2311,9 @@ void sysCloseSemaphore (void) {
 void sysSemaphoreDown (void) {
  Obj sem, value;
 	DB("-->%s ", __func__);
-	DB ("[t:%d b:%d s:%d sem:%d thread=%d]", objDoublyLinkedListLength(ready), objDoublyLinkedListLength(blocked), objDoublyLinkedListLength(sleeping), *(Int*)memVectorObject(semaphores, 0), memVectorObject(car(running), 1));
 	if (wscmAssertArgumentCountRange(1, 1, __func__)) return;
 	/* Store semaphore index in r0. */
 	sem = pop();
-	/* fprintf (stderr, "[sysSemaphoreDown %d]\n", *(Num*)sem); */
 	value = memVectorObject(semaphores, *(Num*)sem);
 	(*(Int*)value)--;
 	if (*(Int*)value < 0) {
@@ -2329,7 +2327,6 @@ void sysSemaphoreDown (void) {
 		objNewInt(*(Int*)value);
 	}
 	DB("<--%s ", __func__);
-	DB ("[t:%d b:%d s:%d sem:%d]", objDoublyLinkedListLength(ready), objDoublyLinkedListLength(blocked), objDoublyLinkedListLength(sleeping), *(Int*)memVectorObject(semaphores, 0));
 }
 
 void sysSemaphoreUp (void) {
@@ -2337,7 +2334,6 @@ void sysSemaphoreUp (void) {
 	DB("-->%s\n", __func__);
 	if (wscmAssertArgumentCountRange(1, 1, __func__)) return;
 	sem = pop();
-	/*fprintf (stderr, "[sysSemaphoreUp %d]\n", *(Num*)sem);*/
 	value = memVectorObject(semaphores, *(Num*)sem);
 	(*(Int*)value)++;
 	if (*(Int*)value < 1) {
@@ -2805,7 +2801,8 @@ void wscmInitialize (void) {
 	memObjStringSet(objCopyInteger);
 	memObjStringSet(sysCreateContinuation);
 	memObjStringSet(sysReinstateContinuation);
-
+	memObjStringSet("Not enough arguments to closure");
+ 
 	objInitialize(sysSchedule);
 
 	/* Create empty thread vector.  All active threads are assigned a number
