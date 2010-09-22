@@ -1335,7 +1335,6 @@
 
 ; Display the same string repeatedly with colors of increasing inensity.
 (define (fancyDisplay c s)
- (WinChatDisplay "\n")
  (map (lambda (c)
         (WinChatSetColor 0 c)
         (WinChatDisplay "\r" s)
@@ -1387,8 +1386,11 @@
 ; Display some initial information
 (thread
  (fancyDisplay 9 "Welcome to World")
+ (WinChatDisplay "\n")
  (fancyDisplay 10 "See http://code.google.com/p/worldtm")
+ (WinChatDisplay "\n")
  (fancyDisplay 12 "Hit ? to toggle the help window")
+ (WinChatDisplay "\n")
  (fancyDisplay 5 (string "Your name is " (avatar 'name))))
 
 ; Create ipc object.  Pass in a debug message output port
@@ -1400,6 +1402,7 @@
 
 ; Always read and evaluate everything from IPC.
 (thread
+ (sleep 6000) ; Give fancy messages a time to render
  ; Set the thread's error handler to a continuation so any user or IPC scheme error is caught.
  (let ((s (call/cc (lambda (c) (vector-set! ERRORS (tid) c) 'starting))))
     (or (eq? s 'starting) (WinChatDisplay "\r\nIPC-REPL-ERROR::" s)))
