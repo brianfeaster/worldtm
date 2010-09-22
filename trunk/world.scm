@@ -21,7 +21,7 @@
 (load "window.scm")
 (load "entity.scm")
 (define QUIETLOGIN (not (null? (memv "silent" (vector->list argv)))))
-(define CELLANIMATION #t) 
+(define CELLANIMATION #t)
 (define SCROLLINGMAP #t)
 (define KITTEHBRAIN  #f)
 (define VOICEDELIMETER " ")
@@ -89,14 +89,14 @@
 
 ;; Stats window
 (define WinStatus ((Terminal 'WindowNew)
-   (WinMap 'Y0) (- (Terminal 'Twidth) 17)
+   (WinMap 'Y0) (- (Terminal 'Twidth) 14)
    2            14
    #x4e))
 ((WinStatus 'toggle))
 (define (WinStatusDisplay . e) (for-each (lambda (x) (for-each (WinStatus 'puts) (display->strings x))) e))
 
 ;; Map column debug window
-(define WinColumn ((Terminal 'WindowNew) 1 (- (Terminal 'Twidth) 4) 18 4 #x5b))
+(define WinColumn ((Terminal 'WindowNew) 2 (- (Terminal 'Twidth) 4) 18 4 #x5b))
 ((WinColumn 'toggle))
 (define WinColumnPutc (WinColumn 'putc))
 (define (WinColumnPuts . l) (for-each (WinColumn 'puts) l))
@@ -129,7 +129,7 @@
 (define (cellIndex symb)
   (let ~ ((i 0)
           (cell (vector-ref Cells 0)))
-   (if (< CellMax i) #f
+   (if (< CellMax i) 0
    (if (eq? symb (car cell)) i
    (~ (+ i 1) (vector-ref Cells (+ i 1)))))))
 
@@ -145,14 +145,6 @@
         #f))))
 
 (cellSet CellMax 'air (glyphNew 0 0  CHAR-CTRL-@ 0 0 CHAR-CTRL-@))
-(load "ultima4.cells")
-
-; Some often used cell indices.
-(define cellXX (cellIndex 'xx))
-(define cellAIR (cellIndex 'air))
-(define cellWATER1 (cellIndex 'water1))
-(define cellBRICK (cellIndex 'brick))
-
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -240,7 +232,7 @@
 ;;   are cached in the area modulo   | c| d|    | f| c|
 ;;   the field coordinates.          +--+--+    +--+--+
 ;;
-(define FieldBlockSize 64) ; Each field block is 256x256 columns
+(define FieldBlockSize  64) ; Each field block is 256x256 columns
 (define FieldBlockCount 2)       ; A field is made up of 2x2 field blocks
 (define FieldSize (* FieldBlockCount FieldBlockSize)) ; For now resulting field size is 512x512
 (define FieldBlockCoordinates ()) ; Canvas coordinates in block space.  (1 1) would be (256 256) map space.
@@ -283,7 +275,7 @@
 ;
 ;  +-----+<---Field range
 ;  |+---+|
-;  ||   |<---Inner field range
+;  ||   |<---Inner field range 1/4 the FieldBlockSize
 ;  |+---+|
 ;  +-----+
 (define (fieldTopBottomBuffer y x)
@@ -303,13 +295,11 @@
 ; Create default plane.
 (define FIELD ())
 
-(define (resetField)
+(define (resetField defaultColumn)
  (set! FIELD
    (vector-vector-map!
-     (lambda (i) (vector -1 cellXX cellAIR))
+     (lambda (i) defaultColumn) ; Hardcode a column
      (make-vector-vector FieldSize FieldSize ()))))
-
-(resetField)
 
 ; Fields are 2d arrays of columns.  Columns are quasi-compressed stacks
 ; of cells that consist of a start height and specified stack of cells.
@@ -415,67 +405,45 @@
      (vector-vector-set! CANVAS y x (cons defaultCell 0))
      (~ y (+ x 1))))))))
 
-(define timeStart (time))
-(resetCanvas)
-(WinConsoleDisplay "Initialized Canvas " (- (time) timeStart) " seconds")
-
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Viewport
 ;;
-(define (WinMapPutGlyph glyph y x)
-  (semaphore-down MapWindowSemaphore)
-  ((WinMap 'goto) y x)
-  ; Animation hack.  Every second use the default glyph or each
-  ; consecutive glyph (stored as consecutive vectors of simple
-  ; glyphs).
-  (let ((t (time)) ; capture the time
-        (l (- (vector-length glyph) 5))) ; number of extra animation glyphs
-    (if (> (modulo t l) 0) (set! glyph (vector-ref glyph (+ 5 (modulo t l)))))
-    (WinMapSetColor (glyph0bg glyph) (glyph0fg glyph))
-    (WinMapPutc     (glyph0ch glyph))
-    (WinMapSetColor (glyph1bg glyph) (glyph1fg glyph))
-    (WinMapPutc     (glyph1ch glyph)))
-  (semaphore-up MapWindowSemaphore))
-
-(define MapWindowSemaphore (open-semaphore 1))
-
-(define PortY 0)
+(define PortCY 0) ; Center of map location
+(define PortCX 0)
+(define PortY 0) ; Upper left corner loation
 (define PortX 0)
 (define PortH 0)
 (define PortW 0)
 
+(define (viewportPlot glyph y x)
+  ((WinMap 'goto) y x)
+  ; The glyph index is based on the time which cycles to the next one every second.
+  (let ((t (time)) ; Glyph index based on time
+        (l (- (vector-length glyph) 5))) ; Number of animation glyphs ignoring the first
+    (if (> (modulo t l) 0) (set! glyph (vector-ref glyph (+ 5 (modulo t l)))))
+    ; 1st char
+    (WinMapSetColor (glyph0bg glyph) (glyph0fg glyph))
+    (WinMapPutc (glyph0ch glyph))
+    ; 2nd char
+    (WinMapSetColor (glyph1bg glyph) (glyph1fg glyph))
+    (WinMapPutc (glyph1ch glyph))))
+
 (define (viewportReset y x)
+ ((Terminal 'lock))
+ (set! PortCY y)
+ (set! PortCX x)
  (set! PortH (WinMap 'Wheight)) ; Adjust Viewport dimensions
  (set! PortW (/ (WinMap 'Wwidth) 2))
  (set! PortY (- y (/ PortH 2)))     ; Center Viewport around Avatar
  (set! PortX (- x (/ PortW 2)))
- ;((WinMap 'home))
  (loop2 0 PortH 0 PortW (lambda (y x) ; Render glyphs in viewport
-   (WinMapPutGlyph (canvasCell (+ PortY y) (+ PortX x))
-                   y
-                   (* x 2))))
- ; Plot column of cells at avatar's (y x) location.  For debugging.
- ((WinColumn 'home))
- (let ~ ((z 11))
-  (let ((c (field-ref z y x)))
-   (if (eq? cellAIR c)
-    (begin (WinColumnSetColor 0 8)
-           (WinColumnPuts "()  "))
-    (begin (set! c (cellGlyph c))
-           (WinColumnSetColor (glyph0bg c) (glyph0fg c))
-           (WinColumnPutc (glyph0ch c))
-           (WinColumnSetColor (glyph1bg c) (glyph1fg c))
-           (WinColumnPutc (glyph1ch c))
-           (WinColumnSetColor 0 7)
-           (set! c (field-base-ref z y x))
-           (if (and (<= 0 c) (< c 256))
-            (begin
-             (if (< c 16) (WinColumnPuts "0"))
-             (WinColumnPuts (number->string c 16)))
-            (WinColumnPuts "  ") ))))
-  (if (> z -6) (~ (- z 1)))))
+   (viewportPlot (canvasCell (+ PortY y) (+ PortX x))
+                 y (* x 2))))
+ ((Terminal 'unlock))
+ (if (WinColumn 'ENABLED) (dumpColumnInfo y x)))
+
 
 (define (viewportRender gy gx)
  ; The cell position and viewport position (upper left corner) are on a torus
@@ -490,7 +458,10 @@
  (let ((y (modulo (- gy PortY) FieldSize)) ; Normalize avatar position.
        (x (modulo (- gx PortX) FieldSize)))
   (and (< y PortH) (< x PortW)
-    (WinMapPutGlyph (canvasCell gy gx) y (* x 2)))))
+    (begin
+      ((Terminal 'lock))
+      (viewportPlot (canvasCell gy gx) y (* x 2))
+      ((Terminal 'unlock))))))
 
 
 
@@ -571,7 +542,7 @@
    (if (and (= x 255) (= 0 (modulo y 12))) (bar)) ; Progress bar
    (let ((index (begin (seek fdi (+ (/ x 16) (* (/ y 16) 16)))
                        (+ 0 (read-char fdi)))))
-    (setCell 2 y x 
+    (setCell 2 y x
       (if (= 255 index) cellWATER1 (begin
         (seek fdm (+ (* index 256) (modulo x 16) (* (modulo y 16) 16)))
         (+ 0 (read-char fdm))))))
@@ -602,21 +573,6 @@
       (<= (* 82 U4MapCellSize) x)
       (< x (* 83 U4MapCellSize))))
 
-;-Outdated---------------------------------------------------
-(define (load-ultima-world44)
- (resetField)
-  (let ~ ((y 0)(x 0)) (or (= y 256) (if (= x 256) (~ (+ y 1) 0) (begin
-      (setCell 1 y x
-        (let ((yy (/ (+ y (* 108 (- U4MapCellSize 1)) ) U4MapCellSize))
-              (xx (/ (+ x (*  86 (- U4MapCellSize 1)) ) U4MapCellSize)))
-         (let ((dist (distance
-                      (list 0 y x)
-                      (list 0 (+ 20 (* (/ y U4MapCellSize) U4MapCellSize))
-                              (+ 20 (* (/ x U4MapCellSize) U4MapCellSize))))))
-          (if (< dist 100) (U4MapCell yy xx) (cellIndex 'help)))))
-      (~ y (+ x 1)))))))
-;-Outdated---------------------------------------------------
-
 (define (updateFieldBlocksU4 y0 x0)
   ;(WinChatDisplay "block " (/ y0 FieldBlockSize) " " (/ x0 FieldBlockSize)  "\r\n")
   (loop2 y0 (+ y0 FieldBlockSize)
@@ -640,11 +596,10 @@
                         (if (< 10 m) (if (< n -9) 5 (if (< 9 n) 7 6))
                         (if (< n -9) 4 (if (< 9 n) 0 8))))))
                      (U4MapCell (/ y U4MapCellSize) (/ x U4MapCellSize)))))))) ; Regular cell
-          (setCell 1 y x NOTHING)))))
+          (setCell 1 y x cellNOTHING)))))
 
 ; Field block updater.  This will eventually be replaced with a map agent handler.
-(thread (let ~ ()
- (sleep 500)
+(define (fieldBlockUpdater)
  (letrec ((avty (avatar 'y))
           (avtx (avatar 'x))
           (blky (+ (/ (if (< avty 0) (- avty FieldBlockSize) avty) FieldBlockSize) -0)) ; TODO Field block synchronization is off.  On startup loads twice.  If ofset is -1, doesn't cache correctly with avatar movement.
@@ -669,7 +624,8 @@
       ; Set block coordinate list after the unloaded blocks have been loaded.
       (set! FieldBlockCoordinates (fieldCreateBlockList yb xb))
       ((ipc 'qwrite) '(who)))))))
- (~)))
+ (sleep 500)
+ (fieldBlockUpdater))
 
 
 
@@ -729,7 +685,7 @@
         (let ((c (field-ref z y x)))
           (apply setLoc loc) ; restore old location.
           c)))
-    (define cell cellBRICK)
+    (define cell 19)
     (define (gpsLook)
       (if (= dir 0) (list (+ z -1) y      x)
       (if (= dir 1) (list z        (++ y) (-- x))
@@ -776,7 +732,7 @@
     (if (> (sqrt (+ (* 4 (^2 (- y (/ (WinMap 'Wheight) 2))))
                     (^2 (- x  (/ (WinMap 'Wwidth) 2)))))
            (+ 0 (WinMap 'Wheight)))
-        (begin 
+        (begin
           ((WinMap 'alpha) y x val)
           ((WinMap 'alpha) y (- (WinMap 'Wwidth) x 1) val)
           ((WinMap 'alpha) (- (WinMap 'Wheight) y 1) x val)
@@ -786,6 +742,25 @@
     (~ y (+ x 1)))))))
 (circularize)
 
+; Plot column of cells.
+(define (dumpColumnInfo y x)
+ ((WinColumn 'home))
+ (let ~ ((z 11))
+  (let ((c (field-ref z y x)))
+   (if (eq? cellAIR c)
+    (begin (WinColumnSetColor 0 8)
+           (WinColumnPuts "()  "))
+    (begin (set! c (cellGlyph c)) ; Dump the glyph
+           (WinColumnSetColor (glyph0bg c) (glyph0fg c))  (WinColumnPutc (glyph0ch c))
+           (WinColumnSetColor (glyph1bg c) (glyph1fg c))  (WinColumnPutc (glyph1ch c))
+           (WinColumnSetColor 0 7)
+           (set! c (field-base-ref z y x)) ; Display base cell's hex value.
+           (if (and (<= 0 c) (< c 256))
+             (begin
+               (if (< c 16) (WinColumnPuts "0"))
+               (WinColumnPuts (number->string c 16)))
+             (WinColumnPuts "  ") ))))
+  (if (> z -6) (~ (- z 1)))))
 
 ; Screen redraw function and signal handler
 (define (handleTerminalResize)
@@ -794,7 +769,7 @@
   ((WinChat 'resize)  (- (Terminal 'Theight) 1) (Terminal 'Twidth))
   ((WinMap 'move)     0 (- (Terminal 'Twidth) (WinMap 'Wwidth) 2))
   ((WinColumn 'move)  1 (- (Terminal 'Twidth) 2) )
-  ((WinStatus 'move)  (WinMap 'Y0) (- (Terminal 'Twidth) 17))
+  ((WinStatus 'move)  (WinMap 'Y0) (- (Terminal 'Twidth) 14))
   ((WinInput 'resize) 1 (Terminal 'Twidth))
   ((WinInput 'move)   (- (Terminal 'Theight) 1) 0))
 
@@ -986,44 +961,49 @@
  ((WinHelp 'toggle))
  ((WinHelpBorder 'toggle)))
 
-(define deltaMoveTime (+ 62 (utime))) ; Double click 1/16 sec.
+(define deltaMoveTime (utime)) ; Double click 1/16 sec.
 
 (define (winMapBigger)
  (if (< (WinMap 'Wheight) (Terminal 'Theight)) (begin
   ;((WinMap 'toggle))
   ((WinMap 'home))
   (if (< (utime) deltaMoveTime)
-    ((WinMap 'moveresize) ; Full resize.
+    ((WinMap 'moveresize) ; Full resize
        0 (- (Terminal 'Twidth) (WinMap 'Wwidth) 2)
              (min (/ (Terminal 'Twidth) 2) (- (Terminal 'Theight) 1))
        (* 2  (min (/ (Terminal 'Twidth) 2) (- (Terminal 'Theight) 1)))))
-    ((WinMap 'moveresize) ; Resize by one.
+    ((WinMap 'moveresize) ; Resize by one
        0 (- (Terminal 'Twidth) (WinMap 'Wwidth) 2)
        (+ 1 (WinMap 'Wheight))
        (+ 2 (WinMap 'Wwidth)))
   (circularize)
   (viewportReset (avatar 'y) (avatar 'x))
   ;((WinMap 'toggle))
-  (set! deltaMoveTime (+ 250 (utime))))))
+  (set! deltaMoveTime (+ 125 (utime))))))
 
 (define (winMapSmaller)
  (if (< 5 (WinMap 'Wheight)) (begin
   ;((WinMap 'toggle))
   ((WinMap 'home))
-  ((WinMap 'moveresize)
-     0 (- (Terminal 'Twidth) (WinMap 'Wwidth) -2)
-     (+ -1 (WinMap 'Wheight))
-     (+ -2 (WinMap 'Wwidth)))
+  (if (< (utime) deltaMoveTime)
+    ((WinMap 'moveresize) ; Full resize
+       0 (- (Terminal 'Twidth) (WinMap 'Wwidth) -10)
+       (+ -5 (WinMap 'Wheight))
+       (+ -10 (WinMap 'Wwidth)))
+    ((WinMap 'moveresize) ; Resize by one
+       0 (- (Terminal 'Twidth) (WinMap 'Wwidth) -2)
+       (+ -1 (WinMap 'Wheight))
+       (+ -2 (WinMap 'Wwidth))))
   (circularize)
   (viewportReset (avatar 'y) (avatar 'x))
   ;((WinMap 'toggle))
-)))
+  (set! deltaMoveTime (+ 125 (utime))))))
 
 (define (winMapUp)  ((WinMap 'move)  (+ -1 (WinMap 'Y0)) (WinMap 'X0)))
 (define (winMapDown) ((WinMap 'move)  (+  1 (WinMap 'Y0)) (WinMap 'X0)))
 (define (winMapLeft)    ((WinMap 'move) (WinMap 'Y0) (+ -1 (WinMap 'X0))))
 (define (winMapRight)  ((WinMap 'move) (WinMap 'Y0) (+  1 (WinMap 'X0))))
- 
+
 ; Should this be a thread?  At least move somewhere else.
 ;(define (refreshIfBeyondViewport)
 ; (let ((y (modulo (- (avatar 'y) PortY) FieldSize));Normalize avatar position.
@@ -1032,18 +1012,6 @@
 ;     (viewportReset (avatar 'y) (avatar 'x)))))
 
 ; TODO Implement coor+dir use new dir to field-ref location an dif > MAX_CELL ipc-write (force blah blah)
-
-(define SOLIDCELLS (list
- (cellIndex 'xx)
- (cellIndex 'mnts)
- (cellIndex 'hills)
- (cellIndex 'water0)
- (cellIndex 'water1)
- (cellIndex 'water2)
- (cellIndex 'brickc)
- (cellIndex 'column)
- (cellIndex 'window)
- (cellIndex 'doorl)))
 
 (define (walk dir)
  ((avatar 'face) dir) ; Turn avatar
@@ -1140,7 +1108,7 @@
 (setButton CHAR-CTRL-M '(begin ((WinStatus 'toggle)) ((WinColumn 'toggle))))
 (setButton CHAR-CTRL-Q '(set! state 'done))
 (setButton #\d '((ipc 'qwrite) `(dropCell ,(avatar 'y) ,(avatar 'x) (cellIndex 'campfire))))
-(setButton #\g 
+(setButton #\g
    '(let ((o (field-ref (avatar 'z) (avatar 'y) (avatar 'x))))
      (field-delete!  (avatar 'z) (avatar 'y) (avatar 'x) o)
      (avatar `(set! cell ,o))))
@@ -1192,7 +1160,7 @@
                 (set! talkInput (substring talkInput 0 (- (string-length talkInput) 1)))))
         'talk)
    ; Send Chatter
-   (if (or (eq? c RETURN) 
+   (if (or (eq? c RETURN)
            (eq? c NEWLINE))
      (begin
        ; Perform actions based on talk phrases.
@@ -1247,7 +1215,7 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Prototypes_and_fun_things
-
+;;
 ;; Walking kitty soldier
 (define (spawnKitty . cycles)
  (set! cycles (if (null? cycles) 128 (car cycles))) ; Set max cycles
@@ -1365,11 +1333,47 @@
    (if (string=? "load underworld" talkInput) (thread (load-ultima-underworld))
    (if (string=? "load ultima5" talkInput) (thread (load-ultima-world5))))))))
 
+; Display the same string repeatedly with colors of increasing inensity.
+(define (fancyDisplay c s)
+ (WinChatDisplay "\n")
+ (map (lambda (c)
+        (WinChatSetColor 0 c)
+        (WinChatDisplay "\r" s)
+        (sleep 50))
+   (list 8 4 12 6 7 14 15 14 7 6 12 4 8 c)))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Start_everything
 ;;
+(load "ultima4.cells")
+
+; Some often used cell indices.
+(define cellNOTHING (cellIndex 'NOTHING))
+(define cellXX (cellIndex 'xx))
+(define cellWATER1 (cellIndex 'water1))
+(define cellBRICK (cellIndex 'brick))
+(define cellAIR (cellIndex 'air))
+
+(define SOLIDCELLS (list
+ (cellIndex 'xx)
+ (cellIndex 'mnts)
+ (cellIndex 'hills)
+ (cellIndex 'water0)
+ (cellIndex 'water1)
+ (cellIndex 'water2)
+ (cellIndex 'brickc)
+ (cellIndex 'column)
+ (cellIndex 'window)
+ (cellIndex 'doorl)))
+
+; Initialize field and canvas structures
+(resetField (vector -1 cellXX cellAIR))
+(resetCanvas)
+
+; Start the local map update agent
+(thread (fieldBlockUpdater))
+
 ; Welcome marquee and login box
 (if (not QUIETLOGIN ) (begin
  (thread (welcome))
@@ -1380,27 +1384,26 @@
       (glyphNew 0 15 (string-ref name 0)
                 0 15 (string-ref name 1))))))
 
-; Create ipc object.  Pass in a debug message output port.
-; for production world an 'empty' port is passed.
-(define ipc (Ipc WinConsoleDisplay))
-
 ; Display some initial information
-(WinChatSetColor 0 11)
-;((WinChat 'goto) 0 0)
-(WinChatDisplay "Welcome to World\r\n") ; "   *** Welcome to the construct. ***"
-(WinChatDisplay "See http://code.google.com/p/worldtm\r\n")
-(WinChatDisplay "Hit ? to toggle the help window\r\n")
-(WinChatDisplay "Your name is " (avatar 'name))
+(thread
+ (fancyDisplay 9 "Welcome to World")
+ (fancyDisplay 10 "See http://code.google.com/p/worldtm")
+ (fancyDisplay 12 "Hit ? to toggle the help window")
+ (fancyDisplay 5 (string "Your name is " (avatar 'name))))
+
+; Create ipc object.  Pass in a debug message output port
+; For production world an 'empty' port is passed
+(define ipc (Ipc WinConsoleDisplay))
 
 ; Move avatar to entrance of Lord British's castle
 ((avatar 'jump) (avatar 'z) (* 108 U4MapCellSize) (* 86 U4MapCellSize))
 
 ; Always read and evaluate everything from IPC.
-(thread 
+(thread
  ; Set the thread's error handler to a continuation so any user or IPC scheme error is caught.
  (let ((s (call/cc (lambda (c) (vector-set! ERRORS (tid) c) 'starting))))
     (or (eq? s 'starting) (WinChatDisplay "\r\nIPC-REPL-ERROR::" s)))
- (let ~ () 
+ (let ~ ()
   (let ((sexp ((ipc 'qread))))
      (WinConsoleWrite sexp)
      (eval sexp)
@@ -1409,7 +1412,7 @@
 ; Redraw map resulting in animated cells.
 (thread (let ~ ()
    (sleep 1000)
-   (if CELLANIMATION (viewportReset (avatar 'y) (avatar 'x)))
+   (if CELLANIMATION (viewportReset PortCY PortCX))
    (~)))
 
 ((WinMap 'toggle))

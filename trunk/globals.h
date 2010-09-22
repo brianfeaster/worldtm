@@ -3,7 +3,7 @@
 
 /* Register aliases.
 */
-#define semaphores r9  /* WSCM: semaphore counters */
+#define semaphores rf  /* WSCM: semaphore counters */
 #define blocked    r10 /* WSCM: I/O and Semaphore blocked threads */
 #define threads    r11 /* WSCM: Thread vector */
 #define sleeping   r12 /* WSCM: Sleeping thread */

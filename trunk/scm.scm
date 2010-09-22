@@ -401,7 +401,7 @@
 ;  Default error handlers for all thread IDs:  Shutdown the entire machine.
 (define ERRORS (make-vector 1024 
   (lambda (x)
-    (displayl 'ERROR:: x)
+    (displayl "\nERROR::" x)
     (quit))))
 
 (define WELCOME-MESSAGE "Welcome to \e[1;31mW\e[33mO\e[32mR\e[34mL\e[35mD\e[01;m.\r\n\e[?25l")

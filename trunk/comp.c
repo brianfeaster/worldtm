@@ -462,7 +462,7 @@ void compLambda (Num flags) {
 
 void compVerifyVectorRef (void) {
 	if (*(Int*)r0 < 0 || memObjectLength(r1) <= *(Int*)r0) {
-		fprintf (stderr, "ERROR::out of bounds:  (vector-ref ");
+		fprintf (stderr, "\nERROR::out of bounds:  (vector-ref ");
 		wscmWrite(r1, 0, 2);
 		fprintf (stderr, " ");
 		wscmWrite(r0, 0, 2);
@@ -477,7 +477,7 @@ void compVerifyVectorRef (void) {
 
 void compVerifyVectorSetB (void) {
 	if (*(Int*)r2 < 0 || memObjectLength(r1) <= *(Int*)r2) {
-		fprintf (stderr, "ERROR::out of bounds:  (vector-set! ");
+		fprintf (stderr, "\nERROR::out of bounds:  (vector-set! ");
 		wscmWrite(r1, 0, 2); fprintf (stderr, "  ");
 		wscmWrite(r2, 0, 2); fprintf (stderr, "  ");
 		wscmWrite(r0, 0, 2); fprintf (stderr, ")");

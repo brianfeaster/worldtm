@@ -59,6 +59,7 @@
  (define GX -1)
  (define WINDOWS ()) ; List of window objects.
  (define TerminalSemaphore (open-semaphore 1))
+ (define PublicSemaphore (open-semaphore 1))
  ; 2D table of visible window objects.  #f represents no window which is never drawn on.  Considering
  ; having a default base window always in existence which could act as a static/dynamic background image.
  (define WindowMask ())
@@ -119,16 +120,11 @@
           ((topwin 'globalRefresh) gy gx) ; Redraw glyph of this window at its global position.
           (gputc #\# #x08 gy gx))))))) ; Default background terminal glyph
 
- ; Debugging
- (define (WindowMaskDump)
-  (let ~ ((w WINDOWS)) ; Print all window IDs
-    (or (null? w) (begin (displayl ((car w) 'ID) " ")
-                         (~ (cdr w)))))
-  (vector-map ; Print the window mask table.
-     (lambda (v)
-        (vector-map (lambda (v) (display (if v (v 'ID) 0))) v))
-     WindowMask)
-  'done)
+ (define (lock)
+   (semaphore-down PublicSemaphore))
+
+ (define (unlock)
+   (semaphore-up PublicSemaphore))
 
  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
  ;; Window_subclass
@@ -138,6 +134,8 @@
    (define ID (+ 1 (length WINDOWS)))
    (define Y1 (+ Y0 Wheight))
    (define X1 (+ X0 Wwidth))
+   (define TY 0)
+   (define TX 0)
    ; 2d vector of cell descriptors #(color char) AKA glyph.
    (define DESC (vector-vector-map!
                   (lambda (x) (vector COLOR #\ ))
@@ -150,8 +148,6 @@
    (define CURSOR-VISIBLE #t)
    (define ENABLED #t)
    (define topRow 0) ; For horizontal scrolling.
-   (define TY 0)
-   (define TX 0)
    (define needToScroll #f) ; For bottom right character printing.
    (define (cursor-visible s) (set! CURSOR-VISIBLE s))
    (define WindowSemaphore (open-semaphore 1))
@@ -263,8 +259,7 @@
    (define (toggle . state)
      (set! ENABLED (if (null? state) (not ENABLED) (car state)))
      (WindowMaskReset Y0 X0 Y1 X1))
-   ; Create transparent 'pixel'.
-   (define (alpha y x a)
+   (define (alpha y x a) ; Create transparent 'pixel'
      (vector-vector-set! ALPHA y x a)
      (if ENABLED (WindowMaskReset (+ y Y0) (+ x X0) (+ y Y0 1) (+ x X0 1))))
    (define (move y x)

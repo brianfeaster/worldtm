@@ -2158,3 +2158,28 @@ values and send them as a list to the global error handler.  Each thread ID
 has its own error handler closure stored in the global ERROR vector.  It is
 usually mutated from within a continuation call.  The default error handler
 behavior is to display the operator/operand list and quit.
+
+
+Mon Sep 20 00:59:38 EDT 2010
+
+Wonder if the agent or peer should determine when a field block should be
+updated.  Should the agent keep track of all avatars and keep their current
+blocks cached as well?
+
+
+Mon Sep 20 18:56:03 EDT 2010
+
+I should first remove all user map related code dealing with content generation
+and move it to the map agent.  I should get a better sense of what behavior
+belongs where hopefully.  Should the passing of map data be synchronized with
+field block sizes or generic so both peer and agent can work with independent
+map block sizes?
+
+
+Tue Sep 21 12:41:30 EDT 2010
+
+Add a public semaphore to window objects.  This should get rid of display errors
+caused by preempted mid-escape sequence.
+
+World crashes evaluating (cellGlyph 'blah) where the argument should be an
+integer.
