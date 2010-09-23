@@ -15,7 +15,7 @@
 ;;   Buttons
 ;;   Typing_and_talking
 ;;    Prototypes_and_fun_things
-;;    Start_everything
+;;   Start_everything
 ;;
 (load "ipc.scm")
 (load "window.scm")
@@ -25,6 +25,7 @@
 (define SCROLLINGMAP #t)
 (define KITTEHBRAIN  #f)
 (define VOICEDELIMETER " ")
+(define NAME "Guest")
 (define DNA 0)
 (define ActivityTime (time))
 
@@ -90,13 +91,14 @@
 ;; Stats window
 (define WinStatus ((Terminal 'WindowNew)
    (WinMap 'Y0) (- (Terminal 'Twidth) 14)
-   2            14
+   3            14
    #x4e))
 ((WinStatus 'toggle))
-(define (WinStatusDisplay . e) (for-each (lambda (x) (for-each (WinStatus 'puts) (display->strings x))) e))
+(define (WinStatusDisplay . e)
+  (for-each (lambda (x) (for-each (WinStatus 'puts) (display->strings x))) e))
 
 ;; Map column debug window
-(define WinColumn ((Terminal 'WindowNew) 2 (- (Terminal 'Twidth) 4) 18 4 #x5b))
+(define WinColumn ((Terminal 'WindowNew) 3 (- (Terminal 'Twidth) 4) 18 4 #x5b))
 ((WinColumn 'toggle))
 (define WinColumnPutc (WinColumn 'putc))
 (define (WinColumnPuts . l) (for-each (WinColumn 'puts) l))
@@ -638,15 +640,15 @@
 (define EntityDB ())
 
 ; Create a default "nobody" entity.
-(define nobody (Entity 42 "nobody" 0 0 0 (glyphNew 0 7 #\n 0 7 #\o)))
+(define nobody (Entity 42 0 "nobody" 0 0 0 (glyphNew 0 7 #\n 0 7 #\o)))
 
 ; Update or create and add a new entity to the entity database.
-(define (entitiesSet dna name z y x glyph)
+(define (entitiesSet dna port name z y x glyph)
  (let ((ent (assv dna EntityDB)))
   (if (null? ent)
-      (set! EntityDB (cons (cons dna (Entity dna name z y x glyph))
-                           EntityDB))
-      (((cdr ent) 'setAll) name z y x glyph)))) ; Clone the remote entitiy locally.
+      (set! EntityDB (cons (cons dna (Entity dna port name z y x glyph))
+                           EntityDB)) ; Clone the remote entitiy locally.
+      (((cdr ent) 'setAll) port name z y x glyph))))
 
 ; Lookup entity, or null, in database.
 (define (entitiesGet dna)
@@ -656,8 +658,8 @@
        (cdr e))))
 
 ; The user's avatar
-(define (Avatar name) ; Inherits Entity
- ((Entity (random) name
+(define (Avatar port name) ; Inherits Entity
+ ((Entity (random) port name
    1 108 86
    (glyphNew 0 15 (string-ref name 0) 0 15 (string-ref name 1)))
   `(let ()
@@ -698,9 +700,6 @@
       (if (= dir 8) (list z        (-- y) x)
       (if (= dir 9) (list z        (-- y) (++ x)))))))))))))
     self) ))
-
-(define avatar (Avatar "Guest"))
-(set! DNA (avatar 'dna))
 
 
 
@@ -885,8 +884,8 @@
 ;; Incomming_IPC_messages
 ;;
 (define (who)
- ((ipc 'qwrite)
- `(entity ,DNA ,(avatar 'name) ,@((avatar 'gps)) ,(avatar 'glyph))))
+  ((ipc 'qwrite)
+    `(entity ,DNA ,(avatar 'port) ,(avatar 'name) ,@((avatar 'gps)) ,(avatar 'glyph))))
 
 ;; Entitity movement
 (define (move dna z y x)
@@ -897,7 +896,7 @@
                                            (list 0 (+ PortY (/ PortH 2)) (+ PortX (/ PortW 2)))))))))
   (if (null? entity)
     (begin
-      (entitiesSet dna "??" z y x (glyphNew 1 9 #\? 1 9 #\?))
+      (entitiesSet dna 0 "??" z y x (glyphNew 1 9 #\? 1 9 #\?))
       ((ipc 'qwrite) '(who)))
     (begin
       ; Move from here
@@ -914,9 +913,9 @@
       (if shouldScroll
         (viewportReset (avatar 'y) (avatar 'x)))))))
 
-(define (entity dna name z y x glyph)
- (entitiesSet dna name z y x glyph)
- (move dna z y x))
+(define (entity dna port name z y x glyph)
+  (entitiesSet dna port name z y x glyph)
+  (move dna z y x))
 
 (define (die dna)
  (let ((entity (entitiesGet dna))
@@ -1011,7 +1010,7 @@
 ;   (if (or (<= PortW x) (<= PortH y))
 ;     (viewportReset (avatar 'y) (avatar 'x)))))
 
-; TODO Implement coor+dir use new dir to field-ref location an dif > MAX_CELL ipc-write (force blah blah)
+; TODO Implement coor+dir use new dir to field-ref location and if > MAX_CELL ipc-write (force blah blah)
 
 (define (walk dir)
  ((avatar 'face) dir) ; Turn avatar
@@ -1033,6 +1032,8 @@
          (number->string (avatar 'z) 16) " "
          (number->string (avatar 'y) 16) " "
          (number->string (avatar 'x) 16) "\r\n"
+         (number->string (modulo (avatar 'y) FieldBlockSize) 16) " "
+         (number->string (modulo (avatar 'x) FieldBlockSize) 16) "\r\n"
          (number->string (/ (avatar 'y) FieldBlockSize) 16) " "
          (number->string (/ (avatar 'x) FieldBlockSize) 16)))))))
 
@@ -1040,16 +1041,22 @@
 (define (avatarColor)
  (let ((glyph (avatar 'glyph)))
   ((avatar 'setGlyph) (glyphNew
-    (glyph0bg glyph)
-    (modulo (+ (glyph0fg glyph) 1) 16)
-    (glyph0ch glyph)
-    (glyph1bg glyph)
-    (modulo (+ (glyph1fg glyph) 1) 16)
-    (glyph1ch glyph))))
+    (glyph0bg glyph)  (modulo (+ (glyph0fg glyph) 1) 16)  (glyph0ch glyph)
+    (glyph1bg glyph)  (modulo (+ (glyph1fg glyph) 1) 16)  (glyph1ch glyph))))
   (who))
 
 (define (rollcall)
- ((ipc 'qwrite) `(if (!= DNA ,DNA) ((ipc 'qwrite) `(if (= DNA ,,DNA) (voice 0 10 (string ,(avatar 'name)" is present in world " ,(let ((t (- (time) ActivityTime))) (if (< t 60) (string (number->string t) "s")(string (number->string (/ t 60)) "m"))))))))))
+ ((ipc 'qwrite) ; Force all to evaluate the following
+  `(if (!= DNA ,DNA) ; Skip if I sent this message
+   ((ipc 'qwrite) ; Force all (except me) to evaluate the following
+    `(if (= DNA ,,DNA) ; If me, evaluate this expression from the other peer
+     (voice 0 10
+      (string ,(avatar 'name)
+              ,(let ((t (- (time) ActivityTime)))
+                (if (< t 60)   (string (number->string t) "s")
+                (if (< t 3600) (string (number->string (/ t 60)) "m")
+                (if (< t 86400)(string (number->string (/ t 3600)) "h")
+                (string (number->string (/ t 86400)) "d"))))))))))))
 
 
 
@@ -1122,8 +1129,9 @@
 (setButton #eof '(set! state 'done))
 (setButton CHAR-CTRL-C '((WinConsole 'toggle)))
 ;(setButton CHAR-CTRL-K '((ipc 'qwrite) `(set! FIELD ,FIELD))) ; Send my plane out to IPC.
-;(setButton #\1 '(thread (sigwinch)))
-(setButton #\1 '((WinChat 'resize) (WinChat 'Wheight) (WinChat 'Wwidth)))
+;(setButton #\1 '(thread (spawnKitty 1000)))
+;(setButton #\1 '((WinChat 'resize) (WinChat 'Wheight) (WinChat 'Wwidth)))
+(setButton #\1 '((WinChat 'scrollUp)))
 ;(setButton CHAR-CTRL-_ '(walk 4)) ; Sent by backspace?
 
 
@@ -1224,6 +1232,7 @@
           (card->dir (lambda (c) (vector-ref #(0 5 6 7 4 0 0 3 2 1) c)))
           (happyVector (vector 0 0 0 0 0 0 0 0))
           (dist 0))
+ ((kitty 'jump) (avatar 'z) (avatar 'y) (avatar 'x))
  ; Tell everyone who this kitteh is.
  ((ipc 'qwrite) `(entity ,(kitty 'dna) "kitty" ,@((kitty 'gps)) ,(glyphNew 0 7 #\K 0 15 #\a)))
  (let ~ ((i 0)) ; Main loop
@@ -1335,11 +1344,13 @@
 
 ; Display the same string repeatedly with colors of increasing inensity.
 (define (fancyDisplay c s)
- (map (lambda (c)
+ (for-each
+   (lambda (c)
         (WinChatSetColor 0 c)
         (WinChatDisplay "\r" s)
         (sleep 50))
-   (list 8 4 12 6 7 14 15 14 7 6 12 4 8 c)))
+   (list 8 4 12 6 7 14 15 14 7 6 12 4 8 c))
+ "")
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -1370,39 +1381,41 @@
 (resetField (vector -1 cellXX cellAIR))
 (resetCanvas)
 
-; Start the local map update agent
-(thread (fieldBlockUpdater))
-
-; Welcome marquee and login box
-(if (not QUIETLOGIN ) (begin
+(or QUIETLOGIN (begin
+ ; Welcome marquee
  (thread (welcome))
+ ; Ask for name via text box
  (let ((name (boxInput "Enter your name")))
-   (if (eq? name "") (set! name "Guest"))
-   ((avatar 'setNameGlyph)
-      name
-      (glyphNew 0 15 (string-ref name 0)
-                0 15 (string-ref name 1))))))
+   (or (eq? name "") (set! NAME name)))))
+
+; Create ipc object.  Pass in a debug message output port (can be empty lambda)
+(define ipc (Ipc WinConsoleDisplay))
+
+; Create avatar object
+(define avatar (Avatar (ipc 'PrivatePort) NAME))
+((avatar 'setGlyph)
+   (glyphNew 0 15 (string-ref NAME 0)
+             0 15 (string-ref NAME 1)))
+(set! DNA (avatar 'dna))
+
+; Move avatar to entrance of Lord British's castle
+((avatar 'jump) 1  (- (* 108 U4MapCellSize) 1)  (- (* 86 U4MapCellSize) 1))
+
+; Start the local map update agent
+;(thread (fieldBlockUpdater))
 
 ; Display some initial information
-(thread
+(or QUIETLOGIN (begin
  (fancyDisplay 9 "Welcome to World")
  (WinChatDisplay "\n")
  (fancyDisplay 10 "See http://code.google.com/p/worldtm")
  (WinChatDisplay "\n")
  (fancyDisplay 12 "Hit ? to toggle the help window")
  (WinChatDisplay "\n")
- (fancyDisplay 5 (string "Your name is " (avatar 'name))))
-
-; Create ipc object.  Pass in a debug message output port
-; For production world an 'empty' port is passed
-(define ipc (Ipc WinConsoleDisplay))
-
-; Move avatar to entrance of Lord British's castle
-((avatar 'jump) (avatar 'z) (* 108 U4MapCellSize) (* 86 U4MapCellSize))
+ (fancyDisplay 5 (string "Your name is " (avatar 'name)))))
 
 ; Always read and evaluate everything from IPC.
 (thread
- (sleep 6000) ; Give fancy messages a time to render
  ; Set the thread's error handler to a continuation so any user or IPC scheme error is caught.
  (let ((s (call/cc (lambda (c) (vector-set! ERRORS (tid) c) 'starting))))
     (or (eq? s 'starting) (WinChatDisplay "\r\nIPC-REPL-ERROR::" s)))

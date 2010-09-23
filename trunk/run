@@ -1,3 +1,3 @@
 stty -echo raw
-./wscm world.scm silent
+./wscm world.scm $* silent
 stty echo cooked

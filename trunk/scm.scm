@@ -1,24 +1,21 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Serializing - implements display and write
-
-;; display ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-; This implementation first converts the object into a flattened
-; list of strings that comprise the object serialized representation.
-; For example (1 2) => ("(" " " "2" ")").  It does this by recursively
-; flattening and serializing the object as it goes.  The benefit is now
-; there is a object->string (display-list-serialize) function.  Not sure
-; what to name it officially.
-
-; TODO: Only one thread should be in this call at a time.
-; Need to implement kernel semaphores?
-; Now that kernel semaphores are implemented, need to
-; block not on a call to display but the port.
+;;
+;; This implementation first converts the object into a flattened
+;; list of strings that comprise the object serialized representation.
+;; For example (1 2) => ("(" " " "2" ")").  It does this by recursively
+;; flattening and serializing the object as it goes.  The benefit is now
+;; there is a object->string (display-list-serialize) function.  Not sure
+;; what to name it officially.
+;;
+;; TODO Block not on a call to display to prevent multiple threads
+;;      from printing at the same time to the same port.
 
 ; Keep track of internal implemenations.
 (define sdisplay display)
 (define swrite write)
 
+; display
 (define (display-list-serialize-list o r)
   (display-list-serialize
      (car o) (if (pair? (cdr o))
@@ -66,8 +63,7 @@
            (display->strings x)))
 
 
-
-;; write ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; write
 (define (write-list-serialize-list o r)
   (write-list-serialize
      (car o) (if (pair? (cdr o))
@@ -107,13 +103,18 @@
  (set! p (if (null? p) stdout (car p))) ; Default port is STDIN.
  (for-each (lambda (s) (send s p))
            (write->strings x)))
-
+;;
 ;; Serializing
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(define (socket-port s)
- (if (port? s) (vector-ref s 2) #f))
 
+
+(define (socket-port s)
+  (if (port? s) (vector-ref s 2) #f))
+
+(define (seek-set port offset) (seek port offset 0))
+(define (seek-current port offset) (seek port offset 1))
+(define (seek-end port offset) (seek port offset 2))
 
 (define (integer->char i) (vector-ref characters i))
 
@@ -135,8 +136,10 @@
 (define CHAR-CTRL-W   (integer->char #x17))
 (define CHAR-ESC      (integer->char #x1b))
 (define CHAR-CTRL-_   (integer->char #x1f))
+(define CHAR-SPACE    (integer->char #x20))
 (define CHAR-CTRL-?   (integer->char #x7f))
 
+(define SPACE         CHAR-SPACE)
 (define NEWLINE       CHAR-CTRL-J)
 (define RETURN        CHAR-CTRL-M)
 
