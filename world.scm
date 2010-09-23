@@ -520,13 +520,13 @@
 (define lcbfd (open-file "lcb1.ult"))
 (define (U4Lcb1MapCell y x)
  (and (< y 0) (<= 32 y) (< x 0) (<= 32 x) (WinChatDisplay "lcb1 coordinates out of range") (quit))
- (seek lcbfd (+ (* y 32) x))
+ (seek-set lcbfd (+ (* y 32) x))
  (+ 0 (read-char lcbfd))) ; Hack to convert char to integer
 
 (define britainfd (open-file "britain.ult"))
 (define (U4BritainMapCell y x)
  (and (< y 0) (<= 32 y) (< x 0) (<= 32 x) (WinChatDisplay "Britain coordinates out of range") (quit))
- (seek britainfd (+ (* y 32) x))
+ (seek-set britainfd (+ (* y 32) x))
  (+ 0 (read-char britainfd))) ; Hack to convert char to integer
 
 ; Get the map cell in the direction from this location.
@@ -542,11 +542,11 @@
        (bar (makeProgressBar 1 30 "Britannia 4")))
  (let ~ ((y 0) (x 0)) (if (< y 256) (if (= x 256) (~ (+ y 1) 0) (begin
    (if (and (= x 255) (= 0 (modulo y 12))) (bar)) ; Progress bar
-   (let ((index (begin (seek fdi (+ (/ x 16) (* (/ y 16) 16)))
+   (let ((index (begin (seek-set fdi (+ (/ x 16) (* (/ y 16) 16)))
                        (+ 0 (read-char fdi)))))
     (setCell 2 y x
       (if (= 255 index) cellWATER1 (begin
-        (seek fdm (+ (* index 256) (modulo x 16) (* (modulo y 16) 16)))
+        (seek-set fdm (+ (* index 256) (modulo x 16) (* (modulo y 16) 16)))
         (+ 0 (read-char fdm))))))
    (~ y (+ x 1))))))))
 
@@ -1402,7 +1402,7 @@
 ((avatar 'jump) 1  (- (* 108 U4MapCellSize) 1)  (- (* 86 U4MapCellSize) 1))
 
 ; Start the local map update agent
-;(thread (fieldBlockUpdater))
+(thread (fieldBlockUpdater))
 
 ; Display some initial information
 (or QUIETLOGIN (begin
