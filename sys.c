@@ -2047,13 +2047,14 @@ void sysSend (void) {
 }
 
 void sysSeek (void) {
- /* TODO: Harden this syscall. */
- Int fd, offset;
+ Int fd, offset, whence;
 	DB("-->%s", __func__);
-	if (wscmAssertArgumentCount(2, __func__)) return;
+	if (wscmAssertArgumentCount(3, __func__)) return;
+	whence = *(Int*)pop(); /* Whence */
+	assert(whence==SEEK_SET || whence==SEEK_CUR || whence==SEEK_END);
 	offset = *(Int*)pop(); /* Offset */
 	fd=*(Int*)pop(); /* Descriptor. */
-	lseek(fd, offset, SEEK_SET);
+	lseek(fd, offset, whence);
 	DB("<--%s", __func__);
 }
 
