@@ -2183,3 +2183,59 @@ caused by preempted mid-escape sequence.
 
 World crashes evaluating (cellGlyph 'blah) where the argument should be an
 integer.
+
+
+Thu Sep 23 11:28:16 EDT 2010
+
+Die should remove entities from the local DB.
+
+
+Sun Sep 26 21:02:51 EDT 2010
+
+The map agent is able to send field block changes to peers.  It now needs to
+keep track of all blocks cached by each peer and send the changes needed
+as the peer walks around the map.  This code is in world.scm already running
+as the temporary Ultima4 map code.
+
+
+Mon Sep 27 11:27:12 EDT 2010
+
+The block and field code is highly coupled.  I'm currently trying to give the
+map agent control of block logic.  I'm hoping the peer will just have to deal
+with updating field content and being away of the overall field dimension and
+location.
+
+
+Tue Sep 28 19:59:55 EDT 2010
+
+Turns out the field size is arbitrary and only matched the canvas size because
+I pre-rendered an initial map (on a torus).  I currently have the the field
+size at 256x256.  The map agent happily sends whatever blocks it thinks the
+peer needs at the time.
+
+When the map receives an initial 'entity' call, it currently creates a local
+entity object.  After that it will just update the object.  It should also
+send map blocks to the peer.  How to determine which blocks to send?  Trivial
+if the block count is odd such as 3x3 for exmaple.  Just send the current block
+and 8 surrounding blocks.  Anything larger than that doesn't matter as long
+as the block is somewhere in th emiddle.  A 2x2 is a bit more tricky.  I'll just
+stick to 3x3 for now.
+
+Instead of 'field blocks' the map agent will deal with 'map blocks'.  Maps will
+be like fields in that they are composed of cell columns.
+
+
+Thu Sep 30 20:51:25 EDT 2010
+
+I altered the IPC object a few weeks ago to a star topology.  I also added a
+private one-read-only listener port to each IPC instance.  I finally got
+around to implementing a preliminary map agent.  It listenes to the usual
+IPC stream and evaluates world expressions such as move and identify.  It
+currently send a bunch of initial map blocks to newly connected peers.  It
+was very slow going and the resulting rendered blocks were out of order.
+I started poking around and making chages in the C code implementing networking
+and alterd the 'backlog' parameter passed to listen().  Upping the value from
+0 to 10 resulted in an expected fast passing of map blocks from the map agent
+to the client.
+
+TODO  Research what the backlog paremeter is all about.
