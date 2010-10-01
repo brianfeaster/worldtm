@@ -1,7 +1,8 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; World
 ;;   Windows
-;;    Glyphs_and_cells
+;;    Glyphs
+;;    Cells
 ;;    Column
 ;;    Field
 ;;    Canvas
@@ -20,7 +21,7 @@
 (load "ipc.scm")
 (load "window.scm")
 (load "entity.scm")
-(define QUIETLOGIN (not (null? (memv "silent" (vector->list argv)))))
+(define QUIETLOGIN (eqv? "silent" (vector-ref argv 2)))
 (define CELLANIMATION #t)
 (define SCROLLINGMAP #t)
 (define KITTEHBRAIN  #f)
@@ -107,9 +108,8 @@
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; Glyphs_and_cells
+;; Glyphs - Two multi-colored characters.
 ;;
-;Glyphs are two multi-colored characters.
 (define glyphNew vector)
 (define (glyph0bg cell) (vector-ref cell 0))
 (define (glyph0fg cell) (vector-ref cell 1))
@@ -118,35 +118,50 @@
 (define (glyph1fg cell) (vector-ref cell 4))
 (define (glyph1ch cell) (vector-ref cell 5))
 
-;Cells are a pair (symbol . glyph) for now (eventually smarter objects)
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Cells - A table of vectors #(symbol solidFlag glyph)
+;;
+(define (cellSymbol cell) (vector-ref cell 0))
+(define (cellSolid  cell) (vector-ref cell 1))
+(define (cellGlyph  cell) (vector-ref cell 2))
+
+(define (cellMake symb glyph . flags)
+  (vector symb
+          (if (null? (memq 'solid flags)) #f 'solid)
+          glyph))
+
 (define CellMax 1023)
+(define Cells (make-vector (+ 1 CellMax) #f))
 
-(define Cells (make-vector (+ 1 CellMax) (cons 'NOTHING (glyphNew 0 7 #\x 0 7 #\x))))
+; Get the cell index given its symbol
+; Return #f if nonexistant
+(define (cellIndex sym)
+  (let ~ ((index 0))
+    (if (< CellMax index) #f ; Not found
+    (let ((cell (vector-ref Cells index)))
+      (if (and cell (eq? (cellSymbol cell) sym)) index ; Found
+      (~ (+ index 1)))))))
 
-; Set the cell's symbol and/or glyph
-(define (cellSet      i symb glyph) (vector-set! Cells i (cons symb glyph)))
-(define (cellSetGlyph i glyph)      (set-cdr! (vector-ref Cells i) glyph))
+; Get the cell given a symbol or index
+; Return #f if index out of range of symbol nonexistent
+(define (cellRef o)
+  (if (integer? o)
+    (if (and (<= 0 o) (<= o CellMax)) (vector-ref Cells o) #f)
+    (let ~ ((i 0)) ; Find the cell via symbol
+      (if (< CellMax i) #f
+      (let ((cell (vector-ref Cells i)))
+        (if (and cell (eq? (cellSymbol cell) o)) cell ; Return the cell
+        (~ (+ i 1))))))))
 
-; Get the cell index of this cell symbol
-(define (cellIndex symb)
-  (let ~ ((i 0)
-          (cell (vector-ref Cells 0)))
-   (if (< CellMax i) 0
-   (if (eq? symb (car cell)) i
-   (~ (+ i 1) (vector-ref Cells (+ i 1)))))))
+; Create a new cell and save in Cells table
+(define (cellSet i symb glyph . flags)
+  (vector-set! Cells i
+    (if (null? (memq 'solid flags))
+      (cellMake symb glyph)
+      (cellMake symb glyph 'solid))))
 
-; Get the cell glyph given its index or symbol
-(define (cellGlyph i)
-  (if (integer? i)
-    (if (< CellMax i) ; An index larger than MAXCEL is assumbed to be an entity object.
-      ((entitiesGet i) 'glyph)
-      (cdr (vector-ref Cells i)))
-    (let ((index (cellIndex i)))
-     (if index
-        (cdr (vector-ref Cells index))
-        #f))))
-
-(cellSet CellMax 'air (glyphNew 0 0  CHAR-CTRL-@ 0 0 CHAR-CTRL-@))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -168,21 +183,28 @@
 ;;  default object is derived by adding the vector length to the first vector
 ;;  value.
 ;;
-; Height of first default bottom object.
+; Create a column given an initial height and a stack of cells
+(define (columnMake bottomHeight . cells)
+  (letrec ((len (length cells))
+           (col (make-vector (+ len 1))))
+    (vector-set! col 0 (- bottomHeight 1))
+    (vector-set-vector! col 1 (list->vector cells) 0)
+    col))
+
+; Height of first default implicit bottom object
 (define (columnHeightBottom c)
   (vector-ref c 0))
 
-; Height of first default top object.
+; Height of first default implicit top object
 (define (columnHeightTop c)
-  (+ (columnHeightBottom c) (vector-length c)))
+  (+ (vector-ref c 0) (vector-length c)))
 
 (define (columnRef c h)
+ (vector-ref c
   (let ((i (- h (columnHeightBottom c))))
-    (if (<= i 0)
-      (vector-ref c 1)
-    (if (>= i (vector-length c))
-      (vector-ref c (- (vector-length c) 1))
-    (vector-ref c i)))))
+    (if (<= i 1) 1
+    (if (<= (vector-length c) i) (- (vector-length c) 1)
+    i)))))
 
 ; Extend column below based on existing column. #(3  4 5 6) -> #(1  4 4 4 5 6)
 (define (columnExtendBelow c bot)
@@ -220,88 +242,25 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Field
-;; Maps will populate the field as if it were a local cache relative
-;; to the avatar's position.
 ;;
-;; A canvas entry is a vector consisting of a cell column.  The canvas itself
-;; is a 2x2 block dynamically updated with cells from a cell field agent.
-;; Avatar movement will readjust the field's virtual position in the map
-;; coordinate system as well as repopulate/cache the new block areas.
-;;
-;; Example:                          +--+--+    +--+--+
-;;   Assume avatar moved from a to   | a| b|    | e| b|
-;;   b in the field  area.  e and f  +--+--+ -> +--+--+
-;;   are cached in the area modulo   | c| d|    | f| c|
-;;   the field coordinates.          +--+--+    +--+--+
-;;
-(define FieldBlockSize  64) ; Each field block is 256x256 columns
-(define FieldBlockCount 2)       ; A field is made up of 2x2 field blocks
-(define FieldSize (* FieldBlockCount FieldBlockSize)) ; For now resulting field size is 512x512
-(define FieldBlockCoordinates ()) ; Canvas coordinates in block space.  (1 1) would be (256 256) map space.
-
-; The first pair of field block coordinates is always the upper left corner.
-(define (fieldBlockY) (car (car FieldBlockCoordinates)))
-(define (fieldBlockX) (cdr (car FieldBlockCoordinates)))
-
-(define (fieldInside? y x)
- (and (pair? FieldBlockCoordinates)
-      (<= (fieldBlockY) y)
-      (< y (+ (fieldBlockY) FieldSize))
-      (<= (fieldBlockX) x)
-      (< x (+ (fieldBlockX) FieldSize))))
-
-; Generate a list of coordinate pairs of each block
-; that make up the canvas at the specified location.
-(define (fieldCreateBlockList y x)
- (let ~ ((m 0) (n 0))
-  (if (= m FieldBlockCount) '()
-  (if (= n FieldBlockCount) (~ (+ m 1) 0)
-  (cons (cons (+ y m) (+ x n))
-        (~ m (+ n 1)))))))
-
-; Return list of block coordinates which need to be updated
-; if we were to move the current field blocks to this new
-; field blocks location.
-(define (canvasBlockCoordinatesNew y x)
-  (let ~ ((newBlocks (fieldCreateBlockList y x)) ; Blocks associated with new field block origin.
-          (currentBlocks FieldBlockCoordinates)) ; Curent blocks associated with current field block coor.
-    (if (null? currentBlocks)
-      newBlocks
-      (~ (list-delete newBlocks (car currentBlocks)) ; Remove current blocks from new block list.
-         (cdr currentBlocks)))))
-
-; Determine if the coordinate is above or below the inner field block area.
-; An avatar that moves outside of the inner field range will cause the
-; field to load new blocks.
-; TODO Implement map to field block coordinates.
-;
-;  +-----+<---Field range
-;  |+---+|
-;  ||   |<---Inner field range 1/4 the FieldBlockSize
-;  |+---+|
-;  +-----+
-(define (fieldTopBottomBuffer y x)
- (let ((fieldy (fieldBlockY))
-       (buffer (/ FieldBlockSize 4)))
-  (if (< y (+ (* FieldBlockSize   fieldy) buffer)) '(top)
-  (if (<= (- (* FieldBlockSize (+ fieldy FieldBlockCount)) buffer) y) '(bottom)
-  ()))))
-
-(define (fieldLeftRightBuffer y x)
- (let ((fieldx (fieldBlockX))
-       (buffer (/ FieldBlockSize 4)))
-  (if (< x (+ (* FieldBlockSize   fieldx) buffer)) '(left)
-  (if (<= (- (* FieldBlockSize (+ fieldx FieldBlockCount)) buffer) x) '(right)
-  ()))))
-
 ; Create default plane.
-(define FIELD ())
+(define FieldSize 256) ; Field grid is 256x256
+(define FieldBlockSize 3) ; TODO this must match the map agent's definition
+(define FIELD (make-vector-vector FieldSize FieldSize #f))
 
+; Initialize the canvas which is a vector of pairs (cellGlyph . cellHeight)
 (define (resetField defaultColumn)
- (set! FIELD
-   (vector-vector-map!
-     (lambda (i) defaultColumn) ; Hardcode a column
-     (make-vector-vector FieldSize FieldSize ()))))
+  (loop2 0 FieldSize 0 FieldSize (lambda (y x)
+    ; Each canvas entry consists of a map cell and its height.
+    (vector-vector-set! FIELD y x defaultColumn))))
+
+; The list of columns will most likely come from a map agent
+; The default block size is assumed
+(define (mapUpdateColumns y x blockSize lst)
+  (loop2 y (+ y blockSize) x (+ x blockSize) (lambda (y x)
+    (vector-vector-set! FIELD (modulo y FieldSize) (modulo x FieldSize) (car lst))
+    (canvasRender y x) ; TODO This is hackish Should not break the hierarchy and call this.
+    (set! lst (cdr lst)))))
 
 ; Fields are 2d arrays of columns.  Columns are quasi-compressed stacks
 ; of cells that consist of a start height and specified stack of cells.
@@ -333,7 +292,7 @@
           (bot    (columnHeightBottom column)));1st implicit bottom cell in col
  ; Adjust the z coor down to the first explicit cell in the column
  (let findNonAir ((z (if (>= z top) (set! z (- top 1)))))
-   (if (or (not (eq? (columnRef column z) cellAIR))
+   (if (or (not (eqv? (columnRef column z) cellAIR))
            (<= z bot))
        (if (pair? z) (car z) z) ; Return first in improper list of objects.
        (findNonAir (- z 1))))))
@@ -366,12 +325,23 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Canvas
-;; A canvas entry is a vector consisting of a cell and it's Z coordinate (the
-;; top most visible).  The canvas itself is a flattened map field.
+;; A canvas entry is a vector consisting of a glyph and it's Z coordinate (the
+;; top most visible usually).
 ;;
-(define CANVAS (make-vector-vector FieldSize FieldSize ()))
+(define CANVAS (make-vector-vector FieldSize FieldSize #f))
 
-(define (canvasCell y x)
+; Initialize the canvas which is a vector of pairs (cellGlyph . cellHeight)
+(define (resetCanvas . defaultGlyph)
+  (set! defaultGlyph (if (null? defaultGlyph) #f (car defaultGlyph)))
+  (loop2 0 FieldSize 0 FieldSize (lambda (y x)
+    ; Each canvas entry consists of a map cell and its height.
+    (vector-vector-set! CANVAS y x
+      (if defaultGlyph
+        (cons defaultGlyph 0)
+        (let ((top (field-ref-top 10 y x)))
+          (cons (cellGlyph (cellRef (field-base-ref top y x))) top)))))))
+
+(define (canvasGlyph y x)
   (car (vector-vector-ref CANVAS
          (modulo y FieldSize)
          (modulo x FieldSize))))
@@ -395,22 +365,15 @@
 
 (define (canvasRender y x)
  (let ((top (field-ref-top 1000 y x)))
-  (canvasCellSet y x (cellGlyph (field-ref top y x)))
+  (let ((celli (field-ref top y x))) ; Field might contain an entity's dna
+    (canvasCellSet y x (if (< CellMax celli) ((entitiesGet celli) 'glyph) (cellGlyph (cellRef celli)))))
   (canvasHeightSet y x top)))
-
-; Initialize the canvas which is a vector of pairs (cellGlyph . cellHeight)
-(define (resetCanvas)
- (let ((defaultCell (cellGlyph 'xx)))
-  (let ~ ((y 0)(x 0))
-   (if (!= y FieldSize) (if (= x FieldSize) (~ (+ y 1) 0) (begin
-    ; Each canvas entry consists of a map cell and its height.
-     (vector-vector-set! CANVAS y x (cons defaultCell 0))
-     (~ y (+ x 1))))))))
 
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; Viewport
+;; Viewport - Dumps to terminal window visible glyphs pre-rendered on the
+;;            canvas grid.
 ;;
 (define PortCY 0) ; Center of map location
 (define PortCX 0)
@@ -441,7 +404,7 @@
  (set! PortY (- y (/ PortH 2)))     ; Center Viewport around Avatar
  (set! PortX (- x (/ PortW 2)))
  (loop2 0 PortH 0 PortW (lambda (y x) ; Render glyphs in viewport
-   (viewportPlot (canvasCell (+ PortY y) (+ PortX x))
+   (viewportPlot (canvasGlyph (+ PortY y) (+ PortX x))
                  y (* x 2))))
  ((Terminal 'unlock))
  (if (WinColumn 'ENABLED) (dumpColumnInfo y x)))
@@ -462,7 +425,7 @@
   (and (< y PortH) (< x PortW)
     (begin
       ((Terminal 'lock))
-      (viewportPlot (canvasCell gy gx) y (* x 2))
+      (viewportPlot (canvasGlyph gy gx) y (* x 2))
       ((Terminal 'unlock))))))
 
 
@@ -551,16 +514,6 @@
    (~ y (+ x 1))))))))
 
 
-; Debugging.  Update field blocks with numbered cells.
-(define updateFieldBlocks (let ((nextCell 99)) (lambda (y0 x0)
-  (letrec ((y1 (+ FieldBlockSize y0)) ; Lower left map coordinates of block
-           (x1 (+ FieldBlockSize x0))
-           (cellGlyph (set! nextCell (+ 1 nextCell)))
-           (glyph (glyphNew 0 (+ 1 (modulo cell 7) 1) (integer->char (+ 48 (/ (- cell 100)      10)))
-                            0 (+ 1 (modulo cell 7) 1) (integer->char (+ 48 (modulo (- cell 100) 10))))))
-   (cellSet cell glyph)
-   (loop2 y0 y1 x0 x1 (lambda (y x) (setCell 0 y x cell))) ))))
-
 (define (inUltima4Range? y x) (and (<= 0 y) (< y U4Size) (<= 0 x) (< x U4Size)))
 
 (define (inUltima4RangeLcb1? y x)
@@ -598,7 +551,7 @@
                         (if (< 10 m) (if (< n -9) 5 (if (< 9 n) 7 6))
                         (if (< n -9) 4 (if (< 9 n) 0 8))))))
                      (U4MapCell (/ y U4MapCellSize) (/ x U4MapCellSize)))))))) ; Regular cell
-          (setCell 1 y x cellNOTHING)))))
+          (setCell 1 y x cellXX)))))
 
 ; Field block updater.  This will eventually be replaced with a map agent handler.
 (define (fieldBlockUpdater)
@@ -746,12 +699,15 @@
  ((WinColumn 'home))
  (let ~ ((z 11))
   (let ((c (field-ref z y x)))
-   (if (eq? cellAIR c)
+   (if (eqv? cellAIR c)
     (begin (WinColumnSetColor 0 8)
            (WinColumnPuts "()  "))
-    (begin (set! c (cellGlyph c)) ; Dump the glyph
-           (WinColumnSetColor (glyph0bg c) (glyph0fg c))  (WinColumnPutc (glyph0ch c))
-           (WinColumnSetColor (glyph1bg c) (glyph1fg c))  (WinColumnPutc (glyph1ch c))
+    (begin (set! c (if (< CellMax c) ((entitiesGet c) 'glyph)
+                                     (cellGlyph (cellRef c)))) ; Dump the glyph
+           (WinColumnSetColor (glyph0bg c) (glyph0fg c))
+           (WinColumnPutc (glyph0ch c))
+           (WinColumnSetColor (glyph1bg c) (glyph1fg c))
+           (WinColumnPutc (glyph1ch c))
            (WinColumnSetColor 0 7)
            (set! c (field-base-ref z y x)) ; Display base cell's hex value.
            (if (and (<= 0 c) (< c 256))
@@ -1019,23 +975,23 @@
     ; Push the entity that's in my way
     ((ipc 'qwrite) `(force ,@((avatar 'gpsLook)) ,dir 10))
     ; Walk normally
-    (if (null? (memv nextCell SOLIDCELLS))
+    (or (cellSolid (cellRef nextCell))
      (begin
       ((avatar 'move))
       ((ipc 'qwrite) `(move ,DNA ,@((avatar 'gps))))
-      (if (eq? (cellIndex 'help) (field-ref (avatar 'z) (avatar 'y) (avatar 'x)))  (help))
-      (if (eq? (cellIndex 'snake) (field-ref (avatar 'z) (avatar 'y) (avatar 'x))) (thread (snake-random)))
-      ;(if (eqv? (cellIndex 'brit2) (field-base-ref (avatar 'z) (avatar 'y) (avatar 'x))) (thread (spawnKitty)))
+      ;(if (eq? 'help  (cellSymbol (field-ref (avatar 'z) (avatar 'y) (avatar 'x))))  (help))
+      ;(if (eq? 'snake (cellSymbol (field-ref (avatar 'z) (avatar 'y) (avatar 'x)))) (thread (snake-random)))
+      ;(if (eq? 'brit2 (cellSymbol (field-base-ref (avatar 'z) (avatar 'y) (avatar 'x)))) (thread (spawnKitty)))
       ;(WinConsoleWrite (fieldColumn (avatar 'y) (avatar 'x)) (field-ref (avatar 'z) (avatar 'y) (avatar 'x)))
       ; Dump our coordinates.
       (WinStatusDisplay "\r\n"
-         (number->string (avatar 'z) 16) " "
-         (number->string (avatar 'y) 16) " "
-         (number->string (avatar 'x) 16) "\r\n"
-         (number->string (modulo (avatar 'y) FieldBlockSize) 16) " "
-         (number->string (modulo (avatar 'x) FieldBlockSize) 16) "\r\n"
-         (number->string (/ (avatar 'y) FieldBlockSize) 16) " "
-         (number->string (/ (avatar 'x) FieldBlockSize) 16)))))))
+         (number->string (avatar 'z)) " "
+         (number->string (avatar 'y)) " "
+         (number->string (avatar 'x)) "\r\n"
+         (number->string (modulo (avatar 'y) FieldBlockSize)) " "
+         (number->string (modulo (avatar 'x) FieldBlockSize)) "\r\n"
+         (number->string (/ (avatar 'y) FieldBlockSize)) " "
+         (number->string (/ (avatar 'x) FieldBlockSize))))))))
 
 ; Change avatar color.  Will just cycle through all 16 avatar colors.
 (define (avatarColor)
@@ -1051,7 +1007,7 @@
    ((ipc 'qwrite) ; Force all (except me) to evaluate the following
     `(if (= DNA ,,DNA) ; If me, evaluate this expression from the other peer
      (voice 0 10
-      (string ,(avatar 'name)
+      (string ,(avatar 'name) " "
               ,(let ((t (- (time) ActivityTime)))
                 (if (< t 60)   (string (number->string t) "s")
                 (if (< t 3600) (string (number->string (/ t 60)) "m")
@@ -1114,7 +1070,7 @@
 (setButton CHAR-CTRL-L '(begin (viewportReset (avatar 'y) (avatar 'x)) ((WinChat 'repaint))))
 (setButton CHAR-CTRL-M '(begin ((WinStatus 'toggle)) ((WinColumn 'toggle))))
 (setButton CHAR-CTRL-Q '(set! state 'done))
-(setButton #\d '((ipc 'qwrite) `(dropCell ,(avatar 'y) ,(avatar 'x) (cellIndex 'campfire))))
+(setButton #\d '((ipc 'qwrite) `(dropCell ,(avatar 'y) ,(avatar 'x) (cellRef 'campfire))))
 (setButton #\g
    '(let ((o (field-ref (avatar 'z) (avatar 'y) (avatar 'x))))
      (field-delete!  (avatar 'z) (avatar 'y) (avatar 'x) o)
@@ -1291,13 +1247,6 @@
      (~))))))))
 
 
-(define (sayDesperate)
-  (let ((cmd `(voice ,DNA 10 "desperate")))
-   (sleep (random 500))
-   ((ipc 'qwrite) cmd) (sleep 500)
-   ((ipc 'qwrite) cmd) (sleep 500)))
-
-
 ; Tank agent - The first interactive user agent.
 (define (tankTalk str) (thread (begin
   (sleep 700)
@@ -1335,12 +1284,13 @@
                    (glyph1bg (avatar 'glyph))
                    (glyph1fg (avatar 'glyph))
                    (string-ref talkInput (if (> strLen 12) 12 11))))
-      (thread (begin (sleep 500) (who)))))))
+      (thread (begin (sleep 500) (who))))))) ; Wait before whoing so I say my new name using my old name
  (if tankIsListening (begin
    (if (string=? "who" talkInput) ((ipc 'qwrite) '(say "I'm here!")))
    (if (string=? "load the jump program" talkInput) (tankTalk "I can't find the disk")
    (if (string=? "load underworld" talkInput) (thread (load-ultima-underworld))
    (if (string=? "load ultima5" talkInput) (thread (load-ultima-world5))))))))
+
 
 ; Display the same string repeatedly with colors of increasing inensity.
 (define (fancyDisplay c s)
@@ -1348,7 +1298,7 @@
    (lambda (c)
         (WinChatSetColor 0 c)
         (WinChatDisplay "\r" s)
-        (sleep 50))
+        (sleep 1))
    (list 8 4 12 6 7 14 15 14 7 6 12 4 8 c))
  "")
 
@@ -1356,30 +1306,26 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Start_everything
 ;;
+
+; Initial cell indices and glyphs
+(define cellWATER1 1)
+(define cellBRICK  19)
+(define cellXX     (- CellMax 1))
+(define cellAIR    CellMax)
+
+(define glyphXX  (glyphNew 7  0 #\X  7  0 #\X))
+(define glyphAIR (glyphNew 3 12 #\A  4  3 #\r))
+
+(cellSet cellXX  'xx  glyphXX 'solid)
+(cellSet cellAIR 'air glyphAIR)
+
 (load "ultima4.cells")
 
-; Some often used cell indices.
-(define cellNOTHING (cellIndex 'NOTHING))
-(define cellXX (cellIndex 'xx))
-(define cellWATER1 (cellIndex 'water1))
-(define cellBRICK (cellIndex 'brick))
-(define cellAIR (cellIndex 'air))
-
-(define SOLIDCELLS (list
- (cellIndex 'xx)
- (cellIndex 'mnts)
- (cellIndex 'hills)
- (cellIndex 'water0)
- (cellIndex 'water1)
- (cellIndex 'water2)
- (cellIndex 'brickc)
- (cellIndex 'column)
- (cellIndex 'window)
- (cellIndex 'doorl)))
-
 ; Initialize field and canvas structures
-(resetField (vector -1 cellXX cellAIR))
-(resetCanvas)
+(resetField (columnMake 0 cellXX cellAIR))
+(resetCanvas glyphXX)
+;(resetCanvas)
+
 
 (or QUIETLOGIN (begin
  ; Welcome marquee
@@ -1390,6 +1336,7 @@
 
 ; Create ipc object.  Pass in a debug message output port (can be empty lambda)
 (define ipc (Ipc WinConsoleDisplay))
+(or QUIETLOGIN (ipc '(set! Debug #f)))
 
 ; Create avatar object
 (define avatar (Avatar (ipc 'PrivatePort) NAME))
@@ -1402,7 +1349,7 @@
 ((avatar 'jump) 1  (- (* 108 U4MapCellSize) 1)  (- (* 86 U4MapCellSize) 1))
 
 ; Start the local map update agent
-(thread (fieldBlockUpdater))
+;(thread (fieldBlockUpdater))
 
 ; Display some initial information
 (or QUIETLOGIN (begin
@@ -1421,7 +1368,6 @@
     (or (eq? s 'starting) (WinChatDisplay "\r\nIPC-REPL-ERROR::" s)))
  (let ~ ()
   (let ((sexp ((ipc 'qread))))
-     (WinConsoleWrite sexp)
      (eval sexp)
      (~))))
 

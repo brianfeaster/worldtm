@@ -617,7 +617,7 @@ void wscmAcceptRemoteStream (void) {
 */
 
 void wscmOpenLocalSocket (void) {
- Int ld, on=1;
+ int ld, on=1;
  struct sockaddr_in sai;
 	DB("-->%s", __func__);
 
@@ -651,7 +651,7 @@ void wscmOpenLocalSocket (void) {
 		goto ret;
 	}
 
-	if (-1 == listen(ld, 0)) {
+	if (-1 == listen(ld, 128)) {
 		//printf("ERROR: listen()\r\n");
 		r0 = eof;
 		goto ret;
@@ -1644,8 +1644,12 @@ void sysMakeVector (void) {
 	if (wscmAssertArgumentCountRange(1, 2, __func__)) return;
 
 	r2 = r1==(Obj)2 ? pop() : null;
-	objNewVector(len=*(Num*)pop());
-	while (len--) memVectorSet(r0, len, r2);
+	len = *(Num*)pop();
+	if (len<1) r0=nullvec;
+	else {
+		objNewVector(len);
+		while (len--) memVectorSet(r0, len, r2);
+	}
 
 	DB("<--%s", __func__);
 }
@@ -1934,7 +1938,7 @@ void sysOpenNewFile (void) {
 }
 
 void sysClose(void) {
-	DB("SYS -->sysClose");
+	DB("::%s", __func__);
 	r0 = pop();
 	if (memObjectType(r0) != TSOCKET
 		 && memObjectType(r0) != TPORT) {
@@ -1944,7 +1948,7 @@ void sysClose(void) {
 		close(*(Int*)r0);
 		memVectorSet(r0, 3, sclosed);
 	}
-	DB("SYS <--sysClose");
+	DB("  --%s", __func__);
 }
 
 /* Given a byte count and port, read from the port count bytes or if 0 any

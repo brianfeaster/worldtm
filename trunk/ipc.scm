@@ -1,12 +1,14 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; IPC Object
 ;;
-;; Star topology.  Hub is always listening on the first port 7155.  Each
-;; instance also has a "single connection one read" listener.
+;; Star topology.  Hub is always listening on the initial hub port.  Peers
+;; will connect to an existing hub if they can not acquire the hub port.  Each
+;; peer and hub will also have a "single connection, single read" listener.
 ;;
-(define (Ipc Display . portNum)
- (define (Displayl . l) (for-each Display l))
- (define HubPort (if (null? portNum) 7155 (car portNum)))
+(define (Ipc DisplayFunction . portNum)
+ (define Debug (and DisplayFunction)) ; Can pass in #f to disable any debug messages
+ (define (Display . l) (and Debug (for-each DisplayFunction l)))
+ (define HubPort (if (null? portNum) 8155 (car portNum)))
  (define HubSocket #eof) ; If not eof then this IPC instance is the hub socket.
  (define PrivatePort (+ 1 HubPort))
  (define PrivateSocket
@@ -79,6 +81,7 @@
   (msgQueueAdd e))
 
  (define (msgQueueAdd e)
+   (Display e)
    (QueueAdd MsgQueue e)
    (semaphore-up MsgQueueSemaphore))
 
@@ -87,7 +90,7 @@
  ; Read from peer's socket and add to this object's I/O queue as well as every
  ; other queue in the peer list.
  (define (peerReaderLoop peer)
-   (Displayl "\r\n::(peerReaderLoop) " peer "  ")
+   (Display "\r\n::(peerReaderLoop) " peer "  ")
    (let ~ ((e (read (peerSocket peer))))
      (if (eof-object? e)
        (begin
@@ -105,7 +108,7 @@
 
  ; Write to peer's socket anything in its queue.
  (define (peerWriterLoop peer)
-   (Displayl "\r\n::(peerWriterLoop) " peer "  ")
+   (Display "\r\n::(peerWriterLoop) " peer "  ")
    (let ~ ()
      (if (peerSocket peer) (begin
        (semaphore-down (peerSemaphore peer))
@@ -121,41 +124,48 @@
      ; handling I/O to the hub will close or fail and createHub will
      ; be called again.
      (let ((hub (peerCreate (open-stream (open-socket "localhost" HubPort)))))
-       (Displayl "\r\n::(createHub) Connected to hub " hub "  ")
+       (Display "\r\n::(createHub) Connected to hub " hub "  ")
        (display "'(World 5 3 0)" (peerSocket hub)) ; Identify myself to the hub.
        (peersAdd hub)
        (thread
          (peerWriterLoop hub))
        (thread
          (peerReaderLoop hub)
-         (Displayl "\r\n::(createHub) Disconnected from hub " hub "  ")
+         (Display "\r\n::(createHub) Disconnected from hub " hub "  ")
          (createHub)))
 
      ; Acquired the hub socket port so act as the hub from now on.  Continusouly
      ; accept incomming peer connections and add to message queue.
      (thread
-      (Displayl "\r\n::(createHub) Hub accepting peer connections  ")
+      (Display "\r\n::(createHub) Hub accepting peer connections  ")
       (let ~ ()
         (let ((peer (peerCreate (open-stream HubSocket))))
-          (Displayl "\r\n::(createHub) Hub accepted peer " peer "  ")
+          (Display "\r\n::(createHub) Hub accepted peer " peer "  ")
           (display "'(World 5 3 0)" (peerSocket peer)) ; Identify myself to the hub.
           (peersAdd peer)
           (thread
             (peerWriterLoop peer))
           (thread
             (peerReaderLoop peer)
-            (Displayl "\r\n::(createHub) Hub Disconnected from peer " peer "  "))
+            (Display "\r\n::(createHub) Hub Disconnected from peer " peer "  "))
           (~))))))
+
+ (define (private port msg)
+   (letrec ((p (open-socket "localhost" port))
+            (s (open-stream p)))
+     (if (eof-object? s) s
+         (write msg s)
+         (display " " s))))
 
  ; Start the engine
  (createHub)
 
  ; The private local socket is continuously opened, read from once and queued then closed.
- (Displayl "\r\n::IPC Private socket " PrivateSocket "  ")
+ (Display "\r\n::IPC Private socket " PrivateSocket "  ")
  (thread (let ~ ()
    (letrec ((s (open-stream PrivateSocket))
             (e (read s)))
-     (Displayl "\r\n::IPC Private socket " PrivateSocket " received " e ".  ")
+     (Display "\r\n::IPC Private socket " PrivateSocket " received[" e "]")
      (or (eof-object? e) (msgQueueAdd e))
      (close s)
      (~))))

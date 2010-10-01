@@ -315,6 +315,17 @@
 
 (define (list . x) x)
 
+(define (list->vector l)
+  (let ((v #()))
+    (let ~ ((len 0)
+            (lst l))
+      (if (null? lst)
+        (set! v (make-vector len))
+        (begin
+          (~ (+ len 1) (cdr lst))
+          (vector-set! v len (car lst)))))
+    v))
+
 (define (append l t)
  (if (pair? l)
      (cons (car l) (append (cdr l) t))
