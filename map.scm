@@ -8,7 +8,7 @@
 ;;
 
 ;(load "window.scm")
-(define MapBlockSize 4)
+(define MapBlockSize 32)
 (define cellBRICK 19)
 (define cellAIR 1023)
 
@@ -32,11 +32,11 @@
 (define NAME "The Map Agent")
 (define (Avatar dna port name z y x glyph) ((Entity dna port name z y x glyph) '(let ()
    (define self (lambda (msg) (eval msg)))
-   (define fieldY (/ y MapBlockSize))
-   (define fieldX (/ x MapBlockSize))
-   (define (setMapLoc fy fx) ; The upper left corner of cached map block set
-     (set! fieldY fy)
-     (set! fieldX fx))
+   (define blockY (/ y MapBlockSize))
+   (define blockX (/ x MapBlockSize))
+   (define (setMapBlockLoc fy fx) ; The upper left corner of cached map block set
+     (set! blockY fy)
+     (set! blockX fx))
    self)))
 
 (define EntityDB ())
@@ -147,7 +147,7 @@
 (define (sendInitialBlocks e)
   (let ((by (- (/ (e 'y) MapBlockSize) (/ MapBlockCount 2)))
         (bx (- (/ (e 'x) MapBlockSize) (/ MapBlockCount 2))))
-  ((e 'setMapLoc ) y x) ; Update the entities cached block location (temporary)
+  ((e 'setMapBlockLoc ) by bx) ; Update the entities cached block location (temporary)
   (loop2 by (+ by MapBlockCount) bx (+ bx MapBlockCount) (lambda (y x)
     (displayl "Sending initial " y " " x " to " (e 'name) "\r\n")
     ((ipc 'private) (e 'port) ; Send the block to the peer
@@ -155,6 +155,42 @@
           ,(let ((l ()))
              (loop (* MapBlockSize MapBlockSize) (lambda (i)
                (set! l (cons (vector -1 (U4MapCell y x) cellAIR) l)))) (cons 'list l))))))))
+
+; The Ultima4 map file is 8x8 blocks of 32x32 cells
+; so create a simpler 256x25 array of cell numbers.
+(define U4MapVector
+ (let ((fd (open-file "ultima4.map"))
+       (vec (make-vector 65536)))
+  (let ~ ((i 0))
+     (if (= i 65536) vec ; Return the vector
+     (begin
+        (vector-set! vec
+                 (+ (* 256 (+ (modulo (/ i 32) 32) (* (/ i 8192) 32)))
+                    (+ (modulo i 32) (* (modulo (/ i 1024) 8) 32)))
+                 (+ 0 (read-char fd))) ; Hack to convert char to integer
+        (~ (+ i 1)))))))
+
+(define U4Lcb1MapVector
+ (let ((fd (open-file "lcb1.ult"))
+       (vec (make-vector 1024)))
+  (let ~ ((i 0))
+     (if (= i 1024) vec ; Return the vector
+     (begin
+        (vector-set! vec i (+ 0 (read-char fd))) ; Hack to convert char to integer
+        (~ (+ i 1)))))))
+
+(define (U4MapCell y x)
+ (vector-ref U4MapVector (+ (* 256 (modulo y 256)) (modulo x 256))))
+
+(define (U4Lcb1MapCell y x)
+ (vector-ref U4Lcb1MapVector (+ (* 32 (modulo y 32)) (modulo x 32))))
+
+(define (inUltima4RangeLcb1? y x)
+ (and (<= (* 107 MapBlockSize) y)
+      (< y (* 108 MapBlockSize))
+      (<= (* 86 MapBlockSize) x)
+      (< x (* 87 MapBlockSize))))
+
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -178,40 +214,29 @@
 
 (define (die . x) ())
 
-; The Ultima4 map file is 8x8 blocks of 32x32 cells
-; so create a simpler 256x25 array of cell numbers.
-(define U4MapVector
- (let ((fd (open-file "ultima4.map"))
-       (vec (make-vector 65536)))
-  (let ~ ((i 0))
-     (if (= i 65536) vec ; Return the vector
-     (begin
-        (vector-set! vec
-                 (+ (* 256 (+ (modulo (/ i 32) 32) (* (/ i 8192) 32)))
-                    (+ (modulo i 32) (* (modulo (/ i 1024) 8) 32)))
-                 (+ 0 (read-char fd))) ; Hack to convert char to integer
-        (~ (+ i 1)))))))
-
-(define (U4MapCell y x)
- (vector-ref U4MapVector (+ (* 256 (modulo y 256)) (modulo x 256))))
-
 (define (move dna . loc)
  (letrec ((e (entityLookup dna))
-          (ey (e 'fieldY))
-          (ex (e 'fieldX))
-          (y (/ (cadr loc) MapBlockSize))
-          (x (/ (caddr loc)MapBlockSize)))
+          (y (cadr loc))
+          (x (caddr loc))
+          (by (/ y  MapBlockSize))
+          (bx (/ x MapBlockSize))
+          (eby (e 'blockY))
+          (ebx (e 'blockX)))
    (apply (e 'setLoc) loc) ; Update entity's location
    (displayl "\n\e[32m" (e 'name) " moves to " ((e 'gps))) ; Debug message
-   (if (or (!= ey y) ; Determine if a new block is required
-           (!= ex x))
+   (if (or (!= eby by) ; Determine if a new block is required
+           (!= ebx bx))
      (begin
-       ((e 'setMapLoc ) y x) ; Update the entities cached block location (temporary)
+       ((e 'setMapBlockLoc ) by bx) ; Update the entities cached block location (temporary)
        ((ipc 'private) (e 'port) ; Send the block to the peer
-          `(mapUpdateColumns ,(* y MapBlockSize) ,(* x MapBlockSize) ,MapBlockSize
+          `(mapUpdateColumns ,(* by MapBlockSize) ,(* bx MapBlockSize) ,MapBlockSize
              ,(let ((l ()))
                 (loop (* MapBlockSize MapBlockSize) (lambda (i)
-                  (set! l (cons (vector -1 (U4MapCell y x) cellAIR) l)))) (cons 'list l))))))))
+                  (set! l (cons (vector -1 (if (inUltima4RangeLcb1? y x)
+                                               (U4Lcb1MapCell (+ y (/ i 32)) (+ x (modulo i 32)))
+                                               (U4MapCell by bx))
+                                           cellAIR) l))))
+                (cons 'list l))))))))
 
 
 

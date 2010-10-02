@@ -21,7 +21,7 @@
 (load "ipc.scm")
 (load "window.scm")
 (load "entity.scm")
-(define QUIETLOGIN (eqv? "silent" (vector-ref argv 2)))
+(define QUIETLOGIN (and (< 2 (vector-length argv)) (eqv? "silent" (vector-ref argv 2))))
 (define CELLANIMATION #t)
 (define SCROLLINGMAP #t)
 (define KITTEHBRAIN  #f)
@@ -118,6 +118,7 @@
 (define (glyph1fg cell) (vector-ref cell 4))
 (define (glyph1ch cell) (vector-ref cell 5))
 
+(define glyphUNKNOWN (glyphNew 0 8 #\? 0 8 #\?))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -133,7 +134,7 @@
           glyph))
 
 (define CellMax 1023)
-(define Cells (make-vector (+ 1 CellMax) #f))
+(define Cells (make-vector (+ 1 CellMax) (cellMake 'unknown glyphUNKNOWN)))
 
 ; Get the cell index given its symbol
 ; Return #f if nonexistant
@@ -1066,6 +1067,7 @@
 (setButton #\t '(begin
   (WinInputPuts (string ">" (replTalk 'getBuffer)))
   (set! state 'talk)))
+(setButton CHAR-CTRL-D '(ipc '(set! Debug (not Debug))))
 (setButton CHAR-CTRL-F '(walkForever))
 (setButton CHAR-CTRL-L '(begin (viewportReset (avatar 'y) (avatar 'x)) ((WinChat 'repaint))))
 (setButton CHAR-CTRL-M '(begin ((WinStatus 'toggle)) ((WinColumn 'toggle))))
@@ -1336,7 +1338,7 @@
 
 ; Create ipc object.  Pass in a debug message output port (can be empty lambda)
 (define ipc (Ipc WinConsoleDisplay))
-(or QUIETLOGIN (ipc '(set! Debug #f)))
+(ipc '(set! Debug #f))
 
 ; Create avatar object
 (define avatar (Avatar (ipc 'PrivatePort) NAME))
