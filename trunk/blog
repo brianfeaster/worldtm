@@ -2239,3 +2239,22 @@ and alterd the 'backlog' parameter passed to listen().  Upping the value from
 to the client.
 
 TODO  Research what the backlog paremeter is all about.
+
+
+Sat Oct  2 23:08:26 EDT 2010
+
+Implementing hardware scrolling.  It does so if the window is larger than one
+row, within the terminal boundaries and the same width.  BUG:  It doesn't check
+if another window is obstructing it.
+
+Windows need to know if they are completely visible or not.  Transparency
+complicates the algorithm.  Since I'll be making a lot of changes to the window
+object I should first support new window ordering.  Window visibility might
+become a side effect of such development.
+
+
+Mon Oct  4 01:28:57 EDT 2010
+
+While updating the windowMask enough information (last and new visible window)
+is there to increment and/or decrement the visible count for the windows.
+Simple fix.

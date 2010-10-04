@@ -63,7 +63,7 @@
  ; 2D table of visible window objects.  #f represents no window which is never drawn on.  Considering
  ; having a default base window always in existence which could act as a static/dynamic background image.
  (define WindowMask ())
-
+ ; Methods
  (define (ResetTerminal)
   (set! Theight (cdr (terminal-size)))
   (set! Twidth  (car (terminal-size)))
@@ -111,10 +111,18 @@
      (~ (cdr w))))))
 
  (define (WindowMaskReset y0 x0 y1 x1)
-  (loop2 y0 y1 x0 x1 (lambda (gy gx)
+  (loop2 y0 (+ y1 1) x0 (+ x1 1) (lambda (gy gx)
      (if (InsideTerminal? gy gx)
-      (let ((topwin (TopmostWindow gy gx))) ; Get top win at global pos
+      (let ((prevwin (vector-vector-ref WindowMask gy gx)) ; Could be #f
+            (topwin (TopmostWindow gy gx))) ; Get top win at global pos
         (vector-vector-set! WindowMask gy gx topwin) ; Cache it
+        ; Update the visible count for the window(s) at this global location.
+        (if prevwin
+          (if (not (eq? prevwin topwin))             ; Previous window here
+             (begin
+               ((prevwin 'visibleCountAdd) -1)
+               (and topwin ((topwin 'visibleCountAdd) 1))))
+          (if topwin ((topwin 'visibleCountAdd) 1))) ; No previous window here
         (if topwin
           ((topwin 'globalRefresh) gy gx) ; Redraw glyph of this window at its global position.
           (gputc #\# #x08 gy gx))))))) ; Default background terminal glyph
@@ -151,6 +159,9 @@
    (define (cursor-visible s) (set! CURSOR-VISIBLE s))
    (define WindowSemaphore (open-semaphore 1))
    (define ScrollbackHack #f)
+   (define VisibleCount 0) ; Number of visible non-obstructed locations
+	; Methods
+   (define (visibleCountAdd c) (set! VisibleCount (+ VisibleCount c)))
    (define (goto y x)
      (set! needToScroll #f)
      (set! TY (min y (- Wheight 1)))
@@ -182,7 +193,22 @@
               (display CHAR-CTRL-H) 
               (set! needToScroll #f)
               (set! TX (- TX 1)))))
+   (define (hardwareScrollable?)
+     (and (= Wwidth Twidth)
+          (< 1 Wheight)
+          (= VisibleCount (* Wwidth Wheight))))
    (define (scrollUp)
+     (if (hardwareScrollable?)
+       (begin
+         (displayl "\e7\e[" (+ Y0 1) ";" (+ Y0 Wheight) "r\e[" (+ Y0 Wheight) "H\n")
+         (displayl "\e[r\e8")
+         (loop Wwidth (lambda (x) ; Clear row which will become the bottom row
+           (let ((desc (vector-vector-ref DESC topRow x)))
+             (vector-set! desc 0 COLOR)
+             (vector-set! desc 1 #\ ))))
+         (set! topRow (modulo (+ topRow 1) Wheight)) ; Shift buffer
+         (repaintRow (- Wheight 1)))
+     (begin
      ; Clear top-row which is to become the bottom row.
      ; Force topmost line off the top of the terminal in hopes
      ; of filling the client's terminal backscroll buffer. Set
@@ -196,13 +222,21 @@
               (~ (+ x 1)))))
        (display "\e[K\n\n\e[r\e8")
        (WindowMaskReset 0 0 2 Twidth)))
-     (loop Wwidth (lambda (x)
+     (loop Wwidth (lambda (x) ; Clear row which will become the bottom row
        (let ((desc (vector-vector-ref DESC topRow x)))
          (vector-set! desc 0 COLOR)
          (vector-set! desc 1 #\ ))))
-     (set! topRow (modulo (+ topRow 1) Wheight))
+     (set! topRow (modulo (+ topRow 1) Wheight)) ; Shift buffer
      ; Refresh window.
-     (repaint))
+     (repaint))))
+   (define (repaintRow row)
+     (loop Wwidth (lambda (x)
+       (let ((desc (vector-vector-ref DESC (modulo (+ row topRow) Wheight) x)))
+         (and (InsideTerminal? (+ row Y0) (+ x X0))
+              (eq? self (vector-vector-ref WindowMask (+ row Y0) (+ x X0)))
+              (gputc (vector-ref desc 1)
+                     (vector-ref desc 0)
+                     (+ row Y0) (+ x X0)))))))
    (define (repaint)
      (loop2 0 Wheight 0 Wwidth (lambda (y x)
        (let ((desc (vector-vector-ref DESC (modulo (+ y topRow) Wheight) x)))
@@ -252,8 +286,10 @@
      (loop (string-length str) (lambda (i) (putchar (string-ref str i))))
      (semaphore-up WindowSemaphore))
    (define (toggle . state)
-     (set! ENABLED (if (null? state) (not ENABLED) (car state)))
-     (WindowMaskReset Y0 X0 Y1 X1))
+     (let ((newstate (if (null? state) (not ENABLED) (car state))))
+       (or (= state newstate) (begin ; If same state, do nothing
+         (set! ENABLED newstate)
+         (WindowMaskReset Y0 X0 Y1 X1)))))
    (define (alpha y x a) ; Create transparent 'pixel'
      (vector-vector-set! ALPHA y x a)
      (if ENABLED (WindowMaskReset (+ y Y0) (+ x X0) (+ y Y0 1) (+ x X0 1))))
