@@ -246,7 +246,7 @@
 ;;
 ; Create default plane.
 (define FieldSize 256) ; Field grid is 256x256
-(define FieldBlockSize 3) ; TODO this must match the map agent's definition
+(define FieldBlockSize 32) ; TODO this must match the map agent's definition
 (define FIELD (make-vector-vector FieldSize FieldSize #f))
 
 ; Initialize the canvas which is a vector of pairs (cellGlyph . cellHeight)
@@ -254,14 +254,6 @@
   (loop2 0 FieldSize 0 FieldSize (lambda (y x)
     ; Each canvas entry consists of a map cell and its height.
     (vector-vector-set! FIELD y x defaultColumn))))
-
-; The list of columns will most likely come from a map agent
-; The default block size is assumed
-(define (mapUpdateColumns y x blockSize lst)
-  (loop2 y (+ y blockSize) x (+ x blockSize) (lambda (y x)
-    (vector-vector-set! FIELD (modulo y FieldSize) (modulo x FieldSize) (car lst))
-    (canvasRender y x) ; TODO This is hackish Should not break the hierarchy and call this.
-    (set! lst (cdr lst)))))
 
 ; Fields are 2d arrays of columns.  Columns are quasi-compressed stacks
 ; of cells that consist of a start height and specified stack of cells.
@@ -906,6 +898,16 @@
     (WinChatSetColor (glyph1bg (entity 'glyph)) (glyph0fg (entity 'glyph)))
     (WinChatDisplay text)))
  (if (and (!= dna DNA) (eqv? text "unatco")) (say "no Savage")))
+
+; The list of columns will most likely come from a map agent
+; The map coordinate and block size passed
+(define (mapUpdateColumns y x blockSize lst)
+  ;(WinChatDisplay "\r\n" y " " x)
+  (loop2 y (+ y blockSize) x (+ x blockSize) (lambda (y x)
+    (vector-vector-set! FIELD (modulo y FieldSize) (modulo x FieldSize) (car lst))
+    (canvasRender y x)
+    (set! lst (cdr lst))))
+  ((ipc 'qwrite) '(who)))
 
 
 

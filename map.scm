@@ -143,19 +143,6 @@
   (if (<= (- (* MapBlockSize (+ mapx MapBlockCount)) buffer) x) '(right)
   ()))))
 
-; TODO start this which should lead to a generic map block updater
-(define (sendInitialBlocks e)
-  (let ((by (- (/ (e 'y) MapBlockSize) (/ MapBlockCount 2)))
-        (bx (- (/ (e 'x) MapBlockSize) (/ MapBlockCount 2))))
-  ((e 'setMapBlockLoc ) by bx) ; Update the entities cached block location (temporary)
-  (loop2 by (+ by MapBlockCount) bx (+ bx MapBlockCount) (lambda (y x)
-    (displayl "Sending initial " y " " x " to " (e 'name) "\r\n")
-    ((ipc 'private) (e 'port) ; Send the block to the peer
-       `(mapUpdateColumns ,(* y MapBlockSize) ,(* x MapBlockSize) ,MapBlockSize
-          ,(let ((l ()))
-             (loop (* MapBlockSize MapBlockSize) (lambda (i)
-               (set! l (cons (vector -1 (U4MapCell y x) cellAIR) l)))) (cons 'list l))))))))
-
 ; The Ultima4 map file is 8x8 blocks of 32x32 cells
 ; so create a simpler 256x25 array of cell numbers.
 (define U4MapVector
@@ -185,11 +172,34 @@
 (define (U4Lcb1MapCell y x)
  (vector-ref U4Lcb1MapVector (+ (* 32 (modulo y 32)) (modulo x 32))))
 
-(define (inUltima4RangeLcb1? y x)
- (and (<= (* 107 MapBlockSize) y)
-      (< y (* 108 MapBlockSize))
-      (<= (* 86 MapBlockSize) x)
-      (< x (* 87 MapBlockSize))))
+; Debug dump the castle map vector
+;(loop2 0 32 0 32
+;   (lambda (y x)
+;     (if (= (modulo x 32) 0) (display  "\n"))
+;     (display (integer->char (+ "A" (modulo (U4Lcb1MapCell y x) 32))))))
+
+(define (inUltima4RangeLcb1? by bx)
+ (and (= by 107) (= bx 86)))
+
+(define (generateBlockColumns by bx)
+  (let ~ ((l ())) ; Create the list of columns
+    (loop2 0 MapBlockSize 0 MapBlockSize (lambda (y x)
+      (set! l (cons (vector -1
+                            (if (inUltima4RangeLcb1? by bx)
+                                (U4Lcb1MapCell (- MapBlockSize y 1) (- MapBlockSize x 1))
+                                (U4MapCell by bx))
+                            cellAIR)
+                    l))))
+    (cons 'list l))) ; return it as an expression (list columns ...)
+
+(define (sendInitialBlocks e)
+  (let ((by (- (/ (e 'y) MapBlockSize) (/ MapBlockCount 2)))
+        (bx (- (/ (e 'x) MapBlockSize) (/ MapBlockCount 2))))
+  ((e 'setMapBlockLoc ) by bx) ; Update the entities cached block location (temporary)
+  (loop2 by (+ by MapBlockCount) bx (+ bx MapBlockCount) (lambda (y x)
+    (displayl "Sending initial " y " " x " to " (e 'name) "\r\n")
+    ((ipc 'private) (e 'port) ; Send the block to the peer
+       `(mapUpdateColumns ,(* y MapBlockSize) ,(* x MapBlockSize) ,MapBlockSize ,(generateBlockColumns y x)))))))
 
 
 
@@ -229,14 +239,7 @@
      (begin
        ((e 'setMapBlockLoc ) by bx) ; Update the entities cached block location (temporary)
        ((ipc 'private) (e 'port) ; Send the block to the peer
-          `(mapUpdateColumns ,(* by MapBlockSize) ,(* bx MapBlockSize) ,MapBlockSize
-             ,(let ((l ()))
-                (loop (* MapBlockSize MapBlockSize) (lambda (i)
-                  (set! l (cons (vector -1 (if (inUltima4RangeLcb1? y x)
-                                               (U4Lcb1MapCell (+ y (/ i 32)) (+ x (modulo i 32)))
-                                               (U4MapCell by bx))
-                                           cellAIR) l))))
-                (cons 'list l))))))))
+          `(mapUpdateColumns ,(* by MapBlockSize) ,(* bx MapBlockSize) ,MapBlockSize ,(generateBlockColumns by bx)))))))
 
 
 
