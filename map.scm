@@ -2,12 +2,21 @@
 ;; Map Agent
 ;;   IPC
 ;;   Avatar_and_entities
-;;   Mapblocks
+;;   Map_blocks
 ;;   Incomming_IPC_messages
 ;;   Start_everything
 ;;
+;; Mapping from Ultima4 map file byte index to (y x) World[tm] coordinates.
+;;  y = (+ (modulo (/ i 32) 32) (* (/ i 8192) 32))
+;;  x = (+ (modulo i 32) (* (modulo (/ i 1024) 8) 32))
+;; Mapping from World[tm] (y x) corrdinates to Ultima4 map file byte index.
+;; i = (+ (modulo x 32) (* (/ x 32) 1024) (* (modulo y 32) 32) (* (/ y 32) 8192))
+;;
+;; Lord British's castle (108 86)
+;;
 
 ;(load "window.scm")
+(define ActivityTime (time))
 (define MapBlockSize 32)
 (define cellBRICK 19)
 (define cellAIR 1023)
@@ -69,7 +78,7 @@
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; Mapblocks
+;; Map_blocks
 ;;
 ;; Maps blocks will populate a peers field as if it were a local cache relative
 ;; to the avatar's position.
@@ -166,29 +175,29 @@
         (vector-set! vec i (+ 0 (read-char fd))) ; Hack to convert char to integer
         (~ (+ i 1)))))))
 
-(define (U4MapCell y x)
- (vector-ref U4MapVector (+ (* 256 (modulo y 256)) (modulo x 256))))
+(define (U4MapColumn y x)
+  (let ((cell (vector-ref U4MapVector (+ (* 256 (modulo y 256)) (modulo x 256)))))
+    (vector -1 cell cellAIR)))
 
-(define (U4Lcb1MapCell y x)
- (vector-ref U4Lcb1MapVector (+ (* 32 (modulo y 32)) (modulo x 32))))
+(define cellBRICKC 127)
+(define cellCOLUMN 48)
+(define doubleHeightCells (list cellBRICKC cellCOLUMN))
 
-; Debug dump the castle map vector
-;(loop2 0 32 0 32
-;   (lambda (y x)
-;     (if (= (modulo x 32) 0) (display  "\n"))
-;     (display (integer->char (+ "A" (modulo (U4Lcb1MapCell y x) 32))))))
+(define (U4Lcb1MapColumn y x)
+  (let ((cell (vector-ref U4Lcb1MapVector (+ (* 32 (modulo y 32)) (modulo x 32)))))
+    (if (pair? (memv cell doubleHeightCells))
+      (vector -1 cell cell cellAIR)
+      (vector -1 cell cellAIR))))
 
 (define (inUltima4RangeLcb1? by bx)
- (and (= by 107) (= bx 86)))
+  (and (= by 107) (= bx 86)))
 
 (define (generateBlockColumns by bx)
   (let ~ ((l ())) ; Create the list of columns
     (loop2 0 MapBlockSize 0 MapBlockSize (lambda (y x)
-      (set! l (cons (vector -1
-                            (if (inUltima4RangeLcb1? by bx)
-                                (U4Lcb1MapCell (- MapBlockSize y 1) (- MapBlockSize x 1))
-                                (U4MapCell by bx))
-                            cellAIR)
+      (set! l (cons (if (inUltima4RangeLcb1? by bx)
+                        (U4Lcb1MapColumn (- MapBlockSize y 1) (- MapBlockSize x 1))
+                        (U4MapColumn by bx))
                     l))))
     (cons 'list l))) ; return it as an expression (list columns ...)
 

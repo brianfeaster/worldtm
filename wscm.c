@@ -107,7 +107,7 @@ int main (int argc, char *argv[]) {
 		/* Create port object, push the argument, set arg count to 1 then
 		   make the syscall. */
 		objNewSymbol ((Str)argv[1], strlen(argv[1]));
-		push(r0);  r1=(Obj)1;  sysOpen();
+		push(r0);  r1=(Obj)1;  sysOpenFile();
 		/* Assign port to existing binding. */
 		if ((r3=r0) != false) {
 			objNewSymbol ((Str)"input", 5);  r1=r0;  wscmTGEFind();

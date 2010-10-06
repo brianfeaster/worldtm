@@ -5,10 +5,12 @@
 ;; will connect to an existing hub if they can not acquire the hub port.  Each
 ;; peer and hub will also have a "single connection, single read" listener.
 ;;
+(load "queue.scm")
+
 (define (Ipc DisplayFunction . portNum)
  (define Debug (and DisplayFunction)) ; Can pass in #f to disable any debug messages
  (define (Display . l) (and Debug (for-each DisplayFunction l)))
- (define HubPort (if (null? portNum) 8155 (car portNum)))
+ (define HubPort (if (null? portNum) 7155 (car portNum)))
  (define HubSocket #eof) ; If not eof then this IPC instance is the hub socket.
  (define PrivatePort (+ 1 HubPort))
  (define PrivateSocket
@@ -21,27 +23,6 @@
                (begin (display "ERROR: Ipc: exceeded maximum port")
                       (quit))
                (~)))))))
-
- ; == Queue object ============================================================
- (define (QueueCreate)
-   (let ((q (list () 'queue)))
-     (set-car! q (cdr q))
-     q))
-
- (define (QueueAdd q e)
-   (let ((oldTail (car q))
-         (newTail (cons e ())))
-     (set-cdr! oldTail newTail)
-     (set-car! q newTail)))
-
- (define (QueueGet q)
-   (if (eq? (car q) (cdr q)) (begin
-    (display "QueueGet on an empty queue!!!")
-    (quit)))
-   (set-cdr! q (cddr q))
-   (cadr q))
-
- (define (QueueEmpty? q) (eq? (car q) (cdr q)))
 
  ; == Peer structure ==========================================================
  ; A peer is a  #(socket  message-queue  message-queue-semaphore)

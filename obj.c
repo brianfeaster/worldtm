@@ -20,7 +20,7 @@ Obj null, nullvec, nullstr, false, true, eof,
     svectorref, svectorvectorref, svectorvectorsetb, svectorsetb, svectorlength,
     scons, scar, scdr, ssetcarb, ssetcdrb,
     sprocedurep, snullp,
-    spairp, svectorp, sstringp, sintegerp, sportp, sappend, seofobjectp,
+    spairp, svectorp, sstringp, sintegerp, ssymbolp, sportp, sappend, seofobjectp,
     sthread, slet, sletrec,
     seval, sapply, scallcc, ssyntaxrules, seof,
     snot, sadd, ssub, smul, sdiv, slogand, characters, staticIntegers, signalhandlers;
@@ -436,6 +436,7 @@ void objInitialize (Func scheduler) {
 	objNewSymbolStatic("vector?");      svectorp= r0;
 	objNewSymbolStatic("string?");      sstringp= r0;
 	objNewSymbolStatic("integer?");     sintegerp= r0;
+	objNewSymbolStatic("symbol?");      ssymbolp= r0;
 	objNewSymbolStatic("port?");        sportp= r0;
 	objNewSymbolStatic("append");       sappend= r0;
 	objNewSymbolStatic("eof-object?");  seofobjectp= r0;
