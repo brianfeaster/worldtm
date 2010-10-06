@@ -2255,6 +2255,7 @@ become a side effect of such development.
 
 Mon Oct  4 01:28:57 EDT 2010
 
-While updating the windowMask enough information (last and new visible window)
-is there to increment and/or decrement the visible count for the windows.
-Simple fix.
+While updating the windowMask, enough information (last and new visible window)
+exists to determine which windows to increment and/or decrement the visible
+count for.  Part of what was needed for determining if a window is completely
+visible for native terminal scrolling.

@@ -248,6 +248,13 @@
         (~ (+ a 1)
            (+ b 1))))))
 
+(define (vector-set-list! v1 s lst)
+ (let ~ ((i s)
+         (l lst))
+   (or (null? l) (begin
+     (vector-set! v1 i (car l))
+     (~ (+ i 1) (cdr l))))))
+
 (define (map f x)
  (if (null? x) ()
   (cons (f (car x))

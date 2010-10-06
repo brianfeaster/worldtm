@@ -29,6 +29,8 @@
 (define NAME "Guest")
 (define DNA 0)
 (define ActivityTime (time))
+(define FieldBlockSize 32) ; TODO this must match the map agent's definition
+(define U4MapCellSize 32) ; Size of each map file cell in the World map.
 
 
 
@@ -174,11 +176,11 @@
 ;;  Z coordinate   -2 -1  0  1  2| 3  4  5  6  7| 8  9 10 11
 ;;                ---------------+--------------+-------------
 ;;                  0  0  0  0  0| 0  5  7  4  9| 9  9  9  9
-;;  Default bottom objects       | Real objects |     Default top objects
+;;       Implied bottom objects  | Real objects | Implied top objects
 ;;                               |              |
-;;          Vector data       #(2  0  5  7  4  9)
+;;    Internal Vector data    #(2  0  5  7  4  9)
 ;;
-;;  Is stored as #(2 0 5 5 3 9) where the first value in the vector is the
+;;  Is stored as #(2 0 5 7 4 9) where the first value in the vector is the
 ;;  position of the first default object. The lower and upper default object
 ;;  are stored in the 2nd and last position. The position of the top most
 ;;  default object is derived by adding the vector length to the first vector
@@ -188,8 +190,8 @@
 (define (columnMake bottomHeight . cells)
   (letrec ((len (length cells))
            (col (make-vector (+ len 1))))
-    (vector-set! col 0 (- bottomHeight 1))
-    (vector-set-vector! col 1 (list->vector cells) 0)
+    (vector-set! col 0 (- bottomHeight 1)) ; Set bottom height of cells
+    (vector-set-list! col 1 cells) ; Copy cells
     col))
 
 ; Height of first default implicit bottom object
@@ -198,7 +200,8 @@
 
 ; Height of first default implicit top object
 (define (columnHeightTop c)
-  (+ (vector-ref c 0) (vector-length c)))
+  (+ (vector-ref c 0)
+     (vector-length c)))
 
 (define (columnRef c h)
  (vector-ref c
@@ -246,7 +249,6 @@
 ;;
 ; Create default plane.
 (define FieldSize 256) ; Field grid is 256x256
-(define FieldBlockSize 32) ; TODO this must match the map agent's definition
 (define FIELD (make-vector-vector FieldSize FieldSize #f))
 
 ; Initialize the canvas which is a vector of pairs (cellGlyph . cellHeight)
@@ -284,11 +286,11 @@
           (top    (columnHeightTop column)) ;1st implicit top cell in column
           (bot    (columnHeightBottom column)));1st implicit bottom cell in col
  ; Adjust the z coor down to the first explicit cell in the column
- (let findNonAir ((z (if (>= z top) (set! z (- top 1)))))
-   (if (or (not (eqv? (columnRef column z) cellAIR))
+ (let findNonAir~ ((z (if (<= top z) (- top 1) z)))
+   (if (or (!= (columnRef column z) cellAIR)
            (<= z bot))
        (if (pair? z) (car z) z) ; Return first in improper list of objects.
-       (findNonAir (- z 1))))))
+       (findNonAir~ (- z 1))))))
 
 ; Replace all cells at this Z location with a single cell.
 (define (field-set! z y x c)
@@ -357,7 +359,7 @@
            h))
 
 (define (canvasRender y x)
- (let ((top (field-ref-top 1000 y x)))
+ (let ((top (field-ref-top 100 y x)))
   (let ((celli (field-ref top y x))) ; Field might contain an entity's dna
     (canvasCellSet y x (if (< CellMax celli) ((entitiesGet celli) 'glyph) (cellGlyph (cellRef celli)))))
   (canvasHeightSet y x top)))
@@ -438,142 +440,6 @@
   (field-set! z y x cell)
   (canvasRender y x)
   (viewportRender y x))
-
-
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; Ultima_city_detail_map
-;;
-;; Mapping from Ultima4 map file byte index to (y x) World[tm] coordinates.
-;;  y = (+ (modulo (/ i 32) 32) (* (/ i 8192) 32))
-;;  x = (+ (modulo i 32) (* (modulo (/ i 1024) 8) 32))
-;; Mapping from World[tm] (y x) corrdinates to Ultima4 map file byte index.
-;; i = (+ (modulo x 32) (* (/ x 32) 1024) (* (modulo y 32) 32) (* (/ y 32) 8192))
-;;
-;; Lord British's castle (108 86)
-
-(define U4MapSize 256) ; Size of the map file.
-(define U4MapCellSize 32) ; Size of each map file cell in the World map.
-(define U4Size (* U4MapSize U4MapCellSize))
-
-; The Ultima4 map file is 8x8 blocks of 32x32 cells
-; so create a simpler 256x25 array of cell numbers.
-(define U4MapVector
- (let ((fd (open-file "ultima4.map"))
-       (vec (make-vector 65536)))
-  (let ~ ((i 0))
-     (if (= i 65536) vec ; Return the vector
-     (begin
-        (vector-set! vec
-                 (+ (* 256 (+ (modulo (/ i 32) 32) (* (/ i 8192) 32)))
-                    (+ (modulo i 32) (* (modulo (/ i 1024) 8) 32)))
-                 (+ 0 (read-char fd))) ; Hack to convert char to integer
-        (~ (+ i 1)))))))
-
-(define (U4MapCell y x)
- (vector-ref U4MapVector (+ (* 256 (modulo y 256)) (modulo x 256))))
-
-(define lcbfd (open-file "lcb1.ult"))
-(define (U4Lcb1MapCell y x)
- (and (< y 0) (<= 32 y) (< x 0) (<= 32 x) (WinChatDisplay "lcb1 coordinates out of range") (quit))
- (seek-set lcbfd (+ (* y 32) x))
- (+ 0 (read-char lcbfd))) ; Hack to convert char to integer
-
-(define britainfd (open-file "britain.ult"))
-(define (U4BritainMapCell y x)
- (and (< y 0) (<= 32 y) (< x 0) (<= 32 x) (WinChatDisplay "Britain coordinates out of range") (quit))
- (seek-set britainfd (+ (* y 32) x))
- (+ 0 (read-char britainfd))) ; Hack to convert char to integer
-
-; Get the map cell in the direction from this location.
-(define (U4MapCellDir y x d)
- (U4MapCell (+ y (vector-ref #(0 -1 -1 -1  0  1 1 1 0) d))
-            (+ x (vector-ref #(1  1  0 -1 -1 -1 0 1 0) d))))
-
-; I will load the ultima5 map some day.  The ovl is a 16x16
-; array indexing the 16x16 cell arrays in the map file.
-(define (load-ultima-world5)
- (let ((fdm (open-file "ultima5.map"))
-       (fdi (open-file "ultima5.ovl"))
-       (bar (makeProgressBar 1 30 "Britannia 4")))
- (let ~ ((y 0) (x 0)) (if (< y 256) (if (= x 256) (~ (+ y 1) 0) (begin
-   (if (and (= x 255) (= 0 (modulo y 12))) (bar)) ; Progress bar
-   (let ((index (begin (seek-set fdi (+ (/ x 16) (* (/ y 16) 16)))
-                       (+ 0 (read-char fdi)))))
-    (setCell 2 y x
-      (if (= 255 index) cellWATER1 (begin
-        (seek-set fdm (+ (* index 256) (modulo x 16) (* (modulo y 16) 16)))
-        (+ 0 (read-char fdm))))))
-   (~ y (+ x 1))))))))
-
-
-(define (inUltima4Range? y x) (and (<= 0 y) (< y U4Size) (<= 0 x) (< x U4Size)))
-
-(define (inUltima4RangeLcb1? y x)
- (and (<= (* 107 U4MapCellSize) y)
-      (< y (* 108 U4MapCellSize))
-      (<= (* 86 U4MapCellSize) x)
-      (< x (* 87 U4MapCellSize))))
-
-(define (inUltima4RangeBritain? y x)
- (and (<= (* 106 U4MapCellSize) y)
-      (< y (* 107 U4MapCellSize))
-      (<= (* 82 U4MapCellSize) x)
-      (< x (* 83 U4MapCellSize))))
-
-(define (updateFieldBlocksU4 y0 x0)
-  ;(WinChatDisplay "block " (/ y0 FieldBlockSize) " " (/ x0 FieldBlockSize)  "\r\n")
-  (loop2 y0 (+ y0 FieldBlockSize)
-         x0 (+ x0 FieldBlockSize)
-     (lambda (y x)
-        (if (inUltima4Range? y x)
-          (begin
-            (if (inUltima4RangeLcb1? y x)
-              (setCell 1 y x (U4Lcb1MapCell (- y (* 107 U4MapCellSize)) (- x (* 86 U4MapCellSize)))) ; LB castle
-            (if (inUltima4RangeBritain? y x)
-              (setCell 1 y x (U4BritainMapCell (- y (* 106 U4MapCellSize)) (- x (* 82 U4MapCellSize)))) ; Britain
-            (letrec ((ty (- y (* (/ y U4MapCellSize) U4MapCellSize) (/ U4MapCellSize 2))) ; Compute radius from center of block
-                     (tx (- x (* (/ x U4MapCellSize) U4MapCellSize) (/ U4MapCellSize 2)))
-                     (dist (sqrt (+ (* ty ty) (* tx tx)))))
-               (setCell 1 y x
-                 (if (and #f (= 0 (random 2)) (> dist 15)) ; DISABLED border of cells get random adjacent glyphs.
-                     (U4MapCellDir (/ y U4MapCellSize) (/ x U4MapCellSize)
-                       (let ((m (- (modulo y U4MapCellSize) (/ U4MapCellSize 2))) ; Translate block coord to origin
-                             (n (- (modulo x U4MapCellSize) (/ U4MapCellSize 2))))
-                        (if (< m -9) (if (< n -9) 3 (if (< 9 n) 1 2))
-                        (if (< 10 m) (if (< n -9) 5 (if (< 9 n) 7 6))
-                        (if (< n -9) 4 (if (< 9 n) 0 8))))))
-                     (U4MapCell (/ y U4MapCellSize) (/ x U4MapCellSize)))))))) ; Regular cell
-          (setCell 1 y x cellXX)))))
-
-; Field block updater.  This will eventually be replaced with a map agent handler.
-(define (fieldBlockUpdater)
- (letrec ((avty (avatar 'y))
-          (avtx (avatar 'x))
-          (blky (+ (/ (if (< avty 0) (- avty FieldBlockSize) avty) FieldBlockSize) -0)) ; TODO Field block synchronization is off.  On startup loads twice.  If ofset is -1, doesn't cache correctly with avatar movement.
-          (blkx (+ (/ (if (< avtx 0) (- avtx FieldBlockSize) avtx) FieldBlockSize) -0)))
-  ; Create the first block list and load each block.  Occurs once.
-  (if (null? FieldBlockCoordinates ) (begin
-     (set! FieldBlockCoordinates (fieldCreateBlockList blky blkx))
-     (map (lambda (b) (updateFieldBlocksU4 (* FieldBlockSize (car b)) (* FieldBlockSize (cdr b))))
-          FieldBlockCoordinates)))
-  ; Forever updated the field blocks.
-  (let ((bounds (append (fieldTopBottomBuffer avty avtx)
-                        (fieldLeftRightBuffer avty avtx))))
-   (if (pair? bounds) (begin
-     (let ((yb (fieldBlockY))  ; Assume new block origin at same place
-           (xb (fieldBlockX))) ; then adjust based on new position.
-      (if (pair? (memq 'bottom bounds)) (set! yb (- blky (- FieldBlockCount 2))))
-      (if (pair? (memq 'top bounds))    (set! yb (- blky 1)))
-      (if (pair? (memq 'right bounds))  (set! xb (- blkx (- FieldBlockCount 2))))
-      (if (pair? (memq 'left bounds))   (set! xb (- blkx 1)))
-      (map (lambda (b) (updateFieldBlocksU4 (* FieldBlockSize (car b)) (* FieldBlockSize (cdr b))))
-           (canvasBlockCoordinatesNew yb xb))
-      ; Set block coordinate list after the unloaded blocks have been loaded.
-      (set! FieldBlockCoordinates (fieldCreateBlockList yb xb))
-      ((ipc 'qwrite) '(who)))))))
- (sleep 500)
- (fieldBlockUpdater))
 
 
 
@@ -661,10 +527,10 @@
 ((WinHelp 'puts) "\r\nt  talk mode (esc to exit)")
 ((WinHelp 'puts) "\r\nc  talk color")
 ((WinHelp 'puts) "\r\nm  toggle map")
-((WinHelp 'puts) "\r\nW  toggle animation")
+((WinHelp 'puts) "\r\na  toggle animation")
 ((WinHelp 'puts) "\r\n>  increase map size")
 ((WinHelp 'puts) "\r\n<  decrease map size")
-((WinHelp 'puts) "\r\np  present user list")
+((WinHelp 'puts) "\r\nW  who is here")
 ((WinHelp 'puts) "\r\nq  quit World[tm]")
 
 ; Make Map window circular
@@ -729,6 +595,13 @@
    (semaphore-up sig28Semaphore))))
 
 (signal-set 28 (lambda () (sigwinch) (unthread)))
+
+; Should this be a thread?  At least move somewhere else.
+;(define (refreshIfBeyondViewport)
+; (let ((y (modulo (- (avatar 'y) PortY) FieldSize));Normalize avatar position.
+;   (x (modulo (- (avatar 'x) PortX) FieldSize)))
+;   (if (or (<= PortW x) (<= PortH y))
+;     (viewportReset (avatar 'y) (avatar 'x)))))
 
 
 ; Welcome message marquee displayed when connecting.
@@ -809,10 +682,11 @@
  (puts "+------------------+")
  ((box 'goto) 0 2) (puts title)
  ((box 'goto) 1 1)
- (let ~ ((c (read-char stdin)))
+ (let ~ ((c (getKey)))
    (or (eq? c RETURN) (eq? c NEWLINE)
     (begin
-     (if (or (eq? c CHAR-CTRL-H) ; Rubout characters
+     (if (or (eq? c 'left)
+             (eq? c CHAR-CTRL-H) ; Rubout characters
              (eq? c CHAR-CTRL-_)
              (eq? c CHAR-CTRL-?))
        (if (eq? str "") "" (begin
@@ -821,9 +695,9 @@
        (if (and (< (string-length str) 18) ; Name length limit
                 (<= #\! c) (<= c #\~))     ; Name character restriction
             (begin
-             (putc c)
-             (set! str (string str c)))))
-     (~ (read-char stdin)))))
+              (putc c)
+              (set! str (string str c)))))
+     (~ (getKey)))))
  ((box 'delete))
  str)
 
@@ -902,7 +776,6 @@
 ; The list of columns will most likely come from a map agent
 ; The map coordinate and block size passed
 (define (mapUpdateColumns y x blockSize lst)
-  ;(WinChatDisplay "\r\n" y " " x)
   (loop2 y (+ y blockSize) x (+ x blockSize) (lambda (y x)
     (vector-vector-set! FIELD (modulo y FieldSize) (modulo x FieldSize) (car lst))
     (canvasRender y x)
@@ -923,7 +796,6 @@
 
 (define (winMapBigger)
  (if (< (WinMap 'Wheight) (Terminal 'Theight)) (begin
-  ;((WinMap 'toggle))
   ((WinMap 'home))
   (if (< (utime) deltaMoveTime)
     ((WinMap 'moveresize) ; Full resize
@@ -936,12 +808,10 @@
        (+ 2 (WinMap 'Wwidth)))
   (circularize)
   (viewportReset (avatar 'y) (avatar 'x))
-  ;((WinMap 'toggle))
   (set! deltaMoveTime (+ 125 (utime))))))
 
 (define (winMapSmaller)
  (if (< 5 (WinMap 'Wheight)) (begin
-  ;((WinMap 'toggle))
   ((WinMap 'home))
   (if (< (utime) deltaMoveTime)
     ((WinMap 'moveresize) ; Full resize
@@ -954,20 +824,12 @@
        (+ -2 (WinMap 'Wwidth))))
   (circularize)
   (viewportReset (avatar 'y) (avatar 'x))
-  ;((WinMap 'toggle))
   (set! deltaMoveTime (+ 125 (utime))))))
 
 (define (winMapUp)  ((WinMap 'move)  (+ -1 (WinMap 'Y0)) (WinMap 'X0)))
 (define (winMapDown) ((WinMap 'move)  (+  1 (WinMap 'Y0)) (WinMap 'X0)))
 (define (winMapLeft)    ((WinMap 'move) (WinMap 'Y0) (+ -1 (WinMap 'X0))))
 (define (winMapRight)  ((WinMap 'move) (WinMap 'Y0) (+  1 (WinMap 'X0))))
-
-; Should this be a thread?  At least move somewhere else.
-;(define (refreshIfBeyondViewport)
-; (let ((y (modulo (- (avatar 'y) PortY) FieldSize));Normalize avatar position.
-;   (x (modulo (- (avatar 'x) PortX) FieldSize)))
-;   (if (or (<= PortW x) (<= PortH y))
-;     (viewportReset (avatar 'y) (avatar 'x)))))
 
 ; TODO Implement coor+dir use new dir to field-ref location and if > MAX_CELL ipc-write (force blah blah)
 
@@ -1022,10 +884,19 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Buttons
 ;;
-(define Buttons (make-vector 257 (lambda())))
+;; Buttons keep track of expresions to keyboard buttons in either a vector of
+;; character indexes and a symbol association list.
+;;
+(define Buttons (make-vector 257 ()))
+(define ButtonsSymbols ())
 
 (define (setButton ch exp)
- (vector-set! Buttons ch exp)) ; For now characters are also integer constants.
+ (if (symbol? ch)
+   (let ((bs (assq ch ButtonsSymbols)))
+     (if (pair? bs)
+       (set-cdr! bs exp)
+       (set! ButtonsSymbols (cons (cons ch exp) ButtonsSymbols))))
+   (vector-set! Buttons ch exp))) ; For now characters are also integer constants.
 
 (define ShowButtons #f)
 (define (showButtons) (set! ShowButtons (not ShowButtons)))
@@ -1034,34 +905,38 @@
 ; assume a closure.  Consider the closure -> closure's code -> the code's pre-compiled
 ; expression and return it (hack).
 (define (getButton ch)
- (let ((val (vector-ref Buttons ch)))
+ (let ((val
+         (if (symbol? ch)
+          (let ((a (assq ch ButtonsSymbols)))
+            (if (pair? a) (cdr a) ()))
+          (vector-ref Buttons ch))))
    (if (pair? val)  val
    (if (procedure? val) (cons 'lambda (vector-ref (vector-ref (vector-ref Buttons ch) 0) 2))
    val))))
 
-(setButton #\p '(rollcall))
-(setButton #\c '(avatarColor))
+(setButton 'down '(walk 2))
 (setButton #\j '(walk 2))
-(setButton #\B '(walk 2))
+(setButton 'up '(walk 8))
 (setButton #\k '(walk 8))
-(setButton #\A '(walk 8))
+(setButton 'left '(walk 4))
 (setButton #\h '(walk 4))
-(setButton #\D '(walk 4))
+(setButton 'right '(walk 6))
 (setButton #\l '(walk 6))
-(setButton #\C '(walk 6))
 (setButton #\b '(walk 1))
 (setButton #\n '(walk 3))
 (setButton #\y '(walk 7))
 (setButton #\u '(walk 9))
 (setButton #\+ '(walk 5))
 (setButton #\- '(walk 0))
+(setButton #\a '(begin
+  (set! CELLANIMATION (not CELLANIMATION))
+  (WinChatDisplay "\r\nCell animation " CELLANIMATION)))
+(setButton #\c '(avatarColor))
+(setButton #\W '(rollcall))
 (setButton #\H '(winMapLeft))
 (setButton #\J '(winMapDown))
 (setButton #\K '(winMapUp))
 (setButton #\L '(winMapRight))
-(setButton #\W '(begin
-  (set! CELLANIMATION (not CELLANIMATION))
-  (WinChatDisplay "\r\nCell animation " CELLANIMATION)))
 (setButton #\s '(begin
   (set! SCROLLINGMAP (not SCROLLINGMAP))
   (WinChatDisplay "\r\nalwaysScroll " SCROLLINGMAP)))
@@ -1099,6 +974,59 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Typing_and_talking
 ;;
+
+; Continuously read stdin and append to the "keyboard" FIFO
+(define getKeySemaphore (open-semaphore 0))
+(define keyQueue (QueueCreate))
+
+(define (KeyAgent)
+ (let ((c (read-char stdin)))
+   (if (eq? c CHAR-ESC)
+    (keyAgentEsc) ; Escape char so attempt to read an escape sequence
+    (begin
+      (QueueAdd keyQueue c) ; Add new keyboard character to queue
+      (semaphore-up getKeySemaphore))) ; flag semaphore
+   (KeyAgent))) ; rinse repeat
+
+; Read an escape sequence
+(define (keyAgentEsc)
+ (let ((c (read-char stdin)))
+   (if (eq? c #\[)
+     (let ((c (read-char stdin)))
+       (if (eq? c #\A)
+         (begin
+           (QueueAdd keyQueue 'up) 
+           (semaphore-up getKeySemaphore))
+       (if (eq? c #\B)
+         (begin
+           (QueueAdd keyQueue 'down) 
+           (semaphore-up getKeySemaphore))
+       (if (eq? c #\C)
+         (begin
+           (QueueAdd keyQueue 'right) 
+           (semaphore-up getKeySemaphore))
+       (if (eq? c #\D)
+         (begin
+           (QueueAdd keyQueue 'left) 
+           (semaphore-up getKeySemaphore))
+       (begin
+           (QueueAdd keyQueue CHAR-ESC) 
+           (QueueAdd keyQueue #\[) 
+           (QueueAdd keyQueue c) 
+           (semaphore-up getKeySemaphore)
+           (semaphore-up getKeySemaphore)
+           (semaphore-up getKeySemaphore)))))))
+     (begin
+       (QueueAdd keyQueue CHAR-ESC)
+       (QueueAdd keyQueue c)
+       (semaphore-up getKeySemaphore)
+       (semaphore-up getKeySemaphore)))))
+
+(define (getKey)
+ (semaphore-down getKeySemaphore)
+ (QueueGet keyQueue))
+
+
 (define (say talkInput . level)
  ((ipc 'qwrite) (list 'voice DNA (if (null? level) 10 (car level)) talkInput)))
 
@@ -1162,8 +1090,8 @@
 
 (define (replCmd c)
  (define state 'cmd) ; state might be changed to 'done or 'talk.
- (let ((button (vector-ref Buttons c)))
-   (if ShowButtons (WinChatDisplay "\r\n" c " " (getButton c)))
+ (let ((button (getButton c)))
+   (if ShowButtons (WinChatDisplay "\r\n" c " " button))
    (if (pair? button) (eval button)
     (if (procedure? button) (button)
      (WinChatDisplay "\r\nButton " c " undefined " button))))
@@ -1173,10 +1101,10 @@
  (let ((state 'cmd))
   (lambda ()
    (if (not (eq? state 'done)) ; Exit if state is done.
-     (let ((c (read-char stdin)))
+     (let ((c (getKey)))
        (set! ActivityTime (time))
        (if (eq? state 'talk) (set! state (replTalk c))
-        (if (eq? state 'cmd) (set! state (replCmd c))))
+         (if (eq? state 'cmd) (set! state (replCmd c))))
        (wrepl))))))
 
 
@@ -1330,6 +1258,8 @@
 (resetCanvas glyphXX)
 ;(resetCanvas)
 
+; Start keyboard reader agent
+(thread (KeyAgent))
 
 (or QUIETLOGIN (begin
  ; Welcome marquee
@@ -1351,9 +1281,6 @@
 
 ; Move avatar to entrance of Lord British's castle
 ((avatar 'jump) 1  (- (* 108 U4MapCellSize) 1)  (- (* 86 U4MapCellSize) 1))
-
-; Start the local map update agent
-;(thread (fieldBlockUpdater))
 
 ; Display some initial information
 (or QUIETLOGIN (begin

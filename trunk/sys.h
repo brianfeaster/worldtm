@@ -43,6 +43,7 @@ void wscmScheduleBlocked (void);
 void wscmSchedule (void);
 void sysError (void);
 void sysUnthread (void);
+void sysOpenFile (void);
 void sysSchedule (void);
 void catchSignal (int sig);
 void sysSignal (void);

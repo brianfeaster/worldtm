@@ -865,6 +865,31 @@ void compIntegerP (Num flags) {
 	DB("<--%s", __func__);
 }
 
+void compSymbolP (Num flags) {
+ Int opcodeStart;
+	DB("-->%s", __func__);
+	if (memObjectType(cdr(expr)) != TPAIR) {
+		write (1, "ERROR: symbol? illegal operand count: ", 38);
+		wscmWrite (expr, 0, 1);
+		return;
+	}
+	expr = cadr(expr);      /* Consider and compile expression. */
+	compExpression(flags & ~TAILCALL);
+
+	opcodeStart = memStackLength(asmstack);
+	asmAsm (
+		BRTI0, TSYMBOL, ADDR, "yes",
+		MVI0, false,
+		BRA, ADDR, "done",
+		LABEL, "yes", MVI0, true,
+		LABEL, "done", 
+		END
+	);
+	asmCompileAsmstack(opcodeStart);
+
+	DB("<--%s", __func__);
+}
+
 void compPortP (Num flags) {
 	DB("-->%s", __func__);
 	if (memObjectType(cdr(expr)) != TPAIR) {
@@ -1713,6 +1738,7 @@ Int compExpression (Num flags) {
 			else if (svectorp   == car(expr)) compVectorP(flags);
 			else if (sstringp   == car(expr)) compStringP(flags);
 			else if (sintegerp  == car(expr)) compIntegerP(flags);
+			else if (ssymbolp   == car(expr)) compSymbolP(flags);
 			else if (sportp     == car(expr)) compPortP(flags);
 			else if (seofobjectp== car(expr)) compEOFObjectP(flags);
 			else if (sbegin     == car(expr)) compBegin(flags);
