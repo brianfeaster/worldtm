@@ -29,8 +29,7 @@
 (define NAME "Guest")
 (define DNA 0)
 (define ActivityTime (time))
-(define FieldBlockSize 32) ; TODO this must match the map agent's definition
-(define U4MapCellSize 32) ; Size of each map file cell in the World map.
+(define MapBlockSize 32) ; Size of each map file cell in the World map.
 
 
 
@@ -86,8 +85,8 @@
 (define WinMapPutc (WinMap 'putc))
 
 ; Help Window.
-(define WinHelpBorder ((Terminal 'WindowNew) 4 19 14 32 #x20))
-(define WinHelp ((Terminal 'WindowNew) 5 20 12 30 #x0a))
+(define WinHelpBorder ((Terminal 'WindowNew) 4 20 16 32 #x20))
+(define WinHelp ((Terminal 'WindowNew) 5 21 14 30 #x0a))
 ((WinHelpBorder 'toggle))
 ((WinHelp 'toggle))
 
@@ -524,14 +523,18 @@
 ((WinHelp 'puts) "          !! Help !!")
 ((WinHelp 'set-color) 0 15)
 ((WinHelp 'puts) "\r\n?  toggle help window")
-((WinHelp 'puts) "\r\nt  talk mode (esc to exit)")
-((WinHelp 'puts) "\r\nc  talk color")
-((WinHelp 'puts) "\r\nm  toggle map")
-((WinHelp 'puts) "\r\na  toggle animation")
+((WinHelp 'puts) "\r\nt  talk mode (tab to exit)")
+((WinHelp 'puts) "\r\nC  color for talking")
+((WinHelp 'puts) "\r\nW  who is here list")
+((WinHelp 'puts) "\r\nM  map toggle")
+((WinHelp 'puts) "\r\nS  scrolling map toggle")
+((WinHelp 'puts) "\r\nA  animation toggle")
 ((WinHelp 'puts) "\r\n>  increase map size")
 ((WinHelp 'puts) "\r\n<  decrease map size")
-((WinHelp 'puts) "\r\nW  who is here")
-((WinHelp 'puts) "\r\nq  quit World[tm]")
+((WinHelp 'puts) "\r\nQ  quit World[tm]")
+((WinHelp 'puts) "\r\nHJKL move map")
+((WinHelp 'puts) "\r\n* To walk use arrows keys")
+((WinHelp 'puts) "\r\n  or 'nethack' keys")
 
 ; Make Map window circular
 (define (circularize . val)
@@ -576,6 +579,7 @@
              (WinColumnPuts "  ") ))))
   (if (> z -6) (~ (- z 1)))))
 
+
 ; Screen redraw function and signal handler
 (define (handleTerminalResize)
   (WinConsoleDisplay "\r\nSIGWINCH::TerminalSize=" (terminal-size))
@@ -595,13 +599,6 @@
    (semaphore-up sig28Semaphore))))
 
 (signal-set 28 (lambda () (sigwinch) (unthread)))
-
-; Should this be a thread?  At least move somewhere else.
-;(define (refreshIfBeyondViewport)
-; (let ((y (modulo (- (avatar 'y) PortY) FieldSize));Normalize avatar position.
-;   (x (modulo (- (avatar 'x) PortX) FieldSize)))
-;   (if (or (<= PortW x) (<= PortH y))
-;     (viewportReset (avatar 'y) (avatar 'x)))))
 
 
 ; Welcome message marquee displayed when connecting.
@@ -776,11 +773,11 @@
 ; The list of columns will most likely come from a map agent
 ; The map coordinate and block size passed
 (define (mapUpdateColumns y x blockSize lst)
+  ;(WinChatDisplay "\r\nBlock " (list (/ y 32) (/ x 32)))
   (loop2 y (+ y blockSize) x (+ x blockSize) (lambda (y x)
     (vector-vector-set! FIELD (modulo y FieldSize) (modulo x FieldSize) (car lst))
     (canvasRender y x)
-    (set! lst (cdr lst))))
-  ((ipc 'qwrite) '(who)))
+    (set! lst (cdr lst)))))
 
 
 
@@ -853,10 +850,10 @@
          (number->string (avatar 'z)) " "
          (number->string (avatar 'y)) " "
          (number->string (avatar 'x)) "\r\n"
-         (number->string (modulo (avatar 'y) FieldBlockSize)) " "
-         (number->string (modulo (avatar 'x) FieldBlockSize)) "\r\n"
-         (number->string (/ (avatar 'y) FieldBlockSize)) " "
-         (number->string (/ (avatar 'x) FieldBlockSize))))))))
+         (number->string (modulo (avatar 'y) MapBlockSize)) " "
+         (number->string (modulo (avatar 'x) MapBlockSize)) "\r\n"
+         (number->string (/ (avatar 'y) MapBlockSize)) " "
+         (number->string (/ (avatar 'x) MapBlockSize))))))))
 
 ; Change avatar color.  Will just cycle through all 16 avatar colors.
 (define (avatarColor)
@@ -928,19 +925,19 @@
 (setButton #\u '(walk 9))
 (setButton #\+ '(walk 5))
 (setButton #\- '(walk 0))
-(setButton #\a '(begin
+(setButton #\A '(begin
   (set! CELLANIMATION (not CELLANIMATION))
   (WinChatDisplay "\r\nCell animation " CELLANIMATION)))
-(setButton #\c '(avatarColor))
+(setButton #\C '(avatarColor))
 (setButton #\W '(rollcall))
 (setButton #\H '(winMapLeft))
 (setButton #\J '(winMapDown))
 (setButton #\K '(winMapUp))
 (setButton #\L '(winMapRight))
-(setButton #\s '(begin
+(setButton #\S '(begin
   (set! SCROLLINGMAP (not SCROLLINGMAP))
   (WinChatDisplay "\r\nalwaysScroll " SCROLLINGMAP)))
-(setButton #\m '((WinMap 'toggle)))
+(setButton #\M '((WinMap 'toggle)))
 (setButton #\t '(begin
   (WinInputPuts (string ">" (replTalk 'getBuffer)))
   (set! state 'talk)))
@@ -959,7 +956,6 @@
 (setButton #\> '(winMapBigger))
 (setButton #\z '(circularize))
 (setButton #\Z '(circularize #t))
-(setButton #\q '(set! state 'done))
 (setButton #\Q '(set! state 'done))
 (setButton #eof '(set! state 'done))
 (setButton CHAR-CTRL-C '((WinConsole 'toggle)))
@@ -1280,7 +1276,7 @@
 (set! DNA (avatar 'dna))
 
 ; Move avatar to entrance of Lord British's castle
-((avatar 'jump) 1  (- (* 108 U4MapCellSize) 1)  (- (* 86 U4MapCellSize) 1))
+((avatar 'jump) 1  (* 108 MapBlockSize)  (+ (* 86 MapBlockSize) (/ MapBlockSize 2) -1))
 
 ; Display some initial information
 (or QUIETLOGIN (begin
