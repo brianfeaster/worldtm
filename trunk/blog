@@ -2259,3 +2259,28 @@ While updating the windowMask, enough information (last and new visible window)
 exists to determine which windows to increment and/or decrement the visible
 count for.  Part of what was needed for determining if a window is completely
 visible for native terminal scrolling.
+
+
+Wed Oct  6 00:59:14 EDT 2010
+
+Added a keyboard handler that will read characters and special keys' escape
+sequences as symbols.  Currently the arrow keys are parsed and send 'up 'down
+'left and 'right symbols to whatever calls getKey.
+
+If escape is pressed it will wait indefinitely for the following #\[ character.
+This needs to be resolved.
+
+The next fix should be escape sequence printing issues.
+
+
+Wed Oct  6 16:55:03 EDT 2010
+
+The map agent currently sends map blocks to peers as soon as they enter the
+region.  It needs to now send map blocks before they are visible.  The
+prototype map code would keep track of all the working map blocks as
+coordinates and use the set of blocks to determine the next set of blocks.
+It was overly complicated.
+
+Keeping track of the entire range (the upper-left coordinate) might be easier.
+When the entity is out of bounds, a new range will be chosen based on the
+previous range and new blocks determined to send.

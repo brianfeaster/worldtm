@@ -15,21 +15,20 @@
 ;; Lord British's castle (108 86)
 ;;
 
-;(load "window.scm")
-(define ActivityTime (time))
-(define MapBlockSize 32)
-(define cellBRICK 19)
+(define MYDNA 17749)
+(define MYNAME "The Map Agent")
+(define ActivityTime (time)) ; Used for the idle time with the 'who' expression
+(define cellCOLUMN 48)
+(define cellBRICKC 127)
 (define cellAIR 1023)
+
+
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; IPC
 ;;
 (load "ipc.scm")
-(define ipc (Ipc displayl))
-
-(define (who)
- ((ipc 'qwrite)
- `(entity ,DNA ,(avatar 'port) ,(avatar 'name) ,@((avatar 'gps)) ,(avatar 'glyph))))
+(define ipc (Ipc #f)) ; Instead of #f can pass in a serializer for debug messages
 
 
 
@@ -37,15 +36,15 @@
 ;; Avatar_and_entities
 ;;
 (load "entity.scm")
-(define DNA 17749)
-(define NAME "The Map Agent")
+
 (define (Avatar dna port name z y x glyph) ((Entity dna port name z y x glyph) '(let ()
    (define self (lambda (msg) (eval msg)))
-   (define blockY (/ y MapBlockSize))
-   (define blockX (/ x MapBlockSize))
-   (define (setMapBlockLoc fy fx) ; The upper left corner of cached map block set
-     (set! blockY fy)
-     (set! blockX fx))
+   ; Map block origin AKA the upper left hand corner of the map blocks sent to the peer
+   (define mapBlockY 0)
+   (define mapBlockX 0)
+   (define (setMapBlockLoc my mx)
+     (set! mapBlockY my)
+     (set! mapBlockX mx))
    self)))
 
 (define EntityDB ())
@@ -59,14 +58,14 @@
 (define (entityDBUpdate dna port name z y x glyph)
   (let ((e (assv dna EntityDB)))
     (or (null? e)
-      (set-cdr! e (entityCreate dna port name z y x glyph)))))
+      (((cdr e) 'setAll) port name z y x glyph))))
 
 (define (entityLookup dna)
   (let ((e (assv dna EntityDB)))
     (if (null? e) UnknownEntity (cdr e))))
 
 ; Create the map agent
-(define avatar (Avatar DNA (ipc 'PrivatePort) NAME 0 0 0 #(1 11 #\M 2 4 #\A)))
+(define avatar (Avatar MYDNA (ipc 'PrivatePort) MYNAME 0 0 0 #(1 11 #\M 2 4 #\A)))
 (entityDBAdd avatar)
 
 ; Create and add some default entities
@@ -92,68 +91,13 @@
 ;;   are cached in the area modulo   | c| D|    | f| D|
 ;;   the field coordinates.          +--+--+    +--+--+
 ;;
-;(define MapBlockSize  32) ; Each field block is 256x256 columns
+(define MapBlockSize  32) ; Each field block is 256x256 columns
 (define MapBlockCount 3)       ; A field is made up of 2x2 field blocks
-(define MapSize (* MapBlockCount MapBlockSize)) ; For now resulting field size is 512x512
-(define MapBlockCoordinates ()) ; Canvas coordinates in block space.  (1 1) would be (256 256) map space.
-
-; The first pair of field block coordinates is always the upper left corner.
-(define (mapBlockY) (car (car MapBlockCoordinates)))
-(define (mapBlockX) (cdr (car MapBlockCoordinates)))
-
-(define (mapInside? y x)
- (and (pair? MapBlockCoordinates)
-      (<= (mapBlockY) y)
-      (< y (+ (mapBlockY) MadSize))
-      (<= (mapBlockX) x)
-      (< x (+ (mapBlockX) MapSize))))
-
-; Generate a list of coordinate pairs of each block
-; that make up the canvas at the specified location.
-(define (mapCreateBlockList y x)
- (let ~ ((m 0) (n 0))
-  (if (= m MapBlockCount) '()
-  (if (= n MapBlockCount) (~ (+ m 1) 0)
-  (cons (cons (+ y m) (+ x n))
-        (~ m (+ n 1)))))))
-
-; Return list of block coordinates which need to be updated
-; if we were to move from the current field block to the new
-; (y x) field blocks location.
-(define (canvasBlockCoordinatesNew y x)
-  (let ~ ((newBlocks (mapCreateBlockList y x)) ; Blocks associated with new field block origin.
-          (currentBlocks MapBlockCoordinates)) ; Curent blocks associated with current field block coor.
-    (if (null? currentBlocks)
-      newBlocks
-      (~ (list-delete newBlocks (car currentBlocks)) ; Remove current blocks from new block list.
-         (cdr currentBlocks)))))
-
-; Determine if the coordinate is above or below the inner field block area.
-; An avatar that moves outside of the inner field range will cause the
-; field to load new blocks.
-; TODO Implement map to field block coordinates.
-;
-;  +-----+<---Field range
-;  |+---+|
-;  ||   |<---Inner field range 1/4 the FieldBlockSize
-;  |+---+|
-;  +-----+
-(define (mapTopBottomBuffer y x)
- (let ((mapy (mapBlockY))
-       (buffer (/ MapBlockSize 4)))
-  (if (< y (+ (* MapBlockSize   mapy) buffer)) '(top)
-  (if (<= (- (* MapBlockSize (+ mapy MapBlockCount)) buffer) y) '(bottom)
-  ()))))
-
-(define (mapLeftRightBuffer y x)
- (let ((mapx (mapBlockX))
-       (buffer (/ MapBlockSize 4)))
-  (if (< x (+ (* MapBlockSize   mapx) buffer)) '(left)
-  (if (<= (- (* MapBlockSize (+ mapx MapBlockCount)) buffer) x) '(right)
-  ()))))
+(define MapRangeSize (* MapBlockCount MapBlockSize)) ; For now resulting blocok range size is 96x96
+(define MapBoundsSize (/ MapBlockSize 2)) ; Distance from the edge the valid range is
 
 ; The Ultima4 map file is 8x8 blocks of 32x32 cells
-; so create a simpler 256x25 array of cell numbers.
+; so create a simpler 256x256 array of cell numbers.
 (define U4MapVector
  (let ((fd (open-file "ultima4.map"))
        (vec (make-vector 65536)))
@@ -179,8 +123,6 @@
   (let ((cell (vector-ref U4MapVector (+ (* 256 (modulo y 256)) (modulo x 256)))))
     (vector -1 cell cellAIR)))
 
-(define cellBRICKC 127)
-(define cellCOLUMN 48)
 (define doubleHeightCells (list cellBRICKC cellCOLUMN))
 
 (define (U4Lcb1MapColumn y x)
@@ -202,19 +144,94 @@
     (cons 'list l))) ; return it as an expression (list columns ...)
 
 (define (sendInitialBlocks e)
-  (let ((by (- (/ (e 'y) MapBlockSize) (/ MapBlockCount 2)))
-        (bx (- (/ (e 'x) MapBlockSize) (/ MapBlockCount 2))))
-  ((e 'setMapBlockLoc ) by bx) ; Update the entities cached block location (temporary)
+  (letrec ((ey (e 'y)) ; Entity's position
+           (ex (e 'x))
+           (by (/ (- ey (/ MapRangeSize 2)) MapBlockSize)) ; A new block range origin
+           (bx (/ (- ex (/ MapRangeSize 2)) MapBlockSize)))
+  ((e 'setMapBlockLoc) by bx) ; Update the entity's block range origin
+  (displayl "\r\nSending initial map blocks to " (e 'name)) ; DEBUG
   (loop2 by (+ by MapBlockCount) bx (+ bx MapBlockCount) (lambda (y x)
-    (displayl "Sending initial " y " " x " to " (e 'name) "\r\n")
+    (displayl " (" y " " x ")") ; DEBUG
     ((ipc 'private) (e 'port) ; Send the block to the peer
-       `(mapUpdateColumns ,(* y MapBlockSize) ,(* x MapBlockSize) ,MapBlockSize ,(generateBlockColumns y x)))))))
+       `(mapUpdateColumns ,(* y MapBlockSize) ,(* x MapBlockSize) ,MapBlockSize ,(generateBlockColumns y x)))))
+  ((ipc 'private) (e 'port)
+    '((ipc 'qwrite) '(who))))) ; Force the peer to request roll call from everyone
 
+; Determine if the coordinate is above or below the inner field block area.
+; An avatar that moves outside of the inner field range will cause the
+; field to load new blocks.
+;
+;  +-----+<---Field range
+;  |+---+|
+;  ||   |<---Inner field range 1/4 the MapBlockSize
+;  |+---+|
+;  +-----+
+(define (entityWithinBounds e)
+ (let ((y (e 'y))
+       (x (e 'x))
+       ; Consider valid boundary
+       (eby0 (+ (* (e 'mapBlockY) MapBlockSize) MapBoundsSize))
+       (ebx0 (+ (* (e 'mapBlockX) MapBlockSize) MapBoundsSize))
+       (eby1 (- (* (+ (e 'mapBlockY) MapBlockCount) MapBlockSize) MapBoundsSize))
+       (ebx1 (- (* (+ (e 'mapBlockX) MapBlockCount) MapBlockSize) MapBoundsSize)))
+   (and (<= eby0 y) (< y eby1)
+        (<= ebx0 x) (< x ebx1))))
+
+(define (notInRange y x ry rx)
+ (displayl "\r\n" (list y x ry rx))
+ (or (< y ry) (<= (+ ry MapBlockCount) y)
+     (< x rx) (<= (+ rx MapBlockCount) x)))
+
+(define (sendNewBlocks e)
+ (letrec ((y (e 'y)) ; Consider entity's location
+          (x (e 'x))
+          (ry (e 'mapBlockY)) ; Entity's current map block range origin
+          (rx (e 'mapBlockX))
+          (my (/ (if (< y 0) (- y MapBlockSize) y) MapBlockSize)) ; Consider map block the entity is in
+          (mx (/ (if (< x 0) (- x MapBlockSize) x) MapBlockSize)); accounting for negative coordinates
+          ; Precompute invalid range boundary axis
+          (top    (+ (* (e 'mapBlockY) MapBlockSize) MapBoundsSize))
+          (bottom (- (* (+ (e 'mapBlockY) MapBlockCount) MapBlockSize) MapBoundsSize))
+          (left   (+ (* (e 'mapBlockX) MapBlockSize) MapBoundsSize))
+          (right  (- (* (+ (e 'mapBlockX) MapBlockCount) MapBlockSize) MapBoundsSize)))
+
+   (displayl "\r\nmy rx rx=" (list my mx))
+   (displayl "\r\nCurrent ry rx=" (list ry rx))
+
+   ; Adjust map block origin
+   (if (< y top) (begin
+     ;((ipc 'private) (e 'port) `(voice DNA 1 "top"))
+     (set! ry (- my 1))))
+
+   (if (<= bottom y) (begin
+     ;((ipc 'private) (e 'port) `(voice DNA 1 "bottom"))
+     (set! ry (- my (- MapBlockCount 2)))))
+
+   (if (< x left) (begin
+     ;((ipc 'private) (e 'port) `(voice DNA 1 "left"))
+     (set! rx (- mx 1))))
+
+   (if (<= right x) (begin
+     ;((ipc 'private) (e 'port) `(voice DNA 1 "right"))
+     (set! rx (- mx (- MapBlockCount 2)))))
+
+   (displayl "\r\nUpdated ry rx=" (list ry rx))
+
+   (loop2 ry (+ ry MapBlockCount) rx (+ rx MapBlockCount) (lambda (by bx)
+     (if (notInRange by bx (e 'mapBlockY) (e 'mapBlockX))
+       ((ipc 'private) (e 'port) ; Send updated block to peer
+         `(mapUpdateColumns ,(* by MapBlockSize) ,(* bx MapBlockSize) ,MapBlockSize ,(generateBlockColumns by bx))))))
+
+   ((e 'setMapBlockLoc) ry rx)))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Incomming_IPC_messages
 ;;
+(define (who)
+ ((ipc 'qwrite)
+ `(entity ,MYDNA ,(avatar 'port) ,(avatar 'name) ,@((avatar 'gps)) ,(avatar 'glyph))))
+
 (define (entity dna port name z y x glyph) 
  (let ((e (entityLookup dna)))
   (if (eq? e UnknownEntity)
@@ -231,24 +248,13 @@
   (displayl "\n\e[1;34m" (e 'name) " says:"text "\e[0m")
   (display (string (e 'name) "\t" text "\n") log)))
 
-(define (die . x) ())
-
 (define (move dna . loc)
- (letrec ((e (entityLookup dna))
-          (y (cadr loc))
-          (x (caddr loc))
-          (by (/ y  MapBlockSize))
-          (bx (/ x MapBlockSize))
-          (eby (e 'blockY))
-          (ebx (e 'blockX)))
+ (letrec ((e (entityLookup dna)))
    (apply (e 'setLoc) loc) ; Update entity's location
-   (displayl "\n\e[32m" (e 'name) " moves to " ((e 'gps))) ; Debug message
-   (if (or (!= eby by) ; Determine if a new block is required
-           (!= ebx bx))
-     (begin
-       ((e 'setMapBlockLoc ) by bx) ; Update the entities cached block location (temporary)
-       ((ipc 'private) (e 'port) ; Send the block to the peer
-          `(mapUpdateColumns ,(* by MapBlockSize) ,(* bx MapBlockSize) ,MapBlockSize ,(generateBlockColumns by bx)))))))
+   (displayl "\n\e[32m" (e 'name) " moves to " ((e 'gps))) ; DEBUG
+   (or (entityWithinBounds e) (sendNewBlocks e))))
+
+(define (die . x) ())
 
 
 
