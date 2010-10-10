@@ -2284,3 +2284,9 @@ It was overly complicated.
 Keeping track of the entire range (the upper-left coordinate) might be easier.
 When the entity is out of bounds, a new range will be chosen based on the
 previous range and new blocks determined to send.
+
+
+Fri Oct  8 01:14:18 EDT 2010
+
+Map agent basics completed.  Updating peers with map blocks works as well
+as various values of map block size and count.

@@ -110,37 +110,52 @@
                  (+ 0 (read-char fd))) ; Hack to convert char to integer
         (~ (+ i 1)))))))
 
-(define U4Lcb1MapVector
- (let ((fd (open-file "lcb1.ult"))
-       (vec (make-vector 1024)))
-  (let ~ ((i 0))
-     (if (= i 1024) vec ; Return the vector
-     (begin
-        (vector-set! vec i (+ 0 (read-char fd))) ; Hack to convert char to integer
-        (~ (+ i 1)))))))
-
 (define (U4MapColumn y x)
   (let ((cell (vector-ref U4MapVector (+ (* 256 (modulo y 256)) (modulo x 256)))))
     (vector -1 cell cellAIR)))
 
-(define doubleHeightCells (list cellBRICKC cellCOLUMN))
+; Return vector of cell numbers representing
+; the U4 city files. lcb1.ult
+(define (ultMapVector fn)
+ (let ((fd (open-file fn))
+       (ultVec (make-vector 1024)))
+  (loop 1024 (lambda (i) (vector-set! ultVec i (+ 0 (read-char fd))))) ; Hack to convert char to integer
+  ultVec))
+; These are like town files only 11x11 so pad rest with grass
+(define (conMapVector fn)
+ (let ((fd (open-file fn))
+       (ultVec (make-vector 1024 4)))
+  (loop2 10 21 10 21 (lambda (y x) (vector-set! ultVec (+ (* y 32) x) (+ 0 (read-char fd))))) ; Hack to convert char to integer
+  ultVec))
 
-(define (U4Lcb1MapColumn y x)
-  (let ((cell (vector-ref U4Lcb1MapVector (+ (* 32 (modulo y 32)) (modulo x 32)))))
+(define (getUltima4ULT by bx)
+  (display (list by bx))
+  (if (and (= by 107) (= bx 86)) (ultMapVector "lcb1.ult")
+  (if (and (= by 107) (= bx 87)) (ultMapVector "lcb2.ult")
+  (if (and (= by 106) (= bx 82)) (ultMapVector "britain.ult")
+  (if (and (= by 145) (= bx 98)) (ultMapVector "paws.ult")
+  (if (and (= by 128) (= bx 22)) (ultMapVector "skara.ult")
+  (if (and (= by 90) (= bx 136)) (ultMapVector "cove.ult")
+  (if (and (= by 92) (= bx 128)) (conMapVector "shrine.con")
+  #f))))))))
+
+(define doubleHeightCells (list cellBRICKC cellCOLUMN))
+(define (ultMapColumn ultVec y x)
+  (let ((cell (vector-ref ultVec (+ (* 32 (modulo y 32)) (modulo x 32)))))
     (if (pair? (memv cell doubleHeightCells))
       (vector -1 cell cell cellAIR)
       (vector -1 cell cellAIR))))
 
-(define (inUltima4RangeLcb1? by bx)
-  (and (= by 107) (= bx 86)))
-
 (define (generateBlockColumns by bx)
-  (let ~ ((l ())) ; Create the list of columns
-    (loop2 0 MapBlockSize 0 MapBlockSize (lambda (y x)
-      (set! l (cons (if (inUltima4RangeLcb1? by bx)
-                        (U4Lcb1MapColumn (- MapBlockSize y 1) (- MapBlockSize x 1))
-                        (U4MapColumn by bx))
-                    l))))
+  (let ~ ((l ()) ; Create the list of columns (in reverse)
+          (ultVec (getUltima4ULT by bx)))
+    (display ultVec)
+    (loop2 0 MapBlockSize 0 MapBlockSize
+      (if ultVec
+        (lambda (y x)
+          (set! l (cons (ultMapColumn ultVec (- MapBlockSize y 1) (- MapBlockSize x 1)) l)))
+        (lambda (y x)
+          (set! l (cons (U4MapColumn by bx) l)))))
     (cons 'list l))) ; return it as an expression (list columns ...)
 
 (define (sendInitialBlocks e)
