@@ -91,10 +91,10 @@
 ;;   are cached in the area modulo   | c| D|    | f| D|
 ;;   the field coordinates.          +--+--+    +--+--+
 ;;
-(define MapBlockSize  32) ; Each field block is 256x256 columns
-(define MapBlockCount 3)       ; A field is made up of 2x2 field blocks
+(define MapBlockSize  32) ; Each field block is a 32x32 array of columns
+(define MapBlockCount 4)       ; A field is made up of 2x2 field blocks
 (define MapRangeSize (* MapBlockCount MapBlockSize)) ; For now resulting blocok range size is 96x96
-(define MapBoundsSize (/ MapBlockSize 2)) ; Distance from the edge the valid range is
+(define MapBoundsSize (/ MapBlockSize 1)) ; Distance from the edge the valid range is
 
 ; The Ultima4 map file is 8x8 blocks of 32x32 cells
 ; so create a simpler 256x256 array of cell numbers.
@@ -129,7 +129,6 @@
   ultVec))
 
 (define (getUltima4ULT by bx)
-  (display (list by bx))
   (if (and (= by 107) (= bx 86)) (ultMapVector "lcb1.ult")
   (if (and (= by 107) (= bx 87)) (ultMapVector "lcb2.ult")
   (if (and (= by 106) (= bx 82)) (ultMapVector "britain.ult")
@@ -149,7 +148,6 @@
 (define (generateBlockColumns by bx)
   (let ~ ((l ()) ; Create the list of columns (in reverse)
           (ultVec (getUltima4ULT by bx)))
-    (display ultVec)
     (loop2 0 MapBlockSize 0 MapBlockSize
       (if ultVec
         (lambda (y x)
@@ -164,9 +162,9 @@
            (by (/ (- ey (/ MapRangeSize 2)) MapBlockSize)) ; A new block range origin
            (bx (/ (- ex (/ MapRangeSize 2)) MapBlockSize)))
   ((e 'setMapBlockLoc) by bx) ; Update the entity's block range origin
-  (displayl "\r\nSending initial map blocks to " (e 'name)) ; DEBUG
+  ;(displayl "\r\nSending initial map blocks to " (e 'name)) ; DEBUG
   (loop2 by (+ by MapBlockCount) bx (+ bx MapBlockCount) (lambda (y x)
-    (displayl " (" y " " x ")") ; DEBUG
+    ;(displayl " (" y " " x ")") ; DEBUG
     ((ipc 'private) (e 'port) ; Send the block to the peer
        `(mapUpdateColumns ,(* y MapBlockSize) ,(* x MapBlockSize) ,MapBlockSize ,(generateBlockColumns y x)))))
   ((ipc 'private) (e 'port)
@@ -193,7 +191,7 @@
         (<= ebx0 x) (< x ebx1))))
 
 (define (notInRange y x ry rx)
- (displayl "\r\n" (list y x ry rx))
+ ;(displayl "\r\n" (list y x ry rx)) ; DEBUG
  (or (< y ry) (<= (+ ry MapBlockCount) y)
      (< x rx) (<= (+ rx MapBlockCount) x)))
 
@@ -206,14 +204,13 @@
           (mx (/ (if (< x 0) (- x MapBlockSize) x) MapBlockSize)); accounting for negative coordinates
           ; Precompute invalid range boundary axis
           (top    (+ (* (e 'mapBlockY) MapBlockSize) MapBoundsSize))
-          (bottom (- (* (+ (e 'mapBlockY) MapBlockCount) MapBlockSize) MapBoundsSize))
           (left   (+ (* (e 'mapBlockX) MapBlockSize) MapBoundsSize))
+          (bottom (- (* (+ (e 'mapBlockY) MapBlockCount) MapBlockSize) MapBoundsSize))
           (right  (- (* (+ (e 'mapBlockX) MapBlockCount) MapBlockSize) MapBoundsSize)))
 
-   (displayl "\r\nmy rx rx=" (list my mx))
-   (displayl "\r\nCurrent ry rx=" (list ry rx))
+   ;(displayl "\r\nmy rx rx=" (list my mx)) ; DEBUG
+   ;(displayl "\r\nCurrent ry rx=" (list ry rx)) ; DEBUG
 
-   ; Adjust map block origin
    (if (< y top) (begin
      ;((ipc 'private) (e 'port) `(voice DNA 1 "top"))
      (set! ry (- my 1))))
@@ -230,14 +227,15 @@
      ;((ipc 'private) (e 'port) `(voice DNA 1 "right"))
      (set! rx (- mx (- MapBlockCount 2)))))
 
-   (displayl "\r\nUpdated ry rx=" (list ry rx))
-
    (loop2 ry (+ ry MapBlockCount) rx (+ rx MapBlockCount) (lambda (by bx)
-     (if (notInRange by bx (e 'mapBlockY) (e 'mapBlockX))
+     (if (notInRange by bx (e 'mapBlockY) (e 'mapBlockX)) (begin
+       (displayl "Sending block " (list by bx)) ; DEBUG
        ((ipc 'private) (e 'port) ; Send updated block to peer
-         `(mapUpdateColumns ,(* by MapBlockSize) ,(* bx MapBlockSize) ,MapBlockSize ,(generateBlockColumns by bx))))))
+         `(mapUpdateColumns ,(* by MapBlockSize) ,(* bx MapBlockSize) ,MapBlockSize ,(generateBlockColumns by bx)))))))
 
+   ;(displayl "\r\nUpdated ry rx=" (list ry rx)) ; DEBUG
    ((e 'setMapBlockLoc) ry rx)))
+
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
