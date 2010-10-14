@@ -95,13 +95,15 @@
        (begin
          (set! GX 0)
          (set! GY (+ 1 GY))
-         ;(if (<= Theight GY) (set! GY (- Theight 1))) ; Allow the cursor to be off scree to force a cursor move.
+         ;(if (<= Theight GY) (set! GY (- Theight 1))) ; Allow the cursor to be off screen to force a cursor move.
        ))
    (semaphore-up TerminalSemaphore))
 
  (define (tcursor-visible)
+   (semaphore-down TerminalSemaphore)
    (display (if TCURSOR-VISIBLE "\e[?25l" "\e[?25h"))
-   (set! TCURSOR-VISIBLE (not TCURSOR-VISIBLE)))
+   (set! TCURSOR-VISIBLE (not TCURSOR-VISIBLE))
+   (semaphore-up TerminalSemaphore))
 
  (define (TopmostWindow gy gx)
  ; Return first window object in window list that is visible at this location.
