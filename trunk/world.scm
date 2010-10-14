@@ -414,13 +414,12 @@
  ; IE: (Cell % FieldWidth - Viewport % FieldWidth) % Fieldwidth < ViewportWidth
  ; But it would seem modulo distributes:  (a%m - b%m)%m == (a-b)%m%m == (a-b)%m
  ; so the actual computation is a bit simpler.  Smokin.
+ ((Terminal 'lock))
  (let ((y (modulo (- gy PortY) FieldSize)) ; Normalize avatar position.
        (x (modulo (- gx PortX) FieldSize)))
-  (and (< y PortH) (< x PortW)
-    (begin
-      ((Terminal 'lock))
-      (viewportPlot (canvasGlyph gy gx) y (* x 2))
-      ((Terminal 'unlock))))))
+  (and (< y PortH) (< x PortW) (begin
+    (viewportPlot (canvasGlyph gy gx) y (* x 2))))
+ ((Terminal 'unlock))))
 
 
 

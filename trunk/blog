@@ -2290,3 +2290,10 @@ Fri Oct  8 01:14:18 EDT 2010
 
 Map agent basics completed.  Updating peers with map blocks works as well
 as various values of map block size and count.
+
+
+Thu Oct 14 15:52:45 EDT 2010
+
+I believe the world map rendering issue is a result of multiple threads being
+blocked on a "send" call.  This is the only plac I don't have preemption in
+place.
