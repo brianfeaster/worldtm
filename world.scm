@@ -8,7 +8,6 @@
 ;;    Canvas
 ;;    Viewport
 ;;    Map_manipulation
-;;    Ultima_city_detail_map
 ;;   Entites_and_avatar
 ;;    Window_functions_and_initialization
 ;;    Incomming_IPC_messages
@@ -54,8 +53,8 @@
 
 ; Console window
 (define WinConsole ((Terminal 'WindowNew)
-  0 0
-  (- (Terminal 'Theight) 1)  (Terminal 'Twidth)
+  (- (Terminal 'Theight) 14) 0
+  13  (Terminal 'Twidth)
   #x02))
 (define WinConsolePuts (WinConsole 'puts))
 (define (WinConsoleDisplay . e) (for-each (lambda (x) (for-each WinConsolePuts (display->strings x))) e))
@@ -390,7 +389,7 @@
     (WinMapPutc (glyph1ch glyph))))
 
 (define (viewportReset y x)
- ((Terminal 'lock))
+ ((Terminal 'lock)) ; This shouldn't be such an all encompasing lock.
  (set! PortCY y)
  (set! PortCX x)
  (set! PortH (WinMap 'Wheight)) ; Adjust Viewport dimensions
@@ -400,7 +399,7 @@
  (loop2 0 PortH 0 PortW (lambda (y x) ; Render glyphs in viewport
    (viewportPlot (canvasGlyph (+ PortY y) (+ PortX x))
                  y (* x 2))))
- ((Terminal 'unlock))
+ ((Terminal 'unlock)) ; This shouldn't be such an all encompasing lock.
  (if (WinColumn 'ENABLED) (dumpColumnInfo y x)))
 
 
@@ -414,12 +413,12 @@
  ; IE: (Cell % FieldWidth - Viewport % FieldWidth) % Fieldwidth < ViewportWidth
  ; But it would seem modulo distributes:  (a%m - b%m)%m == (a-b)%m%m == (a-b)%m
  ; so the actual computation is a bit simpler.  Smokin.
- ((Terminal 'lock))
+ ((Terminal 'lock)) ; This shouldn't be such an all encompasing lock.
  (let ((y (modulo (- gy PortY) FieldSize)) ; Normalize avatar position.
        (x (modulo (- gx PortX) FieldSize)))
   (and (< y PortH) (< x PortW) (begin
     (viewportPlot (canvasGlyph gy gx) y (* x 2))))
- ((Terminal 'unlock))))
+ ((Terminal 'unlock)))) ; This shouldn't be such an all encompasing lock.
 
 
 
@@ -439,6 +438,20 @@
   (canvasRender y x)
   (viewportRender y x))
 
+; Given a cell index or entity DNA value, move it in the field, canvas and viewport.
+(define (moveCell cell zo yo xo z y x centerMap)
+  ; Old location removal
+  (field-delete! zo yo xo cell)
+  (if (>= zo (canvasHeight yo xo)) (begin
+    (canvasRender yo xo)
+    (or centerMap (viewportRender yo xo))))
+  ; New location added
+  (field-add! z y x cell)
+  (if (>= z (canvasHeight y x)) (begin
+    (canvasRender y x)
+    (if centerMap
+      (viewportReset (avatar 'y) (avatar 'x))
+      (viewportRender y x)))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -452,12 +465,14 @@
 ; Create a default "nobody" entity.
 (define nobody (Entity 42 0 "nobody" 0 0 0 (glyphNew 0 7 #\n 0 7 #\o)))
 
+(define (entityAdd entity)
+ (set! EntityDB (cons (cons (entity 'dna) entity) EntityDB)))
+
 ; Update or create and add a new entity to the entity database.
 (define (entitiesSet dna port name z y x glyph)
  (let ((ent (assv dna EntityDB)))
   (if (null? ent)
-      (set! EntityDB (cons (cons dna (Entity dna port name z y x glyph))
-                           EntityDB)) ; Clone the remote entitiy locally.
+      (entityAdd (Entity dna port name z y x glyph)) ; Clone the remote entity locally.
       (((cdr ent) 'setAll) port name z y x glyph))))
 
 ; Lookup entity, or null, in database.
@@ -475,28 +490,24 @@
   `(let ()
     (define (self msg) (eval msg))
     (define dir 0)
-    (define (jump zz yy xx) (set! z zz) (set! y yy) (set! x xx))
-    (define (face dirNew) (set! dir dirNew))
+    (define (face dirNew)
+      (set! dir dirNew))
     (define (move)
-      (if (= dir 0) (jump (+ z -1) y      x)
-      (if (= dir 1) (jump z        (++ y) (-- x))
-      (if (= dir 2) (jump z        (++ y) x)
-      (if (= dir 3) (jump z        (++ y) (++ x))
-      (if (= dir 4) (jump z        y      (-- x))
-      (if (= dir 5) (jump (+ z 1)  y      x)
-      (if (= dir 6) (jump z        y      (++ x))
-      (if (= dir 7) (jump z        (-- y) (-- x))
-      (if (= dir 8) (jump z        (-- y) x)
-      (if (= dir 9) (jump z        (-- y) (++ x)))))))))))))
+      (if (= dir 0) (setLoc (+ z -1) y      x)
+      (if (= dir 1) (setLoc z        (++ y) (-- x))
+      (if (= dir 2) (setLoc z        (++ y) x)
+      (if (= dir 3) (setLoc z        (++ y) (++ x))
+      (if (= dir 4) (setLoc z        y      (-- x))
+      (if (= dir 5) (setLoc (+ z 1)  y      x)
+      (if (= dir 6) (setLoc z        y      (++ x))
+      (if (= dir 7) (setLoc z        (-- y) (-- x))
+      (if (= dir 8) (setLoc z        (-- y) x)
+      (if (= dir 9) (setLoc z        (-- y) (++ x)))))))))))))
     (define (walk dir)
-     (face dir)
-     (move))
+      (face dir)
+      (move))
     (define (look)
-      (let ((loc (gps)))
-        (move) ; temporarily walk to this location
-        (let ((c (field-ref z y x)))
-          (apply setLoc loc) ; restore old location.
-          c)))
+      (apply field-ref (gpsLook)))
     (define cell 19)
     (define (gpsLook)
       (if (= dir 0) (list (+ z -1) y      x)
@@ -509,7 +520,7 @@
       (if (= dir 7) (list z        (-- y) (-- x))
       (if (= dir 8) (list z        (-- y) x)
       (if (= dir 9) (list z        (-- y) (++ x)))))))))))))
-    self) ))
+    self)))
 
 
 
@@ -708,29 +719,15 @@
 
 ;; Entitity movement
 (define (move dna z y x)
- (letrec ((entity (entitiesGet dna))
-          (thisIsMe (= dna DNA))
-          (shouldScroll (and thisIsMe
-           (or SCROLLINGMAP (< 10 (distance (list 0 (avatar 'y) (avatar 'x))
-                                           (list 0 (+ PortY (/ PortH 2)) (+ PortX (/ PortW 2)))))))))
-  (if (null? entity)
-    (begin
-      (entitiesSet dna 0 "??" z y x (glyphNew 1 9 #\? 1 9 #\?))
-      ((ipc 'qwrite) '(who)))
-    (begin
-      ; Move from here
-      (field-delete! (entity 'z) (entity 'y) (entity 'x) dna)
-      (if (>= (entity 'z) (canvasHeight (entity 'y) (entity 'x))) (begin
-        (canvasRender (entity 'y) (entity 'x))
-        (or shouldScroll (viewportRender (entity 'y) (entity 'x)))))
-      ; Place here
-      ((entity 'setLoc) z y x)
-      (field-add! z y x dna)
-      (if (>= (entity 'z) (canvasHeight y x)) (begin
-        (canvasRender y x)
-        (or shouldScroll (viewportRender y x))))
-      (if shouldScroll
-        (viewportReset (avatar 'y) (avatar 'x)))))))
+ (or (= dna DNA)
+   (let ((entity (entitiesGet dna)))
+     (if (null? entity)
+       (begin
+         (entitiesSet dna 0 "??" z y x (glyphNew 1 9 #\? 1 9 #\?))
+         ((ipc 'qwrite) '(who)))
+       (begin
+         (moveCell dna (entity 'z) (entity 'y) (entity 'x) z y x #f)
+         ((entity 'setLoc) z y x))))))
 
 (define (entity dna port name z y x glyph)
   (entitiesSet dna port name z y x glyph)
@@ -792,6 +789,7 @@
 
 (define (winMapBigger)
  (if (< (WinMap 'Wheight) (Terminal 'Theight)) (begin
+  ((Terminal 'lock))
   ((WinMap 'home))
   (if (< (utime) deltaMoveTime)
     ((WinMap 'moveresize) ; Full resize
@@ -803,11 +801,13 @@
        (+ 1 (WinMap 'Wheight))
        (+ 2 (WinMap 'Wwidth)))
   (circularize)
+  ((Terminal 'unlock))
   (viewportReset (avatar 'y) (avatar 'x))
   (set! deltaMoveTime (+ 125 (utime))))))
 
 (define (winMapSmaller)
  (if (< 5 (WinMap 'Wheight)) (begin
+  ((Terminal 'lock))
   ((WinMap 'home))
   (if (< (utime) deltaMoveTime)
     ((WinMap 'moveresize) ; Full resize
@@ -819,6 +819,7 @@
        (+ -1 (WinMap 'Wheight))
        (+ -2 (WinMap 'Wwidth))))
   (circularize)
+  ((Terminal 'unlock))
   (viewportReset (avatar 'y) (avatar 'x))
   (set! deltaMoveTime (+ 125 (utime))))))
 
@@ -836,10 +837,13 @@
     ; Push the entity that's in my way
     ((ipc 'qwrite) `(force ,@((avatar 'gpsLook)) ,dir 10))
     ; Walk normally
-    (or (cellSolid (cellRef nextCell))
-     (begin
-      ((avatar 'move))
-      ((ipc 'qwrite) `(move ,DNA ,@((avatar 'gps))))
+    (or (cellSolid (cellRef nextCell)) (begin
+      ((avatar 'move)) ; Update avatar's state
+      ((ipc 'qwrite) (list 'move DNA (avatar 'z)(avatar 'y)(avatar 'x))) ; Update avatar over IPC
+      ; Update avatar in map
+      (moveCell DNA (avatar 'oz) (avatar 'oy) (avatar 'ox) (avatar 'z) (avatar 'y) (avatar 'x)
+         (or SCROLLINGMAP (< 10 (distance (list 0 (avatar 'y)           (avatar 'x))
+                                          (list 0 (+ PortY (/ PortH 2)) (+ PortX (/ PortW 2)))))))
       ;(if (eq? 'help  (cellSymbol (field-ref (avatar 'z) (avatar 'y) (avatar 'x))))  (help))
       ;(if (eq? 'snake (cellSymbol (field-ref (avatar 'z) (avatar 'y) (avatar 'x)))) (thread (snake-random)))
       ;(if (eq? 'brit2 (cellSymbol (field-base-ref (avatar 'z) (avatar 'y) (avatar 'x)))) (thread (spawnKitty)))
@@ -1115,7 +1119,7 @@
           (card->dir (lambda (c) (vector-ref #(0 5 6 7 4 0 0 3 2 1) c)))
           (happyVector (vector 0 0 0 0 0 0 0 0))
           (dist 0))
- ((kitty 'jump) (avatar 'z) (avatar 'y) (avatar 'x))
+ ((kitty 'setLoc) (avatar 'z) (avatar 'y) (avatar 'x))
  ; Tell everyone who this kitteh is.
  ((ipc 'qwrite) `(entity ,(kitty 'dna) "kitty" ,@((kitty 'gps)) ,(glyphNew 0 7 #\K 0 15 #\a)))
  (let ~ ((i 0)) ; Main loop
@@ -1267,15 +1271,16 @@
 (define ipc (Ipc WinConsoleDisplay))
 (ipc '(set! Debug #f))
 
-; Create avatar object
+; Create avatar object and add to entity list
 (define avatar (Avatar (ipc 'PrivatePort) NAME))
 ((avatar 'setGlyph)
    (glyphNew 0 15 (string-ref NAME 0)
              0 15 (string-ref NAME 1)))
 (set! DNA (avatar 'dna))
+(entityAdd avatar)
 
 ; Move avatar to entrance of Lord British's castle
-((avatar 'jump) 1  (* 108 MapBlockSize)  (+ (* 86 MapBlockSize) (/ MapBlockSize 2) -1))
+((avatar 'setLoc) 1  (* 108 MapBlockSize)  (+ (* 86 MapBlockSize) (/ MapBlockSize 2) -1))
 
 ; Display some initial information
 (or QUIETLOGIN (begin
