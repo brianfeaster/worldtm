@@ -166,8 +166,8 @@
    (define (visibleCountAdd c) (set! VisibleCount (+ VisibleCount c)))
    (define (goto y x)
      (set! needToScroll #f)
-     (set! TY (min y (- Wheight 1)))
-     (set! TX (min x (- Wwidth 1))))
+     (set! TY (min (max 0 y) (- Wheight 1)))
+     (set! TX (min (max 0 x) (- Wwidth 1))))
    (define (set-color b f) (set! COLOR (+ (* 16 b) f)))
    (define (InsideWindow? gy gx)
      (and ENABLED

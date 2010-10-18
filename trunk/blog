@@ -2297,3 +2297,26 @@ Thu Oct 14 15:52:45 EDT 2010
 I believe the world map rendering issue is a result of multiple threads being
 blocked on a "send" call.  This is the only plac I don't have preemption in
 place.
+
+I examined a typescript capture of World output replacing escape with newlines.
+I noticed "25h" was breaking the cursor movement escape sequences.  I added a
+semaphore call to the tcursor-visible method.  It no longer breaks cursor
+movement strings in World.
+
+Can make World crash by enabling animation, walk-forever and resizing the
+window repeatedly.  The invalid vector reference is with the window DESC
+vector.
+
+
+Fri Oct 15 21:24:02 EDT 2010
+
+Fix for the map window resize crash is to add a semaphore call so that adjusting
+the window size doesn't occur during a window rendering.
+
+Currently addressing the avatar's movement lagginess noticable when the avatar
+moves a lot in a large map window. The map window keeps up with the avatar's
+current location but the avatar itself catches up more slowly.
+
+It looks like the map window is refreshed as the avatar movement catches up.
+An avatar movement button first sets the avatar's position then sends the
+expression to the IPC.
