@@ -399,8 +399,7 @@
  (loop2 0 PortH 0 PortW (lambda (y x) ; Render glyphs in viewport
    (viewportPlot (canvasGlyph (+ PortY y) (+ PortX x))
                  y (* x 2))))
- ((Terminal 'unlock)) ; This shouldn't be such an all encompasing lock.
- (if (WinColumn 'ENABLED) (dumpColumnInfo y x)))
+ ((Terminal 'unlock))) ; This shouldn't be such an all encompasing lock.
 
 
 (define (viewportRender gy gx)
@@ -444,14 +443,13 @@
   (field-delete! zo yo xo cell)
   (if (>= zo (canvasHeight yo xo)) (begin
     (canvasRender yo xo)
-    (or centerMap (viewportRender yo xo))))
+    (or centerMap (viewportRender yo xo)))) ; Don't render cell if vewport to be reset
   ; New location added
   (field-add! z y x cell)
   (if (>= z (canvasHeight y x)) (begin
     (canvasRender y x)
-    (if centerMap
-      (viewportReset (avatar 'y) (avatar 'x))
-      (viewportRender y x)))))
+    (or centerMap (viewportRender y x)))) ; Don't render cell if vewport to be reset
+  (if centerMap (viewportReset (avatar 'y) (avatar 'x))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -719,7 +717,7 @@
 
 ;; Entitity movement
 (define (move dna z y x)
- (or (= dna DNA)
+ (or (= dna DNA) ; Skip if this is me since rendering is handled explicitly
    (let ((entity (entitiesGet dna)))
      (if (null? entity)
        (begin
@@ -841,9 +839,12 @@
       ((avatar 'move)) ; Update avatar's state
       ((ipc 'qwrite) (list 'move DNA (avatar 'z)(avatar 'y)(avatar 'x))) ; Update avatar over IPC
       ; Update avatar in map
-      (moveCell DNA (avatar 'oz) (avatar 'oy) (avatar 'ox) (avatar 'z) (avatar 'y) (avatar 'x)
-         (or SCROLLINGMAP (< 10 (distance (list 0 (avatar 'y)           (avatar 'x))
-                                          (list 0 (+ PortY (/ PortH 2)) (+ PortX (/ PortW 2)))))))
+      (moveCell DNA
+                (avatar 'oz) (avatar 'oy) (avatar 'ox)
+                (avatar 'z)  (avatar 'y)  (avatar 'x)
+                (or SCROLLINGMAP (< 10
+                                    (distance (list 0 (avatar 'y)           (avatar 'x))
+                                              (list 0 (+ PortY (/ PortH 2)) (+ PortX (/ PortW 2)))))))
       ;(if (eq? 'help  (cellSymbol (field-ref (avatar 'z) (avatar 'y) (avatar 'x))))  (help))
       ;(if (eq? 'snake (cellSymbol (field-ref (avatar 'z) (avatar 'y) (avatar 'x)))) (thread (snake-random)))
       ;(if (eq? 'brit2 (cellSymbol (field-base-ref (avatar 'z) (avatar 'y) (avatar 'x)))) (thread (spawnKitty)))
@@ -856,7 +857,8 @@
          (number->string (modulo (avatar 'y) MapBlockSize)) " "
          (number->string (modulo (avatar 'x) MapBlockSize)) "\r\n"
          (number->string (/ (avatar 'y) MapBlockSize)) " "
-         (number->string (/ (avatar 'x) MapBlockSize))))))))
+         (number->string (/ (avatar 'x) MapBlockSize)))
+      (if (WinColumn 'ENABLED) (dumpColumnInfo (avatar 'y) (avatar 'x))))))))
 
 ; Change avatar color.  Will just cycle through all 16 avatar colors.
 (define (avatarColor)
@@ -1309,6 +1311,9 @@
    (~)))
 
 ((WinMap 'toggle))
+
+; Hack. Make sure map is rendered after connecting
+(thread (sleep 1000) (walk 8))
 
 (define (shutdown)
   (or QUIETLOGIN (sayByeBye))

@@ -2320,3 +2320,16 @@ current location but the avatar itself catches up more slowly.
 It looks like the map window is refreshed as the avatar movement catches up.
 An avatar movement button first sets the avatar's position then sends the
 expression to the IPC.
+
+
+Tue Oct 19 00:41:35 EDT 2010
+
+Working on map mutation now.  MoveCell doesn't work as expected when trying to
+move a default cell to another location.  The original columns seems to remain
+intact with the desired cell being copied to the new column as expected.
+
+What does it mean to move a cell in between cells in a column?  Replace it with
+air, water or something near by?  Collapse the column?  Copy the cell?
+
+,, oo ,, -> ,,    oo,,
+xx xx xx    xx xx xx

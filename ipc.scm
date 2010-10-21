@@ -134,9 +134,12 @@
  (define (private port msg)
    (letrec ((p (open-socket "localhost" port))
             (s (open-stream p)))
-     (if (eof-object? s) s
+     (if (eof-object? s)
+       (displayl "\r\nCan't send private message to " port ".  stream=" s)
+       (begin
          (write msg s)
-         (display " " s))))
+         (display " " s)
+         (close s)))))
 
  ; Start the engine
  (createHub)

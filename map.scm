@@ -30,6 +30,10 @@
 (load "ipc.scm")
 (define ipc (Ipc #f)) ; Instead of #f can pass in a serializer for debug messages
 
+(define (makeCounter i)
+ (lambda ()
+   (set! i (+ i 1))
+   i))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -39,6 +43,7 @@
 
 (define (Avatar dna port name z y x glyph) ((Entity dna port name z y x glyph) '(let ()
    (define self (lambda (msg) (eval msg)))
+   (define counter (makeCounter 0))
    ; Map block origin AKA the upper left hand corner of the map blocks sent to the peer
    (define mapBlockY 0)
    (define mapBlockX 0)
@@ -102,7 +107,9 @@
  (let ((fd (open-file "ultima4.map"))
        (vec (make-vector 65536)))
   (let ~ ((i 0))
-     (if (= i 65536) vec ; Return the vector
+     (if (= i 65536) (begin
+       (close fd)
+       vec) ; Return the vector
      (begin
         (vector-set! vec
                  (+ (* 256 (+ (modulo (/ i 32) 32) (* (/ i 8192) 32)))
@@ -110,9 +117,13 @@
                  (+ 0 (read-char fd))) ; Hack to convert char to integer
         (~ (+ i 1)))))))
 
+; Return cell number from U4 map
+(define (U4MapCell y x)
+  (vector-ref U4MapVector (+ (* 256 (modulo y 256)) (modulo x 256))))
+
+; Create a column given a U4 map coordinate
 (define (U4MapColumn y x)
-  (let ((cell (vector-ref U4MapVector (+ (* 256 (modulo y 256)) (modulo x 256)))))
-    (vector -1 cell cellAIR)))
+  (vector -1 (U4MapCell y x) cellAIR))
 
 ; Return vector of cell numbers representing
 ; the U4 city files. lcb1.ult
@@ -120,12 +131,15 @@
  (let ((fd (open-file fn))
        (ultVec (make-vector 1024)))
   (loop 1024 (lambda (i) (vector-set! ultVec i (+ 0 (read-char fd))))) ; Hack to convert char to integer
+  (close fd)
   ultVec))
+
 ; These are like town files only 11x11 so pad rest with grass
 (define (conMapVector fn)
  (let ((fd (open-file fn))
        (ultVec (make-vector 1024 4)))
   (loop2 10 21 10 21 (lambda (y x) (vector-set! ultVec (+ (* y 32) x) (+ 0 (read-char fd))))) ; Hack to convert char to integer
+  (close fd)
   ultVec))
 
 (define (getUltima4ULT by bx)
@@ -139,22 +153,37 @@
   #f))))))))
 
 (define doubleHeightCells (list cellBRICKC cellCOLUMN))
-(define (ultMapColumn ultVec y x)
+
+(define (ultMapColumn baseCell ultVec y x)
   (let ((cell (vector-ref ultVec (+ (* 32 (modulo y 32)) (modulo x 32)))))
     (if (pair? (memv cell doubleHeightCells))
-      (vector -1 cell cell cellAIR)
-      (vector -1 cell cellAIR))))
+      (vector -1 baseCell cell cell cellAIR)
+      (vector -1 baseCell cell cellAIR))))
+
+(define (tryToOpenFile fileName)
+  (let ((fp (open-new-file fileName)))
+    (if (port? fp) fp (begin
+      (displayl "\r\nCan't open " fileName ".  Trying again...")
+      (sleep 10)
+      (tryToOpenFile fileName)))))
 
 (define (generateBlockColumns by bx)
-  (let ~ ((l ()) ; Create the list of columns (in reverse)
-          (ultVec (getUltima4ULT by bx)))
-    (loop2 0 MapBlockSize 0 MapBlockSize
+ (letrec ((fn (string "mapU4-" (number->string by 16) "-" (number->string bx 16)))
+          (fp (open-file fn)))
+  (if fp
+    (begin
+      (displayl "\r\nReading and sending cached file " fn)
+      (cons 'list (read fp))) ; return file if already cached
+    (let ~ ((l ()) ; Create the list of columns (in reverse)
+            (ultVec (getUltima4ULT by bx)))
+     (loop2 0 MapBlockSize 0 MapBlockSize
       (if ultVec
-        (lambda (y x)
-          (set! l (cons (ultMapColumn ultVec (- MapBlockSize y 1) (- MapBlockSize x 1)) l)))
-        (lambda (y x)
-          (set! l (cons (U4MapColumn by bx) l)))))
-    (cons 'list l))) ; return it as an expression (list columns ...)
+        (lambda (y x) (set! l (cons (ultMapColumn (U4MapCell by bx) ultVec (- MapBlockSize y 1) (- MapBlockSize x 1)) l)))
+        (lambda (y x) (set! l (cons (U4MapColumn by bx) l)))))
+     (let ((fp (tryToOpenFile fn)))
+       (write l fp)
+       (close fp))
+     (cons 'list l))))) ; return it as an expression (list columns ...)
 
 (define (sendInitialBlocks e)
   (letrec ((ey (e 'y)) ; Entity's position
@@ -165,6 +194,7 @@
   ;(displayl "\r\nSending initial map blocks to " (e 'name)) ; DEBUG
   (loop2 by (+ by MapBlockCount) bx (+ bx MapBlockCount) (lambda (y x)
     ;(displayl " (" y " " x ")") ; DEBUG
+    (displayl "\r\nSending block " (list y x) " to " (e 'name) ":" (e 'port) ":" ((e 'counter))) ; DEBUG
     ((ipc 'private) (e 'port) ; Send the block to the peer
        `(mapUpdateColumns ,(* y MapBlockSize) ,(* x MapBlockSize) ,MapBlockSize ,(generateBlockColumns y x)))))
   ((ipc 'private) (e 'port)
@@ -190,8 +220,8 @@
    (and (<= eby0 y) (< y eby1)
         (<= ebx0 x) (< x ebx1))))
 
+; Determine if location is out of bound of block range
 (define (notInRange y x ry rx)
- ;(displayl "\r\n" (list y x ry rx)) ; DEBUG
  (or (< y ry) (<= (+ ry MapBlockCount) y)
      (< x rx) (<= (+ rx MapBlockCount) x)))
 
@@ -200,40 +230,27 @@
           (x (e 'x))
           (ry (e 'mapBlockY)) ; Entity's current map block range origin
           (rx (e 'mapBlockX))
-          (my (/ (if (< y 0) (- y MapBlockSize) y) MapBlockSize)) ; Consider map block the entity is in
-          (mx (/ (if (< x 0) (- x MapBlockSize) x) MapBlockSize)); accounting for negative coordinates
+          ; Consider map block the entity is in accounting for negative coordinates
+          (my (/ (if (< y 0) (- y MapBlockSize) y) MapBlockSize))
+          (mx (/ (if (< x 0) (- x MapBlockSize) x) MapBlockSize))
           ; Precompute invalid range boundary axis
           (top    (+ (* (e 'mapBlockY) MapBlockSize) MapBoundsSize))
           (left   (+ (* (e 'mapBlockX) MapBlockSize) MapBoundsSize))
           (bottom (- (* (+ (e 'mapBlockY) MapBlockCount) MapBlockSize) MapBoundsSize))
           (right  (- (* (+ (e 'mapBlockX) MapBlockCount) MapBlockSize) MapBoundsSize)))
 
-   ;(displayl "\r\nmy rx rx=" (list my mx)) ; DEBUG
-   ;(displayl "\r\nCurrent ry rx=" (list ry rx)) ; DEBUG
-
-   (if (< y top) (begin
-     ;((ipc 'private) (e 'port) `(voice DNA 1 "top"))
-     (set! ry (- my 1))))
-
-   (if (<= bottom y) (begin
-     ;((ipc 'private) (e 'port) `(voice DNA 1 "bottom"))
-     (set! ry (- my (- MapBlockCount 2)))))
-
-   (if (< x left) (begin
-     ;((ipc 'private) (e 'port) `(voice DNA 1 "left"))
-     (set! rx (- mx 1))))
-
-   (if (<= right x) (begin
-     ;((ipc 'private) (e 'port) `(voice DNA 1 "right"))
-     (set! rx (- mx (- MapBlockCount 2)))))
+   (if (< y top)     (set! ry (- my 1)))
+   (if (<= bottom y) (set! ry (- my (- MapBlockCount 2))))
+   (if (< x left)    (set! rx (- mx 1)))
+   (if (<= right x)  (set! rx (- mx (- MapBlockCount 2))))
 
    (loop2 ry (+ ry MapBlockCount) rx (+ rx MapBlockCount) (lambda (by bx)
      (if (notInRange by bx (e 'mapBlockY) (e 'mapBlockX)) (begin
-       (displayl "Sending block " (list by bx)) ; DEBUG
+       (displayl "\r\nSending block " (list by bx) " to " (e 'name) ":" (e 'port) ":" ((e 'counter))) ; DEBUG
        ((ipc 'private) (e 'port) ; Send updated block to peer
-         `(mapUpdateColumns ,(* by MapBlockSize) ,(* bx MapBlockSize) ,MapBlockSize ,(generateBlockColumns by bx)))))))
+         `(mapUpdateColumns ,(* by MapBlockSize) ,(* bx MapBlockSize) ,MapBlockSize ,(generateBlockColumns by bx)))
+       (displayl "\r\nDone sending block " (list by bx) " to " (e 'name) ":" (e 'port) ":" ((e 'counter))))))) ; DEBUG
 
-   ;(displayl "\r\nUpdated ry rx=" (list ry rx)) ; DEBUG
    ((e 'setMapBlockLoc) ry rx)))
 
 
