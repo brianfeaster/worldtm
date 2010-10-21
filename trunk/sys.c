@@ -544,7 +544,7 @@ void wscmOpenRemoteSocket (void) {
 	r2=pop(); /* Internet address string. */
 	fd = socket(PF_INET, SOCK_STREAM, 0);
 	if (fd == -1) {
-		printf ("ERROR: socket(PF_INET, SOCK_STREAM, 0) => -1\r\n");
+		fprintf (stderr, "ERROR: socket(PF_INET, SOCK_STREAM, 0) => -1\r\n");
 		r0 = eof;
 		goto ret;
 	}
@@ -555,7 +555,7 @@ void wscmOpenRemoteSocket (void) {
 	strncat(hostname, r2, memObjectLength(r2));
 	he = gethostbyname(hostname);
 	if (he == NULL) {
-		printf ("ERROR: gethostbyname(%s) => NULL\r\n", hostname);
+		fprintf (stderr, "ERROR wscmOpenRemoteSocket() gethostbyname(\"%s\")==NULL %d::%s\r\n", hostname, errno, strerror(errno));
 		r0 = eof;
 		goto ret;
 	}
@@ -1930,7 +1930,7 @@ void sysOpen (int oflag, mode_t mode) {
 }
 
 void sysOpenFile (void) {
-	sysOpen(O_CREAT|O_RDWR, S_IRUSR|S_IWUSR);
+	sysOpen(O_RDWR, S_IRUSR|S_IWUSR);
 }
 
 void sysOpenNewFile (void) {
@@ -2036,8 +2036,9 @@ void sysSend (void) {
 	/* Count sent already.  Should be initialized to 0. */
 	r3=0;
 	if (memObjectType(r1) != TSOCKET && memObjectType(r1) != TPORT) {
-		printf ("WARNING: sysSend: not a socket (is a %x): ", memObjectType(r1));
+		printf ("WARNING: sysSend: not a socket is (type 02x%x): ", memObjectType(r1));
 		wscmDisplay(r1, 0, 1);
+		*(int*)0=0;
 		r0 = eof;
 	} else {
 		wscmSend();
