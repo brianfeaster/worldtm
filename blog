@@ -2333,3 +2333,12 @@ air, water or something near by?  Collapse the column?  Copy the cell?
 
 ,, oo ,, -> ,,    oo,,
 xx xx xx    xx xx xx
+
+
+Thu Oct 21 02:56:46 EDT 2010
+
+The map agent was crashing when trying to open a remote direct peer connection
+and when trying to open a map file.  Turns out the unix process was running
+out of file descriptors.  I explicitly close ports in the map agent code.  The
+garbage collector should finalize these objects which is a possible bug.  The
+workaround now is to close unused ports.

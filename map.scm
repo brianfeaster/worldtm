@@ -15,7 +15,7 @@
 ;; Lord British's castle (108 86)
 ;;
 
-(define MYDNA 17749)
+(define DNA 17749)
 (define MYNAME "The Map Agent")
 (define ActivityTime (time)) ; Used for the idle time with the 'who' expression
 (define cellCOLUMN 48)
@@ -70,7 +70,7 @@
     (if (null? e) UnknownEntity (cdr e))))
 
 ; Create the map agent
-(define avatar (Avatar MYDNA (ipc 'PrivatePort) MYNAME 0 0 0 #(1 11 #\M 2 4 #\A)))
+(define avatar (Avatar DNA (ipc 'PrivatePort) MYNAME 0 0 0 #(1 11 #\M 2 4 #\A)))
 (entityDBAdd avatar)
 
 ; Create and add some default entities
@@ -172,8 +172,10 @@
           (fp (open-file fn)))
   (if fp
     (begin
-      (displayl "\r\nReading and sending cached file " fn)
-      (cons 'list (read fp))) ; return file if already cached
+      (displayl "\r\nReading and sending existing cached map " fn)
+      (let ((l (cons 'list (read fp))))
+        (close fp)
+        l))
     (let ~ ((l ()) ; Create the list of columns (in reverse)
             (ultVec (getUltima4ULT by bx)))
      (loop2 0 MapBlockSize 0 MapBlockSize
@@ -260,7 +262,7 @@
 ;;
 (define (who)
  ((ipc 'qwrite)
- `(entity ,MYDNA ,(avatar 'port) ,(avatar 'name) ,@((avatar 'gps)) ,(avatar 'glyph))))
+ `(entity ,DNA ,(avatar 'port) ,(avatar 'name) ,@((avatar 'gps)) ,(avatar 'glyph))))
 
 (define (entity dna port name z y x glyph) 
  (let ((e (entityLookup dna)))
