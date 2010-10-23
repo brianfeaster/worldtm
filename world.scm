@@ -163,6 +163,10 @@
       (cellMake symb glyph)
       (cellMake symb glyph 'solid))))
 
+; Is the cell index a visible cell?  Anything but an entity and air.
+; Air is CellMax value.  Maybe it should be 0?
+(define (cellVisible? c)
+ (and (<= 0 c) (< c CellMax)))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -201,12 +205,11 @@
   (+ (vector-ref c 0)
      (vector-length c)))
 
-(define (columnRef c h)
- (vector-ref c
-  (let ((i (- h (columnHeightBottom c))))
-    (if (<= i 1) 1
-    (if (<= (vector-length c) i) (- (vector-length c) 1)
-    i)))))
+(define (columnRef column z)
+ (vector-ref column (let ((i (- z (columnHeightBottom column)))) ; normalize z coordinate
+                      (if (<= i 1) 1 ; default bottom cell
+                      (if (<= (vector-length column) i) (- (vector-length column) 1) ; default top cell
+                      i)))))
 
 ; Extend column below based on existing column. #(3  4 5 6) -> #(1  4 4 4 5 6)
 (define (columnExtendBelow c bot)
@@ -240,6 +243,13 @@
     (vector-set! c i o)))
     c))
 
+(define (containsVisibleCell? l)
+  (if (pair? l)
+      (or (containsVisibleCell? (car l))
+          (containsVisibleCell? (cdr l)))
+      (cellVisible? l)))
+
+     
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -278,17 +288,25 @@
    (last elements))) ; Last in improper list of objs
 
 ; Scan down map column starting at z for first visibile cell.  Return height.
-; TODO  What should this return if z is below the bottom most explicit cell?
 (define (field-ref-top z y x)
  (letrec ((column (fieldColumn y x))
           (top    (columnHeightTop column)) ;1st implicit top cell in column
-          (bot    (columnHeightBottom column)));1st implicit bottom cell in col
+          (bot    (+ (columnHeightBottom column) 1)));1st implicit bottom cell in col
  ; Adjust the z coor down to the first explicit cell in the column
  (let findNonAir~ ((z (if (<= top z) (- top 1) z)))
    (if (or (!= (columnRef column z) cellAIR)
            (<= z bot))
-       (if (pair? z) (car z) z) ; Return first in improper list of objects.
+       z ; Return first in improper list of objects.
        (findNonAir~ (- z 1))))))
+
+; Scan up map column starting at z for first visibile cell.  Return height.
+(define (field-ceiling z y x)
+ (letrec ((column (fieldColumn y x))
+          (top    (field-ref-top 100 y x))) ; top most visible cell in column
+ (let ~ ((i (+ z 1)))
+   (if (containsVisibleCell? (columnRef column i)) i
+   (if (<= top i) 100
+   (~ (+ i 1)))))))
 
 ; Replace all cells at this Z location with a single cell.
 (define (field-set! z y x c)
@@ -324,15 +342,19 @@
 (define CANVAS (make-vector-vector FieldSize FieldSize #f))
 
 ; Initialize the canvas which is a vector of pairs (cellGlyph . cellHeight)
-(define (resetCanvas . defaultGlyph)
+(define (canvasReset top . defaultGlyph)
   (set! defaultGlyph (if (null? defaultGlyph) #f (car defaultGlyph)))
   (loop2 0 FieldSize 0 FieldSize (lambda (y x)
     ; Each canvas entry consists of a map cell and its height.
     (vector-vector-set! CANVAS y x
       (if defaultGlyph
-        (cons defaultGlyph 0)
-        (let ((top (field-ref-top 10 y x)))
-          (cons (cellGlyph (cellRef (field-base-ref top y x))) top)))))))
+        (cons defaultGlyph 0) ; the new pair
+        (letrec ((t (field-ref-top top y x))
+                 (celli (field-ref t y x)))
+          (cons (if (< CellMax celli) ; the new pair
+                    ((entitiesGet celli) 'glyph)
+                    (cellGlyph (cellRef celli)))
+                t)))))))
 
 (define (canvasGlyph y x)
   (car (vector-vector-ref CANVAS
@@ -356,11 +378,11 @@
              (modulo x FieldSize))
            h))
 
-(define (canvasRender y x)
- (let ((top (field-ref-top 100 y x)))
-  (let ((celli (field-ref top y x))) ; Field might contain an entity's dna
+(define (canvasRender top y x)
+ (let ((t (field-ref-top top y x)))
+  (let ((celli (field-ref t y x))) ; Field might contain an entity's dna
     (canvasCellSet y x (if (< CellMax celli) ((entitiesGet celli) 'glyph) (cellGlyph (cellRef celli)))))
-  (canvasHeightSet y x top)))
+  (canvasHeightSet y x t)))
 
 
 
@@ -426,15 +448,15 @@
 ;;
 ; Drop a cell on the map
 (define (dropCell y x cell)
- (let ((z (+ 1 (field-ref-top 1000 y x))))
+ (let ((z (+ 1 (field-ref-top 100 y x))))
   (field-set! z y x cell)
-  (canvasRender y x)
+  (canvasRender 100 y x)
   (viewportRender y x)))
 
 ; Set map cell and force rendering of cell through entire pipeline.
 (define (setCell z y x cell)
   (field-set! z y x cell)
-  (canvasRender y x)
+  (canvasRender 100 y x)
   (viewportRender y x))
 
 ; Given a cell index or entity DNA value, move it in the field, canvas and viewport.
@@ -442,12 +464,12 @@
   ; Old location removal
   (field-delete! zo yo xo cell)
   (if (>= zo (canvasHeight yo xo)) (begin
-    (canvasRender yo xo)
+    (canvasRender (avatar 'ceiling) yo xo)
     (or centerMap (viewportRender yo xo)))) ; Don't render cell if vewport to be reset
   ; New location added
   (field-add! z y x cell)
   (if (>= z (canvasHeight y x)) (begin
-    (canvasRender y x)
+    (canvasRender (avatar 'ceiling) y x)
     (or centerMap (viewportRender y x)))) ; Don't render cell if vewport to be reset
   (if centerMap (viewportReset (avatar 'y) (avatar 'x))))
 
@@ -483,7 +505,7 @@
 ; The user's avatar
 (define (Avatar port name) ; Inherits Entity
  ((Entity (random) port name
-   1 108 86
+   2 108 86
    (glyphNew 0 15 (string-ref name 0) 0 15 (string-ref name 1)))
   `(let ()
     (define (self msg) (eval msg))
@@ -518,6 +540,8 @@
       (if (= dir 7) (list z        (-- y) (-- x))
       (if (= dir 8) (list z        (-- y) x)
       (if (= dir 9) (list z        (-- y) (++ x)))))))))))))
+    (define ceiling 100)
+    (define (setCeiling z) (set! ceiling z))
     self)))
 
 
@@ -566,6 +590,14 @@
 
 ; Plot column of cells.
 (define (dumpColumnInfo y x)
+ (WinStatusDisplay "\r\n"
+    (number->string (avatar 'z)) " "
+    (number->string (avatar 'y)) " "
+    (number->string (avatar 'x)) "\r\n"
+    (number->string (modulo (avatar 'y) MapBlockSize)) " "
+    (number->string (modulo (avatar 'x) MapBlockSize)) "\r\n"
+    (number->string (/ (avatar 'y) MapBlockSize)) " "
+    (number->string (/ (avatar 'x) MapBlockSize)) " C" (avatar 'ceiling))
  ((WinColumn 'home))
  (let ~ ((z 11))
   (let ((c (field-ref z y x)))
@@ -739,7 +771,7 @@
       ; Remove from here
       (field-delete! (entity 'z) (entity 'y) (entity 'x) dna)
       (if (>= (entity 'z) (canvasHeight (entity 'y) (entity 'x))) (begin
-        (canvasRender (entity 'y) (entity 'x))
+        (canvasRender 100 (entity 'y) (entity 'x))
         (or thisIsMe (viewportRender (entity 'y) (entity 'x)))))))))
 
 (define (force z y x dir str)
@@ -770,7 +802,7 @@
   ;(WinChatDisplay "\r\nBlock " (list (/ y 32) (/ x 32)))
   (loop2 y (+ y blockSize) x (+ x blockSize) (lambda (y x)
     (vector-vector-set! FIELD (modulo y FieldSize) (modulo x FieldSize) (car lst))
-    (canvasRender y x)
+    (canvasRender 100 y x)
     (set! lst (cdr lst)))))
 
 
@@ -837,7 +869,13 @@
     ; Walk normally
     (or (cellSolid (cellRef nextCell)) (begin
       ((avatar 'move)) ; Update avatar's state
-      ((ipc 'qwrite) (list 'move DNA (avatar 'z)(avatar 'y)(avatar 'x))) ; Update avatar over IPC
+      ; If ceiling changes, repaint canvas using new ceiling height
+      (let ((oldCeiling (avatar 'ceiling)))
+        ((avatar 'setCeiling) (- (apply field-ceiling ((avatar 'gps))) 1))
+        (if (!= oldCeiling (avatar 'ceiling))
+          (canvasReset (avatar 'ceiling))))
+      ; Update avatar over IPC
+      ((ipc 'qwrite) (list 'move DNA (avatar 'z)(avatar 'y)(avatar 'x)))
       ; Update avatar in map
       (moveCell DNA
                 (avatar 'oz) (avatar 'oy) (avatar 'ox)
@@ -848,16 +886,6 @@
       ;(if (eq? 'help  (cellSymbol (field-ref (avatar 'z) (avatar 'y) (avatar 'x))))  (help))
       ;(if (eq? 'snake (cellSymbol (field-ref (avatar 'z) (avatar 'y) (avatar 'x)))) (thread (snake-random)))
       ;(if (eq? 'brit2 (cellSymbol (field-base-ref (avatar 'z) (avatar 'y) (avatar 'x)))) (thread (spawnKitty)))
-      ;(WinConsoleWrite (fieldColumn (avatar 'y) (avatar 'x)) (field-ref (avatar 'z) (avatar 'y) (avatar 'x)))
-      ; Dump our coordinates.
-      (WinStatusDisplay "\r\n"
-         (number->string (avatar 'z)) " "
-         (number->string (avatar 'y)) " "
-         (number->string (avatar 'x)) "\r\n"
-         (number->string (modulo (avatar 'y) MapBlockSize)) " "
-         (number->string (modulo (avatar 'x) MapBlockSize)) "\r\n"
-         (number->string (/ (avatar 'y) MapBlockSize)) " "
-         (number->string (/ (avatar 'x) MapBlockSize)))
       (if (WinColumn 'ENABLED) (dumpColumnInfo (avatar 'y) (avatar 'x))))))))
 
 ; Change avatar color.  Will just cycle through all 16 avatar colors.
@@ -951,7 +979,7 @@
 (setButton CHAR-CTRL-L '(begin (viewportReset (avatar 'y) (avatar 'x)) ((WinChat 'repaint))))
 (setButton CHAR-CTRL-M '(begin ((WinStatus 'toggle)) ((WinColumn 'toggle))))
 (setButton CHAR-CTRL-Q '(set! state 'done))
-(setButton #\d '((ipc 'qwrite) `(dropCell ,(avatar 'y) ,(avatar 'x) (cellRef 'campfire))))
+(setButton #\d '((ipc 'qwrite) `(dropCell ,(avatar 'y) ,(avatar 'x) (cellIndex 'campfire))))
 (setButton #\g
    '(let ((o (field-ref (avatar 'z) (avatar 'y) (avatar 'x))))
      (field-delete!  (avatar 'z) (avatar 'y) (avatar 'x) o)
@@ -1256,8 +1284,7 @@
 
 ; Initialize field and canvas structures
 (resetField (columnMake 0 cellXX cellAIR))
-(resetCanvas glyphXX)
-;(resetCanvas)
+(canvasReset 100 glyphXX)
 
 ; Start keyboard reader agent
 (thread (KeyAgent))
@@ -1282,7 +1309,7 @@
 (entityAdd avatar)
 
 ; Move avatar to entrance of Lord British's castle
-((avatar 'setLoc) 1  (* 108 MapBlockSize)  (+ (* 86 MapBlockSize) (/ MapBlockSize 2) -1))
+((avatar 'setLoc) 2 (+ (* 108 MapBlockSize) 3)  (+ (* 86 MapBlockSize) (/ MapBlockSize 2) -1))
 
 ; Display some initial information
 (or QUIETLOGIN (begin
@@ -1313,7 +1340,7 @@
 ((WinMap 'toggle))
 
 ; Hack. Make sure map is rendered after connecting
-(thread (sleep 1000) (walk 8))
+(thread (sleep 2000) (walk 2))
 
 (define (shutdown)
   (or QUIETLOGIN (sayByeBye))

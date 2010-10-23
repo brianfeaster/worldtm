@@ -19,6 +19,7 @@
 (define MYNAME "The Map Agent")
 (define ActivityTime (time)) ; Used for the idle time with the 'who' expression
 (define cellCOLUMN 48)
+(define cellFLOOR 62)
 (define cellBRICKC 127)
 (define cellAIR 1023)
 
@@ -158,7 +159,9 @@
   (let ((cell (vector-ref ultVec (+ (* 32 (modulo y 32)) (modulo x 32)))))
     (if (pair? (memv cell doubleHeightCells))
       (vector -1 baseCell cell cell cellAIR)
-      (vector -1 baseCell cell cellAIR))))
+    (if (= cell cellFLOOR)
+      (vector -1 baseCell cell cellAIR cellBRICKC cellAIR)
+    (vector -1 baseCell cell cellAIR)))))
 
 (define (tryToOpenFile fileName)
   (let ((fp (open-new-file fileName)))

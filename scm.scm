@@ -415,7 +415,8 @@
  (if (string? fn) (load (open-file fn))
  (if (not fn) (displayl "*load done*")
  (let ((exp (read fn)))
-   (or (eof-object? exp)
+   (if (eof-object? exp)
+       (close fn)
        (begin (eval exp)
               (load fn)))))))
 
