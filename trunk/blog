@@ -2342,3 +2342,17 @@ and when trying to open a map file.  Turns out the unix process was running
 out of file descriptors.  I explicitly close ports in the map agent code.  The
 garbage collector should finalize these objects which is a possible bug.  The
 workaround now is to close unused ports.
+
+
+Fri Oct 22 03:39:03 EDT 2010
+
+Examing /proc/pid/fd, I can readily identify open file descriptors and the
+files or ports they represent.  World scheme doesn't close loaded files.
+
+Canvas rendering currently shows the top most cell in a column.  I plan to
+determine the height of the closest cell above the avatar.  This height will be
+the initial height to start scanning down the column for the first visible
+cell.  This should be a good initial method of revealing the inside of rooms or
+dungeon innards.  The dungeon that someone designed many years ago in an early
+version of World will finally render correctly.
+
