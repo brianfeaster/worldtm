@@ -8,14 +8,14 @@
 ;;    Canvas
 ;;    Viewport
 ;;    Map_manipulation
-;;   Entites_and_avatar
-;;    Window_functions_and_initialization
-;;    Incomming_IPC_messages
+;;   Window_functions_and_initialization
+;;    Entites_and_avatar
 ;;   Button_commands
 ;;   Buttons
+;;    Incomming_IPC_messages
 ;;   Typing_and_talking
 ;;    Prototypes_and_fun_things
-;;   Start_everything
+;;   Genesis
 ;;
 (load "ipc.scm")
 (load "window.scm")
@@ -348,10 +348,12 @@
     ; Each canvas entry consists of a map cell and its height.
     (vector-vector-set! CANVAS y x
       (if defaultGlyph
-        (cons defaultGlyph 0) ; the new pair
+        ; default pair
+        (cons defaultGlyph 0)
+        ; pair based on visible cell in field
         (letrec ((t (field-ref-top top y x))
                  (celli (field-ref t y x)))
-          (cons (if (< CellMax celli) ; the new pair
+          (cons (if (< CellMax celli)
                     ((entitiesGet celli) 'glyph)
                     (cellGlyph (cellRef celli)))
                 t)))))))
@@ -474,77 +476,6 @@
   (if centerMap (viewportReset (avatar 'y) (avatar 'x))))
 
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; Entites_and_avatar
-;; Simple objects more dynamic than just cells.
-;;
-
-; Association list of entites to their DNA values.
-(define EntityDB ())
-
-; Create a default "nobody" entity.
-(define nobody (Entity 42 0 "nobody" 0 0 0 (glyphNew 0 7 #\n 0 7 #\o)))
-
-(define (entityAdd entity)
- (set! EntityDB (cons (cons (entity 'dna) entity) EntityDB)))
-
-; Update or create and add a new entity to the entity database.
-(define (entitiesSet dna port name z y x glyph)
- (let ((ent (assv dna EntityDB)))
-  (if (null? ent)
-      (entityAdd (Entity dna port name z y x glyph)) ; Clone the remote entity locally.
-      (((cdr ent) 'setAll) port name z y x glyph))))
-
-; Lookup entity, or null, in database.
-(define (entitiesGet dna)
- (let ((e (assv dna EntityDB)))
-   (if (null? e)
-       nobody
-       (cdr e))))
-
-; The user's avatar
-(define (Avatar port name) ; Inherits Entity
- ((Entity (random) port name
-   2 108 86
-   (glyphNew 0 15 (string-ref name 0) 0 15 (string-ref name 1)))
-  `(let ()
-    (define (self msg) (eval msg))
-    (define dir 0)
-    (define (face dirNew)
-      (set! dir dirNew))
-    (define (move)
-      (if (= dir 0) (setLoc (+ z -1) y      x)
-      (if (= dir 1) (setLoc z        (++ y) (-- x))
-      (if (= dir 2) (setLoc z        (++ y) x)
-      (if (= dir 3) (setLoc z        (++ y) (++ x))
-      (if (= dir 4) (setLoc z        y      (-- x))
-      (if (= dir 5) (setLoc (+ z 1)  y      x)
-      (if (= dir 6) (setLoc z        y      (++ x))
-      (if (= dir 7) (setLoc z        (-- y) (-- x))
-      (if (= dir 8) (setLoc z        (-- y) x)
-      (if (= dir 9) (setLoc z        (-- y) (++ x)))))))))))))
-    (define (walk dir)
-      (face dir)
-      (move))
-    (define (look)
-      (apply field-ref (gpsLook)))
-    (define cell 19)
-    (define (gpsLook)
-      (if (= dir 0) (list (+ z -1) y      x)
-      (if (= dir 1) (list z        (++ y) (-- x))
-      (if (= dir 2) (list z        (++ y) x)
-      (if (= dir 3) (list z        (++ y) (++ x))
-      (if (= dir 4) (list z        y      (-- x))
-      (if (= dir 5) (list (+ z 1)  y      x)
-      (if (= dir 6) (list z        y      (++ x))
-      (if (= dir 7) (list z        (-- y) (-- x))
-      (if (= dir 8) (list z        (-- y) x)
-      (if (= dir 9) (list z        (-- y) (++ x)))))))))))))
-    (define ceiling 100)
-    (define (setCeiling z) (set! ceiling z))
-    self)))
-
-
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Window_functions_and_initialization
@@ -639,7 +570,6 @@
    (semaphore-up sig28Semaphore))))
 
 (signal-set 28 (lambda () (sigwinch) (unthread)))
-
 
 ; Welcome message marquee displayed when connecting.
 (define (welcome)
@@ -740,70 +670,85 @@
 
 
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; Incomming_IPC_messages
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Entites_and_avatar
+;; Simple objects more dynamic than just cells.
 ;;
-(define (who)
-  ((ipc 'qwrite)
-    `(entity ,DNA ,(avatar 'port) ,(avatar 'name) ,@((avatar 'gps)) ,(avatar 'glyph))))
 
-;; Entitity movement
-(define (move dna z y x)
- (or (= dna DNA) ; Skip if this is me since rendering is handled explicitly
-   (let ((entity (entitiesGet dna)))
-     (if (null? entity)
-       (begin
-         (entitiesSet dna 0 "??" z y x (glyphNew 1 9 #\? 1 9 #\?))
-         ((ipc 'qwrite) '(who)))
-       (begin
-         (moveCell dna (entity 'z) (entity 'y) (entity 'x) z y x #f)
-         ((entity 'setLoc) z y x))))))
+; Association list of entites to their DNA values.
+(define EntityDB ())
 
-(define (entity dna port name z y x glyph)
-  (entitiesSet dna port name z y x glyph)
-  (move dna z y x))
+; Create a default "nobody" entity.
+(define nobody (Entity 42 0 "nobody" 0 0 0 (glyphNew 0 7 #\n 0 7 #\o)))
 
-(define (die dna)
- (let ((entity (entitiesGet dna))
-       (thisIsMe (= dna DNA)))
-  (if (not (null? entity)) ; Ignore unknown entities
-    (begin
-      ; Remove from here
-      (field-delete! (entity 'z) (entity 'y) (entity 'x) dna)
-      (if (>= (entity 'z) (canvasHeight (entity 'y) (entity 'x))) (begin
-        (canvasRender 100 (entity 'y) (entity 'x))
-        (or thisIsMe (viewportRender (entity 'y) (entity 'x)))))))))
+(define (entityAdd entity)
+ (set! EntityDB (cons (cons (entity 'dna) entity) EntityDB)))
 
-(define (force z y x dir str)
- (if (and (= z (avatar 'z)) (= y (avatar 'y)) (= x (avatar 'x)))
-   (walk dir)))
+; Update or create and add a new entity to the entity database.
+(define (entitiesSet dna port name z y x glyph)
+ (let ((ent (assv dna EntityDB)))
+  (if (null? ent)
+      (entityAdd (Entity dna port name z y x glyph)) ; Clone the remote entity locally.
+      (((cdr ent) 'setAll) port name z y x glyph))))
 
-(define (voice dna level text)
- (if (= dna 0)
-  (begin ; Message from the system
-    (WinChatDisplay "\r\n")
-    (WinChatSetColor 0 9) (WinChatDisplay "W")
-    (WinChatSetColor 0 11) (WinChatDisplay "O")
-    (WinChatSetColor 0 10) (WinChatDisplay "R")
-    (WinChatSetColor 0 12) (WinChatDisplay "L")
-    (WinChatSetColor 0 13) (WinChatDisplay "D")
-    (WinChatSetColor 0 8) (WinChatDisplay VOICEDELIMETER)
-    (WinChatSetColor 0 7) (WinChatDisplay text))
-  (let ((entity (entitiesGet dna)))
-    (WinChatSetColor (glyph0bg (entity 'glyph)) (glyph0fg (entity 'glyph)))
-    (WinChatDisplay "\r\n" (if (null? entity) "???" (entity 'name)) VOICEDELIMETER)
-    (WinChatSetColor (glyph1bg (entity 'glyph)) (glyph0fg (entity 'glyph)))
-    (WinChatDisplay text)))
- (if (and (!= dna DNA) (eqv? text "unatco")) (say "no Savage")))
+; Lookup entity, or null, in database.
+(define (entitiesGet dna)
+ (let ((e (assv dna EntityDB)))
+   (if (null? e)
+       nobody
+       (cdr e))))
 
-; The list of columns will most likely come from a map agent
-; The map coordinate and block size passed
-(define (mapUpdateColumns y x blockSize lst)
-  ;(WinChatDisplay "\r\nBlock " (list (/ y 32) (/ x 32)))
-  (loop2 y (+ y blockSize) x (+ x blockSize) (lambda (y x)
-    (vector-vector-set! FIELD (modulo y FieldSize) (modulo x FieldSize) (car lst))
-    (canvasRender 100 y x)
-    (set! lst (cdr lst)))))
+; The user's avatar.  An extended entity object that includes positioning
+; and directional observation vectors.
+(define (Avatar port name) ; Inherits Entity
+ ((Entity (random) port name
+   2 108 86
+   (glyphNew 0 15 (string-ref name 0) 0 15 (string-ref name 1)))
+  `(let ()
+    (define (self msg) (eval msg))
+    (define cell 19) ; TODO generalize items
+    (define dir 0)
+    (define relZ 0)
+    (define relY 0)
+    (define relX 0)
+    (define (faceDir dirNew . relLoc)
+      (set! dir dirNew)
+      (if (pair? relLoc) (begin
+        (set! relZ (car relLoc))
+        (set! relY (cadr relLoc))
+        (set! relX (caddr relLoc)))))
+    (define (walk) ; Update avatar's position in the numeric keypad direction with the relative position offset
+      (if (= dir 0) (setLoc (+ z -1 relZ) (+ y    relY) (+ x    relX))
+      (if (= dir 1) (setLoc (+ z    relZ) (+ y  1 relY) (+ x -1 relX))
+      (if (= dir 2) (setLoc (+ z    relZ) (+ y  1 relY) (+ x    relX))
+      (if (= dir 3) (setLoc (+ z    relZ) (+ y  1 relY) (+ x  1 relX))
+      (if (= dir 4) (setLoc (+ z    relZ) (+ y    relY) (+ x -1 relX))
+      (if (= dir 5) (setLoc (+ z  1 relZ) (+ y    relY) (+ x    relX))
+      (if (= dir 6) (setLoc (+ z    relZ) (+ y    relY) (+ x  1 relX))
+      (if (= dir 7) (setLoc (+ z    relZ) (+ y -1 relY) (+ x -1 relX))
+      (if (= dir 8) (setLoc (+ z    relZ) (+ y -1 relY) (+ x    relX))
+      (if (= dir 9) (setLoc (+ z    relZ) (+ y -1 relY) (+ x  1 relX)))))))))))))
+    (define (walkDir dir)
+      (faceDir dir)
+      (walk))
+    (define (gpsLook . relLoc)
+      (if (pair? relLoc) (begin
+        (set! relZ (car relLoc))
+        (set! relY (cadr relLoc))
+        (set! relX (caddr relLoc))))
+      (if (= dir 0) (list (+ z -1 relZ) (+ y    relY) (+ x    relX))
+      (if (= dir 1) (list (+ z    relZ) (+ y  1 relY) (+ x -1 relX))
+      (if (= dir 2) (list (+ z    relZ) (+ y  1 relY) (+ x    relX))
+      (if (= dir 3) (list (+ z    relZ) (+ y  1 relY) (+ x  1 relX))
+      (if (= dir 4) (list (+ z    relZ) (+ y    relY) (+ x -1 relX))
+      (if (= dir 5) (list (+ z  1 relZ) (+ y    relY) (+ x    relX))
+      (if (= dir 6) (list (+ z    relZ) (+ y    relY) (+ x  1 relX))
+      (if (= dir 7) (list (+ z    relZ) (+ y -1 relY) (+ x -1 relX))
+      (if (= dir 8) (list (+ z    relZ) (+ y -1 relY) (+ x    relX))
+      (if (= dir 9) (list (+ z    relZ) (+ y -1 relY) (+ x  1 relX)))))))))))))
+    (define ceiling 100)
+    (define (setCeiling z) (set! ceiling z))
+    self)))
 
 
 
@@ -858,35 +803,55 @@
 (define (winMapLeft)    ((WinMap 'move) (WinMap 'Y0) (+ -1 (WinMap 'X0))))
 (define (winMapRight)  ((WinMap 'move) (WinMap 'Y0) (+  1 (WinMap 'X0))))
 
-; TODO Implement coor+dir use new dir to field-ref location and if > MAX_CELL ipc-write (force blah blah)
+(define (walkDetails)
+  ; If ceiling changes, repaint canvas using new ceiling height
+  (let ((oldCeiling (avatar 'ceiling)))
+    ((avatar 'setCeiling) (- (apply field-ceiling ((avatar 'gps))) 1))
+    (if (!= oldCeiling (avatar 'ceiling))
+      (canvasReset (avatar 'ceiling))))
+  ; Update avatar over IPC
+  ((ipc 'qwrite) (list 'move DNA (avatar 'z)(avatar 'y)(avatar 'x)))
+  ; Update avatar in map
+  (moveCell DNA
+            (avatar 'oz) (avatar 'oy) (avatar 'ox)
+            (avatar 'z)  (avatar 'y)  (avatar 'x)
+            (or SCROLLINGMAP (< 10
+                                (distance (list 0 (avatar 'y)           (avatar 'x))
+                                          (list 0 (+ PortY (/ PortH 2)) (+ PortX (/ PortW 2)))))))
+  ;(if (eq? 'help  (cellSymbol (field-ref (avatar 'z) (avatar 'y) (avatar 'x))))  (help))
+  ;(if (eq? 'snake (cellSymbol (field-ref (avatar 'z) (avatar 'y) (avatar 'x)))) (thread (snake-random)))
+  ;(if (eq? 'brit2 (cellSymbol (field-base-ref (avatar 'z) (avatar 'y) (avatar 'x)))) (thread (spawnKitty)))
+  (if (WinColumn 'ENABLED) (dumpColumnInfo (avatar 'y) (avatar 'x))))
+
+; Fall down one cell if a non-entity and non-solid cell below me
+(define (fall)
+ ((avatar 'faceDir) 0 0 0 0) ; Look down
+ (let ((nextCell (apply field-ref ((avatar 'gpsLook)))))
+   (if (= nextCell CellMax)
+     (begin
+       ((avatar 'walk))
+       (walkDetails)))))
 
 (define (walk dir)
- ((avatar 'face) dir) ; Turn avatar
- (let ((nextCell ((avatar 'look)))) ; Consider cell I'm walking into
+ ((avatar 'faceDir) dir 0 0 0) ; Turn avatar
+ (let ((nextCell (apply field-ref ((avatar 'gpsLook))))) ; Consider cell I'm walking into
    (if (< CellMax nextCell) ; Cell I'm walking into is probably an entity
-    ; Push the entity that's in my way
-    ((ipc 'qwrite) `(force ,@((avatar 'gpsLook)) ,dir 10))
-    ; Walk normally
-    (or (cellSolid (cellRef nextCell)) (begin
-      ((avatar 'move)) ; Update avatar's state
-      ; If ceiling changes, repaint canvas using new ceiling height
-      (let ((oldCeiling (avatar 'ceiling)))
-        ((avatar 'setCeiling) (- (apply field-ceiling ((avatar 'gps))) 1))
-        (if (!= oldCeiling (avatar 'ceiling))
-          (canvasReset (avatar 'ceiling))))
-      ; Update avatar over IPC
-      ((ipc 'qwrite) (list 'move DNA (avatar 'z)(avatar 'y)(avatar 'x)))
-      ; Update avatar in map
-      (moveCell DNA
-                (avatar 'oz) (avatar 'oy) (avatar 'ox)
-                (avatar 'z)  (avatar 'y)  (avatar 'x)
-                (or SCROLLINGMAP (< 10
-                                    (distance (list 0 (avatar 'y)           (avatar 'x))
-                                              (list 0 (+ PortY (/ PortH 2)) (+ PortX (/ PortW 2)))))))
-      ;(if (eq? 'help  (cellSymbol (field-ref (avatar 'z) (avatar 'y) (avatar 'x))))  (help))
-      ;(if (eq? 'snake (cellSymbol (field-ref (avatar 'z) (avatar 'y) (avatar 'x)))) (thread (snake-random)))
-      ;(if (eq? 'brit2 (cellSymbol (field-base-ref (avatar 'z) (avatar 'y) (avatar 'x)))) (thread (spawnKitty)))
-      (if (WinColumn 'ENABLED) (dumpColumnInfo (avatar 'y) (avatar 'x))))))))
+     ; Push the entity that's in my way
+     ((ipc 'qwrite) `(force ,@((avatar 'gpsLook)) ,dir 10))
+     ; Walk normally
+     (if (cellSolid (cellRef nextCell))
+       (begin
+         ; Try to step up
+         ((avatar 'faceDir) dir 1 0 0) ; Peek at the cell above the one in front of me
+         (set! nextCell (apply field-base-ref ((avatar 'gpsLook))))
+         (or (cellSolid (cellRef nextCell))
+           (begin
+             ((avatar 'walk)) ; Walk to the this new up location
+             (walkDetails))))
+       (begin
+         ((avatar 'walk)) ; Update avatar's state
+         (walkDetails)))))
+ (fall))
 
 ; Change avatar color.  Will just cycle through all 16 avatar colors.
 (define (avatarColor)
@@ -908,6 +873,25 @@
                 (if (< t 3600) (string (number->string (/ t 60)) "m")
                 (if (< t 86400)(string (number->string (/ t 3600)) "h")
                 (string (number->string (/ t 86400)) "d"))))))))))))
+
+(define (chooseCell)
+ (define WinCells ((Terminal 'WindowNew) 5 20 2 36 #x07))
+ (define (WinCellsDisplay . e) (for-each (lambda (x) (for-each (WinCells 'puts) (display->strings x))) e))
+ (define WinCellsSetColor  (WinCells 'set-color))
+ (define WinCellsPutc  (WinCells 'putc))
+ (sleep 1000)
+ (loop 100 (lambda (k)
+   ((WinCells 'home))
+   (loop 10 (lambda (i)
+     (let ((c (cellGlyph (cellRef (+ i k)))))
+       (WinCellsSetColor (glyph0bg c) (glyph0fg c)) (WinCellsPutc (glyph0ch c))
+       (WinCellsSetColor (glyph1bg c) (glyph1fg c)) (WinCellsPutc (glyph1ch c))
+       (WinCellsSetColor 0 15)                      (WinCellsPutc (if (= i 4) #\[ (if (= i 5) #\] #\ ))))))
+   (WinCellsSetColor 0 15)
+   (WinCellsDisplay "\r\n" (cellSymbol (cellRef k)))
+   (sleep 500)))
+ ((WinCells 'delete)))
+ ;((WinStatus 'toggle))
 
 
 
@@ -979,10 +963,12 @@
 (setButton CHAR-CTRL-L '(begin (viewportReset (avatar 'y) (avatar 'x)) ((WinChat 'repaint))))
 (setButton CHAR-CTRL-M '(begin ((WinStatus 'toggle)) ((WinColumn 'toggle))))
 (setButton CHAR-CTRL-Q '(set! state 'done))
-(setButton #\d '((ipc 'qwrite) `(dropCell ,(avatar 'y) ,(avatar 'x) (cellIndex 'campfire))))
+(setButton #\d '((ipc 'qwrite) `(setCell ,(avatar 'z) ,(avatar 'y) ,(avatar 'x) (avatar 'cell))))
+(setButton #\D '(chooseCell))
 (setButton #\g
-   '(let ((o (field-ref (avatar 'z) (avatar 'y) (avatar 'x))))
-     (field-delete!  (avatar 'z) (avatar 'y) (avatar 'x) o)
+   '(let ((o (apply field-base-ref ((avatar 'gps)))))
+     (WinChatDisplay "\r\nGrabbed " o)
+     ;(field-delete!  (avatar 'z) (avatar 'y) (avatar 'x) o)
      (avatar `(set! cell ,o))))
 (setButton #\? '(help))
 (setButton #\< '(winMapSmaller))
@@ -996,7 +982,74 @@
 ;(setButton #\1 '(thread (spawnKitty 1000)))
 ;(setButton #\1 '((WinChat 'resize) (WinChat 'Wheight) (WinChat 'Wwidth)))
 (setButton #\1 '((WinChat 'scrollUp)))
-;(setButton CHAR-CTRL-_ '(walk 4)) ; Sent by backspace?
+;(setButton CHAR-CTRL-_ '(walkDir 4)) ; Sent by backspace?
+
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Incomming_IPC_messages
+;;
+(define (who)
+  ((ipc 'qwrite)
+    `(entity ,DNA ,(avatar 'port) ,(avatar 'name) ,@((avatar 'gps)) ,(avatar 'glyph))))
+
+;; Entitity movement
+(define (move dna z y x)
+ (or (= dna DNA) ; Skip if this is me since rendering is handled explicitly
+   (let ((entity (entitiesGet dna)))
+     (if (null? entity)
+       (begin
+         (entitiesSet dna 0 "??" z y x (glyphNew 1 9 #\? 1 9 #\?))
+         ((ipc 'qwrite) '(who)))
+       (begin
+         (moveCell dna (entity 'z) (entity 'y) (entity 'x) z y x #f)
+         ((entity 'setLoc) z y x))))))
+
+(define (entity dna port name z y x glyph)
+  (entitiesSet dna port name z y x glyph)
+  (move dna z y x))
+
+(define (die dna)
+ (let ((entity (entitiesGet dna))
+       (thisIsMe (= dna DNA)))
+  (if (not (null? entity)) ; Ignore unknown entities
+    (begin
+      ; Remove from here
+      (field-delete! (entity 'z) (entity 'y) (entity 'x) dna)
+      (if (>= (entity 'z) (canvasHeight (entity 'y) (entity 'x))) (begin
+        (canvasRender 100 (entity 'y) (entity 'x))
+        (or thisIsMe (viewportRender (entity 'y) (entity 'x)))))))))
+
+(define (force z y x dir str)
+ (if (and (= z (avatar 'z)) (= y (avatar 'y)) (= x (avatar 'x)))
+   (walk dir)))
+
+(define (voice dna level text)
+ (if (= dna 0)
+  (begin ; Message from the system
+    (WinChatDisplay "\r\n")
+    (WinChatSetColor 0 9) (WinChatDisplay "W")
+    (WinChatSetColor 0 11) (WinChatDisplay "O")
+    (WinChatSetColor 0 10) (WinChatDisplay "R")
+    (WinChatSetColor 0 12) (WinChatDisplay "L")
+    (WinChatSetColor 0 13) (WinChatDisplay "D")
+    (WinChatSetColor 0 8) (WinChatDisplay VOICEDELIMETER)
+    (WinChatSetColor 0 7) (WinChatDisplay text))
+  (let ((entity (entitiesGet dna)))
+    (WinChatSetColor (glyph0bg (entity 'glyph)) (glyph0fg (entity 'glyph)))
+    (WinChatDisplay "\r\n" (if (null? entity) "???" (entity 'name)) VOICEDELIMETER)
+    (WinChatSetColor (glyph1bg (entity 'glyph)) (glyph0fg (entity 'glyph)))
+    (WinChatDisplay text)))
+ (if (and (!= dna DNA) (eqv? text "unatco")) (say "no Savage")))
+
+; The list of columns will most likely come from a map agent
+; The map coordinate and block size passed
+(define (mapUpdateColumns y x blockSize lst)
+  ;(WinChatDisplay "\r\nBlock " (list (/ y 32) (/ x 32)))
+  (loop2 y (+ y blockSize) x (+ x blockSize) (lambda (y x)
+    (vector-vector-set! FIELD (modulo y FieldSize) (modulo x FieldSize) (car lst))
+    (canvasRender 100 y x)
+    (set! lst (cdr lst)))))
 
 
 
@@ -1123,7 +1176,7 @@
    (if ShowButtons (WinChatDisplay "\r\n" c " " button))
    (if (pair? button) (eval button)
     (if (procedure? button) (button)
-     (WinChatDisplay "\r\nButton " c " undefined " button))))
+     (WinConsoleDisplay "\r\nButton " c " undefined " button))))
  state)
 
 (define wrepl
@@ -1158,7 +1211,7 @@
    ; Neuron depletion.
    (if (= 0 (modulo i 10)) (vector-map! (lambda (x) (/ x 2)) happyVector))
    ; Walk kitty quasi-randomly.
-   ((kitty 'walk)
+   ((kitty 'walkDir)
        (dir->card (letrec ((dir (card->dir (kitty 'dir)))
                            (dir1 (modulo (+ dir (random 3) -1) 8))
                            (dir2 (modulo (+ dir (random 3) -1) 8)))
@@ -1265,7 +1318,7 @@
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; Start_everything
+;; Genesis
 ;;
 
 ; Initial cell indices and glyphs
