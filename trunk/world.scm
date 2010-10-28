@@ -859,6 +859,8 @@
   ((avatar 'setGlyph) (glyphNew
     (glyph0bg glyph)  (modulo (+ (glyph0fg glyph) 1) 16)  (glyph0ch glyph)
     (glyph1bg glyph)  (modulo (+ (glyph1fg glyph) 1) 16)  (glyph1ch glyph))))
+  (canvasRender (avatar 'ceiling) (avatar 'y) (avatar 'x))
+  (viewportRender(avatar 'y)(avatar 'x))
   (who))
 
 (define (rollcall)
@@ -1289,16 +1291,17 @@
  (let ((strLen (string-length talkInput)))
   (if (and (> strLen 11)
            (string=? "my name is " (substring talkInput 0 11)))
-     (begin
-      ((avatar `setNameGlyph)
-         (substring talkInput 11 strLen)
-         (glyphNew (glyph0bg (avatar 'glyph))
-                   (glyph0fg (avatar 'glyph))
-                   (string-ref talkInput 11)
-                   (glyph1bg (avatar 'glyph))
-                   (glyph1fg (avatar 'glyph))
-                   (string-ref talkInput (if (> strLen 12) 12 11))))
-      (thread (begin (sleep 500) (who))))))) ; Wait before whoing so I say my new name using my old name
+     (thread
+       (sleep 700) ; Wait before whoing so I say my new name using my old name
+       ((avatar `setNameGlyph)
+          (substring talkInput 11 strLen)
+          (glyphNew (glyph0bg (avatar 'glyph))
+                    (glyph0fg (avatar 'glyph))
+                    (string-ref talkInput 11)
+                    (glyph1bg (avatar 'glyph))
+                    (glyph1fg (avatar 'glyph))
+                    (string-ref talkInput (if (> strLen 12) 12 11))))
+       (who)))))
  (if tankIsListening (begin
    (if (string=? "who" talkInput) ((ipc 'qwrite) '(say "I'm here!")))
    (if (string=? "load the jump program" talkInput) (tankTalk "I can't find the disk")
