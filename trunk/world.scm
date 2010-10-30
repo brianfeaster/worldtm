@@ -798,10 +798,10 @@
   (viewportReset (avatar 'y) (avatar 'x))
   (set! deltaMoveTime (+ 125 (utime))))))
 
-(define (winMapUp)  ((WinMap 'move)  (+ -1 (WinMap 'Y0)) (WinMap 'X0)))
-(define (winMapDown) ((WinMap 'move)  (+  1 (WinMap 'Y0)) (WinMap 'X0)))
-(define (winMapLeft)    ((WinMap 'move) (WinMap 'Y0) (+ -1 (WinMap 'X0))))
-(define (winMapRight)  ((WinMap 'move) (WinMap 'Y0) (+  1 (WinMap 'X0))))
+(define (winMapUp)   ((WinMap 'move) (+ -1 (WinMap 'Y0))      (WinMap 'X0)))
+(define (winMapDown) ((WinMap 'move) (+  1 (WinMap 'Y0))      (WinMap 'X0)))
+(define (winMapLeft) ((WinMap 'move)       (WinMap 'Y0) (+ -1 (WinMap 'X0))))
+(define (winMapRight)((WinMap 'move)       (WinMap 'Y0) (+  1 (WinMap 'X0))))
 
 (define (walkDetails)
   ; If ceiling changes, repaint canvas using new ceiling height
@@ -810,12 +810,12 @@
     (if (!= oldCeiling (avatar 'ceiling))
       (canvasReset (avatar 'ceiling))))
   ; Update avatar over IPC
-  ((ipc 'qwrite) (list 'move DNA (avatar 'z)(avatar 'y)(avatar 'x)))
+  ((ipc 'qwrite) (list 'move DNA (avatar 'z) (avatar 'y) (avatar 'x)))
   ; Update avatar in map
   (moveCell DNA
             (avatar 'oz) (avatar 'oy) (avatar 'ox)
             (avatar 'z)  (avatar 'y)  (avatar 'x)
-            (or SCROLLINGMAP (< 10
+            (or SCROLLINGMAP (< (- (/ (WinMap 'Wheight) 2) 2)
                                 (distance (list 0 (avatar 'y)           (avatar 'x))
                                           (list 0 (+ PortY (/ PortH 2)) (+ PortX (/ PortW 2)))))))
   ;(if (eq? 'help  (cellSymbol (field-ref (avatar 'z) (avatar 'y) (avatar 'x))))  (help))
@@ -991,7 +991,8 @@
 (setButton #eof '(set! state 'done))
 (setButton CHAR-CTRL-C '((WinConsole 'toggle)))
 ;(setButton CHAR-CTRL-K '((ipc 'qwrite) `(set! FIELD ,FIELD))) ; Send my plane out to IPC.
-(setButton #\1 '(thread (spawnKitty 1000)))
+;(setButton #\1 '(thread (spawnKitty 1000)))
+(setButton #\1 '(thread (pacman)))
 ;(setButton #\1 '((WinChat 'resize) (WinChat 'Wheight) (WinChat 'Wwidth)))
 ;(setButton #\1 '((WinChat 'scrollUp)))
 ;(setButton CHAR-CTRL-_ '(walkDir 4)) ; Sent by backspace?
@@ -1320,7 +1321,6 @@
    (if (string=? "load the jump program" talkInput) (tankTalk "I can't find the disk")
    (if (string=? "march" talkInput) (thread (march)))))))
 
-
 ; Display the same string repeatedly with colors of increasing inensity.
 (define (fancyDisplay c s)
  (for-each
@@ -1330,6 +1330,43 @@
         (sleep 1))
    (list 8 4 12 6 7 14 15 14 7 6 12 4 8 c))
  "")
+
+; Pacman
+
+; Filter out solid directions from of list
+(define (pacmanFilterSolid l)
+ (if (null? l) ()
+ (if (begin
+       ((avatar 'faceDir) (car l))
+       (cellSolid (cellRef (apply field-base-ref ((avatar 'gpsLook))))))
+   (pacmanFilterSolid (cdr l))
+   (cons (car l) (pacmanFilterSolid (cdr l))))))
+
+(define (pacmanAnother i)
+ (list->vector
+  (pacmanFilterSolid
+   (if (= i 2) '(2 4 6)
+   (if (= i 4) '(2 4 8)
+   (if (= i 6) '(2 6 8)
+   (if (= i 8) '(4 6 8))))))))
+
+(define (pacmanReverse d)
+  (if (= d 2) 8 (if (= d 4) 6 (if (= d 6) 4 (if (= d 8) 2)))))
+
+(define pacman (let ((dir 8) (enabled #f)) (lambda ()
+  (set! enabled (not enabled)) ; Call again to disable
+  (let ~ ()
+    (set! dir ; Pick a new direction after every movement
+      (let ((v (pacmanAnother dir)))
+        (if (eq? #() v)
+          (pacmanReverse dir) ; all new dirs solid so backup
+          (vector-random v)))); choose random new dir
+    ((avatar 'faceDir) dir)
+    ((avatar 'walk))
+    (walkDetails)
+    (sleep 100)
+    (if enabled (~))))))
+
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -1377,7 +1414,8 @@
 (entityAdd avatar)
 
 ; Move avatar to entrance of Lord British's castle
-((avatar 'setLoc) 2 (+ (* 108 MapBlockSize) 3)  (+ (* 86 MapBlockSize) (/ MapBlockSize 2) -1))
+;((avatar 'setLoc) 2 (+ (* 108 MapBlockSize) 3)  (+ (* 86 MapBlockSize) (/ MapBlockSize 2) -1))
+((avatar 'setLoc) 0 3452 2748)
 
 ; Display some initial information
 (or QUIETLOGIN (begin
