@@ -10,7 +10,7 @@
 (define (Ipc DisplayFunction . portNum)
  (define Debug (and DisplayFunction)) ; Can pass in #f to disable any debug messages
  (define (Display . l) (and Debug (for-each DisplayFunction l)))
- (define HubPort (if (null? portNum) 7155 (car portNum)))
+ (define HubPort (if (null? portNum) 8155 (car portNum)))
  (define HubSocket #eof) ; If not eof then this IPC instance is the hub socket.
  (define PrivatePort (+ 1 HubPort))
  (define PrivateSocket
@@ -135,7 +135,9 @@
    (letrec ((p (open-socket "localhost" port))
             (s (open-stream p)))
      (if (eof-object? s)
-       (displayl "\r\nCan't send private message to " port ".  stream=" s)
+       (begin
+         (displayl "\r\nCan't send private message to " port ".  stream=" s)
+         #f)
        (begin
          (write msg s)
          (display " " s)

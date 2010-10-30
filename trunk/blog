@@ -2356,3 +2356,21 @@ cell.  This should be a good initial method of revealing the inside of rooms or
 dungeon innards.  The dungeon that someone designed many years ago in an early
 version of World will finally render correctly.
 
+
+Thu Oct 28 02:32:14 EDT 2010
+
+Implementing pacman.  The map agent needs to save mutated map cells now.  Tank
+will put your avatar into pacman mode, like march mode, which will randomly
+walk a maze.  From there dots will be implemented as well as the ability to
+replenish the dots once they've all be consumed.  A pacman agent might be in
+order.
+
+
+Thu Oct 28 20:09:36 EDT 2010
+
+I was worried about race conditions when sending map changes while someone
+edits or moves cells around.  What I do is send to everyone, if no map agent
+exists, the cell mutation expression.  Otherwise I send the message privately
+to the map agent's listener port (finally coming in handy again).  It will
+process the change then propagate the change to everyone else.  This creates
+a write barrier between peers.

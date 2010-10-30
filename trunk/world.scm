@@ -29,7 +29,7 @@
 (define DNA 0)
 (define ActivityTime (time))
 (define MapBlockSize 32) ; Size of each map file cell in the World map.
-
+(define PortMapAgent #f)
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -895,6 +895,17 @@
  ((WinCells 'delete)))
  ;((WinStatus 'toggle))
 
+(define (buttonSetCell)
+ (if PortMapAgent
+   ; Send to map agent. If map agent doesn't respond
+   ; then ignore it just send to everyone.
+   (or ((ipc 'private) PortMapAgent `(setCellAgent ,(avatar 'z) ,(avatar 'y) ,(avatar 'x) ,(avatar 'cell)))
+     (begin 
+       (set! PortMapAgent #f)
+       (buttonSetCell)))
+   ; Send to everyone
+   ((ipc 'qwrite) `(setCell ,(avatar 'z) ,(avatar 'y) ,(avatar 'x) ,(avatar 'cell)))))
+
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -961,11 +972,10 @@
   (WinInputPuts (string ">" (replTalk 'getBuffer)))
   (set! state 'talk)))
 (setButton CHAR-CTRL-D '(ipc '(set! Debug (not Debug))))
-(setButton CHAR-CTRL-F '(walkForever))
 (setButton CHAR-CTRL-L '(begin (viewportReset (avatar 'y) (avatar 'x)) ((WinChat 'repaint))))
 (setButton CHAR-CTRL-M '(begin ((WinStatus 'toggle)) ((WinColumn 'toggle))))
 (setButton CHAR-CTRL-Q '(set! state 'done))
-(setButton #\d '((ipc 'qwrite) `(setCell ,(avatar 'z) ,(avatar 'y) ,(avatar 'x) (avatar 'cell))))
+(setButton #\d '(buttonSetCell))
 (setButton #\D '(chooseCell))
 (setButton #\g
    '(let ((o (apply field-base-ref ((avatar 'gps)))))
@@ -981,9 +991,9 @@
 (setButton #eof '(set! state 'done))
 (setButton CHAR-CTRL-C '((WinConsole 'toggle)))
 ;(setButton CHAR-CTRL-K '((ipc 'qwrite) `(set! FIELD ,FIELD))) ; Send my plane out to IPC.
-;(setButton #\1 '(thread (spawnKitty 1000)))
+(setButton #\1 '(thread (spawnKitty 1000)))
 ;(setButton #\1 '((WinChat 'resize) (WinChat 'Wheight) (WinChat 'Wwidth)))
-(setButton #\1 '((WinChat 'scrollUp)))
+;(setButton #\1 '((WinChat 'scrollUp)))
 ;(setButton CHAR-CTRL-_ '(walkDir 4)) ; Sent by backspace?
 
 
@@ -1009,7 +1019,9 @@
 
 (define (entity dna port name z y x glyph)
   (entitiesSet dna port name z y x glyph)
-  (move dna z y x))
+  (move dna z y x)
+  (if (= dna 17749) ; The map agent's DNA number
+    (set! PortMapAgent port)))
 
 (define (die dna)
  (let ((entity (entitiesGet dna))
@@ -1046,12 +1058,13 @@
 
 ; The list of columns will most likely come from a map agent
 ; The map coordinate and block size passed
-(define (mapUpdateColumns y x blockSize lst)
+(define (mapUpdateColumns y x blockSize v)
   ;(WinChatDisplay "\r\nBlock " (list (/ y 32) (/ x 32)))
-  (loop2 y (+ y blockSize) x (+ x blockSize) (lambda (y x)
-    (vector-vector-set! FIELD (modulo y FieldSize) (modulo x FieldSize) (car lst))
-    (canvasRender 100 y x)
-    (set! lst (cdr lst)))))
+  (loop2 y (+ y blockSize) x (+ x blockSize)
+    (lambda (y x)
+      (vector-vector-set! FIELD (modulo y FieldSize) (modulo x FieldSize)
+         (vector-vector-ref v (modulo y MapBlockSize) (modulo x MapBlockSize)))
+      (canvasRender 100 y x))))
 
 
 
@@ -1199,14 +1212,14 @@
 ;; Walking kitty soldier
 (define (spawnKitty . cycles)
  (set! cycles (if (null? cycles) 128 (car cycles))) ; Set max cycles
- (letrec ((kitty (Avatar "Kat"))
+ (letrec ((kitty (Avatar 0 "Kat"))
           (dir->card (lambda (d) (vector-ref #(6 9 8 7 4 1 2 3) d)))
           (card->dir (lambda (c) (vector-ref #(0 5 6 7 4 0 0 3 2 1) c)))
           (happyVector (vector 0 0 0 0 0 0 0 0))
           (dist 0))
  ((kitty 'setLoc) (avatar 'z) (avatar 'y) (avatar 'x))
  ; Tell everyone who this kitteh is.
- ((ipc 'qwrite) `(entity ,(kitty 'dna) "kitty" ,@((kitty 'gps)) ,(glyphNew 0 7 #\K 0 15 #\a)))
+ ((ipc 'qwrite) `(entity 0 ,(kitty 'dna) "kitty" ,@((kitty 'gps)) ,(glyphNew 0 7 #\K 0 15 #\a)))
  (let ~ ((i 0)) ; Main loop
    ; Distance from parent avatar
    (set! dist (distance ((kitty 'gps)) ((avatar 'gps))))
@@ -1245,7 +1258,7 @@
        (~ (+ i 1))))))
 
 
-(define walkForever (let ((walkForeverFlag #f)) (lambda ()
+(define march (let ((walkForeverFlag #f)) (lambda ()
  (if walkForeverFlag
   (begin
    (set! walkForeverFlag #f)
@@ -1305,8 +1318,7 @@
  (if tankIsListening (begin
    (if (string=? "who" talkInput) ((ipc 'qwrite) '(say "I'm here!")))
    (if (string=? "load the jump program" talkInput) (tankTalk "I can't find the disk")
-   (if (string=? "load underworld" talkInput) (thread (load-ultima-underworld))
-   (if (string=? "load ultima5" talkInput) (thread (load-ultima-world5))))))))
+   (if (string=? "march" talkInput) (thread (march)))))))
 
 
 ; Display the same string repeatedly with colors of increasing inensity.
