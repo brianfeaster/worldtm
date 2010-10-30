@@ -100,7 +100,7 @@
 (define MapBlockSize  32) ; Each field block is a 32x32 array of columns
 (define MapBlockCount 4)       ; A field is made up of 2x2 field blocks
 (define MapRangeSize (* MapBlockCount MapBlockSize)) ; For now resulting blocok range size is 96x96
-(define MapBoundsSize (/ MapBlockSize 1)) ; Distance from the edge the valid range is
+(define MapBoundsSize MapBlockSize) ; Distance from the edge the valid range is
 
 ; The Ultima4 map file is 8x8 blocks of 32x32 cells
 ; so create a simpler 256x256 array of cell numbers.
@@ -170,25 +170,42 @@
       (sleep 10)
       (tryToOpenFile fileName)))))
 
-(define (generateBlockColumns by bx)
- (letrec ((fn (string "mapU4-" (number->string by 16) "-" (number->string bx 16)))
-          (fp (open-file fn)))
-  (if fp
+(define (saveMapBlock by bx block)
+ (letrec ((fn (string "mapU4-" (number->string by 16) "-" (number->string bx 16))))
+    (displayl "\r\nSaving map block " (list by bx) fn)
+   (let ((fp (tryToOpenFile fn)))
+     (write block fp)
+     (close fp))))
+
+(define CurrentMapBlockName "")
+(define CurrentMapBlock #())
+
+(define (getMapBlock by bx shouldSave)
+ (let ((fn (string "mapU4-" (number->string by 16) "-" (number->string bx 16))))
+  (if (string=? fn CurrentMapBlockName)
     (begin
-      (displayl "\r\nReading and sending existing cached map " fn)
-      (let ((l (cons 'list (read fp))))
-        (close fp)
-        l))
-    (let ~ ((l ()) ; Create the list of columns (in reverse)
-            (ultVec (getUltima4ULT by bx)))
-     (loop2 0 MapBlockSize 0 MapBlockSize
-      (if ultVec
-        (lambda (y x) (set! l (cons (ultMapColumn (U4MapCell by bx) ultVec (- MapBlockSize y 1) (- MapBlockSize x 1)) l)))
-        (lambda (y x) (set! l (cons (U4MapColumn by bx) l)))))
-     (let ((fp (tryToOpenFile fn)))
-       (write l fp)
-       (close fp))
-     (cons 'list l))))) ; return it as an expression (list columns ...)
+      (displayl "\r\nUsing cached map block " fn)
+      CurrentMapBlock) ; Return currently cached map block
+    (let ((fp (open-file fn)))
+      (if fp
+        (begin
+          (displayl "\r\nReading existing map block " fn)
+          (let ((v (read fp)))
+            (close fp)
+            (set! CurrentMapBlockName fn)
+            (set! CurrentMapBlock v)
+            v))
+        (let ((v (make-vector-vector MapBlockSize MapBlockSize #f))
+              (ultVec (getUltima4ULT by bx)))
+          (displayl "\r\nGenerating map block " fn)
+          (loop2 0 MapBlockSize 0 MapBlockSize
+            (if ultVec
+              (lambda (y x) (vector-vector-set! v y x (ultMapColumn (U4MapCell by bx) ultVec y x)))
+              (lambda (y x) (vector-vector-set! v y x (U4MapColumn by bx)))))
+          (if shouldSave (saveMapBlock by bx v))
+          (set! CurrentMapBlockName fn)
+          (set! CurrentMapBlock v)
+          v))))))
 
 (define (sendInitialBlocks e)
   (letrec ((ey (e 'y)) ; Entity's position
@@ -201,7 +218,7 @@
     ;(displayl " (" y " " x ")") ; DEBUG
     (displayl "\r\nSending block " (list y x) " to " (e 'name) ":" (e 'port) ":" ((e 'counter))) ; DEBUG
     ((ipc 'private) (e 'port) ; Send the block to the peer
-       `(mapUpdateColumns ,(* y MapBlockSize) ,(* x MapBlockSize) ,MapBlockSize ,(generateBlockColumns y x)))))
+       `(mapUpdateColumns ,(* y MapBlockSize) ,(* x MapBlockSize) ,MapBlockSize ,(getMapBlock y x #t)))))
   ((ipc 'private) (e 'port)
     '((ipc 'qwrite) '(who))))) ; Force the peer to request roll call from everyone
 
@@ -253,7 +270,7 @@
      (if (notInRange by bx (e 'mapBlockY) (e 'mapBlockX)) (begin
        (displayl "\r\nSending block " (list by bx) " to " (e 'name) ":" (e 'port) ":" ((e 'counter))) ; DEBUG
        ((ipc 'private) (e 'port) ; Send updated block to peer
-         `(mapUpdateColumns ,(* by MapBlockSize) ,(* bx MapBlockSize) ,MapBlockSize ,(generateBlockColumns by bx)))
+         `(mapUpdateColumns ,(* by MapBlockSize) ,(* bx MapBlockSize) ,MapBlockSize ,(getMapBlock by bx #t)))
        (displayl "\r\nDone sending block " (list by bx) " to " (e 'name) ":" (e 'port) ":" ((e 'counter))))))) ; DEBUG
 
    ((e 'setMapBlockLoc) ry rx)))
@@ -291,6 +308,66 @@
 
 (define (die . x) ())
 
+;-----------------------------------------------------------
+
+; Height of first default implicit bottom object
+(define (columnHeightBottom c)
+  (vector-ref c 0))
+
+; Height of first default implicit top object
+(define (columnHeightTop c)
+  (+ (vector-ref c 0)
+     (vector-length c)))
+
+(define (columnRef column z)
+ (vector-ref column (let ((i (- z (columnHeightBottom column)))) ; normalize z coordinate
+                      (if (<= i 1) 1 ; default bottom cell
+                      (if (<= (vector-length column) i) (- (vector-length column) 1) ; default top cell
+                      i)))))
+
+; Extend column below based on existing column. #(3  4 5 6) -> #(1  4 4 4 5 6)
+(define (columnExtendBelow c bot)
+ (let ((k (make-vector (- (columnHeightTop c) bot)             ; vector size
+                       (columnRef c (columnHeightBottom c))))) ; default object
+   ; Set bottom height
+   (vector-set! k 0 bot)
+   ; Copy old column here.
+   (vector-set-vector! k (- (columnHeightBottom c) bot -1) c 1)
+   k))
+
+; Extend column above based on existing column. #(3  4 5 6) -> #(3  4 5 6 6 6)
+(define (columnExtendAbove c top)
+ (let ((k (make-vector (- top (columnHeightBottom c))       ; vector size
+                       (columnRef c (columnHeightTop c))))) ; default object
+   ; Copy old column here including bottom height
+   (vector-set-vector! k 0 c 0)
+   k))
+
+; Returns column (or new column) with object set at specified height.
+(define (columnSet c h o)
+  (let ((i (- h (columnHeightBottom c)))) ; Column height -> vector index
+    (if (<= i 1)
+      (begin
+        (set! c (columnExtendBelow c (- h 2)))
+        (vector-set! c 2 o))
+    (if (>= i (- (vector-length c) 1))
+      (begin
+        (set! c (columnExtendAbove c (+ h 2)))
+        (vector-set! c i o))
+    (vector-set! c i o)))
+    c))
+
+(define (setCell . x) ())
+
+(define (setCellAgent z y x cell)
+  (displayl "\n\e[1;31mSet cell " cell " at " (list z y x)) ; DEBUG
+  (letrec ((block (getMapBlock (/ y MapBlockSize) (/ x MapBlockSize) #f))
+           (by (modulo y MapBlockSize))
+           (bx (modulo x MapBlockSize))
+           (column (vector-vector-ref block by bx)))
+    (vector-vector-set! block by bx (columnSet column z cell))
+    (saveMapBlock (/ y MapBlockSize) (/ x MapBlockSize) block)
+    ((ipc 'qwrite) `(setCell ,z ,y ,x ,cell))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
