@@ -384,6 +384,11 @@
  
 
 
+(define (writel . l)
+ (let ~ ((l l))
+ (if (not (null? l))
+     (begin (write (car l))
+            (~ (cdr l))))))
 (define (displayl . l)
  (let ~ ((l l))
  (if (not (null? l))

@@ -1595,6 +1595,7 @@ ret:
    a combination expression. */
 void compApply (Num flags) {
  Int opcodeStart;
+ Int operandCount=0;
 	DB("-->%s", __func__);
 
 	expr = cdr(expr); /* Skip over 'apply symbol */
@@ -1611,23 +1612,31 @@ void compApply (Num flags) {
 
 	push(car(expr)); /* Save operator parameter. */
 
-	/* Compile operand expression which hopefully evaluates to a list of args. */
-	expr = cadr(expr);
-	compExpression(flags & ~TAILCALL);
-	asm(PUSH0);
+	/* Compile operand expressions the last of which hopefully evaluates to a list of args.
+	   The resulting arguments will be pushed onto the stack and passed to the function.  */
+	expr = cdr(expr);
+	while (memObjectType(expr) == TPAIR) {
+		push (cdr(expr)); /* Push rest */
+		expr = car(expr); /* Consider expression  */
+		compExpression(flags & ~TAILCALL);
+		asm(PUSH0);
+		operandCount++;
+		expr = pop();
+	}
 
 	/* Restore and compile operator expression. */
 	expr=pop();
 	compExpression(flags & ~TAILCALL);
 	asm(MV30); /* Save operator in r3 */
 
-	/* At this point stack has argument-list and r3 has function.  Want
-	   to transfers arguments from list to the stack with r1 ending up
-	   with the argument count.
+	/* At this point stack has the arguments, the argument-list and r3 has function.
+	   Want to transfers the argument-list items from list to the stack with r1 ending up
+	   with the argument count.  Initially the argument count is the number of initial
+	   non-list arguments to apply.
 	*/
 	opcodeStart = memStackLength(asmstack);
 	asmAsm (
-		MVI1, 0l, /* Initialize operand count in r1 to 0. */
+		MVI1, operandCount-1, /* Initialize operand count in r1 to number of initial arguments to apply. */
 		POP0,    /* Pop argument-list. */
 		LABEL, "argcount",
 		BRTI0, TNULL, ADDR, "argcountdone",
