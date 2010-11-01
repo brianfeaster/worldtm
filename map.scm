@@ -53,32 +53,36 @@
      (set! mapBlockX mx))
    self)))
 
+; Association list of entites to their DNA values.
 (define EntityDB ())
 
-(define (entityCreate dna port name z y x glyph)
-  (Avatar dna port name z y x glyph))
+(define (entitiesAdd entity)
+ (set! EntityDB (cons (cons (entity 'dna) entity) EntityDB)))
 
-(define (entityDBAdd e)
-  (set! EntityDB (cons (cons (e 'dna) e) EntityDB)))
-
-(define (entityDBUpdate dna port name z y x glyph)
+; Lookup entity in database.  Create and insert a new generic entity if missing
+(define (entitiesGet dna)
   (let ((e (assv dna EntityDB)))
-    (or (null? e)
-      (((cdr e) 'setAll) port name z y x glyph))))
-
-(define (entityLookup dna)
-  (let ((e (assv dna EntityDB)))
-    (if (null? e) UnknownEntity (cdr e))))
+    (if (null? e) #f (cdr e))))
+       
+; Update, and create if required, an entity in the entity database.
+; Args are:  integer:port  string:name  list:(z y x)  vector:glyph
+(define (entitiesSet dna . args)
+ (let ((e (entitiesGet dna)))
+   (or e (begin ; Create a new local entity
+     (set! e (Avatar dna 0 "nobody" 0 0 0 #(0 7 #\n 0 7 #\o)))
+     (entitiesAdd e)))
+   (for-each
+     (lambda (a)
+       (if (integer? a) ((e 'setPort) a)
+       (if (string? a)  ((e 'setName) a)
+       (if (pair? a)    (apply (e 'setLoc) a)
+       (if (vector? a)  ((e 'setGlyph) a))))))
+     args)
+   e))
 
 ; Create the map agent
 (define avatar (Avatar DNA (ipc 'PrivatePort) MYNAME 0 0 0 #(1 11 #\M 2 4 #\A)))
-(entityDBAdd avatar)
-
-; Create and add some default entities
-; Arguments: dna port name z y x glyph
-(define SystemEntity (entityCreate 0 0 "SYSTEM" 0 0 0 'NOGLYPH))
-(entityDBAdd SystemEntity)
-(define UnknownEntity (entityCreate 1 0 "UNKNOWN" 0 0 0 'NOGLYPH)) ; Not added to DB otherwise contradiction
+(entitiesAdd avatar)
 
 
 
@@ -282,26 +286,28 @@
 ;;
 (define (who)
  ((ipc 'qwrite)
- `(entity ,DNA ,(avatar 'port) ,(avatar 'name) ,@((avatar 'gps)) ,(avatar 'glyph))))
+ `(entity ,DNA ,(avatar 'port) ,(avatar 'name) ',((avatar 'gps)) ,(avatar 'glyph))))
 
-(define (entity dna port name z y x glyph) 
- (let ((e (entityLookup dna)))
-  (if (eq? e UnknownEntity)
+(define (entity dna . args)
+ (let ((e (entitiesGet dna)))
+  (if e
     (begin
-      (entityDBAdd (entityCreate dna port name z y x glyph))
-      (displayl "\n\e[31m" name " registerd\e[0m")
-      (sendInitialBlocks (entityLookup dna)))
+      (apply entitiesSet (cons dna args))
+      (displayl "\n\e[31m" (e 'name) " updated\e[0m"))
     (begin
-      (entityDBUpdate dna port name z y x glyph)
-      (displayl "\n\e[31m" name " updated\e[0m")))))
+      (apply entitiesSet (cons dna args))
+      (set! e (entitiesGet dna))
+      (displayl "\n\e[31m" (e 'name) " registerd\e[0m")
+      ;(sendInitialBlocks (entitiesGet dna))
+))))
 
 (define (voice dna level text)
- (let ((e (entityLookup dna)))
-  (displayl "\n\e[1;34m" (e 'name) " says:"text "\e[0m")
-  (display (string (e 'name) "\t" text "\n") log)))
+ (let ((e (entitiesGet dna)))
+   (displayl "\n\e[1;34m" (e 'name) " says:"text "\e[0m")
+   (display (string (e 'name) "\t" text "\n") log)))
 
 (define (move dna . loc)
- (letrec ((e (entityLookup dna)))
+ (letrec ((e (entitiesGet dna)))
    (apply (e 'setLoc) loc) ; Update entity's location
    (displayl "\n\e[32m" (e 'name) " moves to " ((e 'gps))) ; DEBUG
    (or (entityWithinBounds e) (sendNewBlocks e))))
@@ -383,7 +389,9 @@
     (or (eq? s '*) (displayl "\nIPC-REPL-ERROR::" s)))
  (let ~ () 
   (let ((e ((ipc 'qread))))
-     (displayl "\n\e[1;30mIPC::" e "\e[0m")
+     (display "\n\e[1;30mIPC::")
+     (write e)
+     (display "\e[0m")
      (eval e)
      (~))))
 

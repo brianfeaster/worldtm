@@ -30,6 +30,7 @@
 (define ActivityTime (time))
 (define MapBlockSize 32) ; Size of each map file cell in the World map.
 (define PortMapAgent #f)
+(define EDIT #f)
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -99,7 +100,7 @@
   (for-each (lambda (x) (for-each (WinStatus 'puts) (display->strings x))) e))
 
 ;; Map column debug window
-(define WinColumn ((Terminal 'WindowNew) 3 (- (Terminal 'Twidth) 4) 18 4 #x5b))
+(define WinColumn ((Terminal 'WindowNew) 3 (- (Terminal 'Twidth) 5) 18 5 #x5b))
 ((WinColumn 'toggle))
 (define WinColumnPutc (WinColumn 'putc))
 (define (WinColumnPuts . l) (for-each (WinColumn 'puts) l))
@@ -473,7 +474,8 @@
   (if (>= z (canvasHeight y x)) (begin
     (canvasRender (avatar 'ceiling) y x)
     (or centerMap (viewportRender y x)))) ; Don't render cell if vewport to be reset
-  (if centerMap (viewportReset (avatar 'y) (avatar 'x))))
+  (if centerMap (viewportReset (avatar 'y) (avatar 'x)))
+  (if (WinColumn 'ENABLED) (dumpColumnInfo (avatar 'y) (avatar 'x))))
 
 
 
@@ -534,7 +536,7 @@
   (let ((c (field-ref z y x)))
    (if (eqv? cellAIR c)
     (begin (WinColumnSetColor 0 8)
-           (WinColumnPuts "()  "))
+           (WinColumnPuts "()   "))
     (begin (set! c (if (< CellMax c) ((entitiesGet c) 'glyph)
                                      (cellGlyph (cellRef c)))) ; Dump the glyph
            (WinColumnSetColor (glyph0bg c) (glyph0fg c))
@@ -543,11 +545,12 @@
            (WinColumnPutc (glyph1ch c))
            (WinColumnSetColor 0 7)
            (set! c (field-base-ref z y x)) ; Display base cell's hex value.
-           (if (and (<= 0 c) (< c 256))
+           (if (and (<= 0 c) (< c CellMax))
              (begin
+               (if (< c 256) (WinColumnPuts "0"))
                (if (< c 16) (WinColumnPuts "0"))
                (WinColumnPuts (number->string c 16)))
-             (WinColumnPuts "  ") ))))
+             (WinColumnPuts "   ") ))))
   (if (> z -6) (~ (- z 1)))))
 
 
@@ -678,25 +681,29 @@
 ; Association list of entites to their DNA values.
 (define EntityDB ())
 
-; Create a default "nobody" entity.
-(define nobody (Entity 42 0 "nobody" 0 0 0 (glyphNew 0 7 #\n 0 7 #\o)))
-
-(define (entityAdd entity)
+(define (entitiesAdd entity)
  (set! EntityDB (cons (cons (entity 'dna) entity) EntityDB)))
 
-; Update or create and add a new entity to the entity database.
-(define (entitiesSet dna port name z y x glyph)
- (let ((ent (assv dna EntityDB)))
-  (if (null? ent)
-      (entityAdd (Entity dna port name z y x glyph)) ; Clone the remote entity locally.
-      (((cdr ent) 'setAll) port name z y x glyph))))
-
-; Lookup entity, or null, in database.
+; Lookup entity in database.  Create and insert a new generic entity if missing
 (define (entitiesGet dna)
- (let ((e (assv dna EntityDB)))
-   (if (null? e)
-       nobody
-       (cdr e))))
+  (let ((e (assv dna EntityDB)))
+    (if (null? e) #f (cdr e))))
+       
+; Update, and create if required, an entity in the entity database and return it
+; Args are:  integer:port  string:name  list:(z y x)  vector:glyph
+(define (entitiesSet dna . args)
+ (let ((e (entitiesGet dna)))
+   (or e (begin ; Create a new local entity
+     (set! e (Entity dna 0 "nobody" 0 0 0 (glyphNew 0 7 #\n 0 7 #\o)))
+     (entitiesAdd e)))
+   (for-each
+     (lambda (a)
+       (if (integer? a) ((e 'setPort) a)
+       (if (string? a)  ((e 'setName) a)
+       (if (pair? a)    (apply (e 'setLoc) a)
+       (if (vector? a)  ((e 'setGlyph) a))))))
+     args)
+   e))
 
 ; The user's avatar.  An extended entity object that includes positioning
 ; and directional observation vectors.
@@ -804,24 +811,21 @@
 (define (winMapRight)((WinMap 'move)       (WinMap 'Y0) (+  1 (WinMap 'X0))))
 
 (define (walkDetails)
+  ; Update avatar locally and via IPC
+  ((avatar 'walk))
+  ((ipc 'qwrite) (list 'move DNA (avatar 'z) (avatar 'y) (avatar 'x)))
   ; If ceiling changes, repaint canvas using new ceiling height
   (let ((oldCeiling (avatar 'ceiling)))
     ((avatar 'setCeiling) (- (apply field-ceiling ((avatar 'gps))) 1))
     (if (!= oldCeiling (avatar 'ceiling))
       (canvasReset (avatar 'ceiling))))
-  ; Update avatar over IPC
-  ((ipc 'qwrite) (list 'move DNA (avatar 'z) (avatar 'y) (avatar 'x)))
-  ; Update avatar in map
+  ; Update avatar in field canvas and viewport.
   (moveCell DNA
             (avatar 'oz) (avatar 'oy) (avatar 'ox)
             (avatar 'z)  (avatar 'y)  (avatar 'x)
             (or SCROLLINGMAP (< (- (/ (WinMap 'Wheight) 2) 2)
                                 (distance (list 0 (avatar 'y)           (avatar 'x))
-                                          (list 0 (+ PortY (/ PortH 2)) (+ PortX (/ PortW 2)))))))
-  ;(if (eq? 'help  (cellSymbol (field-ref (avatar 'z) (avatar 'y) (avatar 'x))))  (help))
-  ;(if (eq? 'snake (cellSymbol (field-ref (avatar 'z) (avatar 'y) (avatar 'x)))) (thread (snake-random)))
-  ;(if (eq? 'brit2 (cellSymbol (field-base-ref (avatar 'z) (avatar 'y) (avatar 'x)))) (thread (spawnKitty)))
-  (if (WinColumn 'ENABLED) (dumpColumnInfo (avatar 'y) (avatar 'x))))
+                                          (list 0 (+ PortY (/ PortH 2)) (+ PortX (/ PortW 2))))))))
 
 ; Fall down one cell if a non-entity and non-solid cell below me
 (define (fall)
@@ -829,29 +833,28 @@
  (let ((nextCell (apply field-ref ((avatar 'gpsLook)))))
    (if (= nextCell CellMax)
      (begin
-       ((avatar 'walk))
        (walkDetails)))))
 
 (define (walk dir)
- ((avatar 'faceDir) dir 0 0 0) ; Turn avatar
- (let ((nextCell (apply field-ref ((avatar 'gpsLook))))) ; Consider cell I'm walking into
-   (if (< CellMax nextCell) ; Cell I'm walking into is probably an entity
-     ; Push the entity that's in my way
-     ((ipc 'qwrite) `(force ,@((avatar 'gpsLook)) ,dir 10))
-     ; Walk normally
-     (if (cellSolid (cellRef nextCell))
-       (begin
-         ; Try to step up
-         ((avatar 'faceDir) dir 1 0 0) ; Peek at the cell above the one in front of me
-         (set! nextCell (apply field-base-ref ((avatar 'gpsLook))))
-         (or (cellSolid (cellRef nextCell))
-           (begin
-             ((avatar 'walk)) ; Walk to the this new up location
-             (walkDetails))))
-       (begin
-         ((avatar 'walk)) ; Update avatar's state
-         (walkDetails)))))
- (fall))
+  ; Consider cell I'm walking into.  If cell is entity push it.
+  ; Otherwise move to facing cell or on top of obstructing cell.
+  ((avatar 'faceDir) dir 0 0 0)
+  (let ((nextCell (apply field-ref ((avatar 'gpsLook)))))
+    (if (< CellMax nextCell)
+      ((ipc 'qwrite) `(force ,@((avatar 'gpsLook)) ,dir 10)) ; Push entity
+      (if (or EDIT (not (cellSolid (cellRef nextCell))))
+        (walkDetails) ; Walk normally
+        (begin ; Step up
+          ((avatar 'faceDir) dir 1 0 0) ; Peek at the cell above the one in front of me
+          (set! nextCell (apply field-base-ref ((avatar 'gpsLook))))
+          (or (cellSolid (cellRef nextCell))
+            (walkDetails))))))
+  ; Gravity
+  (or EDIT (fall)))
+
+;(if (eq? 'help  (cellSymbol (field-ref (avatar 'z) (avatar 'y) (avatar 'x))))  (help))
+;(if (eq? 'snake (cellSymbol (field-ref (avatar 'z) (avatar 'y) (avatar 'x)))) (thread (snake-random)))
+;(if (eq? 'brit2 (cellSymbol (field-base-ref (avatar 'z) (avatar 'y) (avatar 'x)))) (thread (spawnKitty)))
 
 ; Change avatar color.  Will just cycle through all 16 avatar colors.
 (define (avatarColor)
@@ -861,6 +864,18 @@
     (glyph1bg glyph)  (modulo (+ (glyph1fg glyph) 1) 16)  (glyph1ch glyph))))
   (canvasRender (avatar 'ceiling) (avatar 'y) (avatar 'x))
   (viewportRender(avatar 'y)(avatar 'x))
+  (who))
+
+(define (changeName str)
+  (sleep 700) ; Wait before whoing so I say my new name using my old name
+  ((avatar `setName) str)
+  ((avatar `setGlyph)
+     (glyphNew (glyph0bg (avatar 'glyph))
+               (glyph0fg (avatar 'glyph))
+               (string-ref str 0)
+               (glyph1bg (avatar 'glyph))
+               (glyph1fg (avatar 'glyph))
+               (string-ref str (if (< 1 (string-length str)) 1 0))))
   (who))
 
 (define (rollcall)
@@ -1004,30 +1019,29 @@
 ;;
 (define (who)
   ((ipc 'qwrite)
-    `(entity ,DNA ,(avatar 'port) ,(avatar 'name) ,@((avatar 'gps)) ,(avatar 'glyph))))
+    `(entity ,DNA ,(avatar 'port) ,(avatar 'name) ',((avatar 'gps)) ,(avatar 'glyph))))
 
-;; Entitity movement
 (define (move dna z y x)
  (or (= dna DNA) ; Skip if this is me since rendering is handled explicitly
    (let ((entity (entitiesGet dna)))
-     (if (null? entity)
-       (begin
-         (entitiesSet dna 0 "??" z y x (glyphNew 1 9 #\? 1 9 #\?))
-         ((ipc 'qwrite) '(who)))
+     (if entity
        (begin
          (moveCell dna (entity 'z) (entity 'y) (entity 'x) z y x #f)
-         ((entity 'setLoc) z y x))))))
+         ((entity 'setLoc) z y x))
+       (begin ; Create
+         (entitiesSet dna 0 "??" (list z y x) (glyphNew 1 9 #\? 1 9 #\?))
+         ((ipc 'qwrite) '(who)))))))
 
-(define (entity dna port name z y x glyph)
-  (entitiesSet dna port name z y x glyph)
-  (move dna z y x)
-  (if (= dna 17749) ; The map agent's DNA number
-    (set! PortMapAgent port)))
+(define (entity dna . args) ; dna port name z y x glyph
+  (let ((e (apply entitiesSet dna args)))
+    (apply move dna ((e 'gps)))
+    (if (= dna 17749) ; The map agent's DNA number
+      (set! PortMapAgent (e 'port)))))
 
 (define (die dna)
  (let ((entity (entitiesGet dna))
        (thisIsMe (= dna DNA)))
-  (if (not (null? entity)) ; Ignore unknown entities
+  (if entity ; Ignore unknown entities
     (begin
       ; Remove from here
       (field-delete! (entity 'z) (entity 'y) (entity 'x) dna)
@@ -1258,7 +1272,6 @@
        ((ipc 'qwrite) `(die ,(kitty 'dna))) ; kill entity
        (~ (+ i 1))))))
 
-
 (define march (let ((walkForeverFlag #f)) (lambda ()
  (if walkForeverFlag
   (begin
@@ -1291,7 +1304,8 @@
 (define (tankStartListening)
   (set! tankHangupTime (+ 10 (time)))
   (tankTalk "Operator")
-  (if (not tankIsListening) (begin (thread (let ~ ()
+  (if (not tankIsListening)
+   (thread (let ~ ()
     (set! tankIsListening #t)
     (sleep 12000)
     (if (< (time) tankHangupTime)
@@ -1301,25 +1315,16 @@
        (set! tankIsListening #f))))))))
 
 (define (tankTheOperator talkInput)
- (if (string=? talkInput "tank") (tankStartListening)
- (let ((strLen (string-length talkInput)))
-  (if (and (> strLen 11)
-           (string=? "my name is " (substring talkInput 0 11)))
-     (thread
-       (sleep 700) ; Wait before whoing so I say my new name using my old name
-       ((avatar `setNameGlyph)
-          (substring talkInput 11 strLen)
-          (glyphNew (glyph0bg (avatar 'glyph))
-                    (glyph0fg (avatar 'glyph))
-                    (string-ref talkInput 11)
-                    (glyph1bg (avatar 'glyph))
-                    (glyph1fg (avatar 'glyph))
-                    (string-ref talkInput (if (> strLen 12) 12 11))))
-       (who)))))
+ (if (string=? talkInput "tank")
+   (tankStartListening)
+   (let ((strLen (string-length talkInput)))
+    (if (and (> strLen 11) (string=? "my name is " (substring talkInput 0 11)))
+      (thread (changeName (substring talkInput 11 strLen))))))
  (if tankIsListening (begin
    (if (string=? "who" talkInput) ((ipc 'qwrite) '(say "I'm here!")))
    (if (string=? "load the jump program" talkInput) (tankTalk "I can't find the disk")
-   (if (string=? "march" talkInput) (thread (march)))))))
+   (if (string=? "march" talkInput) (thread (march))
+   (if (string=? "edit" talkInput) (begin (set! EDIT (not EDIT)) (tankTalk "Edit mode " EDIT))))))))
 
 ; Display the same string repeatedly with colors of increasing inensity.
 (define (fancyDisplay c s)
@@ -1362,7 +1367,6 @@
           (pacmanReverse dir) ; all new dirs solid so backup
           (vector-random v)))); choose random new dir
     ((avatar 'faceDir) dir)
-    ((avatar 'walk))
     (walkDetails)
     (sleep 100)
     (if enabled (~))))))
@@ -1411,11 +1415,11 @@
    (glyphNew 0 15 (string-ref NAME 0)
              0 15 (string-ref NAME 1)))
 (set! DNA (avatar 'dna))
-(entityAdd avatar)
+(entitiesAdd avatar)
 
 ; Move avatar to entrance of Lord British's castle
 ;((avatar 'setLoc) 2 (+ (* 108 MapBlockSize) 3)  (+ (* 86 MapBlockSize) (/ MapBlockSize 2) -1))
-((avatar 'setLoc) 0 3452 2748)
+((avatar 'setLoc) 0 3452 2749)
 
 ; Display some initial information
 (or QUIETLOGIN (begin

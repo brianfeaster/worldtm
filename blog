@@ -2374,3 +2374,9 @@ exists, the cell mutation expression.  Otherwise I send the message privately
 to the map agent's listener port (finally coming in handy again).  It will
 process the change then propagate the change to everyone else.  This creates
 a write barrier between peers.
+
+
+Sun Oct 31 17:35:01 EDT 2010
+
+Duplicate entities are ending up in the field array.  One way is to change the
+avatar's a nme while moving among other cases.
