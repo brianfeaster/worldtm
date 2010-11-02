@@ -2379,4 +2379,9 @@ a write barrier between peers.
 Sun Oct 31 17:35:01 EDT 2010
 
 Duplicate entities are ending up in the field array.  One way is to change the
-avatar's a nme while moving among other cases.
+avatar's name while moving among other cases.
+
+
+Mon Nov  1 16:42:22 EDT 2010
+
+Avatar ghosting fixed but the the avatar's glyph doesn't change unless moved.
