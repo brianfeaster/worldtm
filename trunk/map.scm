@@ -298,8 +298,7 @@
       (apply entitiesSet (cons dna args))
       (set! e (entitiesGet dna))
       (displayl "\n\e[31m" (e 'name) " registerd\e[0m")
-      ;(sendInitialBlocks (entitiesGet dna))
-))))
+      (sendInitialBlocks (entitiesGet dna))))))
 
 (define (voice dna level text)
  (let ((e (entitiesGet dna)))

@@ -369,7 +369,7 @@
          (modulo y FieldSize)
          (modulo x FieldSize))))
 
-(define (canvasCellSet y x c)
+(define (canvasGlyphSet y x c)
   (set-car! (vector-vector-ref CANVAS
               (modulo y FieldSize)
               (modulo x FieldSize))
@@ -383,9 +383,11 @@
 
 (define (canvasRender top y x)
  (let ((t (field-ref-top top y x)))
-  (let ((celli (field-ref t y x))) ; Field might contain an entity's dna
-    (canvasCellSet y x (if (< CellMax celli) ((entitiesGet celli) 'glyph) (cellGlyph (cellRef celli)))))
-  (canvasHeightSet y x t)))
+   (let ((celli (field-ref t y x))) ; Field might contain an entity's dna
+     (canvasGlyphSet y x (if (< CellMax celli)
+                            ((entitiesGet celli) 'glyph)
+                            (cellGlyph (cellRef celli)))))
+   (canvasHeightSet y x t)))
 
 
 
@@ -827,6 +829,30 @@
                                 (distance (list 0 (avatar 'y)           (avatar 'x))
                                           (list 0 (+ PortY (/ PortH 2)) (+ PortX (/ PortW 2))))))))
 
+(define (walk dir)
+  ; Consider cell I'm walking into.  If cell is entity push it.
+  ; Otherwise move to facing cell or on top of obstructing cell.
+  ((avatar 'faceDir) dir 0 0 0)
+  (let ((nextCell (apply field-ref ((avatar 'gpsLook)))))
+    ; Case 1 push entity
+    (if (< CellMax nextCell)
+      ((ipc 'qwrite) `(force ,@((avatar 'gpsLook)) ,dir 10))
+    ; Case 2 walk normally
+    (if (or EDIT (not (cellSolid (cellRef nextCell))))
+      (walkDetails)
+    ; Case 3 step up
+    (begin
+      ((avatar 'faceDir) dir 1 0 0) ; Peek at the cell above the one in front of me
+      (set! nextCell (apply field-base-ref ((avatar 'gpsLook))))
+      (or (cellSolid (cellRef nextCell))
+        (walkDetails))))))
+  ; Gravity
+  (or EDIT (fall)))
+
+;(if (eq? 'help  (cellSymbol (field-ref (avatar 'z) (avatar 'y) (avatar 'x))))  (help))
+;(if (eq? 'snake (cellSymbol (field-ref (avatar 'z) (avatar 'y) (avatar 'x)))) (thread (snake-random)))
+;(if (eq? 'brit2 (cellSymbol (field-base-ref (avatar 'z) (avatar 'y) (avatar 'x)))) (thread (spawnKitty)))
+
 ; Fall down one cell if a non-entity and non-solid cell below me
 (define (fall)
  ((avatar 'faceDir) 0 0 0 0) ; Look down
@@ -835,26 +861,15 @@
      (begin
        (walkDetails)))))
 
-(define (walk dir)
-  ; Consider cell I'm walking into.  If cell is entity push it.
-  ; Otherwise move to facing cell or on top of obstructing cell.
-  ((avatar 'faceDir) dir 0 0 0)
-  (let ((nextCell (apply field-ref ((avatar 'gpsLook)))))
-    (if (< CellMax nextCell)
-      ((ipc 'qwrite) `(force ,@((avatar 'gpsLook)) ,dir 10)) ; Push entity
-      (if (or EDIT (not (cellSolid (cellRef nextCell))))
-        (walkDetails) ; Walk normally
-        (begin ; Step up
-          ((avatar 'faceDir) dir 1 0 0) ; Peek at the cell above the one in front of me
-          (set! nextCell (apply field-base-ref ((avatar 'gpsLook))))
-          (or (cellSolid (cellRef nextCell))
-            (walkDetails))))))
-  ; Gravity
-  (or EDIT (fall)))
-
-;(if (eq? 'help  (cellSymbol (field-ref (avatar 'z) (avatar 'y) (avatar 'x))))  (help))
-;(if (eq? 'snake (cellSymbol (field-ref (avatar 'z) (avatar 'y) (avatar 'x)))) (thread (snake-random)))
-;(if (eq? 'brit2 (cellSymbol (field-base-ref (avatar 'z) (avatar 'y) (avatar 'x)))) (thread (spawnKitty)))
+(define (moveEntity dna z y x)
+   (let ((entity (entitiesGet dna)))
+     (if entity
+       (begin
+         (moveCell dna (entity 'z) (entity 'y) (entity 'x) z y x #f)
+         ((entity 'setLoc) z y x))
+       (begin ; Create
+         (entitiesSet dna 0 "??" (list z y x) (glyphNew 1 9 #\? 1 9 #\?))
+         ((ipc 'qwrite) '(who))))))
 
 ; Change avatar color.  Will just cycle through all 16 avatar colors.
 (define (avatarColor)
@@ -876,7 +891,7 @@
                (glyph1bg (avatar 'glyph))
                (glyph1fg (avatar 'glyph))
                (string-ref str (if (< 1 (string-length str)) 1 0))))
-  (who))
+  ((ipc 'qwrite) `(entity ,DNA ,(avatar 'name) ,(avatar 'glyph)))) ; Notify IPC of my name change
 
 (define (rollcall)
  ((ipc 'qwrite) ; Force all to evaluate the following
@@ -1023,18 +1038,11 @@
 
 (define (move dna z y x)
  (or (= dna DNA) ; Skip if this is me since rendering is handled explicitly
-   (let ((entity (entitiesGet dna)))
-     (if entity
-       (begin
-         (moveCell dna (entity 'z) (entity 'y) (entity 'x) z y x #f)
-         ((entity 'setLoc) z y x))
-       (begin ; Create
-         (entitiesSet dna 0 "??" (list z y x) (glyphNew 1 9 #\? 1 9 #\?))
-         ((ipc 'qwrite) '(who)))))))
+     (moveEntity dna z y x)))
 
 (define (entity dna . args) ; dna port name z y x glyph
   (let ((e (apply entitiesSet dna args)))
-    (apply move dna ((e 'gps)))
+    (apply moveEntity dna ((e 'gps)))
     (if (= dna 17749) ; The map agent's DNA number
       (set! PortMapAgent (e 'port)))))
 
@@ -1423,13 +1431,13 @@
 
 ; Display some initial information
 (or QUIETLOGIN (begin
- (fancyDisplay 9 "Welcome to World")
- (WinChatDisplay "\n")
- (fancyDisplay 10 "See http://code.google.com/p/worldtm")
- (WinChatDisplay "\n")
- (fancyDisplay 12 "Hit ? to toggle the help window")
- (WinChatDisplay "\n")
- (fancyDisplay 5 (string "Your name is " (avatar 'name)))))
+ (fancyDisplay 5 "Welcome to World")
+ (WinChatSetColor 0 3)
+ (WinChatDisplay "\r\nSee http://code.google.com/p/worldtm")
+ (WinChatSetColor 0 9)
+ (WinChatDisplay "\r\nHit ? to toggle the help window")
+ (WinChatSetColor 0 10)
+ (WinChatDisplay (string "\r\nYour name is " (avatar 'name)))))
 
 ; Always read and evaluate everything from IPC.
 (thread
