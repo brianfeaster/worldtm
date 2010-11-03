@@ -148,14 +148,15 @@
   ultVec))
 
 (define (getUltima4ULT by bx)
+  (if (and (= by 43)  (= bx 58)) (ultMapVector "yew.ult")
+  (if (and (= by 90)  (= bx 136))(ultMapVector "cove.ult")
+  (if (and (= by 92)  (= bx 128))(conMapVector "shrine.con")
+  (if (and (= by 106) (= bx 82)) (ultMapVector "britain.ult")
   (if (and (= by 107) (= bx 86)) (ultMapVector "lcb1.ult")
   (if (and (= by 107) (= bx 87)) (ultMapVector "lcb2.ult")
-  (if (and (= by 106) (= bx 82)) (ultMapVector "britain.ult")
-  (if (and (= by 145) (= bx 98)) (ultMapVector "paws.ult")
   (if (and (= by 128) (= bx 22)) (ultMapVector "skara.ult")
-  (if (and (= by 90) (= bx 136)) (ultMapVector "cove.ult")
-  (if (and (= by 92) (= bx 128)) (conMapVector "shrine.con")
-  #f))))))))
+  (if (and (= by 145) (= bx 98)) (ultMapVector "paws.ult")
+  #f)))))))))
 
 (define doubleHeightCells (list cellBRICKC cellCOLUMN))
 
