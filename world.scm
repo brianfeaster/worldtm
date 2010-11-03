@@ -8,8 +8,8 @@
 ;;    Canvas
 ;;    Viewport
 ;;    Map_manipulation
-;;   Window_functions_and_initialization
-;;    Entites_and_avatar
+;;   Entites_and_avatar
+;;    Window_functions_and_initialization
 ;;   Button_commands
 ;;   Buttons
 ;;    Incomming_IPC_messages
@@ -482,6 +482,92 @@
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Entites_and_avatar
+;; Simple objects more dynamic than just cells.
+;;
+
+; Association list of entites to their DNA values.
+(define EntityDB ())
+
+(define (entitiesAdd entity)
+ (set! EntityDB (cons (cons (entity 'dna) entity) EntityDB)))
+
+; Lookup entity in database.
+(define (entitiesGet dna)
+  (let ((e (assv dna EntityDB)))
+    (if (null? e) #f (cdr e))))
+       
+; Update, and create if required, an entity in the entity database and return it
+; Args are:  integer:port  string:name  list:(z y x)  vector:glyph
+(define (entitiesSet dna . args)
+ (let ((e (entitiesGet dna)))
+   ; Create a new entity and add to the DB
+   (or e (begin
+     (set! e (Entity dna 0 "Worldlian" 0 0 0 (glyphNew 1 9 #\W 1 11 #\?)))
+     (entitiesAdd e)))
+   ; Set entities attributes based on the type of arguments
+   e))
+
+; The user's avatar.  An extended entity object that includes positioning
+; and directional observation vectors.
+(define (Avatar port name) ; Inherits Entity
+ ((Entity (random) port name
+   2 108 86
+   (glyphNew 0 15 (string-ref name 0) 0 15 (string-ref name 1)))
+  `(let ()
+    (define (self msg) (eval msg))
+    (define cell 19) ; TODO generalize items
+    (define dir 0)
+    (define relZ 0)
+    (define relY 0)
+    (define relX 0)
+    (define (faceDir dirNew . relLoc)
+      (set! dir dirNew)
+      (if (pair? relLoc) (begin
+        (set! relZ (car relLoc))
+        (set! relY (cadr relLoc))
+        (set! relX (caddr relLoc)))))
+    (define (walk) ; Update avatar's position in the numeric keypad direction with the relative position offset
+      (if (= dir 0) (setLoc (+ z -1 relZ) (+ y    relY) (+ x    relX))
+      (if (= dir 1) (setLoc (+ z    relZ) (+ y  1 relY) (+ x -1 relX))
+      (if (= dir 2) (setLoc (+ z    relZ) (+ y  1 relY) (+ x    relX))
+      (if (= dir 3) (setLoc (+ z    relZ) (+ y  1 relY) (+ x  1 relX))
+      (if (= dir 4) (setLoc (+ z    relZ) (+ y    relY) (+ x -1 relX))
+      (if (= dir 5) (setLoc (+ z  1 relZ) (+ y    relY) (+ x    relX))
+      (if (= dir 6) (setLoc (+ z    relZ) (+ y    relY) (+ x  1 relX))
+      (if (= dir 7) (setLoc (+ z    relZ) (+ y -1 relY) (+ x -1 relX))
+      (if (= dir 8) (setLoc (+ z    relZ) (+ y -1 relY) (+ x    relX))
+      (if (= dir 9) (setLoc (+ z    relZ) (+ y -1 relY) (+ x  1 relX)))))))))))))
+    (define (walkDir dir)
+      (faceDir dir)
+      (walk))
+    (define (gpsLook . relLoc)
+      (if (pair? relLoc) (begin
+        (set! relZ (car relLoc))
+        (set! relY (cadr relLoc))
+        (set! relX (caddr relLoc))))
+      (if (= dir 0) (list (+ z -1 relZ) (+ y    relY) (+ x    relX))
+      (if (= dir 1) (list (+ z    relZ) (+ y  1 relY) (+ x -1 relX))
+      (if (= dir 2) (list (+ z    relZ) (+ y  1 relY) (+ x    relX))
+      (if (= dir 3) (list (+ z    relZ) (+ y  1 relY) (+ x  1 relX))
+      (if (= dir 4) (list (+ z    relZ) (+ y    relY) (+ x -1 relX))
+      (if (= dir 5) (list (+ z  1 relZ) (+ y    relY) (+ x    relX))
+      (if (= dir 6) (list (+ z    relZ) (+ y    relY) (+ x  1 relX))
+      (if (= dir 7) (list (+ z    relZ) (+ y -1 relY) (+ x -1 relX))
+      (if (= dir 8) (list (+ z    relZ) (+ y -1 relY) (+ x    relX))
+      (if (= dir 9) (list (+ z    relZ) (+ y -1 relY) (+ x  1 relX)))))))))))))
+    (define ceiling 100)
+    (define (setCeiling z) (set! ceiling z))
+    self)))
+
+; Update an avatar's postion internaly and in the map
+(define (moveEntity entity z y x)
+  (moveCell (entity 'dna) (entity 'z) (entity 'y) (entity 'x) z y x #f)
+  ((entity 'setLoc) z y x))
+
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Window_functions_and_initialization
 ;;
 ; Setup the help windows with an artistic border and prerender the help text
@@ -675,92 +761,6 @@
 
 
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; Entites_and_avatar
-;; Simple objects more dynamic than just cells.
-;;
-
-; Association list of entites to their DNA values.
-(define EntityDB ())
-
-(define (entitiesAdd entity)
- (set! EntityDB (cons (cons (entity 'dna) entity) EntityDB)))
-
-; Lookup entity in database.  Create and insert a new generic entity if missing
-(define (entitiesGet dna)
-  (let ((e (assv dna EntityDB)))
-    (if (null? e) #f (cdr e))))
-       
-; Update, and create if required, an entity in the entity database and return it
-; Args are:  integer:port  string:name  list:(z y x)  vector:glyph
-(define (entitiesSet dna . args)
- (let ((e (entitiesGet dna)))
-   (or e (begin ; Create a new local entity
-     (set! e (Entity dna 0 "nobody" 0 0 0 (glyphNew 0 7 #\n 0 7 #\o)))
-     (entitiesAdd e)))
-   (for-each
-     (lambda (a)
-       (if (integer? a) ((e 'setPort) a)
-       (if (string? a)  ((e 'setName) a)
-       (if (pair? a)    (apply (e 'setLoc) a)
-       (if (vector? a)  ((e 'setGlyph) a))))))
-     args)
-   e))
-
-; The user's avatar.  An extended entity object that includes positioning
-; and directional observation vectors.
-(define (Avatar port name) ; Inherits Entity
- ((Entity (random) port name
-   2 108 86
-   (glyphNew 0 15 (string-ref name 0) 0 15 (string-ref name 1)))
-  `(let ()
-    (define (self msg) (eval msg))
-    (define cell 19) ; TODO generalize items
-    (define dir 0)
-    (define relZ 0)
-    (define relY 0)
-    (define relX 0)
-    (define (faceDir dirNew . relLoc)
-      (set! dir dirNew)
-      (if (pair? relLoc) (begin
-        (set! relZ (car relLoc))
-        (set! relY (cadr relLoc))
-        (set! relX (caddr relLoc)))))
-    (define (walk) ; Update avatar's position in the numeric keypad direction with the relative position offset
-      (if (= dir 0) (setLoc (+ z -1 relZ) (+ y    relY) (+ x    relX))
-      (if (= dir 1) (setLoc (+ z    relZ) (+ y  1 relY) (+ x -1 relX))
-      (if (= dir 2) (setLoc (+ z    relZ) (+ y  1 relY) (+ x    relX))
-      (if (= dir 3) (setLoc (+ z    relZ) (+ y  1 relY) (+ x  1 relX))
-      (if (= dir 4) (setLoc (+ z    relZ) (+ y    relY) (+ x -1 relX))
-      (if (= dir 5) (setLoc (+ z  1 relZ) (+ y    relY) (+ x    relX))
-      (if (= dir 6) (setLoc (+ z    relZ) (+ y    relY) (+ x  1 relX))
-      (if (= dir 7) (setLoc (+ z    relZ) (+ y -1 relY) (+ x -1 relX))
-      (if (= dir 8) (setLoc (+ z    relZ) (+ y -1 relY) (+ x    relX))
-      (if (= dir 9) (setLoc (+ z    relZ) (+ y -1 relY) (+ x  1 relX)))))))))))))
-    (define (walkDir dir)
-      (faceDir dir)
-      (walk))
-    (define (gpsLook . relLoc)
-      (if (pair? relLoc) (begin
-        (set! relZ (car relLoc))
-        (set! relY (cadr relLoc))
-        (set! relX (caddr relLoc))))
-      (if (= dir 0) (list (+ z -1 relZ) (+ y    relY) (+ x    relX))
-      (if (= dir 1) (list (+ z    relZ) (+ y  1 relY) (+ x -1 relX))
-      (if (= dir 2) (list (+ z    relZ) (+ y  1 relY) (+ x    relX))
-      (if (= dir 3) (list (+ z    relZ) (+ y  1 relY) (+ x  1 relX))
-      (if (= dir 4) (list (+ z    relZ) (+ y    relY) (+ x -1 relX))
-      (if (= dir 5) (list (+ z  1 relZ) (+ y    relY) (+ x    relX))
-      (if (= dir 6) (list (+ z    relZ) (+ y    relY) (+ x  1 relX))
-      (if (= dir 7) (list (+ z    relZ) (+ y -1 relY) (+ x -1 relX))
-      (if (= dir 8) (list (+ z    relZ) (+ y -1 relY) (+ x    relX))
-      (if (= dir 9) (list (+ z    relZ) (+ y -1 relY) (+ x  1 relX)))))))))))))
-    (define ceiling 100)
-    (define (setCeiling z) (set! ceiling z))
-    self)))
-
-
-
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Button_commands
 ;;
@@ -861,37 +861,24 @@
      (begin
        (walkDetails)))))
 
-(define (moveEntity dna z y x)
-   (let ((entity (entitiesGet dna)))
-     (if entity
-       (begin
-         (moveCell dna (entity 'z) (entity 'y) (entity 'x) z y x #f)
-         ((entity 'setLoc) z y x))
-       (begin ; Create
-         (entitiesSet dna 0 "??" (list z y x) (glyphNew 1 9 #\? 1 9 #\?))
-         ((ipc 'qwrite) '(who))))))
-
 ; Change avatar color.  Will just cycle through all 16 avatar colors.
-(define (avatarColor)
+(define (changeColor)
  (let ((glyph (avatar 'glyph)))
-  ((avatar 'setGlyph) (glyphNew
-    (glyph0bg glyph)  (modulo (+ (glyph0fg glyph) 1) 16)  (glyph0ch glyph)
-    (glyph1bg glyph)  (modulo (+ (glyph1fg glyph) 1) 16)  (glyph1ch glyph))))
-  (canvasRender (avatar 'ceiling) (avatar 'y) (avatar 'x))
-  (viewportRender(avatar 'y)(avatar 'x))
-  (who))
+   ((ipc 'qwrite) (list 'entity DNA 
+                    (glyphNew
+                      (glyph0bg glyph)  (modulo (+ (glyph0fg glyph) 1) 16)  (glyph0ch glyph)
+                      (glyph1bg glyph)  (modulo (+ (glyph1fg glyph) 1) 16)  (glyph1ch glyph))))))
 
+; Notify IPC of my name and glyph change
 (define (changeName str)
-  (sleep 700) ; Wait before whoing so I say my new name using my old name
-  ((avatar `setName) str)
-  ((avatar `setGlyph)
-     (glyphNew (glyph0bg (avatar 'glyph))
-               (glyph0fg (avatar 'glyph))
-               (string-ref str 0)
-               (glyph1bg (avatar 'glyph))
-               (glyph1fg (avatar 'glyph))
-               (string-ref str (if (< 1 (string-length str)) 1 0))))
-  ((ipc 'qwrite) `(entity ,DNA ,(avatar 'name) ,(avatar 'glyph)))) ; Notify IPC of my name change
+  ((ipc 'qwrite)
+   (list 'entity DNA str
+            (glyphNew (glyph0bg (avatar 'glyph))
+                      (glyph0fg (avatar 'glyph))
+                      (string-ref str 0)
+                      (glyph1bg (avatar 'glyph))
+                      (glyph1fg (avatar 'glyph))
+                      (string-ref str (if (< 1 (string-length str)) 1 0)))))) ; Notify IPC of my name change
 
 (define (rollcall)
  ((ipc 'qwrite) ; Force all to evaluate the following
@@ -988,7 +975,7 @@
 (setButton #\A '(begin
   (set! CELLANIMATION (not CELLANIMATION))
   (WinChatDisplay "\r\nCell animation " CELLANIMATION)))
-(setButton #\C '(avatarColor))
+(setButton #\C '(changeColor))
 (setButton #\W '(rollcall))
 (setButton #\H '(winMapLeft))
 (setButton #\J '(winMapDown))
@@ -1032,19 +1019,39 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Incomming_IPC_messages
 ;;
-(define (who)
+(define (who . dna) ; TODO handle explicit request from specified peer
   ((ipc 'qwrite)
     `(entity ,DNA ,(avatar 'port) ,(avatar 'name) ',((avatar 'gps)) ,(avatar 'glyph))))
 
+; Update an entity's location
 (define (move dna z y x)
  (or (= dna DNA) ; Skip if this is me since rendering is handled explicitly
-     (moveEntity dna z y x)))
+     (let ((entity (entitiesGet dna)))
+       ; Create new entity then ask for a real update
+       (or entity (begin
+         (set! entity (entitiesSet dna))
+         ((ipc 'qwrite) `(who ,dna))))
+       (moveEntity entity z y x))))
 
-(define (entity dna . args) ; dna port name z y x glyph
-  (let ((e (apply entitiesSet dna args)))
-    (apply moveEntity dna ((e 'gps)))
-    (if (= dna 17749) ; The map agent's DNA number
-      (set! PortMapAgent (e 'port)))))
+; Update one or more of an entity's attribute: dna port name z y x glyph
+(define (entity dna . args) 
+  (let ((entity (entitiesGet dna))
+        (loc #f))
+    (or entity (set! entity (entitiesSet dna))) ; A new entity is born and all attributes set
+    ; Update one or more attributes
+    (for-each
+      (lambda (a)
+        (if (integer? a) ((entity 'setPort) a)
+        (if (string? a)  ((entity 'setName) a)
+        (if (pair? a)    (set! loc a) ; Delay moving the avatar
+        (if (vector? a)  ((entity 'setGlyph) a))))))
+      args)
+    (if loc
+      (apply moveEntity entity loc) ; Now move and update the avatar
+      (begin
+        (canvasRender (avatar 'ceiling) (entity 'y) (entity 'x))
+        (viewportRender (entity 'y) (entity 'x)))) ; Don't render cell if vewport to be reset
+    (if (= dna 17749) (set! PortMapAgent (entity 'port))))) ; The map agent's DNA number
 
 (define (die dna)
  (let ((entity (entitiesGet dna))
@@ -1079,8 +1086,8 @@
     (WinChatDisplay text)))
  (if (and (!= dna DNA) (eqv? text "unatco")) (say "no Savage")))
 
-; The list of columns will most likely come from a map agent
-; The map coordinate and block size passed
+; The 2d vector of columns will most likely come from a map agent.
+; The map block coordinate and map block size is also passed.
 (define (mapUpdateColumns y x blockSize v)
   ;(WinChatDisplay "\r\nBlock " (list (/ y 32) (/ x 32)))
   (loop2 y (+ y blockSize) x (+ x blockSize)
@@ -1179,8 +1186,6 @@
    (if (or (eq? c RETURN)
            (eq? c NEWLINE))
      (begin
-       ; Perform actions based on talk phrases.
-       (tankTheOperator talkInput)
        ; Toggle help window if certain phrase entered
        (if (string=? "?" talkInput) (help))
        ; Send talk chatter to IPC or evaluate expression
@@ -1194,6 +1199,8 @@
                        (vector-set! ERRORS (tid) c)
                        (eval (read-string (cdr-string talkInput)))))))
            (say talkInput))
+       ; Perform actions based on talk phrases.
+       (tankTheOperator talkInput)
        (WinInputPuts "\r\n>")
        (set! talkInput "")
        'talk)
@@ -1285,10 +1292,10 @@
   (begin
    (set! walkForeverFlag #f)
    (WinChatSetColor 0 10)
-   (WinChatDisplay "\r\nThus ends the journey"))
+   (tankTalk "\r\nThus ends the journey"))
   (begin
    (WinChatSetColor 0 10)
-   (WinChatDisplay "\r\nThe journey begins")
+   (tankTalk "\r\nThe journey begins")
    (set! walkForeverFlag #t)
    (thread (let ~ ()
      (for-each
@@ -1299,12 +1306,11 @@
 
 
 ; Tank agent - The first interactive user agent.
-(define (tankTalk str) (thread (begin
+(define (tankTalk str)
+ (thread
   (sleep 700)
-  (WinChatSetColor 0 15)
-  (WinChatDisplay "\r\nTank ")
-  (WinChatSetColor 0 7)
-  (WinChatDisplay str))))
+  (WinChatSetColor 0 15) (WinChatDisplay "\r\nTank ")
+  (WinChatSetColor 0 7)  (WinChatDisplay str)))
 
 (define tankHangupTime 0)
 (define tankIsListening #f)
@@ -1313,14 +1319,14 @@
   (set! tankHangupTime (+ 10 (time)))
   (tankTalk "Operator")
   (if (not tankIsListening)
-   (thread (let ~ ()
-    (set! tankIsListening #t)
-    (sleep 12000)
-    (if (< (time) tankHangupTime)
-      (~)
-      (begin
-       (tankTalk "*CLICK*")
-       (set! tankIsListening #f))))))))
+    (thread (let ~ ()
+      (set! tankIsListening #t)
+      (sleep 12000)
+      (if (< (time) tankHangupTime)
+        (~)
+        (begin
+          (tankTalk "*CLICK*")
+          (set! tankIsListening #f)))))))
 
 (define (tankTheOperator talkInput)
  (if (string=? talkInput "tank")
@@ -1419,15 +1425,13 @@
 
 ; Create avatar object and add to entity list
 (define avatar (Avatar (ipc 'PrivatePort) NAME))
+(entitiesAdd avatar)
+(set! DNA (avatar 'dna))
 ((avatar 'setGlyph)
    (glyphNew 0 15 (string-ref NAME 0)
              0 15 (string-ref NAME 1)))
-(set! DNA (avatar 'dna))
-(entitiesAdd avatar)
-
-; Move avatar to entrance of Lord British's castle
-;((avatar 'setLoc) 2 (+ (* 108 MapBlockSize) 3)  (+ (* 86 MapBlockSize) (/ MapBlockSize 2) -1))
-((avatar 'setLoc) 0 3452 2749)
+(moveEntity avatar 1 3456 2751) ; Move avatar to entrance of Lord British's castle near 108 86
+(viewportReset       3456 2751) ; Must reset hte viewport as well otherwise it thinks it's looking at 0 0
 
 ; Display some initial information
 (or QUIETLOGIN (begin
@@ -1458,7 +1462,7 @@
 ((WinMap 'toggle))
 
 ; Hack. Make sure map is rendered after connecting
-(thread (sleep 2000) (walk 2))
+;(thread (sleep 2000) (walk 2))
 
 (define (shutdown)
   (or QUIETLOGIN (sayByeBye))

@@ -2385,3 +2385,38 @@ avatar's name while moving among other cases.
 Mon Nov  1 16:42:22 EDT 2010
 
 Avatar ghosting fixed but the the avatar's glyph doesn't change unless moved.
+
+Ghosting still occurs when animation is on, the avatar is moving and the name
+is changed.  The animated viewport function doesn't modify objects so it must
+be a race condition caused by the delay the function call causes.
+
+
+Tue Nov  2 20:01:44 EDT 2010
+
+Animation loop -> viewportReset -> lock
+                                -> mutate Port* global variables
+                                -> canvasGlyph
+                                -> viewportPlot 
+                                -> unlock
+March loop -> sleep
+           -> walk -> avatar.faceDir
+                   -> avatar.gpsLook
+                   -> walkDetails  -> avatar.walk
+                                   -> ipc.write (move DNA avatar.zyx) skipped
+                                   -> (moveCell DNA oldloc newloc #f)
+changeName -> avatar.setname
+           -> avatar.setglyph
+           -> ipc.write (entity DNA avatar.name avatar.glyph)
+
+entity -> (entitiesSet dna args)
+       -> moveEntity dna entity.gps -> entitiesGet
+                                    -> moveCell dna oldloc newloc #f
+                                    -> entity.setLoc
+
+The collision is when a name change eventually calls moveCell and setLoc both
+also called while the marching loop is active.
+
+An entity update can come in the form of a move or entity expression.  In the
+case of a name or glyph change the avatar's current location should be
+rerendered.  If a location is included the avatar should be moved.  Stray
+avatar cells need to be prevented by serializing avatar map moves.
