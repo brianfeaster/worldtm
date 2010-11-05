@@ -24,7 +24,7 @@
     (set-car! q newTail))
   (semaphore-up QueueSemaphore))
 
-; Getting an itme will skip the first one and return
+; Getting an item will skip the first one and return
 ; the last leaving it there.
 ; [  *   |  *--]------------------------->[ e  | () ]
 ;    `------------------------------------^

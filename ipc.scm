@@ -62,7 +62,7 @@
   (msgQueueAdd e))
 
  (define (msgQueueAdd e)
-   (Display e)
+   (or (eq? (car e) 'mapUpdateColumns) (Display e))
    (QueueAdd MsgQueue e)
    (semaphore-up MsgQueueSemaphore))
 
@@ -146,7 +146,7 @@
  ; Start the engine
  (createHub)
 
- ; The private local socket is continuously opened, read from once and queued then closed.
+ ; The private local socket is continuously opened, read from once, queued then closed.
  (Display "\r\n::IPC Private socket " PrivateSocket "  ")
  (thread (let ~ ()
    (letrec ((s (open-stream PrivateSocket))

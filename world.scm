@@ -494,27 +494,32 @@
 
 ; Lookup entity in database.
 (define (entitiesGet dna)
-  (let ((e (assv dna EntityDB)))
-    (if (null? e) #f (cdr e))))
-       
-; Update, and create if required, an entity in the entity database and return it
-; Args are:  integer:port  string:name  list:(z y x)  vector:glyph
-(define (entitiesSet dna . args)
- (let ((e (entitiesGet dna)))
-   ; Create a new entity and add to the DB
-   (or e (begin
-     (set! e (Entity dna 0 "Worldlian" 0 0 0 (glyphNew 1 9 #\W 1 11 #\?)))
-     (entitiesAdd e)))
-   ; Set entities attributes based on the type of arguments
-   e))
+  (let ((entity (assv dna EntityDB)))
+    (if (null? entity) #f (cdr entity))))
 
+(define (entitiesSet dna . args)
+  (let ((entity (entitiesGet dna)))
+    (if entity
+      (for-each ; Update only name and glyph if entity already exists
+        (lambda (a)
+          (if (integer? a) ((entity 'setPort) a)
+          (if (string? a)  ((entity 'setName) a)
+          (if (vector? a)  ((entity 'setGlyph) a)))))
+        args)
+      (begin
+        ; Create a new entity.  Massage the arguments (port name glyph (x y z))->(port name glyph x y z)
+        (set! entity (apply Entity dna (let ~ ((args args))
+                                         (if (pair? (car args)) (car args)
+                                             (cons (car args) (~ (cdr args)))))))
+        (entitiesAdd entity)))
+    ; Return the new or modified entity
+    entity))
+       
 ; The user's avatar.  An extended entity object that includes positioning
 ; and directional observation vectors.
-(define (Avatar port name) ; Inherits Entity
- ((Entity (random) port name
-   2 108 86
-   (glyphNew 0 15 (string-ref name 0) 0 15 (string-ref name 1)))
-  `(let ()
+(define (Avatar port name glyph z y x) ; Inherits Entity
+ ((Entity (random) port name glyph  z y x)
+  `(let () ; This is passed in as the inheriting child object
     (define (self msg) (eval msg))
     (define cell 19) ; TODO generalize items
     (define dir 0)
@@ -556,7 +561,7 @@
       (if (= dir 7) (list (+ z    relZ) (+ y -1 relY) (+ x -1 relX))
       (if (= dir 8) (list (+ z    relZ) (+ y -1 relY) (+ x    relX))
       (if (= dir 9) (list (+ z    relZ) (+ y -1 relY) (+ x  1 relX)))))))))))))
-    (define ceiling 100)
+    (define ceiling z)
     (define (setCeiling z) (set! ceiling z))
     self)))
 
@@ -1021,36 +1026,28 @@
 ;;
 (define (who . dna) ; TODO handle explicit request from specified peer
   ((ipc 'qwrite)
-    `(entity ,DNA ,(avatar 'port) ,(avatar 'name) ',((avatar 'gps)) ,(avatar 'glyph))))
+    `(entity ,DNA ,(avatar 'port) ,(avatar 'name) ,(avatar 'glyph) ',((avatar 'gps)))))
 
 ; Update an entity's location
 (define (move dna z y x)
  (or (= dna DNA) ; Skip if this is me since rendering is handled explicitly
      (let ((entity (entitiesGet dna)))
-       ; Create new entity then ask for a real update
-       (or entity (begin
-         (set! entity (entitiesSet dna))
-         ((ipc 'qwrite) `(who ,dna))))
-       (moveEntity entity z y x))))
+       (if entity (moveEntity entity z y x)))))
 
-; Update one or more of an entity's attribute: dna port name z y x glyph
-(define (entity dna . args) 
-  (let ((entity (entitiesGet dna))
-        (loc #f))
-    (or entity (set! entity (entitiesSet dna))) ; A new entity is born and all attributes set
-    ; Update one or more attributes
-    (for-each
-      (lambda (a)
-        (if (integer? a) ((entity 'setPort) a)
-        (if (string? a)  ((entity 'setName) a)
-        (if (pair? a)    (set! loc a) ; Delay moving the avatar
-        (if (vector? a)  ((entity 'setGlyph) a))))))
-      args)
-    (if loc
-      (apply moveEntity entity loc) ; Now move and update the avatar
-      (begin
+; Update one or more of an entity's attribute: dna port name glyph z y x
+(define (entity dna . args)
+  (let ((entity (entitiesGet dna)))
+    (if entity
+      (begin ; Modify entity attributes
+        (apply entitiesSet dna args)
+        (moveCell (entity 'dna) (entity 'z) (entity 'y) (entity 'x)
+                                (entity 'z) (entity 'y) (entity 'x) #f)
         (canvasRender (avatar 'ceiling) (entity 'y) (entity 'x))
-        (viewportRender (entity 'y) (entity 'x)))) ; Don't render cell if vewport to be reset
+        (viewportRender (entity 'y) (entity 'x)))
+      (begin ; Create new entity with all args
+        (set! entity (apply entitiesSet dna args))
+        (moveCell (entity 'dna) (entity 'z) (entity 'y) (entity 'x) (entity 'z) (entity 'y) (entity 'x) #f)))
+    ; Rerender the avatar
     (if (= dna 17749) (set! PortMapAgent (entity 'port))))) ; The map agent's DNA number
 
 (define (die dna)
@@ -1424,12 +1421,13 @@
 (ipc '(set! Debug #f))
 
 ; Create avatar object and add to entity list
-(define avatar (Avatar (ipc 'PrivatePort) NAME))
+(define avatar (Avatar
+  (ipc 'PrivatePort)
+  NAME
+  (glyphNew 0 15 (string-ref NAME 0) 0 15 (string-ref NAME 1))
+  99 3456 2751))
 (entitiesAdd avatar)
 (set! DNA (avatar 'dna))
-((avatar 'setGlyph)
-   (glyphNew 0 15 (string-ref NAME 0)
-             0 15 (string-ref NAME 1)))
 (moveEntity avatar 1 3456 2751) ; Move avatar to entrance of Lord British's castle near 108 86
 (viewportReset       3456 2751) ; Must reset hte viewport as well otherwise it thinks it's looking at 0 0
 
@@ -1460,9 +1458,6 @@
    (~)))
 
 ((WinMap 'toggle))
-
-; Hack. Make sure map is rendered after connecting
-;(thread (sleep 2000) (walk 2))
 
 (define (shutdown)
   (or QUIETLOGIN (sayByeBye))
