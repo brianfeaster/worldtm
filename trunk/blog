@@ -2420,3 +2420,10 @@ An entity update can come in the form of a move or entity expression.  In the
 case of a name or glyph change the avatar's current location should be
 rerendered.  If a location is included the avatar should be moved.  Stray
 avatar cells need to be prevented by serializing avatar map moves.
+
+
+Thu Nov  4 20:35:37 EDT 2010
+
+Having difficulty creating an elegant entity abstraction.  The entity class
+is simple and so is the IPC message but I'm unable to land a simple message
+system to initialize and update entities across peers.

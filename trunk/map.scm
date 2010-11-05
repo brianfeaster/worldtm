@@ -42,7 +42,7 @@
 ;;
 (load "entity.scm")
 
-(define (Avatar dna port name z y x glyph) ((Entity dna port name z y x glyph) '(let ()
+(define (Avatar dna port name glyph z y x) ((Entity dna port name glyph z y x) '(let ()
    (define self (lambda (msg) (eval msg)))
    (define counter (makeCounter 0))
    ; Map block origin AKA the upper left hand corner of the map blocks sent to the peer
@@ -59,31 +59,33 @@
 (define (entitiesAdd entity)
  (set! EntityDB (cons (cons (entity 'dna) entity) EntityDB)))
 
-; Lookup entity in database.  Create and insert a new generic entity if missing
+; Lookup entity in database.
 (define (entitiesGet dna)
-  (let ((e (assv dna EntityDB)))
-    (if (null? e) #f (cdr e))))
-       
-; Update, and create if required, an entity in the entity database.
-; Args are:  integer:port  string:name  list:(z y x)  vector:glyph
+  (let ((entity (assv dna EntityDB)))
+    (if (null? entity) #f (cdr entity))))
+
 (define (entitiesSet dna . args)
- (let ((e (entitiesGet dna)))
-   (or e (begin ; Create a new local entity
-     (set! e (Avatar dna 0 "nobody" 0 0 0 #(0 7 #\n 0 7 #\o)))
-     (entitiesAdd e)))
-   (for-each
-     (lambda (a)
-       (if (integer? a) ((e 'setPort) a)
-       (if (string? a)  ((e 'setName) a)
-       (if (pair? a)    (apply (e 'setLoc) a)
-       (if (vector? a)  ((e 'setGlyph) a))))))
-     args)
-   e))
-
+  (let ((entity (entitiesGet dna)))
+    (if entity
+      (for-each ; Update only name and glyph if entity already exists
+        (lambda (a)
+          (if (integer? a) ((entity 'setPort) a)
+          (if (string? a)  ((entity 'setName) a)
+          (if (vector? a)  ((entity 'setGlyph) a)))))
+        args)
+      (begin
+        ; Create a new entity.  Massage the arguments (port name glyph (x y z))->(port name glyph x y z)
+        (set! entity (apply Avatar dna (let ~ ((args args))
+                                         (if (pair? (car args)) (car args)
+                                             (cons (car args) (~ (cdr args)))))))
+        (entitiesAdd entity)))
+    ; Return the new or modified entity
+    entity))
+       
 ; Create the map agent
-(define avatar (Avatar DNA (ipc 'PrivatePort) MYNAME 0 0 0 #(1 11 #\M 2 4 #\A)))
+(define avatar (Avatar DNA (ipc 'PrivatePort) MYNAME #(1 11 #\M 2 4 #\A) 0 0 0))
 (entitiesAdd avatar)
-
+(entitiesAdd (Entity 0 0 "System" #(0 1 #\S 0 1 #\Y) 0 0 0))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -218,14 +220,13 @@
            (by (/ (- ey (/ MapRangeSize 2)) MapBlockSize)) ; A new block range origin
            (bx (/ (- ex (/ MapRangeSize 2)) MapBlockSize)))
   ((e 'setMapBlockLoc) by bx) ; Update the entity's block range origin
-  ;(displayl "\r\nSending initial map blocks to " (e 'name)) ; DEBUG
-  (loop2 by (+ by MapBlockCount) bx (+ bx MapBlockCount) (lambda (y x)
-    ;(displayl " (" y " " x ")") ; DEBUG
-    (displayl "\r\nSending block " (list y x) " to " (e 'name) ":" (e 'port) ":" ((e 'counter))) ; DEBUG
-    ((ipc 'private) (e 'port) ; Send the block to the peer
-       `(mapUpdateColumns ,(* y MapBlockSize) ,(* x MapBlockSize) ,MapBlockSize ,(getMapBlock y x #t)))))
-  ((ipc 'private) (e 'port)
-    '((ipc 'qwrite) '(who))))) ; Force the peer to request roll call from everyone
+  (loop2 by (+ by MapBlockCount)
+         bx (+ bx MapBlockCount)
+    (lambda (y x)
+      (displayl "\r\nSending block " (list y x) " to " (e 'name) ":" (e 'port) ":" ((e 'counter))) ; DEBUG
+      ((ipc 'private) (e 'port) ; Send the block to the peer
+         `(mapUpdateColumns ,(* y MapBlockSize) ,(* x MapBlockSize) ,MapBlockSize ,(getMapBlock y x #t)))))
+  ((ipc 'private) (e 'port) '((ipc 'qwrite) '(who))))) ; Force the peer to request roll call from everyone
 
 ; Determine if the coordinate is above or below the inner field block area.
 ; An avatar that moves outside of the inner field range will cause the
@@ -285,21 +286,20 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Incomming_IPC_messages
 ;;
-(define (who)
+(define (who . dna)
  ((ipc 'qwrite)
- `(entity ,DNA ,(avatar 'port) ,(avatar 'name) ',((avatar 'gps)) ,(avatar 'glyph))))
+ `(entity ,DNA ,(avatar 'port) ,(avatar 'name) ,(avatar 'glyph) ',((avatar 'gps)))))
 
 (define (entity dna . args)
  (let ((e (entitiesGet dna)))
   (if e
     (begin
-      (apply entitiesSet (cons dna args))
+      (apply entitiesSet dna args)
       (displayl "\n\e[31m" (e 'name) " updated\e[0m"))
     (begin
-      (apply entitiesSet (cons dna args))
-      (set! e (entitiesGet dna))
-      (displayl "\n\e[31m" (e 'name) " registerd\e[0m")
-      (sendInitialBlocks (entitiesGet dna))))))
+      (set! e (apply entitiesSet dna args))
+      (displayl "\n\e[31m" (e 'port) (e 'name) (e 'glyph) (list (e 'z) (e 'y) (e 'x)) " registerd\e[0m")
+      (sendInitialBlocks e)))))
 
 (define (voice dna level text)
  (let ((e (entitiesGet dna)))
