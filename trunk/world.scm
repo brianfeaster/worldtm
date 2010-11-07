@@ -31,6 +31,7 @@
 (define MapBlockSize 32) ; Size of each map file cell in the World map.
 (define PortMapAgent #f)
 (define EDIT #f)
+(define MAPSCROLL #t)
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -126,7 +127,7 @@
 ;; Cells - A table of vectors #(symbol solidFlag glyph)
 ;;
 (define (cellSymbol cell) (vector-ref cell 0))
-(define (cellSolid  cell) (vector-ref cell 1))
+(define (cellSolid? cell) (vector-ref cell 1))
 (define (cellGlyph  cell) (vector-ref cell 2))
 
 (define (cellMake symb glyph . flags)
@@ -341,10 +342,12 @@
 ;; top most visible usually).
 ;;
 (define CANVAS (make-vector-vector FieldSize FieldSize #f))
+(define canvasSemaphore (open-semaphore 1))
 
 ; Initialize the canvas which is a vector of pairs (cellGlyph . cellHeight)
 (define (canvasReset top . defaultGlyph)
   (set! defaultGlyph (if (null? defaultGlyph) #f (car defaultGlyph)))
+  ;(semaphore-down canvasSemaphore)
   (loop2 0 FieldSize 0 FieldSize (lambda (y x)
     ; Each canvas entry consists of a map cell and its height.
     (vector-vector-set! CANVAS y x
@@ -357,7 +360,9 @@
           (cons (if (< CellMax celli)
                     ((entitiesGet celli) 'glyph)
                     (cellGlyph (cellRef celli)))
-                t)))))))
+                t))))))
+  ;(semaphore-up canvasSemaphore)
+)
 
 (define (canvasGlyph y x)
   (car (vector-vector-ref CANVAS
@@ -382,12 +387,15 @@
            h))
 
 (define (canvasRender top y x)
+ ;(semaphore-down canvasSemaphore)
  (let ((t (field-ref-top top y x)))
    (let ((celli (field-ref t y x))) ; Field might contain an entity's dna
      (canvasGlyphSet y x (if (< CellMax celli)
                             ((entitiesGet celli) 'glyph)
                             (cellGlyph (cellRef celli)))))
-   (canvasHeightSet y x t)))
+   (canvasHeightSet y x t))
+ ;(semaphore-up canvasSemaphore)
+)
 
 
 
@@ -465,7 +473,11 @@
   (viewportRender y x))
 
 ; Given a cell index or entity DNA value, move it in the field, canvas and viewport.
+(define moveCellSemaphore (open-semaphore 1))
+
 (define (moveCell cell zo yo xo z y x centerMap)
+  (or MAPSCROLL (set! centerMap #f)) ; Global toggle to disable map scrolling
+  (semaphore-down moveCellSemaphore)
   ; Old location removal
   (field-delete! zo yo xo cell)
   (if (>= zo (canvasHeight yo xo)) (begin
@@ -477,7 +489,8 @@
     (canvasRender (avatar 'ceiling) y x)
     (or centerMap (viewportRender y x)))) ; Don't render cell if vewport to be reset
   (if centerMap (viewportReset (avatar 'y) (avatar 'x)))
-  (if (WinColumn 'ENABLED) (dumpColumnInfo (avatar 'y) (avatar 'x))))
+  (if (WinColumn 'ENABLED) (dumpColumnInfo (avatar 'y) (avatar 'x)))
+  (semaphore-up moveCellSemaphore))
 
 
 
@@ -834,7 +847,10 @@
                                 (distance (list 0 (avatar 'y)           (avatar 'x))
                                           (list 0 (+ PortY (/ PortH 2)) (+ PortX (/ PortW 2))))))))
 
+(define walkSemaphore (open-semaphore 1))
+
 (define (walk dir)
+  (semaphore-down walkSemaphore)
   ; Consider cell I'm walking into.  If cell is entity push it.
   ; Otherwise move to facing cell or on top of obstructing cell.
   ((avatar 'faceDir) dir 0 0 0)
@@ -843,16 +859,17 @@
     (if (< CellMax nextCell)
       ((ipc 'qwrite) `(force ,@((avatar 'gpsLook)) ,dir 10))
     ; Case 2 walk normally
-    (if (or EDIT (not (cellSolid (cellRef nextCell))))
+    (if (or EDIT (not (cellSolid? (cellRef nextCell))))
       (walkDetails)
     ; Case 3 step up
     (begin
       ((avatar 'faceDir) dir 1 0 0) ; Peek at the cell above the one in front of me
       (set! nextCell (apply field-base-ref ((avatar 'gpsLook))))
-      (or (cellSolid (cellRef nextCell))
+      (or (cellSolid? (cellRef nextCell))
         (walkDetails))))))
   ; Gravity
-  (or EDIT (fall)))
+  (or EDIT (fall))
+  (semaphore-up walkSemaphore))
 
 ;(if (eq? 'help  (cellSymbol (field-ref (avatar 'z) (avatar 'y) (avatar 'x))))  (help))
 ;(if (eq? 'snake (cellSymbol (field-ref (avatar 'z) (avatar 'y) (avatar 'x)))) (thread (snake-random)))
@@ -1354,31 +1371,29 @@
  (if (null? l) ()
  (if (begin
        ((avatar 'faceDir) (car l))
-       (cellSolid (cellRef (apply field-base-ref ((avatar 'gpsLook))))))
+       (cellSolid? (cellRef (apply field-base-ref ((avatar 'gpsLook))))))
    (pacmanFilterSolid (cdr l))
    (cons (car l) (pacmanFilterSolid (cdr l))))))
 
 (define (pacmanAnother i)
- (list->vector
-  (pacmanFilterSolid
-   (if (= i 2) '(2 4 6)
-   (if (= i 4) '(2 4 8)
-   (if (= i 6) '(2 6 8)
-   (if (= i 8) '(4 6 8))))))))
-
-(define (pacmanReverse d)
-  (if (= d 2) 8 (if (= d 4) 6 (if (= d 6) 4 (if (= d 8) 2)))))
+ (list->vector (pacmanFilterSolid (if (= i 2) '(2 4 6)
+                                  (if (= i 4) '(2 4 8)
+                                  (if (= i 6) '(2 6 8)
+                                  (if (= i 8) '(4 6 8))))))))
 
 (define pacman (let ((dir 8) (enabled #f)) (lambda ()
   (set! enabled (not enabled)) ; Call again to disable
   (let ~ ()
+    (semaphore-down walkSemaphore)
     (set! dir ; Pick a new direction after every movement
       (let ((v (pacmanAnother dir)))
         (if (eq? #() v)
-          (pacmanReverse dir) ; all new dirs solid so backup
+          (vector-ref #(0 0 8 0 6 0 4 0 2) dir) ; all new dirs solid so backup 2->8 4->6 6->4 8->2
           (vector-random v)))); choose random new dir
+    (WinConsoleDisplay dir)
     ((avatar 'faceDir) dir)
     (walkDetails)
+    (semaphore-up walkSemaphore)
     (sleep 100)
     (if enabled (~))))))
 
