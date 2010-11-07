@@ -2419,7 +2419,7 @@ also called while the marching loop is active.
 An entity update can come in the form of a move or entity expression.  In the
 case of a name or glyph change the avatar's current location should be
 rerendered.  If a location is included the avatar should be moved.  Stray
-avatar cells need to be prevented by serializing avatar map moves.
+avatar cells need to be prevented by making avatar map moves thread safe.
 
 
 Thu Nov  4 20:35:37 EDT 2010
@@ -2427,3 +2427,17 @@ Thu Nov  4 20:35:37 EDT 2010
 Having difficulty creating an elegant entity abstraction.  The entity class
 is simple and so is the IPC message but I'm unable to land a simple message
 system to initialize and update entities across peers.
+
+
+Sun Nov  7 01:46:41 EDT 2010
+
+The cell column model is lacking in simplicity or at least the usage of it is.
+When moving a cell, the method is unable to move properly delete the last cell
+in a column's list of cells.
+
+
+Sun Nov  7 13:27:29 EST 2010
+
+Canvas mutation needs to be thread safe.  As does moving since pacman and
+walking/falling both rely on the avatar's current direction which is changed
+by both flows.
