@@ -1409,7 +1409,7 @@ void compNot (Num flags) {
  Int opcodeStart;
 	DB("-->%s", __func__);
 	expr = cadr(expr);           /* Compile this expression */
-	compExpression(flags);
+	compExpression(flags & ~TAILCALL);
 	opcodeStart = memStackLength(asmstack);
 	asmAsm (
 		BRTI0, TFALSE, ADDR, "false",
