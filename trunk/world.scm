@@ -22,7 +22,7 @@
 (load "entity.scm")
 (define QUIETLOGIN (and (< 2 (vector-length argv)) (eqv? "silent" (vector-ref argv 2))))
 (define CELLANIMATION #t)
-(define SCROLLINGMAP #t)
+(define MAPSCROLL 'always) ; always edge never
 (define KITTEHBRAIN  #f)
 (define VOICEDELIMETER " ")
 (define NAME "Guest")
@@ -31,7 +31,6 @@
 (define MapBlockSize 32) ; Size of each map file cell in the World map.
 (define PortMapAgent #f)
 (define EDIT #f)
-(define MAPSCROLL #t)
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -476,7 +475,7 @@
 (define moveCellSemaphore (open-semaphore 1))
 
 (define (moveCell cell zo yo xo z y x centerMap)
-  (or MAPSCROLL (set! centerMap #f)) ; Global toggle to disable map scrolling
+  (if (eq? MAPSCROLL 'never) (set! centerMap #f)) ; Global toggle to disable map scrolling
   (semaphore-down moveCellSemaphore)
   ; Old location removal
   (field-delete! zo yo xo cell)
@@ -541,21 +540,30 @@
     (define relX 0)
     (define (faceDir dirNew . relLoc)
       (set! dir dirNew)
-      (if (pair? relLoc) (begin
-        (set! relZ (car relLoc))
-        (set! relY (cadr relLoc))
-        (set! relX (caddr relLoc)))))
-    (define (walk) ; Update avatar's position in the numeric keypad direction with the relative position offset
-      (if (= dir 0) (setLoc (+ z -1 relZ) (+ y    relY) (+ x    relX))
-      (if (= dir 1) (setLoc (+ z    relZ) (+ y  1 relY) (+ x -1 relX))
-      (if (= dir 2) (setLoc (+ z    relZ) (+ y  1 relY) (+ x    relX))
-      (if (= dir 3) (setLoc (+ z    relZ) (+ y  1 relY) (+ x  1 relX))
+      (if (pair? relLoc)
+        (begin
+          (set! relZ (car relLoc))
+          (set! relLoc (cdr relLoc)))
+        (set! relZ 0))
+      (if (pair? relLoc)
+        (begin
+          (set! relY (car relLoc))
+          (set! relLoc (cdr relLoc)))
+        (set! relY 0))
+      (if (pair? relLoc)
+        (set! relX (car relLoc))
+        (set! relX 0)))
+    (define (walk) ; Update avatar's position using cardinal polar coordinates
+      (if (= dir 0) (setLoc (+ z    relZ) (+ y    relY) (+ x  1 relX))
+      (if (= dir 1) (setLoc (+ z    relZ) (+ y -1 relY) (+ x  1 relX))
+      (if (= dir 2) (setLoc (+ z    relZ) (+ y -1 relY) (+ x    relX))
+      (if (= dir 3) (setLoc (+ z    relZ) (+ y -1 relY) (+ x -1 relX))
       (if (= dir 4) (setLoc (+ z    relZ) (+ y    relY) (+ x -1 relX))
-      (if (= dir 5) (setLoc (+ z  1 relZ) (+ y    relY) (+ x    relX))
-      (if (= dir 6) (setLoc (+ z    relZ) (+ y    relY) (+ x  1 relX))
-      (if (= dir 7) (setLoc (+ z    relZ) (+ y -1 relY) (+ x -1 relX))
-      (if (= dir 8) (setLoc (+ z    relZ) (+ y -1 relY) (+ x    relX))
-      (if (= dir 9) (setLoc (+ z    relZ) (+ y -1 relY) (+ x  1 relX)))))))))))))
+      (if (= dir 5) (setLoc (+ z    relZ) (+ y  1 relY) (+ x -1 relX))
+      (if (= dir 6) (setLoc (+ z    relZ) (+ y  1 relY) (+ x    relX))
+      (if (= dir 7) (setLoc (+ z    relZ) (+ y  1 relY) (+ x  1 relX))
+      (if (= dir 8) (setLoc (+ z -1 relZ) (+ y    relY) (+ x    relX))
+      (if (= dir 9) (setLoc (+ z  1 relZ) (+ y    relY) (+ x    relX)))))))))))))
     (define (walkDir dir)
       (faceDir dir)
       (walk))
@@ -564,16 +572,16 @@
         (set! relZ (car relLoc))
         (set! relY (cadr relLoc))
         (set! relX (caddr relLoc))))
-      (if (= dir 0) (list (+ z -1 relZ) (+ y    relY) (+ x    relX))
-      (if (= dir 1) (list (+ z    relZ) (+ y  1 relY) (+ x -1 relX))
-      (if (= dir 2) (list (+ z    relZ) (+ y  1 relY) (+ x    relX))
-      (if (= dir 3) (list (+ z    relZ) (+ y  1 relY) (+ x  1 relX))
+      (if (= dir 0) (list (+ z    relZ) (+ y    relY) (+ x  1 relX))
+      (if (= dir 1) (list (+ z    relZ) (+ y -1 relY) (+ x  1 relX))
+      (if (= dir 2) (list (+ z    relZ) (+ y -1 relY) (+ x    relX))
+      (if (= dir 3) (list (+ z    relZ) (+ y -1 relY) (+ x -1 relX))
       (if (= dir 4) (list (+ z    relZ) (+ y    relY) (+ x -1 relX))
-      (if (= dir 5) (list (+ z  1 relZ) (+ y    relY) (+ x    relX))
-      (if (= dir 6) (list (+ z    relZ) (+ y    relY) (+ x  1 relX))
-      (if (= dir 7) (list (+ z    relZ) (+ y -1 relY) (+ x -1 relX))
-      (if (= dir 8) (list (+ z    relZ) (+ y -1 relY) (+ x    relX))
-      (if (= dir 9) (list (+ z    relZ) (+ y -1 relY) (+ x  1 relX)))))))))))))
+      (if (= dir 5) (list (+ z    relZ) (+ y  1 relY) (+ x -1 relX))
+      (if (= dir 6) (list (+ z    relZ) (+ y  1 relY) (+ x    relX))
+      (if (= dir 7) (list (+ z    relZ) (+ y  1 relY) (+ x  1 relX))
+      (if (= dir 8) (list (+ z -1 relZ) (+ y    relY) (+ x    relX))
+      (if (= dir 9) (list (+ z  1 relZ) (+ y    relY) (+ x    relX)))))))))))))
     (define ceiling z)
     (define (setCeiling z) (set! ceiling z))
     self)))
@@ -595,17 +603,17 @@
 ((WinHelp 'set-color) 0 15)
 ((WinHelp 'puts) "\r\n?  toggle help window")
 ((WinHelp 'puts) "\r\nt  talk mode (tab to exit)")
-((WinHelp 'puts) "\r\nC  color for talking")
-((WinHelp 'puts) "\r\nW  who is here list")
+((WinHelp 'puts) "\r\nC  color of talking")
+((WinHelp 'puts) "\r\nW  who is connected")
 ((WinHelp 'puts) "\r\nM  map toggle")
-((WinHelp 'puts) "\r\nS  scrolling map toggle")
-((WinHelp 'puts) "\r\nA  animation toggle")
-((WinHelp 'puts) "\r\n>  increase map size")
-((WinHelp 'puts) "\r\n<  decrease map size")
+((WinHelp 'puts) "\r\nS  scrolling map mode")
+((WinHelp 'puts) "\r\nA  animated cells toggle")
+((WinHelp 'puts) "\r\n>  map size bigger")
+((WinHelp 'puts) "\r\n<  map size smaller")
 ((WinHelp 'puts) "\r\nQ  quit World[tm]")
 ((WinHelp 'puts) "\r\nHJKL move map")
-((WinHelp 'puts) "\r\n* To walk use arrows keys")
-((WinHelp 'puts) "\r\n  or 'nethack' keys")
+((WinHelp 'puts) "\r\n* To walk hit ESC then arrows")
+((WinHelp 'puts) "\r\n  keys or 'nethack' keys")
 
 ; Make Map window circular
 (define (circularize . val)
@@ -838,37 +846,39 @@
   (let ((oldCeiling (avatar 'ceiling)))
     ((avatar 'setCeiling) (- (apply field-ceiling ((avatar 'gps))) 1))
     (if (!= oldCeiling (avatar 'ceiling))
-      (canvasReset (avatar 'ceiling))))
+      (thread (canvasReset (avatar 'ceiling)))))
   ; Update avatar in field canvas and viewport.
   (moveCell DNA
             (avatar 'oz) (avatar 'oy) (avatar 'ox)
             (avatar 'z)  (avatar 'y)  (avatar 'x)
-            (or SCROLLINGMAP (< (- (/ (WinMap 'Wheight) 2) 2)
-                                (distance (list 0 (avatar 'y)           (avatar 'x))
-                                          (list 0 (+ PortY (/ PortH 2)) (+ PortX (/ PortW 2))))))))
+            (or (eq? MAPSCROLL 'always)
+                (and (eq? MAPSCROLL 'edge)
+                     (< (- (/ (WinMap 'Wheight) 2) 2)
+                        (distance (list 0 (avatar 'y)           (avatar 'x))
+                                  (list 0 (+ PortY (/ PortH 2)) (+ PortX (/ PortW 2)))))))))
 
 (define walkSemaphore (open-semaphore 1))
 
 (define (walk dir)
   (semaphore-down walkSemaphore)
-  ; Consider cell I'm walking into.  If cell is entity push it.
-  ; Otherwise move to facing cell or on top of obstructing cell.
-  ((avatar 'faceDir) dir 0 0 0)
-  (let ((nextCell (apply field-ref ((avatar 'gpsLook)))))
-    ; Case 1 push entity
-    (if (< CellMax nextCell)
-      ((ipc 'qwrite) `(force ,@((avatar 'gpsLook)) ,dir 10))
-    ; Case 2 walk normally
-    (if (or EDIT (not (cellSolid? (cellRef nextCell))))
-      (walkDetails)
-    ; Case 3 step up
-    (begin
-      ((avatar 'faceDir) dir 1 0 0) ; Peek at the cell above the one in front of me
-      (set! nextCell (apply field-base-ref ((avatar 'gpsLook))))
-      (or (cellSolid? (cellRef nextCell))
-        (walkDetails))))))
-  ; Gravity
-  (or EDIT (fall))
+    ; Consider cell I'm walking into.  If cell is entity push it.
+    ; Otherwise move to facing cell or on top of obstructing cell.
+    ((avatar 'faceDir) dir)
+    (let ((nextCell (apply field-ref ((avatar 'gpsLook)))))
+      ; Case 1 push entity
+      (if (< CellMax nextCell)
+        ((ipc 'qwrite) `(force ,@((avatar 'gpsLook)) ,dir 10))
+      ; Case 2 walk normally
+      (if (or EDIT (not (cellSolid? (cellRef nextCell))))
+        (walkDetails)
+      ; Case 3 step up
+      (begin
+        ((avatar 'faceDir) dir 1) ; Peek at the cell above the one in front of me
+        (set! nextCell (apply field-base-ref ((avatar 'gpsLook))))
+        (or (cellSolid? (cellRef nextCell))
+          (walkDetails))))))
+    ; Gravity
+    (or EDIT (fall))
   (semaphore-up walkSemaphore))
 
 ;(if (eq? 'help  (cellSymbol (field-ref (avatar 'z) (avatar 'y) (avatar 'x))))  (help))
@@ -877,7 +887,7 @@
 
 ; Fall down one cell if a non-entity and non-solid cell below me
 (define (fall)
- ((avatar 'faceDir) 0 0 0 0) ; Look down
+ ((avatar 'faceDir) 8) ; Look down
  (let ((nextCell (apply field-ref ((avatar 'gpsLook)))))
    (if (= nextCell CellMax)
      (begin
@@ -980,20 +990,20 @@
    (if (procedure? val) (cons 'lambda (vector-ref (vector-ref (vector-ref Buttons ch) 0) 2))
    val))))
 
-(setButton 'down '(walk 2))
-(setButton #\j '(walk 2))
-(setButton 'up '(walk 8))
-(setButton #\k '(walk 8))
+(setButton 'down '(walk 6))
+(setButton #\j '(walk 6))
+(setButton 'up '(walk 2))
+(setButton #\k '(walk 2))
 (setButton 'left '(walk 4))
 (setButton #\h '(walk 4))
-(setButton 'right '(walk 6))
-(setButton #\l '(walk 6))
-(setButton #\b '(walk 1))
-(setButton #\n '(walk 3))
-(setButton #\y '(walk 7))
-(setButton #\u '(walk 9))
-(setButton #\+ '(walk 5))
-(setButton #\- '(walk 0))
+(setButton 'right '(walk 0))
+(setButton #\l '(walk 0))
+(setButton #\b '(walk 5))
+(setButton #\n '(walk 7))
+(setButton #\y '(walk 3))
+(setButton #\u '(walk 1))
+(setButton #\- '(walk 8))
+(setButton #\+ '(walk 9))
 (setButton #\A '(begin
   (set! CELLANIMATION (not CELLANIMATION))
   (WinChatDisplay "\r\nCell animation " CELLANIMATION)))
@@ -1004,13 +1014,17 @@
 (setButton #\K '(winMapUp))
 (setButton #\L '(winMapRight))
 (setButton #\S '(begin
-  (set! SCROLLINGMAP (not SCROLLINGMAP))
-  (WinChatDisplay "\r\nalwaysScroll " SCROLLINGMAP)))
+  (set! MAPSCROLL
+    (if (eq? MAPSCROLL 'always) 'edge
+    (if (eq? MAPSCROLL 'edge) 'never
+    'always)))
+  (WinChatDisplay "\r\nScroll mode set to:" MAPSCROLL)))
 (setButton #\M '((WinMap 'toggle)))
 (setButton #\t '(begin
   (WinInputPuts (string ">" (replTalk 'getBuffer)))
   (set! state 'talk)))
 (setButton CHAR-CTRL-D '(ipc '(set! Debug (not Debug))))
+(setButton CHAR-CTRL-E '(begin (set! EDIT (not EDIT)) (WinChatDisplay "\r\nEDIT " EDIT)))
 (setButton CHAR-CTRL-L '(begin (viewportReset (avatar 'y) (avatar 'x)) ((WinChat 'repaint))))
 (setButton CHAR-CTRL-M '(begin ((WinStatus 'toggle)) ((WinColumn 'toggle))))
 (setButton CHAR-CTRL-Q '(set! state 'done))
@@ -1030,8 +1044,8 @@
 (setButton #eof '(set! state 'done))
 (setButton CHAR-CTRL-C '((WinConsole 'toggle)))
 ;(setButton CHAR-CTRL-K '((ipc 'qwrite) `(set! FIELD ,FIELD))) ; Send my plane out to IPC.
-;(setButton #\1 '(thread (spawnKitty 1000)))
-(setButton #\1 '(thread (pacman)))
+(setButton #\1 '(begin (set! state 'pacman) (pacman)))
+(setButton #\2 '(thread (spawnKitty 1000)))
 ;(setButton #\1 '((WinChat 'resize) (WinChat 'Wheight) (WinChat 'Wwidth)))
 ;(setButton #\1 '((WinChat 'scrollUp)))
 ;(setButton CHAR-CTRL-_ '(walkDir 4)) ; Sent by backspace?
@@ -1127,7 +1141,7 @@
     (begin
       (QueueAdd keyQueue c) ; Add new keyboard character to queue
       (semaphore-up getKeySemaphore))) ; flag semaphore
-   (KeyAgent))) ; rinse repeat
+   (KeyAgent))) ; rinse and repeat
 
 ; Read an escape sequence
 (define (keyAgentEsc)
@@ -1150,14 +1164,14 @@
          (begin
            (QueueAdd keyQueue 'left) 
            (semaphore-up getKeySemaphore))
-       (begin
+       (begin ; Not an arrow key sequence, so send all the character to the key queue
            (QueueAdd keyQueue CHAR-ESC) 
            (QueueAdd keyQueue #\[) 
            (QueueAdd keyQueue c) 
            (semaphore-up getKeySemaphore)
            (semaphore-up getKeySemaphore)
            (semaphore-up getKeySemaphore)))))))
-     (begin
+     (begin ; Not a recognized escape sequence, so send escape and the character
        (QueueAdd keyQueue CHAR-ESC)
        (QueueAdd keyQueue c)
        (semaphore-up getKeySemaphore)
@@ -1185,20 +1199,20 @@
 
 (define replTalk
  (let ((talkInput ""))
-  (lambda (c)
-   (if (eq? c 'getBuffer) talkInput ; Return input buffer contents.
+  (lambda (b)
+   (if (eq? b 'getBuffer) talkInput ; Return input buffer contents.
    ; backspace
-   (if (or (eq? c CHAR-CTRL-H)
-           (eq? c CHAR-CTRL-_)
-           (eq? c CHAR-CTRL-?))
+   (if (or (eq? b CHAR-CTRL-H)
+           (eq? b CHAR-CTRL-_)
+           (eq? b CHAR-CTRL-?))
        (begin
         (if (not (eq? "" talkInput))
          (begin ((WinInput 'backspace) #\ )
                 (set! talkInput (substring talkInput 0 (- (string-length talkInput) 1)))))
         'talk)
    ; Send Chatter
-   (if (or (eq? c RETURN)
-           (eq? c NEWLINE))
+   (if (or (eq? b RETURN)
+           (eq? b NEWLINE))
      (begin
        ; Toggle help window if certain phrase entered
        (if (string=? "?" talkInput) (help))
@@ -1219,33 +1233,37 @@
        (set! talkInput "")
        'talk)
    ; Quit chat mode.
-   (if (or (eq? c CHAR-ESC) ; Escape char
-           (eq? c CHAR-CTRL-I)) ; Tab char
+   (if (or (eq? b CHAR-ESC) ; Escape char
+           (eq? b CHAR-CTRL-I)) ; Tab char
      (begin (WinInputPuts "\r\n")
             'cmd)
-   (if (and (>= c #\ )(<= c #\~))
-       (begin (WinInputPutc c)
-              (set! talkInput (string talkInput c))
+   (if (and (>= b #\ )(<= b #\~))
+       (begin (WinInputPutc b)
+              (set! talkInput (string talkInput b))
               'talk)
    'talk))))))))
 
-(define (replCmd c)
+(define (replCmd b)
  (define state 'cmd) ; state might be changed to 'done or 'talk.
- (let ((button (getButton c)))
-   (if ShowButtons (WinChatDisplay "\r\n" c " " button))
+ (let ((button (getButton b)))
+   (if ShowButtons (WinChatDisplay "\r\n" b " " button))
    (if (pair? button) (eval button)
     (if (procedure? button) (button)
-     (WinConsoleDisplay "\r\nButton " c " undefined " button))))
+     (WinConsoleDisplay "\r\nButton " b " undefined " button))))
  state)
 
+; The various states (talk cmd pacman done)
 (define wrepl
  (let ((state 'cmd))
   (lambda ()
-   (if (not (eq? state 'done)) ; Exit if state is done.
-     (let ((c (getKey)))
+   (if (neq? state 'done) ; Exit if state is done.
+     (let ((b (getKey)))
        (set! ActivityTime (time))
-       (if (eq? state 'talk) (set! state (replTalk c))
-         (if (eq? state 'cmd) (set! state (replCmd c))))
+       (if (eq? state 'talk) (set! state (replTalk b))
+         (if (eq? state 'cmd) (set! state (replCmd b))
+           (if (eq? state 'pacman) (set! state (replPacman b))
+             (begin (WinChatDisplay "\r\nUnknown REPL state " state)
+                    (set! state 'cmd)))))
        (wrepl))))))
 
 
@@ -1253,17 +1271,17 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Prototypes_and_fun_things
 ;;
+
 ;; Walking kitty soldier
 (define (spawnKitty . cycles)
  (set! cycles (if (null? cycles) 128 (car cycles))) ; Set max cycles
- (letrec ((kitty (Avatar 0 "Kat"))
+ (letrec ((kitty (Avatar 0 "Kat" (glyphNew 0 7 #\K 0 15 #\a) (avatar 'z) (avatar 'y) (avatar 'x)))
           (dir->card (lambda (d) (vector-ref #(6 9 8 7 4 1 2 3) d)))
           (card->dir (lambda (c) (vector-ref #(0 5 6 7 4 0 0 3 2 1) c)))
           (happyVector (vector 0 0 0 0 0 0 0 0))
           (dist 0))
- ((kitty 'setLoc) (avatar 'z) (avatar 'y) (avatar 'x))
  ; Tell everyone who this kitteh is.
- ((ipc 'qwrite) `(entity 0 ,(kitty 'dna) "kitty" ,@((kitty 'gps)) ,(glyphNew 0 7 #\K 0 15 #\a)))
+ ((ipc 'qwrite) `(entity ,(kitty 'dna) 0 "kitty" ,(kitty 'glyph) ',((kitty 'gps))))
  (let ~ ((i 0)) ; Main loop
    ; Distance from parent avatar
    (set! dist (distance ((kitty 'gps)) ((avatar 'gps))))
@@ -1284,19 +1302,8 @@
             (if (= kd dist) -1 -2)))
           (vector-ref happyVector (card->dir (kitty 'dir)))))
    ((ipc 'qwrite) `(move ,(kitty 'dna) ,@((kitty 'gps))))
-   (if KITTEHBRAIN (begin
-     ((WinChat 'goto) 10 5) (WinChatDisplay (vector-ref happyVector 3) "  ")
-     ((WinChat 'goto) 10 8) (WinChatDisplay (vector-ref happyVector 2) "  ")
-     ((WinChat 'goto) 10 11)(WinChatDisplay (vector-ref happyVector 1) "  ")
-     ((WinChat 'goto) 11 5) (WinChatDisplay (vector-ref happyVector 4) "  ")
-     ((WinChat 'goto) 11 11)(WinChatDisplay (vector-ref happyVector 0) "  ")
-     ((WinChat 'goto) 12 5) (WinChatDisplay (vector-ref happyVector 5) "  ")
-     ((WinChat 'goto) 12 8) (WinChatDisplay (vector-ref happyVector 6) "  ")
-     ((WinChat 'goto) 12 11)(WinChatDisplay (vector-ref happyVector 7) "  ")))
    (sleep 200)
-   ;(if (equal? ((kitty 'gps))
-   ;            ((avatar 'gps)))
-   ;    ((ipc 'qwrite) `(voice ,(kitty 'dna) 10 "Mrrreeeooowww!")))
+   ;(if (equal? ((kitty 'gps)) ((avatar 'gps))) ((ipc 'qwrite) `(voice ,(kitty 'dna) 10 "Mrrreeeooowww!")))
    (if (> i (+ cycles (random 30)))
        ((ipc 'qwrite) `(die ,(kitty 'dna))) ; kill entity
        (~ (+ i 1))))))
@@ -1314,7 +1321,7 @@
    (thread (let ~ ()
      (for-each
        (lambda (x) (or walkForeverFlag (unthread)) (walk x) (sleep 400))
-       '(6 6 6 6 8 8 8 8 4 4 4 4 2 2 2 2))
+       '(0 0 0 0 2 2 2 2 4 4 4 4 6 6 6 6))
      (sleep 500)
      (~))))))))
 
@@ -1366,36 +1373,82 @@
 
 ; Pacman
 
-; Filter out solid directions from of list
-(define (pacmanFilterSolid l)
- (if (null? l) ()
- (if (begin
-       ((avatar 'faceDir) (car l))
-       (cellSolid? (cellRef (apply field-base-ref ((avatar 'gpsLook))))))
-   (pacmanFilterSolid (cdr l))
-   (cons (car l) (pacmanFilterSolid (cdr l))))))
+(define pacmanOn #f)
+(define desiredDir 'ghost)
 
-(define (pacmanAnother i)
- (list->vector (pacmanFilterSolid (if (= i 2) '(2 4 6)
-                                  (if (= i 4) '(2 4 8)
-                                  (if (= i 6) '(2 6 8)
-                                  (if (= i 8) '(4 6 8))))))))
+; Handle pacman controls and adjust state for the pacman thread
+(define (replPacman b) ; button
+ (define newState 'pacman)
+ (if (eq? b #\q)
+   (begin
+     (pacman)
+     (set! newState 'cmd)) ; Call pacman to stop thread and set new state.
+ (if (eq? b 'right) (set! desiredDir 0)
+ (if (eq? b 'up)    (set! desiredDir 2)
+ (if (eq? b 'left)  (set! desiredDir 4)
+ (if (eq? b 'down)  (set! desiredDir 6)
+ (if (eq? b #\l)  (set! desiredDir 0)
+ (if (eq? b #\k)  (set! desiredDir 2)
+ (if (eq? b #\h)  (set! desiredDir 4)
+ (if (eq? b #\j)  (set! desiredDir 6)
+ (if (eq? b #\g)    (set! desiredDir 'ghost)))))))))))
+ newState) ; want to stay in the pacman state
 
-(define pacman (let ((dir 8) (enabled #f)) (lambda ()
-  (set! enabled (not enabled)) ; Call again to disable
-  (let ~ ()
+; Given a direction, return a list of possible directions (same direction, left or right)
+; after filtering out non-obstructed directions
+(define (pacmanFilterDirections l)
+  (filter-not
+    (lambda (d)
+      ((avatar 'faceDir) d)
+      (cellSolid? (cellRef (apply field-base-ref ((avatar 'gpsLook))))))
+    l))
+
+; Generate list of possible directions for a ghost given a direction
+(define (pacmanNewGhostDirections dir)
+  (pacmanFilterDirections
+    (list (modulo (- dir 2) 8) ; Start with three direction: left current right
+                  dir
+                  (modulo (+ dir 2) 8))))
+
+; Generate list with desired and/or current pacman directions
+(define (pacmanNewPacmanDirections dir)
+  (pacmanFilterDirections (list desiredDir dir)))
+
+; Pacman thread
+(define pacman (let ((dir 0)) (lambda ()
+  (if pacmanOn
+    (begin
+      (WinChatSetColor 0 1)
+      (WinChatDisplay "\r\nYour pacman game is over."))
+    (begin
+      (WinChatSetColor 0 15)
+      (WinChatDisplay "\r\nWelcome to pacman mode")
+      (WinChatSetColor 0 7)
+      (WinChatDisplay "\r\n q.......quit")
+      (WinChatDisplay "\r\n g.......act like a ghost")
+      (WinChatDisplay "\r\n arrows..move pacman")))
+  (set! pacmanOn (not pacmanOn)) ; Call again to disable
+  (thread (let ~ () (if pacmanOn (begin
     (semaphore-down walkSemaphore)
-    (set! dir ; Pick a new direction after every movement
-      (let ((v (pacmanAnother dir)))
-        (if (eq? #() v)
-          (vector-ref #(0 0 8 0 6 0 4 0 2) dir) ; all new dirs solid so backup 2->8 4->6 6->4 8->2
-          (vector-random v)))); choose random new dir
-    (WinConsoleDisplay dir)
-    ((avatar 'faceDir) dir)
-    (walkDetails)
+    (if (eq? desiredDir 'ghost)
+      ; Ghost logic
+      (begin
+        (set! dir ; Pick a new direction after every movement
+          (let ((v (list->vector (pacmanNewGhostDirections dir))))
+            (if (eq? #() v)
+              (modulo (+ dir 4) 8) ; The new directions are all invalid so reverse direction
+              (vector-random v)))); choose random new dir
+        ((avatar 'faceDir) dir)
+        (walkDetails))
+      ; Pacman logic
+      (let ((dirs (pacmanNewPacmanDirections dir)))
+        (if (pair? dirs) (begin
+          (set! dir (car dirs))
+          ((avatar 'faceDir) dir)
+          (walkDetails)))))
     (semaphore-up walkSemaphore)
     (sleep 100)
-    (if enabled (~))))))
+    (~))))))))
 
 
 

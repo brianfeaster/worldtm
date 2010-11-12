@@ -1,21 +1,24 @@
+;;
+;; Queues
+;;
+
+(define QueueSemaphore (open-semaphore 1))
+
 ; Initiall a queue is a list where the first item
 ; points to the last pair that make up the list.
 ; This is considered an empty queue.  The last read
 ; item will continue to exist as a placeholder.
 ;
-; [  *   |  *--]---->[ queue  |  ()  ]
-;    `---------------^
-;
-(define QueueSemaphore (open-semaphore 1))
-
+; ( * . *-)---->( queue . () )
+;   `-----------^
 (define (QueueCreate)
   (let ((q (list () 'queue)))
     (set-car! q (cdr q))
     q))
 
 ; Adding an itme:
-; [  *   |  *--]---->[ queue  |  *--]---->[ e  | () ]
-;    `------------------------------------^
+; ( * . *-)---->( queue . *-)---->( e . () )
+;   `-----------------------------^
 (define (QueueAdd q e)
   (semaphore-down QueueSemaphore)
   (let ((oldTail (car q))
@@ -26,8 +29,8 @@
 
 ; Getting an item will skip the first one and return
 ; the last leaving it there.
-; [  *   |  *--]------------------------->[ e  | () ]
-;    `------------------------------------^
+; ( * . *-)------------------------->( e . () )
+;   `--------------------------------^
 (define (QueueGet q)
   (semaphore-down QueueSemaphore)
   (if (eq? (car q) (cdr q)) (begin

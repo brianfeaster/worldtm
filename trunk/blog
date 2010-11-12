@@ -2441,3 +2441,28 @@ Sun Nov  7 13:27:29 EST 2010
 Canvas mutation needs to be thread safe.  As does moving since pacman and
 walking/falling both rely on the avatar's current direction which is changed
 by both flows.
+
+* Develop walking kitty code for an abstracted entity object.
+
+
+Tue Nov  9 03:48:54 EST 2010
+
+Bug in the compiler when compiling not expressions.  When compiling not's
+parameter expression, the TAILCALL flag was not unset.  The resulting
+emitted code would be incorrect if the not expression was the last one in
+the block as the resulting assembly would return after the not's paremeter
+instructions thus skipping the actual not assembled opcodes.
+
+* Plan on adding a new pacman state to the wrepl loop.
+* Refactor movement values to cardinal polar.
+
+Movement control implemented for the pacman hack.  What's needed now are
+ghosts but there is no decent NPC abstraction.  It should handle IPC commands
+and keep some map state.  In a nutshell it should implement most of what's in
+world.scm.  The next big project then is to distill an avatar abstraction.
+
+
+Thu Nov 11 03:52:47 EST 2010
+
+The IPC should accept a queue object which new incoming messages will add
+objects to along with the other peer streams and local queue.

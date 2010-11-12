@@ -177,6 +177,11 @@
           (equal? (car l1) (car l2))
           (equal? (cdr l1) (cdr l2)))))
 
+(define (meq? a b)         (eq? a b))
+(define (neq? a b)    (not (eq? a b)))
+(define (neqv? a b)   (not (eqv? a b)))
+(define (nequal? a b) (not (equal? a b)))
+
 (define (memq o l)
  (if (null? l) ()
   (if (eq? o (car l)) l
@@ -254,6 +259,18 @@
    (or (null? l) (begin
      (vector-set! v1 i (car l))
      (~ (+ i 1) (cdr l))))))
+
+(define (filter p l)
+ (if (null? l) ()
+ (if (p (car l))
+     (cons (car l) (filter p (cdr l)))
+     (filter p (cdr l)))))
+
+(define (filter-not p l)
+ (if (null? l) ()
+ (if (p (car l))
+     (filter-not p (cdr l))
+     (cons (car l) (filter-not p (cdr l))))))
 
 (define (map f x)
  (if (null? x) ()

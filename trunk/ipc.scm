@@ -115,7 +115,7 @@
          (Display "\r\n::(createHub) Disconnected from hub " hub "  ")
          (createHub)))
 
-     ; Acquired the hub socket port so act as the hub from now on.  Continusouly
+     ; Acquired the hub socket port so act as the hub from now on.  Continuously
      ; accept incomming peer connections and add to message queue.
      (thread
       (Display "\r\n::(createHub) Hub accepting peer connections  ")
