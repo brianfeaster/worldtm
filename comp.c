@@ -1256,6 +1256,11 @@ void compTransformLetrec (void) {
 	DB("-->%s", __func__);
 	expr=cdr(expr); /* Skip letrec. */
 
+   if (memObjectType(car(expr)) != TPAIR) {
+		fprintf (stderr, "letrec malformed: ");
+		wscmWrite(expr, 0, 2);
+	}
+
 	/* Push and count letrec binding expressions. */
 	for (r3=car(expr), len=0;  r3!=null; r3=cdr(r3), len++) push(car(r3));
 
