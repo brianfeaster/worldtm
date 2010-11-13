@@ -1045,7 +1045,8 @@
 (setButton CHAR-CTRL-C '((WinConsole 'toggle)))
 ;(setButton CHAR-CTRL-K '((ipc 'qwrite) `(set! FIELD ,FIELD))) ; Send my plane out to IPC.
 (setButton #\1 '(begin (set! state 'pacman) (pacman)))
-(setButton #\2 '(thread (spawnKitty 1000)))
+(setButton #\2 '(thread (pong)))
+(setButton #\3 '(thread (spawnKitty 1000)))
 ;(setButton #\1 '((WinChat 'resize) (WinChat 'Wheight) (WinChat 'Wwidth)))
 ;(setButton #\1 '((WinChat 'scrollUp)))
 ;(setButton CHAR-CTRL-_ '(walkDir 4)) ; Sent by backspace?
@@ -1450,7 +1451,61 @@
     (sleep 100)
     (~))))))))
 
+; Given a vector on the cartesian plane in quadrant one between slope
+; 0 and 1, return list of Bresenham increments which walk the line.
+; y <= x
+(define (lineIncrements y x stepDir incDir)
+  (letrec ((yy (+ y y))  (yy-xx (- yy (+ x x))))
+    (let ~ ((i x)  (e (- yy x)))
+      (if (= i 0) ()
+      (if (< 0 e) (cons incDir  (~ (- i 1) (+ e yy-xx)))
+                  (cons stepDir (~ (- i 1) (+ e yy))))))))
 
+; \2|1/  Return list of avatar movements
+;_3\|/0_ required to walk from location 0 to 1
+; 4/|\7  
+; /5|6\
+(define (lineWalks y0 x0 y1 x1)
+ (letrec ((y (- y1 y0))
+          (x (- x1 x0))
+          (ay (abs y))
+          (ax (abs x)))
+  (if (< ay ax)
+    (if (< 0 x) ; linear X axis movement
+      (if (< 0 y)
+        (lineIncrements ay ax 0 7)      ; 7
+        (lineIncrements ay ax 0 1))     ; 0
+      (if (< 0 y)
+        (lineIncrements ay ax 4 5)      ; 4
+        (lineIncrements ay ax 4 3)))    ; 3
+    (if (< 0 y) ; linear Y axis movement
+      (if (< 0 x)
+        (lineIncrements ax ay 6 7)      ; 6
+        (lineIncrements ax ay 6 5))     ; 5
+      (if (< 0 x)
+        (lineIncrements ax ay 2 1)      ; 1
+        (lineIncrements ax ay 2 3)))))) ; 2
+
+
+(define pong (let ((power #f)) (lambda ()
+  (set! power (not power))
+  (WinChatDisplay "\r\nPong " (if power "enabled.  Press 2 to disable." "disabled"))
+  (let ~ ((wall 0))
+   (if power
+    (let ((oy (* (/ (avatar 'y) MapBlockSize) MapBlockSize)) ; Origin of this map block
+          (ox (* (/ (avatar 'x) MapBlockSize) MapBlockSize))
+          (m 0)
+          (n 0))
+    (if (= wall 0) (begin (set! m (random MapBlockSize)) (set! n (- MapBlockSize 1)))
+    (if (= wall 1) (begin (set! m 0)                     (set! n (random MapBlockSize)))
+    (if (= wall 2) (begin (set! m (random MapBlockSize)) (set! n 0))
+    (if (= wall 3) (begin (set! m (- MapBlockSize 1))    (set! n (random MapBlockSize)))))))
+    (let ~ ((l (lineWalks (avatar 'y) (avatar 'x) (+ oy m) (+ ox n))))
+      (if (pair? l) (begin
+        (walk (car l))
+        (sleep 10)
+        (if power (~ (cdr l))))))
+    (~ (modulo (+ wall 1) 4))))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Genesis

@@ -14,7 +14,7 @@
 ; Keep track of internal implemenations.
 (define sdisplay display)
 (define swrite write)
-
+(quit
 ; display
 (define (display-list-serialize-list o r)
   (display-list-serialize
@@ -146,6 +146,8 @@
 (define (newline) (display NEWLINE))
 (define (return)  (display RETURN))
 (define (beep)    (send "\a" stdout))
+
+(define (abs x) (if (< x 0) (- x) x))
 
 (define ( caar x)      (car (car x)))
 (define ( cadr x)      (car (cdr x)))
