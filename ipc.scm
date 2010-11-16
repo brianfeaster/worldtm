@@ -23,68 +23,53 @@
                (begin (display "ERROR: Ipc: exceeded maximum port")
                       (quit))
                (~)))))))
+ (define PeerList (ListCreate))
+ (define QueueList (ListCreate))
 
- ; == Peer structure ==========================================================
+ ;--- Peer structure ----------------------------------------------------------
  ; A peer is a  #(socket  message-queue  message-queue-semaphore)
- (define (peerCreate s) (vector s (QueueCreate) (open-semaphore 0)))
+ (define (peerCreate s) (vector s (QueueCreate)))
  (define (peerSocket p) (vector-ref p 0))
  (define (peerQueue p) (vector-ref p 1))
- (define (peerSemaphore p) (vector-ref p 2))
 
- ; == Peer lists ==============================================================
- (define PeerList ())
- (define PeersSemaphore (open-semaphore 1))
+ ;--- Reader Queues -----------------------------------------------------------
+ (define (newReader) ; return a new IPC queue reader
+   (let ((q (QueueCreate)))
+     (ListAdd QueueList q)
+     q))
 
- (define (peersAdd peer)
-   (semaphore-down PeersSemaphore)
-   (set! PeerList (cons peer PeerList))
-   (semaphore-up PeersSemaphore))
-
- (define (peersDelete peer)
-   (semaphore-down PeersSemaphore)
-   (set! PeerList (list-delete PeerList peer))
-   (semaphore-up PeersSemaphore))
-
- ;=== Message_Queues ==========================================================
- (define MsgQueue (QueueCreate))
- (define MsgQueueSemaphore (open-semaphore 0))
-
- (define (qread)    ; Read from my incomming message queue.
-   (semaphore-down MsgQueueSemaphore)
-   (QueueGet MsgQueue))
+ (define (delReader q)
+   (QueueDestroy q)
+   (ListDel QueueList q))
 
  ; Append e to each peer's outgoing message queue as well as my own.
  (define (qwrite e)
-  (map (lambda (p)
-         (QueueAdd (peerQueue p) e)
-         (semaphore-up (peerSemaphore p)))
-       PeerList)
-  (msgQueueAdd e))
+  (map (lambda (p) (QueueAdd (peerQueue p) e))
+       (ListGet PeerList))
+  (msgQueuesAdd e))
 
- (define (msgQueueAdd e)
-   (or (eq? (car e) 'mapUpdateColumns) (Display e))
-   (QueueAdd MsgQueue e)
-   (semaphore-up MsgQueueSemaphore))
+ (define (msgQueuesAdd e)
+   (Display e)
+   (map (lambda (q) (QueueAdd q e))
+        (ListGet QueueList)))
 
- ; == Socket communication ====================================================
+ ;--- Socket communication ----------------------------------------------------
 
- ; Read from peer's socket and add to this object's I/O queue as well as every
- ; other queue in the peer list.
+ ; Read from peer's socket and add to this object's I/O queue as well as every ; other queue in the peer list.
  (define (peerReaderLoop peer)
    (Display "\r\n::(peerReaderLoop) " peer "  ")
    (let ~ ((e (read (peerSocket peer))))
      (if (eof-object? e)
        (begin
-         (peersDelete peer)
+         (ListDel PeerList peer)
          (vector-set! peer 0 #f)) ; BF TODO Required to remove socket from peer?
        (begin
          ; Relay message to every other peer
          (map (lambda (p)
-                (QueueAdd (peerQueue p) e)
-                (semaphore-up (peerSemaphore p)))
-              (list-delete PeerList peer))
+                (or (eq? p peer) (QueueAdd (peerQueue p) e)))
+              (ListGet PeerList))
          ; Add message to my local I/O queue
-         (msgQueueAdd e)
+         (msgQueuesAdd e)
          (~ (read (peerSocket peer)))))))
 
  ; Write to peer's socket anything in its queue.
@@ -92,9 +77,7 @@
    (Display "\r\n::(peerWriterLoop) " peer "  ")
    (let ~ ()
      (if (peerSocket peer) (begin
-       (semaphore-down (peerSemaphore peer))
-       (write (QueueGet (peerQueue peer))
-              (peerSocket peer))
+       (write (QueueGet (peerQueue peer)) (peerSocket peer))
        (send " " (peerSocket peer))
        (~)))))
 
@@ -107,7 +90,7 @@
      (let ((hub (peerCreate (open-stream (open-socket "localhost" HubPort)))))
        (Display "\r\n::(createHub) Connected to hub " hub "  ")
        (display "'(World 5 3 0)" (peerSocket hub)) ; Identify myself to the hub.
-       (peersAdd hub)
+       (ListAdd PeerList hub)
        (thread
          (peerWriterLoop hub))
        (thread
@@ -123,7 +106,7 @@
         (let ((peer (peerCreate (open-stream HubSocket))))
           (Display "\r\n::(createHub) Hub accepted peer " peer "  ")
           (display "'(World 5 3 0)" (peerSocket peer)) ; Identify myself to the hub.
-          (peersAdd peer)
+          (ListAdd PeerList peer)
           (thread
             (peerWriterLoop peer))
           (thread
@@ -152,7 +135,7 @@
    (letrec ((s (open-stream PrivateSocket))
             (e (read s)))
      (Display "\r\n::IPC Private socket " PrivateSocket " received[" e "]")
-     (or (eof-object? e) (msgQueueAdd e))
+     (or (eof-object? e) (msgQueuesAdd e))
      (close s)
      (~))))
 
