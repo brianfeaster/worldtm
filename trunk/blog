@@ -2466,3 +2466,12 @@ Thu Nov 11 03:52:47 EST 2010
 
 The IPC should accept a queue object which new incoming messages will add
 objects to along with the other peer streams and local queue.
+
+
+Sun Nov 14 01:13:13 EST 2010
+
+Implementing pong.  Paddles should be multi-celled avatars.
+
+IPC object should by default start with no direct reader but be able to generate
+new readers as needed.  These will be accessed for IPC reads where as the IPC
+object will continue to be used to write IPC messages to.

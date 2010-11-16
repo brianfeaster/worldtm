@@ -841,7 +841,7 @@
 (define (walkDetails)
   ; Update avatar locally and via IPC
   ((avatar 'walk))
-  ((ipc 'qwrite) (list 'move DNA (avatar 'z) (avatar 'y) (avatar 'x)))
+  (ipcWrite (list 'move DNA (avatar 'z) (avatar 'y) (avatar 'x)))
   ; If ceiling changes, repaint canvas using new ceiling height
   (let ((oldCeiling (avatar 'ceiling)))
     ((avatar 'setCeiling) (- (apply field-ceiling ((avatar 'gps))) 1))
@@ -867,7 +867,7 @@
     (let ((nextCell (apply field-ref ((avatar 'gpsLook)))))
       ; Case 1 push entity
       (if (< CellMax nextCell)
-        ((ipc 'qwrite) `(force ,@((avatar 'gpsLook)) ,dir 10))
+        (ipcWrite `(force ,@((avatar 'gpsLook)) ,dir 10))
       ; Case 2 walk normally
       (if (or EDIT (not (cellSolid? (cellRef nextCell))))
         (walkDetails)
@@ -896,14 +896,14 @@
 ; Change avatar color.  Will just cycle through all 16 avatar colors.
 (define (changeColor)
  (let ((glyph (avatar 'glyph)))
-   ((ipc 'qwrite) (list 'entity DNA 
+   (ipcWrite (list 'entity DNA 
                     (glyphNew
                       (glyph0bg glyph)  (modulo (+ (glyph0fg glyph) 1) 16)  (glyph0ch glyph)
                       (glyph1bg glyph)  (modulo (+ (glyph1fg glyph) 1) 16)  (glyph1ch glyph))))))
 
 ; Notify IPC of my name and glyph change
 (define (changeName str)
-  ((ipc 'qwrite)
+  (ipcWrite
    (list 'entity DNA str
             (glyphNew (glyph0bg (avatar 'glyph))
                       (glyph0fg (avatar 'glyph))
@@ -913,9 +913,9 @@
                       (string-ref str (if (< 1 (string-length str)) 1 0)))))) ; Notify IPC of my name change
 
 (define (rollcall)
- ((ipc 'qwrite) ; Force all to evaluate the following
+ (ipcWrite ; Force all to evaluate the following
   `(if (!= DNA ,DNA) ; Skip if I sent this message
-   ((ipc 'qwrite) ; Force all (except me) to evaluate the following
+   (ipcWrite ; Force all (except me) to evaluate the following
     `(if (= DNA ,,DNA) ; If me, evaluate this expression from the other peer
      (voice 0 10
       (string ,(avatar 'name) " "
@@ -953,7 +953,7 @@
        (set! PortMapAgent #f)
        (buttonSetCell)))
    ; Send to everyone
-   ((ipc 'qwrite) `(setCell ,(avatar 'z) ,(avatar 'y) ,(avatar 'x) ,(avatar 'cell)))))
+   (ipcWrite `(setCell ,(avatar 'z) ,(avatar 'y) ,(avatar 'x) ,(avatar 'cell)))))
 
 
 
@@ -1043,7 +1043,7 @@
 (setButton #\Q '(set! state 'done))
 (setButton #eof '(set! state 'done))
 (setButton CHAR-CTRL-C '((WinConsole 'toggle)))
-;(setButton CHAR-CTRL-K '((ipc 'qwrite) `(set! FIELD ,FIELD))) ; Send my plane out to IPC.
+;(setButton CHAR-CTRL-K '(ipcWrite `(set! FIELD ,FIELD))) ; Send my plane out to IPC.
 (setButton #\1 '(begin (set! state 'pacman) (pacman)))
 (setButton #\2 '(thread (pong)))
 (setButton #\3 '(thread (spawnKitty 1000)))
@@ -1057,7 +1057,7 @@
 ;; Incomming_IPC_messages
 ;;
 (define (who . dna) ; TODO handle explicit request from specified peer
-  ((ipc 'qwrite)
+  (ipcWrite
     `(entity ,DNA ,(avatar 'port) ,(avatar 'name) ,(avatar 'glyph) ',((avatar 'gps)))))
 
 ; Update an entity's location
@@ -1184,10 +1184,10 @@
 
 
 (define (say talkInput . level)
- ((ipc 'qwrite) (list 'voice DNA (if (null? level) 10 (car level)) talkInput)))
+ (ipcWrite (list 'voice DNA (if (null? level) 10 (car level)) talkInput)))
 
 (define (saySystem talkInput)
- ((ipc 'qwrite) (list 'voice 0 10 talkInput)))
+ (ipcWrite (list 'voice 0 10 talkInput)))
 
 (define (sayHelloWorld)
  (saySystem (string
@@ -1277,37 +1277,37 @@
 (define (spawnKitty . cycles)
  (set! cycles (if (null? cycles) 128 (car cycles))) ; Set max cycles
  (letrec ((kitty (Avatar 0 "Kat" (glyphNew 0 7 #\K 0 15 #\a) (avatar 'z) (avatar 'y) (avatar 'x)))
-          (dir->card (lambda (d) (vector-ref #(6 9 8 7 4 1 2 3) d)))
-          (card->dir (lambda (c) (vector-ref #(0 5 6 7 4 0 0 3 2 1) c)))
           (happyVector (vector 0 0 0 0 0 0 0 0))
           (dist 0))
  ; Tell everyone who this kitteh is.
- ((ipc 'qwrite) `(entity ,(kitty 'dna) 0 "kitty" ,(kitty 'glyph) ',((kitty 'gps))))
- (let ~ ((i 0)) ; Main loop
+ (ipcWrite `(entity ,(kitty 'dna) 0 "kitty" ,(kitty 'glyph) ',((kitty 'gps))))
+ (let ~ ((tic 0)) ; Main loop
    ; Distance from parent avatar
    (set! dist (distance ((kitty 'gps)) ((avatar 'gps))))
    ; Neuron depletion.
-   (if (= 0 (modulo i 10)) (vector-map! (lambda (x) (/ x 2)) happyVector))
+   (if (= (modulo tic 10) 0)
+     (vector-map! (lambda (x) (/ x 2)) happyVector))
    ; Walk kitty quasi-randomly.
    ((kitty 'walkDir)
-       (dir->card (letrec ((dir (card->dir (kitty 'dir)))
-                           (dir1 (modulo (+ dir (random 3) -1) 8))
-                           (dir2 (modulo (+ dir (random 3) -1) 8)))
-                   (if (> (vector-ref happyVector dir1)
-                          (vector-ref happyVector dir2))
-                       dir1 dir2))))
-   (vector-set! happyVector (card->dir (kitty 'dir))
+       (letrec ((dir (kitty 'dir))
+                (dir1 (modulo (+ dir (random 3) -1) 8))
+                (dir2 (modulo (+ dir (random 3) -1) 8)))
+            (if (> (vector-ref happyVector dir1)
+                   (vector-ref happyVector dir2))
+                dir1 dir2)))
+   (vector-set! happyVector (kitty 'dir)
        (+ (let ((kd (distance ((kitty 'gps))
                               ((avatar 'gps)))))
             (if (< kd dist) 1
             (if (= kd dist) -1 -2)))
-          (vector-ref happyVector (card->dir (kitty 'dir)))))
-   ((ipc 'qwrite) `(move ,(kitty 'dna) ,@((kitty 'gps))))
+          (vector-ref happyVector (kitty 'dir))))
+   (ipcWrite `(move ,(kitty 'dna) ,@((kitty 'gps))))
    (sleep 200)
-   ;(if (equal? ((kitty 'gps)) ((avatar 'gps))) ((ipc 'qwrite) `(voice ,(kitty 'dna) 10 "Mrrreeeooowww!")))
-   (if (> i (+ cycles (random 30)))
-       ((ipc 'qwrite) `(die ,(kitty 'dna))) ; kill entity
-       (~ (+ i 1))))))
+   ;(if (equal? ((kitty 'gps)) ((avatar 'gps))) (ipcWrite `(voice ,(kitty 'dna) 10 "Mrrreeeooowww!")))
+   ; Kill entity or loop again
+   (if (> tic (+ cycles (random 30)))
+       (ipcWrite `(die ,(kitty 'dna)))
+       (~ (+ tic 1))))))
 
 (define march (let ((walkForeverFlag #f)) (lambda ()
  (if walkForeverFlag
@@ -1357,7 +1357,7 @@
     (if (and (> strLen 11) (string=? "my name is " (substring talkInput 0 11)))
       (thread (changeName (substring talkInput 11 strLen))))))
  (if tankIsListening (begin
-   (if (string=? "who" talkInput) ((ipc 'qwrite) '(say "I'm here!")))
+   (if (string=? "who" talkInput) (ipcWrite '(say "I'm here!")))
    (if (string=? "load the jump program" talkInput) (tankTalk "I can't find the disk")
    (if (string=? "march" talkInput) (thread (march))
    (if (string=? "edit" talkInput) (begin (set! EDIT (not EDIT)) (tankTalk "Edit mode " EDIT))))))))
@@ -1542,6 +1542,8 @@
 ; Create ipc object.  Pass in a debug message output port (can be empty lambda)
 (define ipc (Ipc WinConsoleDisplay))
 (ipc '(set! Debug #f))
+(define ipcReadQueue ((ipc 'newReader)))
+(define ipcWrite (ipc 'qwrite))
 
 ; Create avatar object and add to entity list
 (define avatar (Avatar
@@ -1566,11 +1568,12 @@
 
 ; Always read and evaluate everything from IPC.
 (thread
- ; Set the thread's error handler to a continuation so any user or IPC scheme error is caught.
+ ; Set the thread's error handler to a continuation so any user or IPC scheme error is caught
+ ; causing the thread to begin again from the let block.
  (let ((s (call/cc (lambda (c) (vector-set! ERRORS (tid) c) 'starting))))
     (or (eq? s 'starting) (WinChatDisplay "\r\nIPC-REPL-ERROR::" s)))
  (let ~ ()
-  (let ((sexp ((ipc 'qread))))
+  (let ((sexp (QueueGet ipcReadQueue)))
      (eval sexp)
      (~))))
 
@@ -1584,7 +1587,7 @@
 
 (define (shutdown)
   (or QUIETLOGIN (sayByeBye))
-  ((ipc 'qwrite) `(die ,DNA)) ; Kill avatar's entity
+  (ipcWrite `(die ,DNA)) ; Kill avatar's entity
   (sleep 1000) ; wait for ipc to flush
   (displayl "\e[" (Terminal 'Theight) "H\r\n\e[0m\e[?25h")
   (quit))
@@ -1599,6 +1602,6 @@
 (signal-set 15 (lambda () (say "signal 15 TERM")  (shutdown)))
 
 (or QUIETLOGIN (sayHelloWorld))
-((ipc 'qwrite) '(who))
+(ipcWrite '(who))
 (wrepl)
 (shutdown)
