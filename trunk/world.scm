@@ -21,7 +21,7 @@
 (load "window.scm")
 (load "entity.scm")
 (define QUIETLOGIN (and (< 2 (vector-length argv)) (eqv? "silent" (vector-ref argv 2))))
-(define CELLANIMATION #t)
+(define VIEWPORTANIMATION #t)
 (define MAPSCROLL 'always) ; always edge never
 (define KITTEHBRAIN  #f)
 (define VOICEDELIMETER " ")
@@ -422,7 +422,12 @@
     (WinMapSetColor (glyph1bg glyph) (glyph1fg glyph))
     (WinMapPutc (glyph1ch glyph))))
 
+; Keep track of time of last viewport refresh used by refresh thread
+; to skip if an avatar movement has caused one within a set time
+(define VIEWPORTREDRAWTIME (time))
+
 (define (viewportReset y x)
+ (set! VIEWPORTREDRAWTIME (time))
  ((Terminal 'lock)) ; This shouldn't be such an all encompasing lock.
  (set! PortCY y)
  (set! PortCX x)
@@ -474,6 +479,7 @@
 ; Given a cell index or entity DNA value, move it in the field, canvas and viewport.
 (define moveCellSemaphore (open-semaphore 1))
 
+; Mutate field and update canvas and viewport
 (define (moveCell cell zo yo xo z y x centerMap)
   (if (eq? MAPSCROLL 'never) (set! centerMap #f)) ; Global toggle to disable map scrolling
   (semaphore-down moveCellSemaphore)
@@ -487,8 +493,8 @@
   (if (>= z (canvasHeight y x)) (begin
     (canvasRender (avatar 'ceiling) y x)
     (or centerMap (viewportRender y x)))) ; Don't render cell if vewport to be reset
-  (if centerMap (viewportReset (avatar 'y) (avatar 'x)))
-  (if (WinColumn 'ENABLED) (dumpColumnInfo (avatar 'y) (avatar 'x)))
+  (if centerMap (viewportReset y x))
+  (if (WinColumn 'ENABLED) (dumpColumnInfo y x))
   (semaphore-up moveCellSemaphore))
 
 
@@ -527,68 +533,62 @@
     ; Return the new or modified entity
     entity))
        
-; The user's avatar.  An extended entity object that includes positioning
-; and directional observation vectors.
+; The user's avatar.  An extended entity object that includes positioning and directional observation vectors
 (define (Avatar port name glyph z y x) ; Inherits Entity
  ((Entity (random) port name glyph  z y x)
-  `(let () ; This is passed in as the inheriting child object
+  `(let () ; This let block is passed in as the inheriting child object
     (define (self msg) (eval msg))
-    (define cell 19) ; TODO generalize items
+    (define cell 19) ; TODO replace with a generalize item container
     (define dir 0)
-    (define relZ 0)
-    (define relY 0)
-    (define relX 0)
-    (define (faceDir dirNew . relLoc)
-      (set! dir dirNew)
-      (if (pair? relLoc)
+    (define tz 0) ; Translation coordinates 
+    (define ty 0)
+    (define tx 0)
+    (define (look ndir . rloc) ; Look in a direction plus a relative (not rotational) zyx location
+      (set! dir ndir)
+      (if (pair? rloc)
         (begin
-          (set! relZ (car relLoc))
-          (set! relLoc (cdr relLoc)))
-        (set! relZ 0))
-      (if (pair? relLoc)
+          (set! tz (car rloc))
+          (set! rloc (cdr rloc)))
+        (set! tz 0))
+      (if (pair? rloc)
         (begin
-          (set! relY (car relLoc))
-          (set! relLoc (cdr relLoc)))
-        (set! relY 0))
-      (if (pair? relLoc)
-        (set! relX (car relLoc))
-        (set! relX 0)))
-    (define (walk) ; Update avatar's position using cardinal polar coordinates
-      (if (= dir 0) (setLoc (+ z    relZ) (+ y    relY) (+ x  1 relX))
-      (if (= dir 1) (setLoc (+ z    relZ) (+ y -1 relY) (+ x  1 relX))
-      (if (= dir 2) (setLoc (+ z    relZ) (+ y -1 relY) (+ x    relX))
-      (if (= dir 3) (setLoc (+ z    relZ) (+ y -1 relY) (+ x -1 relX))
-      (if (= dir 4) (setLoc (+ z    relZ) (+ y    relY) (+ x -1 relX))
-      (if (= dir 5) (setLoc (+ z    relZ) (+ y  1 relY) (+ x -1 relX))
-      (if (= dir 6) (setLoc (+ z    relZ) (+ y  1 relY) (+ x    relX))
-      (if (= dir 7) (setLoc (+ z    relZ) (+ y  1 relY) (+ x  1 relX))
-      (if (= dir 8) (setLoc (+ z -1 relZ) (+ y    relY) (+ x    relX))
-      (if (= dir 9) (setLoc (+ z  1 relZ) (+ y    relY) (+ x    relX)))))))))))))
-    (define (walkDir dir)
-      (faceDir dir)
-      (walk))
-    (define (gpsLook . relLoc)
-      (if (pair? relLoc) (begin
-        (set! relZ (car relLoc))
-        (set! relY (cadr relLoc))
-        (set! relX (caddr relLoc))))
-      (if (= dir 0) (list (+ z    relZ) (+ y    relY) (+ x  1 relX))
-      (if (= dir 1) (list (+ z    relZ) (+ y -1 relY) (+ x  1 relX))
-      (if (= dir 2) (list (+ z    relZ) (+ y -1 relY) (+ x    relX))
-      (if (= dir 3) (list (+ z    relZ) (+ y -1 relY) (+ x -1 relX))
-      (if (= dir 4) (list (+ z    relZ) (+ y    relY) (+ x -1 relX))
-      (if (= dir 5) (list (+ z    relZ) (+ y  1 relY) (+ x -1 relX))
-      (if (= dir 6) (list (+ z    relZ) (+ y  1 relY) (+ x    relX))
-      (if (= dir 7) (list (+ z    relZ) (+ y  1 relY) (+ x  1 relX))
-      (if (= dir 8) (list (+ z -1 relZ) (+ y    relY) (+ x    relX))
-      (if (= dir 9) (list (+ z  1 relZ) (+ y    relY) (+ x    relX)))))))))))))
+          (set! ty (car rloc))
+          (set! rloc (cdr rloc)))
+        (set! ty 0))
+      (if (pair? rloc)
+        (set! tx (car rloc))
+        (set! tx 0)))
+    (define (gpsLook . rloc) ; Return location avatar is looking at
+      (if (pair? rloc) (begin
+        (set! tz (car rloc))
+        (set! ty (cadr rloc))
+        (set! tx (caddr rloc))))
+      (if (= dir 0) (list (+ z    tz) (+ y    ty) (+ x  1 tx))
+      (if (= dir 1) (list (+ z    tz) (+ y -1 ty) (+ x  1 tx))
+      (if (= dir 2) (list (+ z    tz) (+ y -1 ty) (+ x    tx))
+      (if (= dir 3) (list (+ z    tz) (+ y -1 ty) (+ x -1 tx))
+      (if (= dir 4) (list (+ z    tz) (+ y    ty) (+ x -1 tx))
+      (if (= dir 5) (list (+ z    tz) (+ y  1 ty) (+ x -1 tx))
+      (if (= dir 6) (list (+ z    tz) (+ y  1 ty) (+ x    tx))
+      (if (= dir 7) (list (+ z    tz) (+ y  1 ty) (+ x  1 tx))
+      (if (= dir 8) (list (+ z -1 tz) (+ y    ty) (+ x    tx))
+      (if (= dir 9) (list (+ z  1 tz) (+ y    ty) (+ x    tx)))))))))))))
     (define ceiling z)
     (define (setCeiling z) (set! ceiling z))
     self)))
 
 ; Update an avatar's postion internaly and in the map
+; Also handle map redrawing and centering
 (define (moveEntity entity z y x)
-  (moveCell (entity 'dna) (entity 'z) (entity 'y) (entity 'x) z y x #f)
+  (moveCell (entity 'dna)
+            (entity 'z) (entity 'y) (entity 'x) ; old location
+            z y x ; new location
+            (and (eq? entity avatar) ; If me then might have to redraw the map
+                 (or (eq? MAPSCROLL 'always)
+                     (and (eq? MAPSCROLL 'edge)
+                          (< (- (/ (WinMap 'Wheight) 2) 2)
+                             (distance (list 0 y x)
+                                       (list 0 (+ PortY (/ PortH 2)) (+ PortX (/ PortW 2)))))))))
   ((entity 'setLoc) z y x))
 
 
@@ -596,6 +596,7 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Window_functions_and_initialization
 ;;
+
 ; Setup the help windows with an artistic border and prerender the help text
 (map (lambda (x) ((WinHelp 'alpha) 0 x #f)) '(0 1 2 3 4 5 6 7 8 21 22 23 24 25 26 27 28 29))
 (map (lambda (x) ((WinHelpBorder 'alpha) 0 x #f)) '(0 1 2 3 4 5 6 7 8 23 24 25 26 27 28 29 30 31))
@@ -666,6 +667,14 @@
                (WinColumnPuts (number->string c 16)))
              (WinColumnPuts "   ") ))))
   (if (> z -6) (~ (- z 1)))))
+
+; Continuously redraw the viewport for cell animation.  Should be called in its own thread.
+(define (viewportAnimationLoop)
+   (sleep 1000)
+   (and VIEWPORTANIMATION
+        (< 0 (- (time) VIEWPORTREDRAWTIME))
+        (viewportReset PortCY PortCX))
+   (viewportAnimationLoop))
 
 
 ; Screen redraw function and signal handler
@@ -839,23 +848,14 @@
 (define (winMapRight)((WinMap 'move)       (WinMap 'Y0) (+  1 (WinMap 'X0))))
 
 (define (walkDetails)
-  ; Update avatar locally and via IPC
-  ((avatar 'walk))
+  ; Update avatar locally in the field/canvas/viewport and via IPC
+  (apply moveEntity `(,avatar ,@((avatar 'gpsLook))))
   (ipcWrite (list 'move DNA (avatar 'z) (avatar 'y) (avatar 'x)))
   ; If ceiling changes, repaint canvas using new ceiling height
   (let ((oldCeiling (avatar 'ceiling)))
     ((avatar 'setCeiling) (- (apply field-ceiling ((avatar 'gps))) 1))
     (if (!= oldCeiling (avatar 'ceiling))
-      (thread (canvasReset (avatar 'ceiling)))))
-  ; Update avatar in field canvas and viewport.
-  (moveCell DNA
-            (avatar 'oz) (avatar 'oy) (avatar 'ox)
-            (avatar 'z)  (avatar 'y)  (avatar 'x)
-            (or (eq? MAPSCROLL 'always)
-                (and (eq? MAPSCROLL 'edge)
-                     (< (- (/ (WinMap 'Wheight) 2) 2)
-                        (distance (list 0 (avatar 'y)           (avatar 'x))
-                                  (list 0 (+ PortY (/ PortH 2)) (+ PortX (/ PortW 2)))))))))
+      (thread (canvasReset (avatar 'ceiling))))))
 
 (define walkSemaphore (open-semaphore 1))
 
@@ -863,7 +863,7 @@
   (semaphore-down walkSemaphore)
     ; Consider cell I'm walking into.  If cell is entity push it.
     ; Otherwise move to facing cell or on top of obstructing cell.
-    ((avatar 'faceDir) dir)
+    ((avatar 'look) dir)
     (let ((nextCell (apply field-ref ((avatar 'gpsLook)))))
       ; Case 1 push entity
       (if (< CellMax nextCell)
@@ -873,7 +873,7 @@
         (walkDetails)
       ; Case 3 step up
       (begin
-        ((avatar 'faceDir) dir 1) ; Peek at the cell above the one in front of me
+        ((avatar 'look) dir 1) ; Peek at the cell above the one in front of me
         (set! nextCell (apply field-base-ref ((avatar 'gpsLook))))
         (or (cellSolid? (cellRef nextCell))
           (walkDetails))))))
@@ -887,7 +887,7 @@
 
 ; Fall down one cell if a non-entity and non-solid cell below me
 (define (fall)
- ((avatar 'faceDir) 8) ; Look down
+ ((avatar 'look) 8) ; Look down
  (let ((nextCell (apply field-ref ((avatar 'gpsLook)))))
    (if (= nextCell CellMax)
      (begin
@@ -1005,8 +1005,8 @@
 (setButton #\- '(walk 8))
 (setButton #\+ '(walk 9))
 (setButton #\A '(begin
-  (set! CELLANIMATION (not CELLANIMATION))
-  (WinChatDisplay "\r\nCell animation " CELLANIMATION)))
+  (set! VIEWPORTANIMATION (not VIEWPORTANIMATION))
+  (WinChatDisplay "\r\nMap animation " VIEWPORTANIMATION)))
 (setButton #\C '(changeColor))
 (setButton #\W '(rollcall))
 (setButton #\H '(winMapLeft))
@@ -1062,7 +1062,7 @@
 
 ; Update an entity's location
 (define (move dna z y x)
- (or (= dna DNA) ; Skip if this is me since rendering is handled explicitly
+ (or (= dna DNA) ; Skip if this is me since map rendering is handled during movement handling
      (let ((entity (entitiesGet dna)))
        (if entity (moveEntity entity z y x)))))
 
@@ -1079,7 +1079,6 @@
       (begin ; Create new entity with all args
         (set! entity (apply entitiesSet dna args))
         (moveCell (entity 'dna) (entity 'z) (entity 'y) (entity 'x) (entity 'z) (entity 'y) (entity 'x) #f)))
-    ; Rerender the avatar
     (if (= dna 17749) (set! PortMapAgent (entity 'port))))) ; The map agent's DNA number
 
 (define (die dna)
@@ -1285,16 +1284,17 @@
    ; Distance from parent avatar
    (set! dist (distance ((kitty 'gps)) ((avatar 'gps))))
    ; Neuron depletion.
-   (if (= (modulo tic 10) 0)
-     (vector-map! (lambda (x) (/ x 2)) happyVector))
+   (if (= (modulo tic 10) 0) (vector-map! (lambda (x) (/ x 2)) happyVector))
    ; Walk kitty quasi-randomly.
-   ((kitty 'walkDir)
+   ((kitty 'look) ; was walkDir
        (letrec ((dir (kitty 'dir))
                 (dir1 (modulo (+ dir (random 3) -1) 8))
                 (dir2 (modulo (+ dir (random 3) -1) 8)))
             (if (> (vector-ref happyVector dir1)
                    (vector-ref happyVector dir2))
                 dir1 dir2)))
+   (apply (kitty 'setLoc) ((kitty 'gpsLook)))
+   ; Update neuron vector
    (vector-set! happyVector (kitty 'dir)
        (+ (let ((kd (distance ((kitty 'gps))
                               ((avatar 'gps)))))
@@ -1303,7 +1303,10 @@
           (vector-ref happyVector (kitty 'dir))))
    (ipcWrite `(move ,(kitty 'dna) ,@((kitty 'gps))))
    (sleep 200)
-   ;(if (equal? ((kitty 'gps)) ((avatar 'gps))) (ipcWrite `(voice ,(kitty 'dna) 10 "Mrrreeeooowww!")))
+   (if (equal? ((kitty 'gps)) ((avatar 'gps))) ; If avatar and kitty meet...
+     (begin
+        (ipcWrite `(voice ,(kitty 'dna) 10 "Hiss!"))
+        (set! tic (+ cycles 30))))
    ; Kill entity or loop again
    (if (> tic (+ cycles (random 30)))
        (ipcWrite `(die ,(kitty 'dna)))
@@ -1400,7 +1403,7 @@
 (define (pacmanFilterDirections l)
   (filter-not
     (lambda (d)
-      ((avatar 'faceDir) d)
+      ((avatar 'look) d)
       (cellSolid? (cellRef (apply field-base-ref ((avatar 'gpsLook))))))
     l))
 
@@ -1439,13 +1442,13 @@
             (if (eq? #() v)
               (modulo (+ dir 4) 8) ; The new directions are all invalid so reverse direction
               (vector-random v)))); choose random new dir
-        ((avatar 'faceDir) dir)
+        ((avatar 'look) dir)
         (walkDetails))
       ; Pacman logic
       (let ((dirs (pacmanNewPacmanDirections dir)))
         (if (pair? dirs) (begin
           (set! dir (car dirs))
-          ((avatar 'faceDir) dir)
+          ((avatar 'look) dir)
           (walkDetails)))))
     (semaphore-up walkSemaphore)
     (sleep 100)
@@ -1554,7 +1557,7 @@
 (entitiesAdd avatar)
 (set! DNA (avatar 'dna))
 (moveEntity avatar 1 3456 2751) ; Move avatar to entrance of Lord British's castle near 108 86
-(viewportReset       3456 2751) ; Must reset hte viewport as well otherwise it thinks it's looking at 0 0
+(viewportReset       3456 2751) ; Must reset the viewport to initialize synchronize location with avatar
 
 ; Display some initial information
 (or QUIETLOGIN (begin
@@ -1578,10 +1581,7 @@
      (~))))
 
 ; Redraw map resulting in animated cells.
-(thread (let ~ ()
-   (sleep 1000)
-   (if CELLANIMATION (viewportReset PortCY PortCX))
-   (~)))
+(thread (viewportAnimationLoop))
 
 ((WinMap 'toggle))
 
