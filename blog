@@ -2473,5 +2473,11 @@ Sun Nov 14 01:13:13 EST 2010
 Implementing pong.  Paddles should be multi-celled avatars.
 
 IPC object should by default start with no direct reader but be able to generate
-new readers as needed.  These will be accessed for IPC reads where as the IPC
-object will continue to be used to write IPC messages to.
+new readers as needed.  These will be accessed for received IPC messages.   The
+IPC object will continue to be used as the only source for IPC message writes.
+
+
+Tue Nov 16 05:32:45 EST 2010
+
+* Multi-celled avatars
+* Abstract entity and IPC handler
