@@ -44,7 +44,7 @@
 ;;
 (load "entity.scm")
 
-(define (Avatar dna port name glyph z y x) ((Entity dna port name glyph z y x) '(let ()
+(define (Avatar dna port name sprite z y x) ((Entity dna port name sprite z y x) '(let ()
    (define self (lambda (msg) (eval msg)))
    (define counter (makeCounter 0))
    ; Map block origin AKA the upper left hand corner of the map blocks sent to the peer
@@ -53,6 +53,7 @@
    (define (setMapBlockLoc my mx)
      (set! mapBlockY my)
      (set! mapBlockX mx))
+   (define (glyph) ((sprite 'glyphRef) 0 0))
    self)))
 
 ; Association list of entites to their DNA values.
@@ -85,7 +86,7 @@
     entity))
        
 ; Create the map agent
-(define avatar (Avatar DNA (ipc 'PrivatePort) MYNAME #(1 11 #\M 2 4 #\A) 0 0 0))
+(define avatar (Avatar DNA (ipc 'PrivatePort) MYNAME (Sprite 1 1 (vector #(1 11 #\M 2 4 #\A))) 0 0 0))
 (entitiesAdd avatar)
 (entitiesAdd (Entity 0 0 "System" #(0 1 #\S 0 1 #\Y) 0 0 0))
 
@@ -290,7 +291,7 @@
 ;;
 (define (who . dna)
  (ipcWrite
- `(entity ,DNA ,(avatar 'port) ,(avatar 'name) ,(avatar 'glyph) ',((avatar 'gps)))))
+ `(entity ,DNA ,(avatar 'port) ,(avatar 'name) ,(((avatar 'sprite) 'serialize)) ',((avatar 'gps)))))
 
 (define (entity dna . args)
  (let ((e (entitiesGet dna)))

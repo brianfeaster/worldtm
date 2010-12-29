@@ -279,10 +279,13 @@
   (cons (f (car x))
         (map f (cdr x)))))
 
-(define (for-each f l)
- (if (null? l) ()
-     (begin (f (car l))
-            (for-each f (cdr l)))))
+(define (for-each fn lst)
+ (if (null? lst) ()
+     (begin (fn (car lst))
+            (for-each fn (cdr lst)))))
+
+; Same as for-each except arguments are switched
+(define (each-for lst fn) (for-each fn lst))
 
 (define (loop a fn)
  (let ~ ((i 0))
@@ -298,6 +301,7 @@
      (fn a)
      (~ (+ a 1))))))
 
+; Call fn over the 2d coordinate range excluding y1 x1 values
 (define (loop2 y0 y1 x0 x1 fn)
  (let ~ ((y y0) (x x0))
   (if (!= y y1)
