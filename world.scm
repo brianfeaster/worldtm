@@ -65,7 +65,7 @@
          (for-each WinConsolePuts (display->strings x))))
     l))
 (define (WinConsoleWrite . e) (for-each (lambda (x) (for-each WinConsolePuts (write->strings x))) e))
-;((WinConsole 'toggle))
+((WinConsole 'toggle))
 
 ; Input Window
 (define WinInput ((Terminal 'WindowNew)
@@ -1606,7 +1606,7 @@
 
 ; Create ipc object.  Pass in a debug message output port (can be empty lambda)
 (define ipc (Ipc WinConsoleDisplay))
-(ipc '(set! Debug #t))
+(ipc '(set! Debug #f))
 (define ipcReadQueue ((ipc 'newReader)))
 (define ipcWrite (ipc 'qwrite))
 
@@ -1614,17 +1614,15 @@
 (define avatar (Avatar
   (ipc 'PrivatePort)
   NAME
-  (Sprite 1 1 (vector (glyphNew 0 15 #\S 0 15 #\h)))
+  (Sprite 1 1 (vector (glyphNew 0 15 #\: 0 15 #\))))
   99 3456 2751))
-
-;(displayl "Avatar =" avatar "\nGlyph =" ((avatar 'glyph)) "\nGlyph ser=" (((avatar 'sprite) 'serialize))) (quit)
 
 (define (setSprite x)
   (if (= x 0)
     (avatar '(set! sprite (Sprite 1 1 #(#(0 15 #\S  0 15 #\h)))))
   (if (= x 1)
     (avatar '(set! sprite
-      (Sprite 3 2 #(#(0 15 #\  0 15 #\() #(0 15 #\) 0 15 #\ )    ; ()
+      (Sprite 3 2 #(#(0 15 #\  0 15 #\() #(0 15 #\) 0 15 #\ )  ; ()
                   #(0 15 #\- 0 15 #\[) #(0 15 #\] 0 15 #\-)    ;-[]-
                   #(0 15 #\_ 0 15 #\/) #(0 15 #\\ 0 15 #\_)))));_/\_
   (if (= x 2)
@@ -1637,8 +1635,7 @@
                     #(0 15 #\| 0 15 #\|)
                     #(0 15 #\| 0 15 #\|))))))))
    (ipcWrite (list 'entity DNA (((avatar 'sprite) 'serialize)))))
-(setSprite 2)
-
+;(setSprite 0)
 
 
 (entitiesAdd avatar)
