@@ -376,7 +376,7 @@
            (column (vector-vector-ref block by bx)))
     (vector-vector-set! block by bx (columnSet column z cell))
     (saveMapBlock (/ y MapBlockSize) (/ x MapBlockSize) block)
-    (ipcWrite `(setCell ,z ,y ,x ,cell))))
+    (ipcWrite `(mapSetCell ,z ,y ,x ,cell))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;

@@ -7,7 +7,7 @@
 ;;    Field
 ;;    Canvas
 ;;    Viewport
-;;    Map_manipulation
+;;   Map_manipulation
 ;;   Entites_and_avatar
 ;;    Window_functions_and_initialization
 ;;   Button_commands
@@ -474,43 +474,76 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Map_manipulation
 ;;
+;; Calls to edit the World "map" which is made up of Glyphs, Cells,
+;; Columns, a Field, a Canvas and a Viewport.
+
 ; Drop a cell on the map
-(define (dropCell y x cell)
+(define (mapDropCell y x cell)
  (let ((z (+ 1 (field-ref-top 100 y x))))
   (field-set! z y x cell)
   (canvasRender 100 y x)
   (viewportRender y x)))
 
 ; Set map cell and force rendering of cell through entire pipeline.
-(define (setCell z y x cell)
+(define (mapSetCell z y x cell)
   (field-set! z y x cell)
   (canvasRender 100 y x)
   (viewportRender y x))
 
-(define (moveMapCell cell zo yo xo z y x)
-  ; Old location removal
-  (field-delete! zo yo xo cell)
-  (if (>= zo (canvasHeight yo xo)) (begin
-    (canvasRender (avatar 'ceiling) yo xo)
-    (viewportRender yo xo)))
-  ; New location added
+; Delete a cell from the field.  Update canvas if needed.
+(define (mapDelCell cell z y x)
+  (field-delete! z y x cell)
+  (if (>= z (canvasHeight y x)) (begin
+    (canvasRender (avatar 'ceiling) y x)
+    (viewportRender y x))))
+
+; Add a cell to the field.  Update canvas if needed.
+(define (mapAddCell cell z y x)
   (field-add! z y x cell)
   (if (>= z (canvasHeight y x)) (begin
     (canvasRender (avatar 'ceiling) y x)
     (viewportRender y x))))
 
-(define (moveEntityBigCell dna zo yo xo z y x centerMap)
+(define (mapMoveCell cell zo yo xo z y x)
+  ; Old location removal
+  (mapDelCell cell zo yo xo)
+  ; New location added
+  (mapAddCell cell z y x))
+
+(define (mapDelEntitySprite dna zo yo xo)
+  (letrec ((entity (entitiesGet dna))
+           (sprite (entity 'sprite))
+           (h (sprite 'height))
+           (w (sprite 'width))
+           (coordinates (sprite 'coordinates))) ; List of the sprites glyph coordinates
+    ; Second update canvas and viewport
+    (each-for coordinates
+      (lambda (c)
+        (if c (let ((m (car c))
+                    (n (cdr c)))
+          (WinConsoleDisplay (list m n))
+          ; First update field
+          (field-delete! zo (+ m yo) (+ n xo) dna)
+          ; Render old deleted location
+          (if (>= zo (canvasHeight (+ m yo) (+ n xo)))
+           (begin
+             (canvasRenderEntity (avatar 'ceiling) (+ m yo) (+ n xo))
+             (viewportRender (+ m yo) (+ n xo)))))))))) ; Don't render cell if viewport to be reset
+
+(define (mapMoveEntitySprite dna zo yo xo z y x centerMap)
   (if (eq? MAPSCROLL 'never) (set! centerMap #f)) ; Global toggle to disable map scrolling
   (letrec ((entity (entitiesGet dna))
            (sprite (entity 'sprite))
            (h (sprite 'height))
            (w (sprite 'width))
-           (coordinates (sprite 'coordinates)))
+           (coordinates (sprite 'coordinates))) ; List of the sprites glyph coordinates
+    ; First update field
     (each-for coordinates
       (lambda (c) (if c (let ((m (car c))
                               (n (cdr c)))
                     (field-delete! zo (+ m yo) (+ n xo) dna) ; Old
                     (field-add! z (+ m y) (+ n x) dna))))) ; New
+    ; Second update canvas and viewport
     (each-for coordinates
       (lambda (c)
         (if c (let ((m (car c))
@@ -528,14 +561,14 @@
 
 
 ; Given a cell index or entity DNA value, move it in the field, canvas and viewport.
-(define moveCellSemaphore (open-semaphore 1))
+(define MAPMOVECELLSEMAPHORE (open-semaphore 1))
 
-(define (moveCell cell zo yo xo z y x centerMap)
-  (semaphore-down moveCellSemaphore)
+(define (mapMoveObject cell zo yo xo z y x centerMap)
+  (semaphore-down MAPMOVECELLSEMAPHORE)
   (if (< CellMax cell)
-    (moveEntityBigCell cell zo yo xo z y x centerMap)
-    (moveMapCell cell zo yo xo z y x))
-  (semaphore-up moveCellSemaphore))
+    (mapMoveEntitySprite cell zo yo xo z y x centerMap)
+    (mapMoveCell         cell zo yo xo z y x))
+  (semaphore-up MAPMOVECELLSEMAPHORE))
 
 
 
@@ -560,9 +593,9 @@
     (if entity
       (for-each ; Update only name and glyph if entity already exists
         (lambda (a)
-          (if (integer? a) ((entity 'setPort) a)
-          (if (string? a)  ((entity 'setName) a)
-          (if (procedure? a)    ((entity 'setSprite) a))))) ; TODO BF sprite update mechanism stinks
+          (if (integer? a)  ((entity 'setPort) a)
+          (if (string? a)   ((entity 'setName) a)
+          (if (procedure? a)((entity 'setSprite) a))))) ; TODO BF sprite update mechanism stinks
         args)
       (begin
         ; Create a new entity.  Massage the arguments (port name glyph (x y z))->(port name glyph x y z)
@@ -623,7 +656,7 @@
         (oy (entity 'y))
         (ox (entity 'x)))
    ((entity 'setLoc) z y x)
-   (moveCell (entity 'dna)
+   (mapMoveObject (entity 'dna)
              oz oy ox
              z y x
              (and (eq? entity avatar) ; If me then might have to redraw the map
@@ -999,7 +1032,7 @@
        (set! PortMapAgent #f)
        (buttonSetCell)))
    ; Send to everyone
-   (ipcWrite `(setCell ,(avatar 'z) ,(avatar 'y) ,(avatar 'x) ,(avatar 'cell)))))
+   (ipcWrite `(mapSetCell ,(avatar 'z) ,(avatar 'y) ,(avatar 'x) ,(avatar 'cell)))))
 
 
 
@@ -1117,13 +1150,14 @@
     (if entity
       (begin ; Modify entity attributes
         (apply entitiesSet dna args)
-        (moveCell (entity 'dna) (entity 'z) (entity 'y) (entity 'x)
-                                (entity 'z) (entity 'y) (entity 'x) #f)
+        (mapMoveObject (entity 'dna) (entity 'z) (entity 'y) (entity 'x)
+                                     (entity 'z) (entity 'y) (entity 'x) #f)
         (canvasRender (avatar 'ceiling) (entity 'y) (entity 'x))
         (viewportRender (entity 'y) (entity 'x)))
       (begin ; Create new entity with all args
         (set! entity (apply entitiesSet dna args))
-        (moveCell (entity 'dna) (entity 'z) (entity 'y) (entity 'x) (entity 'z) (entity 'y) (entity 'x) #f)))
+        (mapMoveObject (entity 'dna) (entity 'z) (entity 'y) (entity 'x)
+                                     (entity 'z) (entity 'y) (entity 'x) #f)))
     (if (= dna 17749) (set! PortMapAgent (entity 'port))))) ; The map agent's DNA number
 
 (define (die dna)
@@ -1618,6 +1652,7 @@
   99 3456 2751))
 
 (define (setSprite x)
+  (mapDelEntitySprite DNA (avatar 'z) (avatar 'y) (avatar 'x)) ; Remove it first from the map
   (if (= x 0)
     (avatar '(set! sprite (Sprite 1 1 #(#(0 15 #\S  0 15 #\h)))))
   (if (= x 1)

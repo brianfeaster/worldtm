@@ -2529,3 +2529,7 @@ Wed Dec 29 04:57:19 EST 2010
 
 Entities are represented as sprites now.  For pong to work the ball needs to be
 controlled and shared with other peers.
+
+Split up map rendering into cell/sprite del and add.  This way I can create a
+new call that deletes a entity's sprite from the map (field/canvas) then add the
+entity's new sprite to the map.
