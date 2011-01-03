@@ -2533,3 +2533,9 @@ controlled and shared with other peers.
 Split up map rendering into cell/sprite del and add.  This way I can create a
 new call that deletes a entity's sprite from the map (field/canvas) then add the
 entity's new sprite to the map.
+
+
+Sun Jan  2 00:10:39 EST 2011
+
+Sprite needs to be updated properly for peers, not just local client, during
+update and quitting.
