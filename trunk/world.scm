@@ -1167,7 +1167,7 @@
   (if entity ; Ignore unknown entities
     (begin
       ; Remove from here
-      (field-delete! (entity 'z) (entity 'y) (entity 'x) dna)
+      (mapDelEntitySprite dna (entity 'z) (entity 'y) (entity 'x)) ; Remove it first from the map
       (if (>= (entity 'z) (canvasHeight (entity 'y) (entity 'x))) (begin
         (canvasRender 100 (entity 'y) (entity 'x))
         (or thisIsMe (viewportRender (entity 'y) (entity 'x)))))))))
