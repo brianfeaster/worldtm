@@ -591,12 +591,13 @@
 (define (entitiesSet dna . args)
   (let ((entity (entitiesGet dna)))
     (if entity
-      (for-each ; Update only name and glyph if entity already exists
+      (each-for args ; Update only name and glyph if entity already exists
         (lambda (a)
-          (if (integer? a)  ((entity 'setPort) a)
-          (if (string? a)   ((entity 'setName) a)
-          (if (procedure? a)((entity 'setSprite) a))))) ; TODO BF sprite update mechanism stinks
-        args)
+          (if (integer? a)   ((entity 'setPort) a)
+          (if (string? a)    ((entity 'setName) a)
+          (if (procedure? a) (begin
+                (mapDelEntitySprite dna (entity 'z) (entity 'y) (entity 'x)) ; Remove it first from the map
+                ((entity 'setSprite) a))))))) ; TODO BF sprite update mechanism stinks
       (begin
         ; Create a new entity.  Massage the arguments (port name glyph (x y z))->(port name glyph x y z)
         (set! entity (apply Entity dna (let ~ ((args args))
@@ -1652,26 +1653,21 @@
   99 3456 2751))
 
 (define (setSprite x)
-  (mapDelEntitySprite DNA (avatar 'z) (avatar 'y) (avatar 'x)) ; Remove it first from the map
+ (ipcWrite (list 'entity DNA 
   (if (= x 0)
-    (avatar '(set! sprite (Sprite 1 1 #(#(0 15 #\S  0 15 #\h)))))
+    '(Sprite 1 1 #(#(0 15 #\S  0 15 #\h)))
   (if (= x 1)
-    (avatar '(set! sprite
-      (Sprite 3 2 #(#(0 15 #\  0 15 #\() #(0 15 #\) 0 15 #\ )  ; ()
-                  #(0 15 #\- 0 15 #\[) #(0 15 #\] 0 15 #\-)    ;-[]-
-                  #(0 15 #\_ 0 15 #\/) #(0 15 #\\ 0 15 #\_)))));_/\_
+    '(Sprite 3 2 #(#(0 15 #\  0 15 #\() #(0 15 #\) 0 15 #\ )  ; ()
+                   #(0 15 #\- 0 15 #\[) #(0 15 #\] 0 15 #\-)  ;-[]-
+                   #(0 15 #\_ 0 15 #\/) #(0 15 #\\ 0 15 #\_)));_/\_
   (if (= x 2)
-    (avatar '(set! sprite
-      (Sprite 7 1 #(#(0 15 #\| 0 15 #\|)
-                    #(0 15 #\| 0 15 #\|)
-                    #(0 15 #\| 0 15 #\|)
-                    #(0 15 #\| 0 15 #\|)
-                    #(0 15 #\| 0 15 #\|)
-                    #(0 15 #\| 0 15 #\|)
-                    #(0 15 #\| 0 15 #\|))))))))
-   (ipcWrite (list 'entity DNA (((avatar 'sprite) 'serialize)))))
-;(setSprite 0)
-
+    '(Sprite 7 1 #(#(0 15 #\| 0 15 #\|)
+                   #(0 15 #\| 0 15 #\|)
+                   #(0 15 #\| 0 15 #\|)
+                   #(0 15 #\| 0 15 #\|)
+                   #(0 15 #\| 0 15 #\|)
+                   #(0 15 #\| 0 15 #\|)
+                   #(0 15 #\| 0 15 #\|)))))))))
 
 (entitiesAdd avatar)
 (set! DNA (avatar 'dna))
