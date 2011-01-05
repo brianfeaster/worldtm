@@ -2539,3 +2539,14 @@ Sun Jan  2 00:10:39 EST 2011
 
 Sprite needs to be updated properly for peers, not just local client, during
 update and quitting.
+
+
+Tue Jan  4 00:49:47 EST 2011
+
+I want to bring back the glyph variable for entities.  This will be used as the
+default sprite as well as a generic icon for reprenting the avatar outside of
+the map.
+
+Tue Jan  4 14:19:09 EST 2011
+
+Adding a color variable to the avatar object.
