@@ -1,7 +1,6 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; World
 ;;   Windows
-;;    Glyphs
 ;;    Cells
 ;;    Column
 ;;    Field
@@ -110,21 +109,6 @@
 (define WinColumnPutc (WinColumn 'putc))
 (define (WinColumnPuts . l) (for-each (WinColumn 'puts) l))
 (define WinColumnSetColor (WinColumn 'set-color))
-
-
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; Glyphs - Two multi-colored characters.
-;;
-(define glyphNew vector)
-(define (glyph0bg cell) (vector-ref cell 0))
-(define (glyph0fg cell) (vector-ref cell 1))
-(define (glyph0ch cell) (vector-ref cell 2))
-(define (glyph1bg cell) (vector-ref cell 3))
-(define (glyph1fg cell) (vector-ref cell 4))
-(define (glyph1ch cell) (vector-ref cell 5))
-
-(define glyphUNKNOWN (glyphNew 0 8 #\? 0 8 #\?))
 
 
 
@@ -361,7 +345,7 @@
         (letrec ((t (field-ref-top top y x))
                  (celli (field-ref t y x)))
           (cons (if (< CellMax celli)
-                    (((entitiesGet celli) 'glyph))
+                    ((entitiesGet celli) 'glyph)
                     (cellGlyph (cellRef celli)))
                 t)))))))
 
@@ -391,7 +375,7 @@
  (let ((z (field-ref-top top y x))) ; Get z of first cell starting at top
    (let ((celli (field-ref z y x))) ; Field might contain an entity's dna
      (canvasGlyphSet y x (if (< CellMax celli)
-                             (((entitiesGet celli) 'glyph))
+                             ((entitiesGet celli) 'glyph)
                              (cellGlyph (cellRef celli)))))
    (canvasHeightSet y x z)))
 
@@ -595,9 +579,13 @@
         (lambda (a)
           (if (integer? a)   ((entity 'setPort) a)
           (if (string? a)    ((entity 'setName) a)
+          (if (vector? a)
+            (begin ((entity 'setGlyph) a)
+                   (if (= 1 ((entity 'sprite) 'glyphCount))
+                       ((entity 'setSprite) (Sprite 1 1 (vector a)))))
           (if (procedure? a) (begin
                 (mapDelEntitySprite dna (entity 'z) (entity 'y) (entity 'x)) ; Remove it first from the map
-                ((entity 'setSprite) a))))))) ; TODO BF sprite update mechanism stinks
+                ((entity 'setSprite) a)))))))) ; TODO BF sprite update mechanism stinks
       (begin
         ; Create a new entity.  Massage the arguments (port name glyph (x y z))->(port name glyph x y z)
         (set! entity (apply Entity dna (let ~ ((args args))
@@ -608,8 +596,8 @@
     entity))
 
 ; The user's avatar.  An extended entity object that includes positioning and directional observation vectors
-(define (Avatar port name sprite z y x) ; Inherits Entity
- ((Entity (random) port name sprite  z y x)
+(define (Avatar port name z y x) ; Inherits Entity
+ ((Entity (random) port name z y x)
   `(let () ; This let block is passed in as the inheriting child object
     (define (self msg) (eval msg))
     (define cell 19) ; TODO replace with a generalize item container
@@ -728,7 +716,7 @@
    (if (eqv? cellAIR c)
     (begin (WinColumnSetColor 0 8)
            (WinColumnPuts "()   "))
-    (begin (set! c (if (< CellMax c) (((entitiesGet c) 'glyph))
+    (begin (set! c (if (< CellMax c) ((entitiesGet c) 'glyph)
                                      (cellGlyph (cellRef c)))) ; Dump the glyph
            (WinColumnSetColor (glyph0bg c) (glyph0fg c))
            (WinColumnPutc (glyph0ch c))
@@ -977,7 +965,7 @@
 (define (changeColor) ; TODO BF: fix this shite
  (let ((glyph (avatar 'glyph)))
    (ipcWrite (list 'entity DNA 
-                    (glyphNew
+                    (Glyph
                       (glyph0bg glyph)  (modulo (+ (glyph0fg glyph) 1) 16)  (glyph0ch glyph)
                       (glyph1bg glyph)  (modulo (+ (glyph1fg glyph) 1) 16)  (glyph1ch glyph))))))
 
@@ -985,12 +973,12 @@
 (define (changeName str)
   (ipcWrite
    (list 'entity DNA str
-            (glyphNew (glyph0bg (avatar 'glyph))
-                      (glyph0fg (avatar 'glyph))
-                      (string-ref str 0)
-                      (glyph1bg (avatar 'glyph))
-                      (glyph1fg (avatar 'glyph))
-                      (string-ref str (if (< 1 (string-length str)) 1 0)))))) ; Notify IPC of my name change
+            (Glyph (glyph0bg (avatar 'glyph))
+                   (glyph0fg (avatar 'glyph))
+                   (string-ref str 0)
+                   (glyph1bg (avatar 'glyph))
+                   (glyph1fg (avatar 'glyph))
+                   (string-ref str (if (< 1 (string-length str)) 1 0)))))) ; Notify IPC of my name change
 
 (define (rollcall)
  (ipcWrite ; Force all to evaluate the following
@@ -1137,7 +1125,7 @@
 ;;
 (define (who . dna) ; TODO handle explicit request from specified peer
   (ipcWrite
-    `(entity ,DNA ,(avatar 'port) ,(avatar 'name) ,(((avatar 'sprite) 'serialize)) ',((avatar 'gps)))))
+    `(entity ,DNA ,(avatar 'port) ,(avatar 'name) ',((avatar 'gps)))))
 
 ; Update an entity's location
 (define (move dna z y x)
@@ -1188,7 +1176,7 @@
     (WinChatSetColor 0 8) (WinChatDisplay VOICEDELIMETER)
     (WinChatSetColor 0 7) (WinChatDisplay text))
   (letrec ((entity (entitiesGet dna))
-           (glyph ((entity 'glyph))))
+           (glyph (entity 'glyph)))
     (WinChatSetColor (glyph0bg glyph) (glyph0fg glyph))
     (WinChatDisplay "\r\n" (if (null? entity) "???" (entity 'name)) VOICEDELIMETER)
     (WinChatSetColor (glyph1bg glyph) (glyph0fg glyph))
@@ -1356,11 +1344,11 @@
 ;; Walking kitty soldier
 (define (spawnKitty . cycles)
  (set! cycles (if (null? cycles) 128 (car cycles))) ; Set max cycles
- (letrec ((kitty (Avatar 0 "Kat" (glyphNew 0 7 #\K 0 15 #\a) (avatar 'z) (avatar 'y) (avatar 'x)))
+ (letrec ((kitty (Avatar 0 "Kat" (avatar 'z) (avatar 'y) (avatar 'x)))
           (happyVector (vector 0 0 0 0 0 0 0 0))
           (dist 0))
  ; Tell everyone who this kitteh is.
- (ipcWrite `(entity ,(kitty 'dna) 0 "kitty" ,(kitty 'glyph) ',((kitty 'gps))))
+ (ipcWrite `(entity ,(kitty 'dna) 0 "kitty" ',((kitty 'gps))))
  (let ~ ((tic 0)) ; Main loop
    ; Distance from parent avatar
    (set! dist (distance ((kitty 'gps)) ((avatar 'gps))))
@@ -1574,7 +1562,7 @@
 
 (define pong
  (let ((power #f)
-       (ball (Avatar 0 "ball" (Sprite 1 1 (vector (glyphNew 0 15 #\( 0  15 #\)))) 0 0 0))
+       (ball (Avatar 0 "()"  0 0 0))
        (oy 0) ; Origin of this map block
        (ox 0)
        (m 0)
@@ -1617,8 +1605,8 @@
 (define cellXX     (- CellMax 1))
 (define cellAIR    CellMax)
 
-(define glyphXX  (glyphNew 7  0 #\X  7  0 #\X))
-(define glyphAIR (glyphNew 3 12 #\A  4  3 #\r))
+(define glyphXX  (Glyph 7  0 #\X  7  0 #\X))
+(define glyphAIR (Glyph 3 12 #\A  4  3 #\r))
 
 (cellSet cellXX  'xx  glyphXX 'solid)
 (cellSet cellAIR 'air glyphAIR)
@@ -1646,16 +1634,12 @@
 (define ipcWrite (ipc 'qwrite))
 
 ; Create avatar object and add to entity list
-(define avatar (Avatar
-  (ipc 'PrivatePort)
-  NAME
-  (Sprite 1 1 (vector (glyphNew 0 15 #\: 0 15 #\))))
-  99 3456 2751))
+(define avatar (Avatar (ipc 'PrivatePort) NAME 99 3456 2751))
 
 (define (setSprite x)
  (ipcWrite (list 'entity DNA 
   (if (= x 0)
-    '(Sprite 1 1 #(#(0 15 #\S  0 15 #\h)))
+    `(Sprite 1 1 ,(vector (avatar 'glyph)))
   (if (= x 1)
     '(Sprite 3 2 #(#(0 15 #\  0 15 #\() #(0 15 #\) 0 15 #\ )  ; ()
                    #(0 15 #\- 0 15 #\[) #(0 15 #\] 0 15 #\-)  ;-[]-
