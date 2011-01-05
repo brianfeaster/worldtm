@@ -375,14 +375,6 @@
  (let ((z (field-ref-top top y x))) ; Get z of first cell starting at top
    (let ((celli (field-ref z y x))) ; Field might contain an entity's dna
      (canvasGlyphSet y x (if (< CellMax celli)
-                             ((entitiesGet celli) 'glyph)
-                             (cellGlyph (cellRef celli)))))
-   (canvasHeightSet y x z)))
-
-(define (canvasRenderEntity top y x)
- (let ((z (field-ref-top top y x))) ; Get z of first cell starting at top
-   (let ((celli (field-ref z y x))) ; Field might contain an entity's dna
-     (canvasGlyphSet y x (if (< CellMax celli)
                              (letrec ((ent (entitiesGet celli))
                                       (sprite (ent 'sprite))
                                       (ey (ent 'y))
@@ -511,7 +503,7 @@
           ; Render old deleted location
           (if (>= zo (canvasHeight (+ m yo) (+ n xo)))
            (begin
-             (canvasRenderEntity (avatar 'ceiling) (+ m yo) (+ n xo))
+             (canvasRender (avatar 'ceiling) (+ m yo) (+ n xo))
              (viewportRender (+ m yo) (+ n xo)))))))))) ; Don't render cell if viewport to be reset
 
 (define (mapMoveEntitySprite dna zo yo xo z y x centerMap)
@@ -534,11 +526,11 @@
                     (n (cdr c)))
           ; Render old deleted location
           (if (>= zo (canvasHeight (+ m yo) (+ n xo))) (begin
-            (canvasRenderEntity (avatar 'ceiling) (+ m yo) (+ n xo))
+            (canvasRender (avatar 'ceiling) (+ m yo) (+ n xo))
             (or centerMap (viewportRender (+ m yo) (+ n xo))))) ; Don't render cell if viewport to be reset
           ; Render new added location
           (if (>= z (canvasHeight (+ m y) (+ n x))) (begin
-            (canvasRenderEntity (avatar 'ceiling) (+ m y) (+ n x))
+            (canvasRender (avatar 'ceiling) (+ m y) (+ n x))
             (or centerMap (viewportRender (+ m y) (+ n x)))))))))) ; Don't render cell if vewport to be reset
   (if centerMap (viewportReset y x))
   (if (WinColumn 'ENABLED) (dumpColumnInfo y x)))
@@ -1179,7 +1171,7 @@
            (glyph (entity 'glyph)))
     (WinChatSetColor (glyph0bg glyph) (glyph0fg glyph))
     (WinChatDisplay "\r\n" (if (null? entity) "???" (entity 'name)) VOICEDELIMETER)
-    (WinChatSetColor (glyph1bg glyph) (glyph0fg glyph))
+    (WinChatSetColor (glyph1bg glyph) (glyph1fg glyph))
     (WinChatDisplay text)))
  (if (and (!= dna DNA) (eqv? text "unatco")) (say "no Savage")))
 
@@ -1562,7 +1554,7 @@
 
 (define pong
  (let ((power #f)
-       (ball (Avatar 0 "()"  0 0 0))
+       (ball (Avatar 0 "()" 0 0 0))
        (oy 0) ; Origin of this map block
        (ox 0)
        (m 0)
@@ -1573,7 +1565,7 @@
   ((ball 'setLoc) (avatar 'z) (avatar 'y) (avatar 'x))
   (set! oy (* (/ (avatar 'y) MapBlockSize) MapBlockSize)) ; Origin of this map block
   (set! ox (* (/ (avatar 'x) MapBlockSize) MapBlockSize))
-  (ipcWrite `(entity ,(ball 'dna) ,(ball 'port) ,(ball 'name) ,(((ball 'sprite) 'serialize)) ',((ball 'gps))))
+  (ipcWrite `(entity ,(ball 'dna) ,(ball 'port) ,(ball 'name) ',((ball 'gps))))
   (sleep 500)
   (let ~ ((wall 0)) (if power (begin
     (if (= wall 0) (begin (set! m (random MapBlockSize)) (set! n (- MapBlockSize 1)))
