@@ -1015,6 +1015,18 @@
    ; Send to everyone
    (ipcWrite `(mapSetCell ,(avatar 'z) ,(avatar 'y) ,(avatar 'x) ,(avatar 'cell)))))
 
+(define (mouseHandler)
+ (letrec ((wmx (WinMap 'X0))
+               (wmy (WinMap 'Y0))
+               (mx (getKey))
+               (my (getKey))
+               (mapy (+ PortY (- my wmy)))
+               (mapx (+ PortX (/ (- mx wmx) 2))))
+   (let ~ ((l (lineWalks (avatar 'y) (avatar 'x) mapy mapx)))
+     (if (pair? l) (begin
+       (walk (car l))
+       (~ (cdr l)))))))
+
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -1109,7 +1121,10 @@
 ;(setButton #\1 '((WinChat 'resize) (WinChat 'Wheight) (WinChat 'Wwidth)))
 ;(setButton #\1 '((WinChat 'scrollUp)))
 ;(setButton CHAR-CTRL-_ '(walkDir 4)) ; Sent by backspace?
-
+(setButton 'mouse0 '(mouseHandler))
+(setButton 'mouse1 '(begin (getKey) (getKey)))
+(setButton 'mouse2 '(begin (getKey) (getKey)))
+(setButton 'mouseup '(begin (getKey) (getKey)))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -1195,53 +1210,57 @@
 (define getKeySemaphore (open-semaphore 0))
 (define keyQueue (QueueCreate))
 
-(define (KeyAgent)
+(define (keyQueueAdd c)
+  (QueueAdd keyQueue c)
+  (semaphore-up getKeySemaphore))
+
+(define (getKey)
+ (semaphore-down getKeySemaphore)
+ (QueueGet keyQueue))
+
+(define (KeyAgentLoop)
  (let ((c (read-char stdin)))
    (if (eq? c CHAR-ESC)
     (keyAgentEsc) ; Escape char so attempt to read an escape sequence
     (begin
       (QueueAdd keyQueue c) ; Add new keyboard character to queue
       (semaphore-up getKeySemaphore))) ; flag semaphore
-   (KeyAgent))) ; rinse and repeat
+   (KeyAgentLoop))) ; rinse and repeat
+
+; An "\e[" has already been scanned
+(define (keyAgentEscBracket)
+  (let ((c (read-char stdin)))
+    (if (eq? c #\A) (keyQueueAdd 'up)
+    (if (eq? c #\B) (keyQueueAdd 'down)
+    (if (eq? c #\C) (keyQueueAdd 'right)
+    (if (eq? c #\D) (keyQueueAdd 'left)
+    (if (eq? c #\M) (keyAgentEscBracketM)
+    (begin ; Not an arrow key sequence, so send all the character to the key queue
+      (keyQueueAdd CHAR-ESC) 
+      (keyQueueAdd #\[) 
+      (keyQueueAdd c)))))))))
 
 ; Read an escape sequence
 (define (keyAgentEsc)
  (let ((c (read-char stdin)))
    (if (eq? c #\[)
-     (let ((c (read-char stdin)))
-       (if (eq? c #\A)
-         (begin
-           (QueueAdd keyQueue 'up) 
-           (semaphore-up getKeySemaphore))
-       (if (eq? c #\B)
-         (begin
-           (QueueAdd keyQueue 'down) 
-           (semaphore-up getKeySemaphore))
-       (if (eq? c #\C)
-         (begin
-           (QueueAdd keyQueue 'right) 
-           (semaphore-up getKeySemaphore))
-       (if (eq? c #\D)
-         (begin
-           (QueueAdd keyQueue 'left) 
-           (semaphore-up getKeySemaphore))
-       (begin ; Not an arrow key sequence, so send all the character to the key queue
-           (QueueAdd keyQueue CHAR-ESC) 
-           (QueueAdd keyQueue #\[) 
-           (QueueAdd keyQueue c) 
-           (semaphore-up getKeySemaphore)
-           (semaphore-up getKeySemaphore)
-           (semaphore-up getKeySemaphore)))))))
-     (begin ; Not a recognized escape sequence, so send escape and the character
-       (QueueAdd keyQueue CHAR-ESC)
-       (QueueAdd keyQueue c)
-       (semaphore-up getKeySemaphore)
-       (semaphore-up getKeySemaphore)))))
+     (keyAgentEscBracket)
+     (begin ; Not a recognized escape sequence, so send escape and the [ character
+       (keyQueueAdd CHAR-ESC)
+       (keyQueueAdd c)))))
 
-(define (getKey)
- (semaphore-down getKeySemaphore)
- (QueueGet keyQueue))
-
+; An "\e[M" has been scanned
+(define (keyAgentEscBracketM)
+ (let ((c (read-char stdin)))
+   (if (eq? c #\ ) (keyQueueAdd 'mouse0)
+   (if (eq? c #\!) (keyQueueAdd 'mouse2)
+   (if (eq? c #\") (keyQueueAdd 'mouse1)
+   (if (eq? c #\#) (keyQueueAdd 'mouseup)))))
+   (begin
+     (set! c (read-char stdin))
+     (keyQueueAdd (- c #\  1))
+     (set! c (read-char stdin))
+     (keyQueueAdd (- c #\  1))))))))
 
 (define (say talkInput . level)
  (ipcWrite (list 'voice DNA (if (null? level) 10 (car level)) talkInput)))
@@ -1610,7 +1629,7 @@
 (canvasReset 100 glyphXX)
 
 ; Start keyboard reader agent
-(thread (KeyAgent))
+(thread (KeyAgentLoop))
 
 (or QUIETLOGIN (begin
  ; Welcome marquee
