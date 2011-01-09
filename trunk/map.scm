@@ -366,7 +366,7 @@
     (vector-set! c i o)))
     c))
 
-(define (setCell . x) ())
+(define (mapSetCell . x) ())
 
 (define (setCellAgent z y x cell)
   (displayl "\n\e[1;31mSet cell " cell " at " (list z y x)) ; DEBUG
