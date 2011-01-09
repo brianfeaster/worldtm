@@ -409,6 +409,7 @@
  (define (BufferNew Y0 X0 Wheight Wwidth COLOR)
    (((WindowNew Y0 X0 Wheight Wwidth COLOR) 'Buffer)) )
 
+ (display "\e[?1000h") ; Enable mouse reporting
  (ResetTerminal)
  self)
 ;;
