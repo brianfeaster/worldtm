@@ -1017,11 +1017,12 @@
 
 (define (mouseHandler)
  (letrec ((wmx (WinMap 'X0))
-               (wmy (WinMap 'Y0))
-               (mx (getKey))
-               (my (getKey))
-               (mapy (+ PortY (- my wmy)))
-               (mapx (+ PortX (/ (- mx wmx) 2))))
+          (wmy (WinMap 'Y0))
+          (mx (getKey))
+          (my (getKey))
+          (mapy (+ PortY (- my wmy)))
+          (mapx (+ PortX (/ (- mx wmx) 2))))
+   (WinConsoleDisplay "\r\n" wmx " " wmy " " mx " " my " " mapy " " mapx)
    (let ~ ((l (lineWalks (avatar 'y) (avatar 'x) mapy mapx)))
      (if (pair? l) (begin
        (walk (car l))
