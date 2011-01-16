@@ -20,7 +20,6 @@ void wscmNewThread (void);
 void sysWrite (void);
 void sysIllegalOperator (void);
 void sysCreateContinuation (void);
-void wscmDumpEnv (Obj o);
 void sysDumpCallStackCode (void);
 
 /* Has compiler encountered an error?
@@ -463,25 +462,19 @@ void compLambda (Num flags) {
 void compVerifyVectorRef (void) {
 	if (*(Int*)r0 < 0 || memObjectLength(r1) <= *(Int*)r0) {
 		fprintf (stderr, "\nERROR::out of bounds:  (vector-ref ");
-		wscmWrite(r1, 0, 2);
-		fprintf (stderr, " ");
-		wscmWrite(r0, 0, 2);
-		fprintf (stderr, ")");
-		/* Dump the current code block */
-		vmDebugDumpCode(code, stderr);
-		wscmDumpEnv(env);
-		fflush(stdout);
-		*(Int*)0 = 0;
+		wscmWrite(r1, 0, 2); fprintf (stderr, " ");
+		wscmWrite(r0, 0, 2); fprintf (stderr, ")");
+		sysDebugger();
 	}
 }
 
 void compVerifyVectorSetB (void) {
 	if (*(Int*)r2 < 0 || memObjectLength(r1) <= *(Int*)r2) {
 		fprintf (stderr, "\nERROR::out of bounds:  (vector-set! ");
-		wscmWrite(r1, 0, 2); fprintf (stderr, "  ");
-		wscmWrite(r2, 0, 2); fprintf (stderr, "  ");
+		wscmWrite(r1, 0, 2); fprintf (stderr, " ");
+		wscmWrite(r2, 0, 2); fprintf (stderr, " ");
 		wscmWrite(r0, 0, 2); fprintf (stderr, ")");
-		*(Int*)0 = 0;
+		sysDebugger();
 	}
 }
 
