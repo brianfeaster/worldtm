@@ -924,20 +924,15 @@ void memDebugDumpHeapHeaders (FILE *stream) {
 	fprintf (stream, "Finalizer %8lx   %10lx   %10lx   %10lx\n",
 	        heapStatic.finalizerCount,  heapOld.finalizerCount,
 	        heap.finalizerCount,        heapNew.finalizerCount);
-	fprintf (stream, "     -0-          -1-          -2-          -3-          -4-          -5-          -6-         -7-\n");
-	fprintf (stream, ""OBJ" "OBJ" "OBJ" "OBJ" "OBJ" "OBJ" "OBJ" "OBJ"\n",
-	        r0, r1, r2, r3,
-	        r4, r5, r6, r7);
-	fprintf (stream, ""OBJ" "OBJ" "OBJ" "OBJ" "OBJ" "OBJ" "OBJ" "OBJ"\n",
-	        r8, r9, ra, rb,
-	        rc, rd, re, rf);
-	fprintf (stream, "     -8-          -9-          -a-          -b-          -c-          -d-          -e-          -f-\n");
-	fprintf (stream, ""OBJ" "OBJ" "OBJ" "OBJ" "OBJ" "OBJ" "OBJ" "OBJ"\n",
-	        r10, r11, r12, r13,
-	        r14, r15, r16, r17);
-	fprintf (stream, ""OBJ" "OBJ" "OBJ" "OBJ" "OBJ" "OBJ" "OBJ" "OBJ"\n",
-	        r18, r19, r1a, r1b,
-	        r1c, r1d, r1e, r1f);
+
+	fprintf (stream, "r00 "OBJ"  r08 "OBJ"  r10 "OBJ"  r18 "OBJ"\n", r0, r8, r10, r18);
+	fprintf (stream, "r01 "OBJ"  r09 "OBJ"  r11 "OBJ"  r19 "OBJ"\n", r1, r9, r11, r19);
+	fprintf (stream, "r02 "OBJ"  r0a "OBJ"  r12 "OBJ"  r1a "OBJ"\n", r2, ra, r12, r1a);
+	fprintf (stream, "r03 "OBJ"  r0b "OBJ"  r13 "OBJ"  r1b "OBJ"\n", r3, rb, r13, r1b);
+	fprintf (stream, "r04 "OBJ"  r0c "OBJ"  r14 "OBJ"  r1c "OBJ"\n", r4, rc, r14, r1c);
+	fprintf (stream, "r05 "OBJ"  r0d "OBJ"  r15 "OBJ"  r1d "OBJ"\n", r5, rd, r15, r1d);
+	fprintf (stream, "r06 "OBJ"  r0e "OBJ"  r16 "OBJ"  r1e "OBJ"\n", r6, re, r16, r1e);
+	fprintf (stream, "r07 "OBJ"  r0f "OBJ"  r17 "OBJ"  r1f "OBJ"\n", r7, rf, r17, r1f);
 }
 
 

@@ -50,5 +50,6 @@ void sysSignal (void);
 void wscmDefine (char* sym);
 void wscmInitialize (void);
 void sysDumpCallStackCode (void);
+void sysDebugger (void);
 
 #endif

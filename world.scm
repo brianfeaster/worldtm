@@ -958,8 +958,8 @@
  (let ((glyph (avatar 'glyph)))
    (ipcWrite (list 'entity DNA 
                     (Glyph
-                      (glyph0bg glyph)  (modulo (+ (glyph0fg glyph) 1) 16)  (glyph0ch glyph)
-                      (glyph1bg glyph)  (modulo (+ (glyph1fg glyph) 1) 16)  (glyph1ch glyph))))))
+                      (glyph0bg glyph)  (modulo (+ (glyph0fg glyph) 1) 256)  (glyph0ch glyph)
+                      (glyph1bg glyph)  (modulo (+ (glyph1fg glyph) 1) 256)  (glyph1ch glyph))))))
 
 ; Notify IPC of my name and glyph change
 (define (changeName str)
@@ -985,25 +985,6 @@
                 (if (< t 86400)(string (number->string (/ t 3600)) "h")
                 (string (number->string (/ t 86400)) "d"))))))))))))
 
-(define (chooseCell)
- (define WinCells ((Terminal 'WindowNew) 5 20 2 36 #x07))
- (define (WinCellsDisplay . e) (for-each (lambda (x) (for-each (WinCells 'puts) (display->strings x))) e))
- (define WinCellsSetColor  (WinCells 'set-color))
- (define WinCellsPutc  (WinCells 'putc))
- (sleep 1000)
- (loop 100 (lambda (k)
-   ((WinCells 'home))
-   (loop 10 (lambda (i)
-     (let ((c (cellGlyph (cellRef (+ i k)))))
-       (WinCellsSetColor (glyph0bg c) (glyph0fg c)) (WinCellsPutc (glyph0ch c))
-       (WinCellsSetColor (glyph1bg c) (glyph1fg c)) (WinCellsPutc (glyph1ch c))
-       (WinCellsSetColor 0 15)                      (WinCellsPutc (if (= i 4) #\[ (if (= i 5) #\] #\ ))))))
-   (WinCellsSetColor 0 15)
-   (WinCellsDisplay "\r\n" (cellSymbol (cellRef k)))
-   (sleep 500)))
- ((WinCells 'delete)))
- ;((WinStatus 'toggle))
-
 (define (buttonSetCell)
  (if PortMapAgent
    ; Send to map agent. If map agent doesn't respond
@@ -1028,6 +1009,41 @@
        (walk (car l))
        (~ (cdr l)))))))
 
+(define (chooseCell)
+ (define WinCells ((Terminal 'WindowNew) 5 20 2 36 #x07))
+ (define (WinCellsDisplay . e) (for-each (lambda (x) (for-each (WinCells 'puts) (display->strings x))) e))
+ (define WinCellsSetColor  (WinCells 'set-color))
+ (define WinCellsPutc  (WinCells 'putc))
+ (sleep 1000)
+ (loop 100 (lambda (k)
+   ((WinCells 'home))
+   (loop 10 (lambda (i)
+     (let ((c (cellGlyph (cellRef (+ i k)))))
+       (WinCellsSetColor (glyph0bg c) (glyph0fg c)) (WinCellsPutc (glyph0ch c))
+       (WinCellsSetColor (glyph1bg c) (glyph1fg c)) (WinCellsPutc (glyph1ch c))
+       (WinCellsSetColor 0 15)                      (WinCellsPutc (if (= i 4) #\[ (if (= i 5) #\] #\ ))))))
+   (WinCellsSetColor 0 15)
+   (WinCellsDisplay "\r\n" (cellSymbol (cellRef k)))
+   (sleep 500)))
+ ((WinCells 'delete)))
+
+(define (dumpColors)
+ (define WinCells ((Terminal 'WindowNew) 2 2 8 36 #x0000))
+ (define (disp . e) (for-each (lambda (x) (for-each (WinCells 'puts) (display->strings x))) e))
+ (define color  (WinCells 'set-color))
+ (define putc  (WinCells 'putc))
+ (define (nl) ((WinCells 'puts) "\r\n"))
+
+ (define (dumpThem)
+   ((WinCells 'goto) 0 2) (loop 8  (lambda (i) (color 0 i) (putc #\Û)))
+   ((WinCells 'goto) 1 2) (loop 8  (lambda (i) (color 0 (+ 8 i)) (putc #\Û)))
+   (loop 24 (lambda (i) (color 0 (+ 232 i)) (putc #\Û)))
+   (nl)
+   (loop 216 (lambda (i) (rem if (= 0 (modulo i 36)) (nl))
+                         (color 0 (+ 16 i)) (putc #\Û))))
+
+ (dumpThem) (sleep 8000)
+ ((WinCells 'delete)))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -1102,7 +1118,7 @@
 (setButton CHAR-CTRL-M '(begin ((WinStatus 'toggle)) ((WinColumn 'toggle))))
 (setButton CHAR-CTRL-Q '(set! state 'done))
 (setButton #\d '(buttonSetCell))
-(setButton #\D '(chooseCell))
+(setButton #\D '(thread (dumpColors)))
 (setButton #\g
    '(let ((o (apply field-base-ref ((avatar 'gps)))))
      (WinChatDisplay "\r\nGrabbed " o)

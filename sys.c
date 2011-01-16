@@ -5,6 +5,7 @@
 #include <assert.h>
 #include <sys/stat.h>
 #include "sys.h"
+#include <termios.h>
 
 const int MaxSemaphoreCount=64;
 
@@ -385,23 +386,23 @@ void wscmDumpTGE (void) {
 	fprintf (stderr, "\n\\------------------------------------------------------\n");
 }
 
-void wscmDumpEnv (Obj o) {
+void sysDumpEnv (Obj env) {
  Obj formals;
  Int i, len;
 
-	if (o==tge) fprintf (stderr, "\n----TGE "OBJ"------------------------------------\n...", o);
+	if (env==tge) fprintf (stderr, "\n----TGE "OBJ"------------------------------------\n...", env);
 
-	while (o!=tge) {
-		formals = memVectorObject(o, 1);
-		fprintf (stderr, "\n----ENV "OBJ"------------------------------------", o);
+	while (env!=tge) {
+		formals = memVectorObject(env, 1);
+		fprintf (stderr, "\n----ENV "OBJ"------------------------------------", env);
 		for (i=2; memObjectType(formals) == TPAIR; i++) {
-			fprintf (stderr, "\n"OBJ" ", memVectorObject(o, i));
+			fprintf (stderr, "\n"OBJ" ", memVectorObject(env, i));
 			len=wscmWrite (car(formals), stderr);
 			fprintf(stderr, "                "+((len<17)?len-1:15));
-			wscmWriteMax (memVectorObject(o, i), stderr, 80);
+			wscmWriteMax (memVectorObject(env, i), stderr, 80);
 			formals = cdr(formals);
 		}
-		o=memVectorObject(o, 0);
+		env=memVectorObject(env, 0); /* Consider parent env */
 	}
 	fprintf (stderr, "\n\\------------------------------------------------------\n");
 }
@@ -1329,28 +1330,13 @@ void sysQuit (void) { exit(0); }
 /* This can do anything.  I change it mainly for debugging and prototyping. */
 void sysFun (void) {
  Int i;
-	//vmDebugDumpCode(r1c, stderr);
-	//memDebugDumpHeapHeaders(stderr);
 	//memDebugDumpYoungHeap(stderr);
 	//memValidateHeapStructures();
-	//memDebugDumpHeapHeaders(stderr);
 	//sysDumpCallStackCode();
 	fprintf (stderr, "[%d]", memStackLength(stack));
 	for (i=memStackLength(stack)-1; 0<=i; --i) wscmWrite(memStackObject(stack, i), stdout);
 }
 
-/* Dump external representation of the local environment hierarchy to stdout. */
-void sysDumpEnv (void) {
-	wscmDumpEnv(env);
-	r0=null;
-}
-
-void sysDumpStack (void) {
-	write (1, "\n", 1);
-	wscmWrite(stack, stderr);
-	//wscmWrite(symbols, stderr);
-	//memDebugDumpHeapStructures();
-}
 
 /* 1. Call the function and pass it 5
    2. Call the function and pass code
@@ -2854,7 +2840,7 @@ void wscmInitialize (void) {
 	wscmDefineSyscall (sysFun, "fun");
 	wscmDefineSyscall (sysDumpEnv, "env");
 	wscmDefineSyscall (wscmDumpTGE, "tge");
-	wscmDefineSyscall (sysDumpStack, "stack");
+	wscmDefineSyscall (sysDebugger, "debugger");
 	wscmDefineSyscall (sysDumpThreads, "threads");
 	wscmDefineSyscall (sysString, "string");
 	wscmDefineSyscall (sysMakeString, "make-string");
@@ -2954,8 +2940,8 @@ void sysDumpCallStackCode (void) {
  Int i;
  Obj o, l=NULL;
 
-	wscmDumpEnv(r16);
-	wscmDumpEnv(r15);
+	sysDumpEnv(r16);
+	sysDumpEnv(r15);
 	for (i=0; i<memStackLength(stack); ++i) {
 		o = memStackObject(stack, i);
 		printf ("Stack "INT" "HEX016" "OBJ NL, i, memIsObjectValid(o)?memObjectDescriptor(o):0, o);
@@ -2967,12 +2953,60 @@ void sysDumpCallStackCode (void) {
 			if (memObjectType(o)==TCODE) {
 				printf (NL "Stack "INT" "HEX016" "OBJ NL, i, memObjectDescriptor(o), o);
 				wscmWrite(memVectorObject(o, 2), stdout);
-				if (l!=NULL) wscmDumpEnv(l);
+				if (l!=NULL) sysDumpEnv(l);
 				else printf (NL);
 			}
 		}
 		l = o;
 	}
+}
+
+void sysDebugger (void) {
+ struct winsize win;
+ int done=0, cmd, fl;
+ struct termios tios, tios_orig;
+
+	fflush(stdout);
+
+	/* Force cooked mode. */
+	tcgetattr(1, &tios_orig); /* Backup termios */
+	tcgetattr(1, &tios);
+	tios.c_iflag |= (ICRNL | IXON | IXOFF | IXANY);
+	tios.c_oflag |= OPOST;
+	tios.c_lflag |= (ECHO | ICANON | ISIG | IEXTEN);
+	tcsetattr(1, TCSANOW, &tios);
+
+	/* Force blocking input */
+	fl=fcntl(0, F_GETFL, 0);
+	fcntl (0, F_SETFL, fl&~O_NONBLOCK);
+
+	ioctl(1, TIOCGWINSZ, &win); printf ("\e[%dH", win.ws_row); /* Move cursor to bottom of screen */
+	while (!done) {
+		printf ("\n\e[1m-------------------------------");
+		printf ("\nc  vmDebugDumpCode(code=1c, stderr)");
+		printf ("\ne  sysDumpEnv(env)");
+		printf ("\ns  wscmWrite(stack, stderr)");
+		printf ("\ny  wscmWrite(symbols, stderr)");
+		printf ("\nh  memDebugDumpHeapHeaders(stderr)"); 
+		printf ("\nR  return");
+		printf ("\nX  crash");
+		printf ("\nQ  exit(-1)");
+		printf ("\n-------------------------------\e[0m");
+		printf ("\nwscmdbg>");
+		while (strchr("\r\n \t", cmd=getchar())); /* Skip whitespace */
+		if (cmd=='c') vmDebugDumpCode(code, stderr);
+		if (cmd=='e') sysDumpEnv(env);
+		if (cmd=='s') wscmWrite(stack, stderr);
+		if (cmd=='y') wscmWrite(symbols, stderr);
+	   if (cmd=='h') memDebugDumpHeapHeaders(stderr);
+		if (cmd=='R') done=1;
+		if (cmd=='X') *(Int*)0=0;
+		if (cmd=='Q') exit(-1);
+	}
+
+	/* Restore terminal and IO */
+	tcsetattr(1, TCSANOW, &tios_orig);
+	fcntl (0, F_SETFL, fl);
 }
 
 #undef DB_MODULE

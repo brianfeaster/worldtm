@@ -152,9 +152,11 @@ void vmVm (Int cmd) {
 		return;
 	}
 
- /* pc, after a syscall, could have it's code object move.  Find
-    all opcodes that could possibly cause a GC.  Better to NOT EVER USE
-    LOCAL C VARS.  DUHHH. */
+	/* pc, after a syscall, could have it's code object move.  Find
+		all opcodes that could possibly cause a GC.  Better to NOT EVER USE
+		LOCAL C VARS.  DUHHH.
+	*/
+
 	/* Since registers are really void* and opcodes are u64 words, instruction
 		addresses must be adjusted by 8 times.
 		void **pc = (void**)code + (int)ip;
