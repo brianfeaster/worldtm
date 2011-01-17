@@ -83,6 +83,9 @@
  (define (InsideTerminal? y x)
    (and (>= y 0) (>= x 0) (< y Theight) (< x Twidth)))
 
+ (define (topWin y x)
+   (vector-vector-ref WindowMask y x))
+
  (define (gputc char color y x)
    (semaphore-down TerminalSemaphore)
    ; Set color.
@@ -115,7 +118,7 @@
    (set! TCURSOR-VISIBLE (not TCURSOR-VISIBLE))
    (semaphore-up TerminalSemaphore))
 
- (define (TopmostWindow gy gx)
+ (define (TopmostWindowDiscover gy gx)
  ; Return first window object in window list that is visible at this location.
    (let ~ ((w WINDOWS))
      (if (null? w) #f
@@ -125,8 +128,8 @@
  (define (WindowMaskReset y0 x0 y1 x1)
   (loop2 y0 (+ y1 1) x0 (+ x1 1) (lambda (gy gx)
      (if (InsideTerminal? gy gx)
-      (let ((prevwin (vector-vector-ref WindowMask gy gx)) ; Could be #f
-            (topwin (TopmostWindow gy gx))) ; Get top win at global pos
+      (let ((prevwin (topWin gy gx)) ; Could be #f
+            (topwin (TopmostWindowDiscover gy gx))) ; Get top win at global pos
         (vector-vector-set! WindowMask gy gx topwin) ; Cache it
         ; Update the visible count for the window(s) at this global location.
         (if prevwin
@@ -150,7 +153,7 @@
  ;;
  (define (WindowNew Y0 X0 Wheight Wwidth COLOR . switches)
    (define (self msg) (eval msg))
-   (define ID (+ 1 (length WINDOWS)))
+   (define id (+ 1 (length WINDOWS)))
    (define Y1 (+ Y0 Wheight))
    (define X1 (+ X0 Wwidth))
    (define TY 0)
@@ -173,6 +176,8 @@
    (define ScrollbackHack #f)
    (define VisibleCount 0) ; Number of visible non-obstructed locations
 	; Methods
+   (define (getColor y x) (vector-ref (vector-vector-ref DESC y x) 0))
+   (define (getChar  y x) (vector-ref (vector-vector-ref DESC y x) 1))
    (define (visibleCountAdd c) (set! VisibleCount (+ VisibleCount c)))
    (define (goto y x)
      (set! needToScroll #f)
@@ -245,7 +250,7 @@
      (loop Wwidth (lambda (x)
        (let ((desc (vector-vector-ref DESC (modulo (+ row topRow) Wheight) x)))
          (and (InsideTerminal? (+ row Y0) (+ x X0))
-              (eq? self (vector-vector-ref WindowMask (+ row Y0) (+ x X0)))
+              (eq? self (topWin (+ row Y0) (+ x X0)))
               (gputc (vector-ref desc 1)
                      (vector-ref desc 0)
                      (+ row Y0) (+ x X0)))))))
@@ -253,7 +258,7 @@
      (loop2 0 Wheight 0 Wwidth (lambda (y x)
        (let ((desc (vector-vector-ref DESC (modulo (+ y topRow) Wheight) x)))
          (and (InsideTerminal? (+ y Y0) (+ x X0))
-              (eq? self (vector-vector-ref WindowMask (+ y Y0) (+ x X0)))
+              (eq? self (topWin (+ y Y0) (+ x X0)))
               (gputc (vector-ref desc 1)
                      (vector-ref desc 0)
                      (+ y Y0) (+ x X0)))))))
@@ -275,7 +280,7 @@
        (begin
          ; Send character to terminal only if window location is visible.
          (and (InsideTerminal? gy gx)
-              (eq? self (vector-vector-ref WindowMask gy gx))
+              (eq? self (topWin gy gx))
               (gputc c COLOR gy gx))
          ; Cache color and char to buffer.
          (let ((desc (vector-vector-ref DESC (modulo (+ TY topRow) Wheight) TX)))
