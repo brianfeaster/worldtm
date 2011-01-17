@@ -2550,3 +2550,57 @@ the map.
 Tue Jan  4 14:19:09 EST 2011
 
 Adding a color variable to the avatar object.
+
+
+Mon Jan 17 00:53:05 EST 2011
+
+Initially mouse strings were handled like button presses.  This was dirty as I
+inserted the mouse coordinates as numbers in the key queue.  Now mouse events
+are a separate mechanism but are scanned during keyboard escape string scanning.
+Mouse events are stored in their own queue.  A mouse event loop thread
+dispatches each stored mouse event to the registered handlers based on the
+window id.  If no action handler exists the mouse event is ignored.
+
+The first mouse handler is a palette chooser.  It's a window with all 256 colors
+plus a recently selected color list.  The last choosen color is reprsented in
+decimal hex and example usages as foreground, background and combinations of
+white and black text.
+
+Interaction is strictly with the mouse.  I'd like the keyboard to be used as
+well so I need to create an event dispatcher mechanism for keyboard input.  This
+means windows will be able to steal keyboard input rather than the keyboard
+routing determining what to do with keypresses.
+
+Current use case:
+
+User logs in and starts off in command mode.  Can immediately walk around using
+keyboard, arrows or mouse.  Button t activates talk mode.  Can type and talk and
+can move but only with mouse clicks.
+
+Button C, in command mode, activates palette window to choose new avatar and
+talk color with mouse.  User can still swtich between talk and cmd mode.
+
+Possible use case:
+
+User logs in and starts off in modified comand mode.  Arrow keys and mouse move
+avatar while other buttons are used for talking.  If talk line is not empty
+then cursor keys will navigate/edit the talk input line.
+
+Tab or escape will exit talk mode.  The talk input line will disappear.  Buttons
+used for avatar motion, actions and other environment interactions.  Text
+scrollback navigation would be one example.
+
+End of use cases.
+
+The talk input line should be the model of how any focused window should behave.
+Some keys should be allowed to pass through to other threads or handlers.
+This includes the map window, palette window, and the pacman/pong functions.
+
+Currently each keyboard handler deals with altering the repl state.  So while
+talking, hitting escape will force the repl call the cmd handler after each
+keypress rather than the talk handler.  This needs to be reimplemented.
+
+Hitting keys should result in the proper window or method receving the key.
+A sieve of handlers might be in order here.  Those handlers on the top of the
+stack get first dibs on the key otherwise they are passed down to the previous
+handler.

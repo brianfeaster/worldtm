@@ -183,7 +183,7 @@
      (set! needToScroll #f)
      (set! TY (min (max 0 y) (- Wheight 1)))
      (set! TX (min (max 0 x) (- Wwidth 1))))
-   (define (set-color b f) (set! COLOR (+ (* 16 b) f)))
+   (define (set-color b f) (set! COLOR (+ (* 256 b) f))) ; 256 colors each fg and bg packed into 16 bits
    (define (InsideWindow? gy gx)
      (and ENABLED
           (>= gy Y0)
