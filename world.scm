@@ -41,7 +41,7 @@
 (define WinChat ((Terminal 'BufferNew)
   0 0
   (- (Terminal 'Theight) 1)  (Terminal 'Twidth)
-  #x0f))
+  #x000f))
 (define WinChatPutc (WinChat 'putc))
 (define WinChatPuts (WinChat 'puts))
 (define WinChatSetColor (WinChat 'set-color))
@@ -55,7 +55,7 @@
 (define WinConsole ((Terminal 'WindowNew)
   (- (Terminal 'Theight) 14) 0
   13  (Terminal 'Twidth)
-  #x02))
+  #x0002))
 (define WinConsolePuts (WinConsole 'puts))
 (define (WinConsoleDisplay . l)
   (for-each
@@ -70,7 +70,7 @@
 (define WinInput ((Terminal 'WindowNew)
   (- (Terminal 'Theight) 1) 0
   1 (Terminal 'Twidth)
-  #x4a))
+  #x040a))
 (define WinInputPutc (WinInput 'putc))
 (define WinInputPuts (WinInput 'puts))
 (define WinInputSetColor (WinInput 'set-color))
@@ -82,15 +82,15 @@
   ((Terminal 'WindowNew)
     0 (- (Terminal 'Twidth) (* MapSize 2)) ; Position of the map window
     (+ MapSize 0) (* 2 MapSize)
-    #x0f 'NOREFRESH)))
+    #x000f 'NOREFRESH)))
 ((WinMap 'toggle))
 ((WinMap 'cursor-visible) #f) ; Disable cursor in map window
 (define WinMapSetColor (WinMap 'set-color))
 (define WinMapPutc (WinMap 'putc))
 
 ; Help Window.
-(define WinHelpBorder ((Terminal 'WindowNew) 4 20 16 32 #x20))
-(define WinHelp ((Terminal 'WindowNew) 5 21 14 30 #x0a))
+(define WinHelpBorder ((Terminal 'WindowNew) 4 20 16 32 #x0200))
+(define WinHelp ((Terminal 'WindowNew) 5 21 14 30 #x000a))
 ((WinHelpBorder 'toggle))
 ((WinHelp 'toggle))
 
@@ -98,23 +98,23 @@
 (define WinStatus ((Terminal 'WindowNew)
    (WinMap 'Y0) (- (Terminal 'Twidth) 14)
    3            14
-   #x4e))
+   #x040e))
 ((WinStatus 'toggle))
 (define (WinStatusDisplay . e)
   (for-each (lambda (x) (for-each (WinStatus 'puts) (display->strings x))) e))
 
 ;; Map column debug window
-(define WinColumn ((Terminal 'WindowNew) 3 (- (Terminal 'Twidth) 5) 18 5 #x5b))
+(define WinColumn ((Terminal 'WindowNew) 3 (- (Terminal 'Twidth) 5) 18 5 #x050b))
 ((WinColumn 'toggle))
 (define WinColumnPutc (WinColumn 'putc))
 (define (WinColumnPuts . l) (for-each (WinColumn 'puts) l))
 (define WinColumnSetColor (WinColumn 'set-color))
 
-(define WinColors ((Terminal 'WindowNew) 2 15 8 36 #x0000))
-(define (WinColorsDisplay . e) (for-each (lambda (x) (for-each (WinColors 'puts) (display->strings x))) e))
-(define WinColorsColor (WinColors 'set-color))
-(define WinColorsGoto (WinColors 'goto))
-((WinColors 'toggle))
+(define WinPalette ((Terminal 'WindowNew) 2 15 9 36 #x000f))
+(define (WinPaletteDisplay . e) (for-each (lambda (x) (for-each (WinPalette 'puts) (display->strings x))) e))
+(define WinPaletteColor (WinPalette 'set-color))
+(define WinPaletteGoto (WinPalette 'goto))
+((WinPalette 'toggle))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -678,14 +678,14 @@
 ((WinHelp 'puts) "\r\n  keys or 'nethack' keys")
 
 ; Initialize the color palette window
-(define (WinColorsInitialize)
-  (WinColorsGoto 0 0) (loop 8  (lambda (i) (WinColorsColor 0 i) (WinColorsDisplay #\Û)))
-  (WinColorsGoto 1 0) (loop 8  (lambda (i) (WinColorsColor 0 (+ 8 i)) (WinColorsDisplay #\Û)))
-  (loop 24 (lambda (i) (WinColorsColor 0 (+ 232 i)) (WinColorsDisplay #\Û)))
-  (WinColorsDisplay "\r\n")
-  (loop 216 (lambda (i) (WinColorsColor 0 (+ 16 i)) (WinColorsDisplay #\Û))))
-
-(WinColorsInitialize)
+(WinPaletteGoto 0 0) (loop 8  (lambda (i) (WinPaletteColor i 0) (WinPaletteDisplay #\ )))
+(loop 12 (lambda (i) (WinPaletteColor (+ 232 i) 0) (WinPaletteDisplay #\ )))
+(WinPaletteGoto 1 0) (loop 8  (lambda (i) (WinPaletteColor (+ 8 i) 0) (WinPaletteDisplay #\ )))
+(loop 12 (lambda (i) (WinPaletteColor (+ 232 12 i) 0) (WinPaletteDisplay #\ )))
+(WinPaletteDisplay "\r\n")
+(loop 216 (lambda (i)
+  (WinPaletteColor (+ 16 i) 0)
+  (WinPaletteDisplay #\ ))))
 
 ; Make Map window circular
 (define (circularize . val)
@@ -1003,25 +1003,7 @@
    ; Send to everyone
    (ipcWrite `(mapSetCell ,(avatar 'z) ,(avatar 'y) ,(avatar 'x) ,(avatar 'cell)))))
 
-(define (chooseCell)
- (define WinCells ((Terminal 'WindowNew) 5 20 2 36 #x07))
- (define (WinCellsDisplay . e) (for-each (lambda (x) (for-each (WinCells 'puts) (display->strings x))) e))
- (define WinCellsSetColor  (WinCells 'set-color))
- (define WinCellsPutc  (WinCells 'putc))
- (sleep 1000)
- (loop 100 (lambda (k)
-   ((WinCells 'home))
-   (loop 10 (lambda (i)
-     (let ((c (cellGlyph (cellRef (+ i k)))))
-       (WinCellsSetColor (glyph0bg c) (glyph0fg c)) (WinCellsPutc (glyph0ch c))
-       (WinCellsSetColor (glyph1bg c) (glyph1fg c)) (WinCellsPutc (glyph1ch c))
-       (WinCellsSetColor 0 15)                      (WinCellsPutc (if (= i 4) #\[ (if (= i 5) #\] #\ ))))))
-   (WinCellsSetColor 0 15)
-   (WinCellsDisplay "\r\n" (cellSymbol (cellRef k)))
-   (sleep 500)))
- ((WinCells 'delete)))
-
-(define (mouseWalk action my mx) ; Was (mouseHandler)
+(define (mouseWalkAction action my mx)
  (if (eq? action 'mouse0)
  (letrec ((wmx (WinMap 'X0))
           (wmy (WinMap 'Y0))
@@ -1033,11 +1015,30 @@
        (walk (car l))
        (~ (cdr l))))))))
 
-(define (mouseColorsFunction action ty tx) ; Was (mouseHandler)
+(define LastColors (make-list 32 0))
+(define (mouseColorsAction action ty tx) ; Was (mouseHandler)
  (if (eq? action 'mouse0)
- (letrec ((wy (- ty (WinColors 'Y0)))
-          (wx (- tx (WinColors 'X0)))
-          (clr ((WinColors 'getColor) wy wx)))
+ (letrec ((wy (- ty (WinPalette 'Y0)))
+          (wx (- tx (WinPalette 'X0)))
+          (clr (/ ((WinPalette 'getColor) wy wx) 256)))
+   ; Update and render the last selected colors
+   (if (not (and (< 19 wx) (< wy 2))) (begin
+     (set! LastColors (cdr (append LastColors (list clr))))
+     (WinPaletteGoto 0 20)
+     (let ~ ((i 0) (lst LastColors)) (if (pair? lst) (begin
+       (if (= i 16) (WinPaletteGoto 1 20))
+       (WinPaletteColor (car lst) 0)
+       (WinPaletteDisplay #\ )
+       (~ (+ i 1) (cdr lst)))))))
+   (WinPaletteColor 0 7)
+   (WinPaletteGoto 8 0) (WinPaletteDisplay "                                    ")
+   (WinPaletteGoto 8 1) (WinPaletteDisplay clr)
+   (WinPaletteGoto 8 5) (WinPaletteDisplay "#x" (number->string clr 16))
+   (WinPaletteGoto 8 10)(WinPaletteColor clr 0) (WinPaletteDisplay "    ")
+   (WinPaletteGoto 8 15)(WinPaletteColor 0 clr) (WinPaletteDisplay "**XX")
+   (WinPaletteGoto 8 20)(WinPaletteColor clr 0) (WinPaletteDisplay "**XX")
+   (WinPaletteGoto 8 25)(WinPaletteColor clr #xf) (WinPaletteDisplay "**XX")
+   (WinPaletteGoto 8 30)(WinPaletteColor #xf clr) (WinPaletteDisplay "**XX")
    ;(WinChatDisplay "\r\n" wy " " wx " " ty " " tx " New color=" clr)
    (let ((glyph (avatar 'glyph)))
      (ipcWrite (list 'entity DNA 
@@ -1097,7 +1098,7 @@
 (setButton #\A '(begin
   (set! VIEWPORTANIMATION (not VIEWPORTANIMATION))
   (WinChatDisplay "\r\nMap animation " VIEWPORTANIMATION)))
-(setButton #\C '((WinColors 'toggle)))
+(setButton #\C '((WinPalette 'toggle)))
 (setButton #\W '(rollcall))
 (setButton #\H '(winMapLeft))
 (setButton #\J '(winMapDown))
@@ -1138,10 +1139,6 @@
 ;(setButton #\1 '((WinChat 'resize) (WinChat 'Wheight) (WinChat 'Wwidth)))
 ;(setButton #\1 '((WinChat 'scrollUp)))
 ;(setButton CHAR-CTRL-_ '(walkDir 4)) ; Sent by backspace?
-;(setButton 'mouse0 '(mouseHandler))
-;(setButton 'mouse1 '(begin (getKey) (getKey)))
-;(setButton 'mouse2 '(begin (getKey) (getKey)))
-;(setButton 'mouseup '(begin (getKey) (getKey)))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -1483,6 +1480,24 @@
    (list 8 4 12 6 7 14 15 14 7 6 12 4 8 c))
  "")
 
+(define (chooseCell)
+ (define WinCells ((Terminal 'WindowNew) 5 20 2 36 #x07))
+ (define (WinCellsDisplay . e) (for-each (lambda (x) (for-each (WinCells 'puts) (display->strings x))) e))
+ (define WinCellsSetColor  (WinCells 'set-color))
+ (define WinCellsPutc  (WinCells 'putc))
+ (sleep 1000)
+ (loop 100 (lambda (k)
+   ((WinCells 'home))
+   (loop 10 (lambda (i)
+     (let ((c (cellGlyph (cellRef (+ i k)))))
+       (WinCellsSetColor (glyph0bg c) (glyph0fg c)) (WinCellsPutc (glyph0ch c))
+       (WinCellsSetColor (glyph1bg c) (glyph1fg c)) (WinCellsPutc (glyph1ch c))
+       (WinCellsSetColor 0 15)                      (WinCellsPutc (if (= i 4) #\[ (if (= i 5) #\] #\ ))))))
+   (WinCellsSetColor 0 15)
+   (WinCellsDisplay "\r\n" (cellSymbol (cellRef k)))
+   (sleep 500)))
+ ((WinCells 'delete)))
+
 ; Pacman
 
 (define pacmanOn #f)
@@ -1562,10 +1577,9 @@
     (sleep 100)
     (~))))))))
 
-; Given a vector on the cartesian plane in quadrant one between slope
+; Given a vector on the cartesian plane in quadrant 1 between slope
 ; 0 and 1, return list of Bresenham Y increments which walk the line
-; along X.
-; y <= x
+; along X.  y must be <= x.
 (define (lineIncrements y x stepDir incDir)
   (letrec ((yy (+ y y))  (yy-xx (- yy (+ x x))))
     (let ~ ((i x)  (e (- yy x)))
@@ -1662,8 +1676,8 @@
 
 ; Register the map's mouse click handler which will walk
 ; the avatar to the point clicked in the map.
-(mouseActionRegister (WinMap 'id)  mouseWalk)
-(mouseActionRegister (WinColors 'id)  mouseColorsFunction)
+(mouseActionRegister (WinMap 'id)  mouseWalkAction)
+(mouseActionRegister (WinPalette 'id)  mouseColorsAction)
 
 (or QUIETLOGIN (begin
  ; Welcome marquee

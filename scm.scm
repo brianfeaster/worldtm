@@ -345,6 +345,12 @@
 
 (define (list . x) x)
 
+(define (make-list num . default)
+ (set! default (if (pair? default) (car default) ()))
+ (let ~ ((i 0))
+   (if (= i num) ()
+     (cons default (~ (+ i 1))))))
+
 (define (list->vector l)
   (let ((v #()))
     (let ~ ((len 0)
