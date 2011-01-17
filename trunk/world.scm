@@ -110,6 +110,11 @@
 (define (WinColumnPuts . l) (for-each (WinColumn 'puts) l))
 (define WinColumnSetColor (WinColumn 'set-color))
 
+(define WinColors ((Terminal 'WindowNew) 2 15 8 36 #x0000))
+(define (WinColorsDisplay . e) (for-each (lambda (x) (for-each (WinColors 'puts) (display->strings x))) e))
+(define WinColorsColor (WinColors 'set-color))
+(define WinColorsGoto (WinColors 'goto))
+((WinColors 'toggle))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -672,6 +677,16 @@
 ((WinHelp 'puts) "\r\n* To walk hit ESC then arrows")
 ((WinHelp 'puts) "\r\n  keys or 'nethack' keys")
 
+; Initialize the color palette window
+(define (WinColorsInitialize)
+  (WinColorsGoto 0 0) (loop 8  (lambda (i) (WinColorsColor 0 i) (WinColorsDisplay #\Û)))
+  (WinColorsGoto 1 0) (loop 8  (lambda (i) (WinColorsColor 0 (+ 8 i)) (WinColorsDisplay #\Û)))
+  (loop 24 (lambda (i) (WinColorsColor 0 (+ 232 i)) (WinColorsDisplay #\Û)))
+  (WinColorsDisplay "\r\n")
+  (loop 216 (lambda (i) (WinColorsColor 0 (+ 16 i)) (WinColorsDisplay #\Û))))
+
+(WinColorsInitialize)
+
 ; Make Map window circular
 (define (circularize . val)
  (set! val (not (null? val))) ; Default to disabling circular corners of map.
@@ -953,14 +968,6 @@
      (begin
        (walkDetails)))))
 
-; Change avatar color.  Will just cycle through all 16 avatar colors.
-(define (changeColor) ; TODO BF: fix this shite
- (let ((glyph (avatar 'glyph)))
-   (ipcWrite (list 'entity DNA 
-                    (Glyph
-                      (glyph0bg glyph)  (modulo (+ (glyph0fg glyph) 1) 256)  (glyph0ch glyph)
-                      (glyph1bg glyph)  (modulo (+ (glyph1fg glyph) 1) 256)  (glyph1ch glyph))))))
-
 ; Notify IPC of my name and glyph change
 (define (changeName str)
   (ipcWrite
@@ -996,19 +1003,6 @@
    ; Send to everyone
    (ipcWrite `(mapSetCell ,(avatar 'z) ,(avatar 'y) ,(avatar 'x) ,(avatar 'cell)))))
 
-(define (mouseHandler)
- (letrec ((wmx (WinMap 'X0))
-          (wmy (WinMap 'Y0))
-          (mx (getKey))
-          (my (getKey))
-          (mapy (+ PortY (- my wmy)))
-          (mapx (+ PortX (/ (- mx wmx) 2))))
-   (WinConsoleDisplay "\r\n" wmx " " wmy " " mx " " my " " mapy " " mapx)
-   (let ~ ((l (lineWalks (avatar 'y) (avatar 'x) mapy mapx)))
-     (if (pair? l) (begin
-       (walk (car l))
-       (~ (cdr l)))))))
-
 (define (chooseCell)
  (define WinCells ((Terminal 'WindowNew) 5 20 2 36 #x07))
  (define (WinCellsDisplay . e) (for-each (lambda (x) (for-each (WinCells 'puts) (display->strings x))) e))
@@ -1027,23 +1021,30 @@
    (sleep 500)))
  ((WinCells 'delete)))
 
-(define (dumpColors)
- (define WinCells ((Terminal 'WindowNew) 2 2 8 36 #x0000))
- (define (disp . e) (for-each (lambda (x) (for-each (WinCells 'puts) (display->strings x))) e))
- (define color  (WinCells 'set-color))
- (define putc  (WinCells 'putc))
- (define (nl) ((WinCells 'puts) "\r\n"))
+(define (mouseWalk action my mx) ; Was (mouseHandler)
+ (if (eq? action 'mouse0)
+ (letrec ((wmx (WinMap 'X0))
+          (wmy (WinMap 'Y0))
+          (mapy (+ PortY (- my wmy)))
+          (mapx (+ PortX (/ (- mx wmx) 2))))
+   ;(WinConsoleDisplay "\r\n" wmx " " wmy " " mx " " my " " mapy " " mapx)
+   (let ~ ((l (lineWalks (avatar 'y) (avatar 'x) mapy mapx)))
+     (if (pair? l) (begin
+       (walk (car l))
+       (~ (cdr l))))))))
 
- (define (dumpThem)
-   ((WinCells 'goto) 0 2) (loop 8  (lambda (i) (color 0 i) (putc #\Û)))
-   ((WinCells 'goto) 1 2) (loop 8  (lambda (i) (color 0 (+ 8 i)) (putc #\Û)))
-   (loop 24 (lambda (i) (color 0 (+ 232 i)) (putc #\Û)))
-   (nl)
-   (loop 216 (lambda (i) (rem if (= 0 (modulo i 36)) (nl))
-                         (color 0 (+ 16 i)) (putc #\Û))))
+(define (mouseColorsFunction action ty tx) ; Was (mouseHandler)
+ (if (eq? action 'mouse0)
+ (letrec ((wy (- ty (WinColors 'Y0)))
+          (wx (- tx (WinColors 'X0)))
+          (clr ((WinColors 'getColor) wy wx)))
+   ;(WinChatDisplay "\r\n" wy " " wx " " ty " " tx " New color=" clr)
+   (let ((glyph (avatar 'glyph)))
+     (ipcWrite (list 'entity DNA 
+                      (Glyph
+                        (glyph0bg glyph) clr (glyph0ch glyph)
+                        (glyph1bg glyph) clr (glyph1ch glyph))))))))
 
- (dumpThem) (sleep 8000)
- ((WinCells 'delete)))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -1096,7 +1097,7 @@
 (setButton #\A '(begin
   (set! VIEWPORTANIMATION (not VIEWPORTANIMATION))
   (WinChatDisplay "\r\nMap animation " VIEWPORTANIMATION)))
-(setButton #\C '(changeColor))
+(setButton #\C '((WinColors 'toggle)))
 (setButton #\W '(rollcall))
 (setButton #\H '(winMapLeft))
 (setButton #\J '(winMapDown))
@@ -1118,7 +1119,6 @@
 (setButton CHAR-CTRL-M '(begin ((WinStatus 'toggle)) ((WinColumn 'toggle))))
 (setButton CHAR-CTRL-Q '(set! state 'done))
 (setButton #\d '(buttonSetCell))
-(setButton #\D '(thread (dumpColors)))
 (setButton #\g
    '(let ((o (apply field-base-ref ((avatar 'gps)))))
      (WinChatDisplay "\r\nGrabbed " o)
@@ -1138,10 +1138,10 @@
 ;(setButton #\1 '((WinChat 'resize) (WinChat 'Wheight) (WinChat 'Wwidth)))
 ;(setButton #\1 '((WinChat 'scrollUp)))
 ;(setButton CHAR-CTRL-_ '(walkDir 4)) ; Sent by backspace?
-(setButton 'mouse0 '(mouseHandler))
-(setButton 'mouse1 '(begin (getKey) (getKey)))
-(setButton 'mouse2 '(begin (getKey) (getKey)))
-(setButton 'mouseup '(begin (getKey) (getKey)))
+;(setButton 'mouse0 '(mouseHandler))
+;(setButton 'mouse1 '(begin (getKey) (getKey)))
+;(setButton 'mouse2 '(begin (getKey) (getKey)))
+;(setButton 'mouseup '(begin (getKey) (getKey)))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -1224,27 +1224,48 @@
 ;;
 
 ; Continuously read stdin and append to the "keyboard" FIFO
-(define getKeySemaphore (open-semaphore 0))
-(define keyQueue (QueueCreate))
+(define KeyQueue (QueueCreate))
+(define MouseQueue (QueueCreate))
 
-(define (keyQueueAdd c)
-  (QueueAdd keyQueue c)
-  (semaphore-up getKeySemaphore))
+(define (getKey) (QueueGet KeyQueue))
+(define (getMouse) (QueueGet MouseQueue))
 
-(define (getKey)
- (semaphore-down getKeySemaphore)
- (QueueGet keyQueue))
+(define (keyQueueAdd c) (QueueAdd KeyQueue c)) ; List of characters and button symbols
+(define (mouseQueueAdd c) (QueueAdd MouseQueue c)) ; List of (mouseAction y x))
+(define mouseActionVector (make-vector 128 #f)) ; Vector of fuctions accepting (action y x).  TODO only 128 windows supported
+(define (mouseActionRegister id fn) (vector-set! mouseActionVector id fn))
+(define (mouseActionUnRegister id fn) (vector-set! mouseActionVector id #f))
 
+; Called in a separate thread
 (define (KeyAgentLoop)
  (let ((c (read-char stdin)))
    (if (eq? c CHAR-ESC)
-    (keyAgentEsc) ; Escape char so attempt to read an escape sequence
-    (begin
-      (QueueAdd keyQueue c) ; Add new keyboard character to queue
-      (semaphore-up getKeySemaphore))) ; flag semaphore
+     (keyAgentEsc) ; Escape char so attempt to read an escape sequence
+     (keyQueueAdd c)) ; Add new keyboard character to queue
    (KeyAgentLoop))) ; rinse and repeat
 
-; An "\e[" has already been scanned
+; Called in a separate thread
+(define (MouseAgentLoop)
+ (letrec ((msg (getMouse))
+          (y (cadr msg))
+          (x (caddr msg))
+          (win ((Terminal 'topWin) y x))
+          (id (if win (win 'id) #f))
+          (fn (if id (vector-ref mouseActionVector id) #f)))
+  ;(WinChatDisplay "\r\n window id=" id "  fn=" fn "  msg=" msg)
+  (if fn (apply fn msg))
+  (MouseAgentLoop)))
+
+; An "\e" scanned
+(define (keyAgentEsc)
+ (let ((c (read-char stdin)))
+   (if (eq? c #\[)
+     (keyAgentEscBracket)
+     (begin ; Not a recognized escape sequence, so send escape and the [ character
+       (keyQueueAdd CHAR-ESC)
+       (keyQueueAdd c)))))
+
+; An "\e[" scanned
 (define (keyAgentEscBracket)
   (let ((c (read-char stdin)))
     (if (eq? c #\A) (keyQueueAdd 'up)
@@ -1257,27 +1278,17 @@
       (keyQueueAdd #\[) 
       (keyQueueAdd c)))))))))
 
-; Read an escape sequence
-(define (keyAgentEsc)
- (let ((c (read-char stdin)))
-   (if (eq? c #\[)
-     (keyAgentEscBracket)
-     (begin ; Not a recognized escape sequence, so send escape and the [ character
-       (keyQueueAdd CHAR-ESC)
-       (keyQueueAdd c)))))
-
 ; An "\e[M" has been scanned
 (define (keyAgentEscBracketM)
- (let ((c (read-char stdin)))
-   (if (eq? c #\ ) (keyQueueAdd 'mouse0)
-   (if (eq? c #\!) (keyQueueAdd 'mouse2)
-   (if (eq? c #\") (keyQueueAdd 'mouse1)
-   (if (eq? c #\#) (keyQueueAdd 'mouseup)))))
-   (begin
-     (set! c (read-char stdin))
-     (keyQueueAdd (- c #\  1))
-     (set! c (read-char stdin))
-     (keyQueueAdd (- c #\  1))))))))
+ (letrec ((c (read-char stdin))
+          (action (if (eq? c #\ ) 'mouse0
+                  (if (eq? c #\!) 'mouse2
+                  (if (eq? c #\") 'mouse1
+                  (if (eq? c #\#) 'mouseup
+                  'mouse)))))
+          (x (- (read-char stdin) #\  1))
+          (y (- (read-char stdin) #\  1)))
+     (mouseQueueAdd (list action y x))))
 
 (define (say talkInput . level)
  (ipcWrite (list 'voice DNA (if (null? level) 10 (car level)) talkInput)))
@@ -1645,8 +1656,14 @@
 (resetField (columnMake 0 cellXX cellAIR))
 (canvasReset 100 glyphXX)
 
-; Start keyboard reader agent
+; Start keyboard and mouse reader agents
 (thread (KeyAgentLoop))
+(thread (MouseAgentLoop))
+
+; Register the map's mouse click handler which will walk
+; the avatar to the point clicked in the map.
+(mouseActionRegister (WinMap 'id)  mouseWalk)
+(mouseActionRegister (WinColors 'id)  mouseColorsFunction)
 
 (or QUIETLOGIN (begin
  ; Welcome marquee
