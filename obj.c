@@ -492,3 +492,5 @@ void objInitialize (Func scheduler) {
 
 	DB("  --%s", __func_);
 }
+
+#undef DB_MODULE

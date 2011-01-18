@@ -139,9 +139,10 @@
 (define CHAR-SPACE    (integer->char #x20))
 (define CHAR-CTRL-?   (integer->char #x7f))
 
-(define SPACE         CHAR-SPACE)
-(define NEWLINE       CHAR-CTRL-J)
-(define RETURN        CHAR-CTRL-M)
+(define SPACE      CHAR-SPACE)
+(define TAB        CHAR-CTRL-I)
+(define NEWLINE    CHAR-CTRL-J)
+(define RETURN     CHAR-CTRL-M)
 
 (define (newline) (display NEWLINE))
 (define (return)  (display RETURN))

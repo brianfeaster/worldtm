@@ -8,7 +8,7 @@
 #include "comp.h"
 
 void sysCompile (void);
-void wscmWrite (Obj a, long islist, Int fd);
+Int wscmWrite (Obj a, FILE *stream);
 Int  wscmEnvFind (void);
 void wscmTGEFind (void);
 void sysError (void);
@@ -57,7 +57,7 @@ void compSelfEvaluating (void) {
 void compVariableReference (void) {
  Int ret, depth;
 	DB("-->compVariableReference: ");
-	DBE wscmWrite(expr, 0, 2);
+	DBE wscmWrite(expr, stderr);
 	r1 = expr;
 	/* Scan local environments.  Returned is a 16 bit number, the high 8 bits
 	   is the environment chain depth, the low 8 bits the binding offset. The
@@ -113,7 +113,7 @@ void compTransformDefineFunction (void) {
 	r1=r3;      r2=r0;   objCons12(); /* (fn (lambda formals body)) */
 	
 	DB("<--%s <= ", __func__);
-	DBE wscmWrite(expr, 0, 1);
+	DBE wscmWrite(expr, stdout);
 }
 
 
@@ -147,7 +147,7 @@ void compDefine (Num flags) {
 			write (2, "ERROR: compDefine(): Missing expression.", 40);
 		}
 	} else  {
-		write (2, "ERROR: compDefine(): Not a symbol:", 34); wscmWrite(r1, 0,2);
+		write (2, "ERROR: compDefine(): Not a symbol:", 34); wscmWrite(r1, stderr);
 	}
 	DB("<--compDefine");
 }
@@ -244,7 +244,7 @@ void compTransformInternalDefinitions(void) {
 	}
 	
 	DB("<--%s => ", __func__);
-	DBE wscmWrite(expr, 0, 1);
+	DBE wscmWrite(expr, stdout);
 }
 
 /*        ( (square.#<closure>) (x.5) (y.9) )
@@ -287,7 +287,7 @@ void compTransformInternalDefinitions(void) {
 void compLambdaBody (Num flags) {
  Int opcodeStart;
 	DB("-->%s", __func__);
-	DBE wscmWrite(expr, 0, 1);
+	DBE wscmWrite(expr, stdout);
 
 	/* Since we're creating a new code object, save the current asmstack and
 	   create a new one to start emitting opcodes to. */
@@ -399,7 +399,7 @@ void compLambdaBody (Num flags) {
 	asmstack=pop();
 
 	DB("<--%s => ", __func__);
-	DBE wscmWrite (r0, 0, 2);
+	DBE wscmWrite (r0, stderr);
 }
 
 
@@ -462,8 +462,8 @@ void compLambda (Num flags) {
 void compVerifyVectorRef (void) {
 	if (*(Int*)r0 < 0 || memObjectLength(r1) <= *(Int*)r0) {
 		fprintf (stderr, "\nERROR::out of bounds:  (vector-ref ");
-		wscmWrite(r1, 0, 2); fprintf (stderr, " ");
-		wscmWrite(r0, 0, 2); fprintf (stderr, ")");
+		wscmWrite(r1, stderr); fprintf (stderr, " ");
+		wscmWrite(r0, stderr); fprintf (stderr, ")");
 		sysDebugger();
 	}
 }
@@ -471,9 +471,9 @@ void compVerifyVectorRef (void) {
 void compVerifyVectorSetB (void) {
 	if (*(Int*)r2 < 0 || memObjectLength(r1) <= *(Int*)r2) {
 		fprintf (stderr, "\nERROR::out of bounds:  (vector-set! ");
-		wscmWrite(r1, 0, 2); fprintf (stderr, " ");
-		wscmWrite(r2, 0, 2); fprintf (stderr, " ");
-		wscmWrite(r0, 0, 2); fprintf (stderr, ")");
+		wscmWrite(r1, stderr); fprintf (stderr, " ");
+		wscmWrite(r2, stderr); fprintf (stderr, " ");
+		wscmWrite(r0, stderr); fprintf (stderr, ")");
 		sysDebugger();
 	}
 }
@@ -682,14 +682,14 @@ void compSetCarB (Num flags) {
 	expr = cdr(expr); /* Skip set-car! symbol. */
 	if (expr == null) {
 		printf ("ERROR: set-car! illegal pair expression: ");
-		wscmWrite (expr, 0, 1);
+		wscmWrite (expr, stdout);
 		goto ret;
 	}
 	push(car(expr)); /* Save pair expression. */
 	expr = cdr(expr);
 	if (expr == null) {
 		printf ("ERROR: set-car! illegal object expression: ");
-		wscmWrite (expr, 0, 1);
+		wscmWrite (expr, stdout);
 		goto ret;
 	}
 	expr = car(expr);/* Consider and compile object expression. */
@@ -708,14 +708,14 @@ void compSetCdrB (Num flags) {
 	expr = cdr(expr); /* Skip set-cdr! symbol. */
 	if (expr == null) {
 		printf ("ERROR: set-cdr! illegal pair expression: ");
-		wscmWrite (expr, 0, 1);
+		wscmWrite (expr, stdout);
 		goto ret;
 	}
 	push(car(expr)); /* Save pair expression. */
 	expr = cdr(expr);
 	if (expr == null) {
 		printf ("ERROR: set-cdr! illegal object expression: ");
-		wscmWrite (expr, 0, 1);
+		wscmWrite (expr, stdout);
 		goto ret;
 	}
 	expr = car(expr);/* Consider and compile object expression. */
@@ -733,7 +733,7 @@ void compProcedureP (Num flags) {
 	DB("-->%s", __func__);
 	if (memObjectType(cdr(expr)) != TPAIR) {
 		write (1, "ERROR: null? illegal operand count: ", 36);
-		wscmWrite (expr, 0, 1);
+		wscmWrite (expr, stdout);
 	}
 	expr = cadr(expr);      /* Consider and compile expression. */
 	compExpression(flags & ~TAILCALL);
@@ -748,7 +748,7 @@ void compNullP (Num flags) {
 	DB("-->compNullP");
 	if (memObjectType(cdr(expr)) != TPAIR) {
 		write (1, "ERROR: null? illegal operand count: ", 36);
-		wscmWrite (expr, 0, 1);
+		wscmWrite (expr, stdout);
 	}
 	expr = cadr(expr);      /* Consider and compile expression. */
 	compExpression(flags & ~TAILCALL);
@@ -763,7 +763,7 @@ void compPairP (Num flags) {
 	DB("-->compPairP");
 	if (memObjectType(cdr(expr)) != TPAIR) {
 		write (1, "ERROR: pair? illegal operand count: ", 36);
-		wscmWrite (expr, 0, 1);
+		wscmWrite (expr, stdout);
 		return;
 	}
 	expr = cadr(expr);      /* Consider and compile expression. */
@@ -785,7 +785,7 @@ void compVectorP (Num flags) {
 	DB("-->%s", __func__);
 	if (memObjectType(cdr(expr)) != TPAIR) {
 		write (1, "ERROR: vector? illegal operand count: ", 38);
-		wscmWrite (expr, 0, 1);
+		wscmWrite (expr, stdout);
 		return;
 	}
 	expr = cadr(expr);      /* Consider and compile expression. */
@@ -811,7 +811,7 @@ void compStringP (Num flags) {
 	DB("-->%s", __func__);
 	if (memObjectType(cdr(expr)) != TPAIR) {
 		write (1, "ERROR: string? illegal operand count: ", 38);
-		wscmWrite (expr, 0, 1);
+		wscmWrite (expr, stdout);
 		return;
 	}
 	expr = cadr(expr);      /* Consider and compile expression. */
@@ -837,7 +837,7 @@ void compIntegerP (Num flags) {
 	DB("-->%s", __func__);
 	if (memObjectType(cdr(expr)) != TPAIR) {
 		write (1, "ERROR: integer? illegal operand count: ", 38);
-		wscmWrite (expr, 0, 1);
+		wscmWrite (expr, stdout);
 		return;
 	}
 	expr = cadr(expr);      /* Consider and compile expression. */
@@ -863,7 +863,7 @@ void compSymbolP (Num flags) {
 	DB("-->%s", __func__);
 	if (memObjectType(cdr(expr)) != TPAIR) {
 		write (1, "ERROR: symbol? illegal operand count: ", 38);
-		wscmWrite (expr, 0, 1);
+		wscmWrite (expr, stdout);
 		return;
 	}
 	expr = cadr(expr);      /* Consider and compile expression. */
@@ -887,7 +887,7 @@ void compPortP (Num flags) {
 	DB("-->%s", __func__);
 	if (memObjectType(cdr(expr)) != TPAIR) {
 		write (1, "ERROR: vector? illegal operand count: ", 38);
-		wscmWrite (expr, 0, 1);
+		wscmWrite (expr, stdout);
 		return;
 	}
 	expr = cadr(expr);      /* Consider and compile expression. */
@@ -908,7 +908,7 @@ void compEOFObjectP (Num flags) {
 	DB("-->%s", __func__);
 	if (memObjectType(cdr(expr)) != TPAIR) {
 		printf ("ERROR: eof-object? illegal operand count: ");
-		wscmWrite (expr, 0, 1);
+		wscmWrite (expr, stdout);
 		return;
 	}
 	expr = cadr(expr);      /* Consider and compile expression. */
@@ -1106,7 +1106,7 @@ void compThread (void) {
 	asm(SYSI); asm(wscmNewThread);
 
 	DB("<--%s => ", __func__);
-	DBE wscmWrite(r0, 0, 2);
+	DBE wscmWrite(r0, stderr);
 }
 
 void compTransformLet (void) {
@@ -1157,7 +1157,7 @@ void compTransformLet (void) {
 	expr=r0;
 
 	DB("<--%s => ", __func__);
-	DBE wscmWrite(expr, 0, 1);
+	DBE wscmWrite(expr, stdout);
 }
 
 void compTransformNamedLet (void) {
@@ -1220,7 +1220,7 @@ void compTransformNamedLet (void) {
 	expr=r0;
 
 	DB("<--%s => ", __func__);
-	DBE wscmWrite(expr, 0, 1);
+	DBE wscmWrite(expr, stdout);
 }
 
 void compLet (Num flags) {
@@ -1251,7 +1251,7 @@ void compTransformLetrec (void) {
 
    if (memObjectType(car(expr)) != TPAIR) {
 		fprintf (stderr, "letrec malformed: ");
-		wscmWrite(expr, 0, 2);
+		wscmWrite(expr, stderr);
 	}
 
 	/* Push and count letrec binding expressions. */
@@ -1286,7 +1286,7 @@ void compTransformLetrec (void) {
 	r1=slet; r2=r0;  objCons12();
 
 	DB("<--%s => ", __func__);
-	DBE wscmWrite(r0, 0, 1);
+	DBE wscmWrite(r0, stdout);
 }
 
 void compLetrec (Num flags) {
@@ -1344,7 +1344,7 @@ void compQuasiquote (Num flags) {
 	compTransformQuasiquote(0);
 	expr = r0;
 	DB("   %s quasiquote transformation => ", __func__);
-	DBE wscmWrite (expr, 0, 2);
+	DBE wscmWrite (expr, stderr);
 	compExpression(flags);
 	DB("<--%s", __func__);
 }
@@ -1359,7 +1359,7 @@ void compSyntaxRulesHelper (void) {
 	if (TPAIR == memObjectType(expr)) {
 		/* R2 contains the expression to be transformed.  */
 		DB("   Considering:");
-		DBE wscmWrite(expr, 0, 2);
+		DBE wscmWrite(expr, stderr);
 		push(cdr(expr));
 		asm(LDI02); asm(1l);
 		asm(PUSH0);
@@ -1386,7 +1386,7 @@ void compSyntaxRulesHelper (void) {
 */ 
 void compSyntaxRules (void) {
 	DB("-->wscmSyntaxRules <= ");
-	DBE wscmWrite (expr, 0, 2);
+	DBE wscmWrite (expr, stderr);
 	expr = cadr(expr);
 	/* Create new code block. */
 	push(asmstack);
@@ -1395,7 +1395,7 @@ void compSyntaxRules (void) {
 	compSyntaxRulesHelper();
 	asm(RET);
 	asmNewCode(); /* Transfer code stack to fixed size code vector. */
-	DBE wscmWrite(r0, 0, 1);
+	DBE wscmWrite(r0, stdout);
 	/* Restore code block. */
 	asmstack=pop();
 	asm(MVI1); asm(r0); /* Load r1 with code. */

@@ -689,3 +689,4 @@ void vmDebugDumpCode (Obj c, FILE *stream) {
 	fcntl (0, F_SETFL, fdState);
 	DB (TAB2"--"STR, __func__);
 }
+#undef DB_MODULE

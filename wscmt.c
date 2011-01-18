@@ -56,3 +56,5 @@ int main (void) {
 	DB ("  --%s", __func__);
 	return 0;
 }
+
+#undef DB_MODULE
