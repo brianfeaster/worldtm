@@ -2604,3 +2604,10 @@ Hitting keys should result in the proper window or method receving the key.
 A sieve of handlers might be in order here.  Those handlers on the top of the
 stack get first dibs on the key otherwise they are passed down to the previous
 handler.
+
+
+Mon Jan 17 18:10:07 EST 2011
+
+Wondering if I should merge the mouse and keyboard event loops into one stdio
+handler.  Currently key presses are just queued up but mouse events are
+dispatched.
