@@ -939,6 +939,10 @@
 
 (define walkSemaphore (open-semaphore 1))
 
+(define (jump z y x)
+ ((avatar 'setLoc) z y x)
+ (walkDetails))
+
 (define (walk dir)
   (semaphore-down walkSemaphore)
     ; Consider cell I'm walking into.  If cell is entity push it.
@@ -1045,7 +1049,15 @@
    (if (eq? c #\h)
      (set! x (modulo (- x 1)  (WinPalette 'Wwidth)))
    (if (eq? c #\l)
-     (set! x (modulo (+ x 1)  (WinPalette 'Wwidth)))))))
+     (set! x (modulo (+ x 1)  (WinPalette 'Wwidth)))
+   (if (eq? c #\K)
+     ((WinPalette 'move) (+ -1 (WinPalette 'Y0))      (WinPalette 'X0))
+   (if (eq? c #\J)
+     ((WinPalette 'move) (+  1 (WinPalette 'Y0))      (WinPalette 'X0))
+   (if (eq? c #\H)
+     ((WinPalette 'move)       (WinPalette 'Y0) (+ -1 (WinPalette 'X0)))
+   (if (eq? c #\L)
+     ((WinPalette 'move)       (WinPalette 'Y0) (+  1 (WinPalette 'X0)))))))))))
    (updatePaletteCursor y x)))))
 
 (define (mouseColorsAction action wy wx) ; Was (mouseHandler)
@@ -1258,14 +1270,6 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Typing_and_talking
 ;;
-; This needs to be called in a separate thread
-(define (keyScannerAgentLoop)
- (let ((c (read-char stdin)))
-   (if (eq? c CHAR-ESC)
-     (keyScannerEsc) ; Escape char so attempt to read an escape sequence
-     (keyDispatcher c)) ; Add new keyboard character to queue
-   (keyScannerAgentLoop))) ; rinse and repeat
-
 (define keyDispatcherStack ())
 (define (keyDispatcherRegister fn) (set! keyDispatcherStack (cons fn keyDispatcherStack)))
 (define (keyDispatcherUnRegister fn) (set! keyDispatcherStack (list-delete keyDispatcherStack fn)))
@@ -1284,14 +1288,26 @@
   ;(WinChatDisplay "\r\n mouseDispatcher  event=" event " y=" y " x=" x " winid=" id "  fn=" fn)
   (if fn (fn event (- y (win 'Y0)) (- x (win 'X0))))))
 
+; This needs to be called in a separate thread
+(define (keyScannerAgentLoop)
+ (let ((c (read-char stdin)))
+   (if (eq? c CHAR-ESC)
+     (keyScannerEsc) ; Escape char so attempt to read an escape sequence
+     (keyDispatcher c)) ; Add new keyboard character to queue
+   (keyScannerAgentLoop))) ; rinse and repeat
+
 ; An "\e" scanned
 (define (keyScannerEsc)
  (let ((c (read-char stdin)))
    (if (eq? c #\[)
      (keyScannerEscBracket)
-     (begin ; Not a recognized escape sequence, so send escape and the [ character
+   (if (eq? c CHAR-ESC)
+     (begin
        (keyDispatcher CHAR-ESC)
-       (keyDispatcher c)))))
+       (keyScannerEsc))
+   (begin ; Not a recognized escape sequence, so send escape and the [ character
+     (keyDispatcher CHAR-ESC)
+     (keyDispatcher c))))))
 
 ; An "\e[" scanned
 (define (keyScannerEscBracket)
@@ -1319,7 +1335,9 @@
   (mouseDispatcher action y x)))
 
 ;TODO move this
-; Continuously read stdin and append to a FIFO.
+; Base keyboard read queue.  Continuously read stdin and append to a FIFO.
+; Call getKey to read it.  It is possible that another dispatcher has been
+; registered and captures characters before this.
 (define KeyQueue (QueueCreate))
 (define (getKey) (QueueGet KeyQueue))
 (define (keyQueueAdd c) (QueueAdd KeyQueue c)) ; List of characters and button symbols
@@ -1506,7 +1524,9 @@
    (if (string=? "who" talkInput) (ipcWrite '(say "I'm here!")))
    (if (string=? "load the jump program" talkInput) (tankTalk "I can't find the disk")
    (if (string=? "march" talkInput) (thread (march))
-   (if (string=? "edit" talkInput) (begin (set! EDIT (not EDIT)) (tankTalk "Edit mode " EDIT))))))))
+   (if (string=? "edit" talkInput) (begin (set! EDIT (not EDIT)) (tankTalk "Edit mode " EDIT))
+   (if (string=? "island" talkInput) (jump 1 4150 5602)
+   (if (string=? "britania" talkInput) (jump 1 3456 2751)))))))))
 
 ; Display the same string repeatedly with colors of increasing inensity.
 (define (fancyDisplay c s)

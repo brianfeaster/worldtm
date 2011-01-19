@@ -2611,3 +2611,14 @@ Mon Jan 17 18:10:07 EST 2011
 Wondering if I should merge the mouse and keyboard event loops into one stdio
 handler.  Currently key presses are just queued up but mouse events are
 dispatched.
+
+Hitting escape should time out during escape sequence parsing.
+
+
+Tue Jan 18 14:28:53 EST 2011
+
+Read should be given a timeout to return nothing if no characters are available
+from the stream.  This would make implementing escape sequences trivial.
+Currently hitting escape halts the key parser as it waits for the next possible
+escape sequence character.
+
