@@ -914,6 +914,7 @@ void wscmRemoveThread (Obj t) {
 }
 
 /* Move thread from its current queue to specified queue.
+	State one of: sready srunning ssleeping ssemaphore sopenblocked sreadblocked swriteblocked
 */
 void wscmMoveToQueue (Obj thread, Obj queue, Obj state) {
 	DB("-->%s", __func__);
@@ -1968,13 +1969,13 @@ void sysRecv (void) {
 void sysReadChar (void) {
 	DB("-->%s", __func__);
 	r1=pop(); /* Port object. */
-	r2=null;  /* tells recv that we just want a character. */
 	if (memObjectType(r1) != TSOCKET
 	    && memObjectType(r1) != TPORT) {
 		printf ("WARNING: sysReadChar: not a socket: ");
 		wscmDisplay(r1, 0, 1);
 		r0 = eof;
 	} else
+		r2=null;  /* tells recv that we just want a character. */
 		wscmRecvBlock();
 	DB("<--%s", __func__);
 }
@@ -1984,7 +1985,7 @@ void sysUnreadChar (void) {
 	if (wscmAssertArgumentCountRange(2, 2, __func__)) return;
 	r1=pop(); /* Port. */
 	r0=pop(); /* Character. */
-	if (memObjectType(r1) != TSOCKET) {
+	if (memObjectType(r1) != TSOCKET && memObjectType(r1) != TPORT) {
 		printf ("WARNING: sysUnreadChar: arg2 not a socket: ");
 		wscmDisplay(r1, 0, 1);
 		r0 = eof;

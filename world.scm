@@ -923,10 +923,12 @@
   ; Update avatar locally in the field/canvas/viewport and via IPC
   (apply moveEntity avatar ((avatar 'gpsLook)))
   (ipcWrite (list 'move DNA (avatar 'z) (avatar 'y) (avatar 'x)))
-  (let ((baseSym (cellSymbol (cellRef (apply field-base-ref ((avatar 'gps)))))))
+  (letrec ((cellNum (apply field-base-ref ((avatar 'gps))))
+           (baseSym (cellSymbol (cellRef cellNum))))
+    (if (and (<= 512 cellNum) (<= cellNum 612)) (WinChatDisplay "\r\n" (twoLetterDefinition baseSym))
     (if (eq? baseSym 'sprite0) (setSprite 0)
     (if (eq? baseSym 'sprite1) (setSprite 1)
-    (if (eq? baseSym 'sprite2) (setSprite 2)))))
+    (if (eq? baseSym 'sprite2) (setSprite 2))))))
   ; If ceiling changes, repaint canvas using new ceiling height
   (let ((oldCeiling (avatar 'ceiling)))
     ((avatar 'setCeiling) (- (apply field-ceiling ((avatar 'gps))) 1))
@@ -997,16 +999,16 @@
                 (if (< t 86400)(string (number->string (/ t 3600)) "h")
                 (string (number->string (/ t 86400)) "d"))))))))))))
 
-(define (buttonSetCell)
+(define (buttonSetCell cell)
  (if PortMapAgent
    ; Send to map agent. If map agent doesn't respond
    ; then ignore it just send to everyone.
-   (or ((ipc 'private) PortMapAgent `(setCellAgent ,(avatar 'z) ,(avatar 'y) ,(avatar 'x) ,(avatar 'cell)))
+   (or ((ipc 'private) PortMapAgent `(setCellAgent ,(avatar 'z) ,(avatar 'y) ,(avatar 'x) ,cell))
      (begin 
        (set! PortMapAgent #f)
        (buttonSetCell)))
    ; Send to everyone
-   (ipcWrite `(mapSetCell ,(avatar 'z) ,(avatar 'y) ,(avatar 'x) ,(avatar 'cell)))))
+   (ipcWrite `(mapSetCell ,(avatar 'z) ,(avatar 'y) ,(avatar 'x) ,cell))))
 
 (define (mouseWalkAction action wy wx)
  (if (eq? action 'mouse0)
@@ -1170,10 +1172,11 @@
 (setButton CHAR-CTRL-L '(begin (viewportReset (avatar 'y) (avatar 'x)) ((WinChat 'repaint))))
 (setButton CHAR-CTRL-M '(begin ((WinStatus 'toggle)) ((WinColumn 'toggle))))
 (setButton CHAR-CTRL-Q '(set! state 'done))
-(setButton #\d '(buttonSetCell))
+(setButton #\d '(buttonSetCell (avatar 'cell)))
 (setButton #\g
    '(let ((o (apply field-base-ref ((avatar 'gps)))))
      (WinChatDisplay "\r\nGrabbed " o)
+     (buttonSetCell cellAIR)
      (avatar `(set! cell ,o))))
 (setButton #\? '(help))
 (setButton #\< '(winMapSmaller))
@@ -1526,7 +1529,8 @@
    (if (string=? "march" talkInput) (thread (march))
    (if (string=? "edit" talkInput) (begin (set! EDIT (not EDIT)) (tankTalk "Edit mode " EDIT))
    (if (string=? "island" talkInput) (jump 1 4150 5602)
-   (if (string=? "britania" talkInput) (jump 1 3456 2751)))))))))
+   (if (string=? "scrabble" talkInput) (jump 1 3338 3244)
+   (if (string=? "britania" talkInput) (jump 1 3456 2751))))))))))
 
 ; Display the same string repeatedly with colors of increasing inensity.
 (define (fancyDisplay c s)
@@ -1723,6 +1727,7 @@
 (cellSet cellAIR 'air glyphAIR)
 
 (load "ultima4.cells")
+(load "scrabble.scm") ; TODO temporary
 
 ; Initialize field and canvas structures
 (resetField (columnMake 0 cellXX cellAIR))
