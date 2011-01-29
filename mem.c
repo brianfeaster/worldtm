@@ -1068,6 +1068,7 @@ void memValidateObject (Obj o) {
  Obj oo, op;
  Int valid=1;
  Int i;
+	DB("   ::%s", __func__);
 	
 	if ((memIsObjectInHeap(&heapOld, o)
 		  || memIsObjectInHeap(&heap, o)
@@ -1079,45 +1080,48 @@ void memValidateObject (Obj o) {
 			op = memVectorObject(o, 0);
 			/* Verify pointer is into an object in the current heap. */
 			if (!memIsObjectInHeap(&heap, oo)) {
-				fprintf (stderr, "ERROR memValidateObject() pointer is to invalid object.\n");
+				fprintf (stderr, "\nERROR memValidateObject() pointer is to invalid object.");
 				valid=0;
 			}
 			/* Verify pointer is within object */
 			if (!((oo <= op)	
 			      && (op < oo + memObjectSize(oo) - DescSize))) {
-				fprintf (stderr, "ERROR memValidateObject() pointer is out of object range.\n");
+				fprintf (stderr, "\nERROR memValidateObject() pointer is out of object range.");
 				valid=0;
 			}
 		} else if (memIsObjectStack(o)) {
 			op = memVectorObject(o, 0);
 			if (!(o <= op
 			      && (op < o + memObjectSize(o) - DescSize))) {
-				fprintf (stderr, "ERROR memValidateObject() stack "OBJ" out of bounds. ptr:"OBJ"  end:"OBJ"\n", o, op, o + memObjectSize(o) - DescSize);
+				fprintf (stderr, "\nERROR memValidateObject() stack "OBJ" out of bounds. ptr:"OBJ"  end:"OBJ"", o, op, o + memObjectSize(o) - DescSize);
 				valid=0;
 			}
 		} else if (memIsObjectShadow(o))
-			fprintf (stderr, "ERROR memValidateObject() found shadow.\n");
+			fprintf (stderr, "\nERROR memValidateObject() found shadow.");
 		else if (memIsObjectFinalizer(o))
-			fprintf (stderr, "ERROR memValidateObject() found finalizer.\n");
+			fprintf (stderr, "\nERROR memValidateObject() found finalizer.");
 		else if (memIsObjectVector(o))
 			for (i=0; i<memObjectLength(o); i++) {
 				oo = memVectorObject(o, i);
 				if (!(memIsObjectInHeap(&heapOld, oo) || memIsObjectInHeap(&heap, oo) || memIsObjectInHeap(&heapStatic, oo))
-				    && (oo > (Obj)0x420000 && oo < (Obj)-0x420000) /* Was 0xffff */
+				    && (oo > (Obj)0x430000 && oo < (Obj)-0x430000) /* Was 0xffff.  Allowing positive and negative 'immediate' values. */
 				    && !memObjString(oo)) { /* Ignore registered internal pointers. */
-					fprintf (stderr, "ERROR memValidateObject() vector object "OBJ"["INT"]="OBJ" invalid.\n", o, i, oo);
+					fprintf (stderr, "\nERROR memValidateObject() vector object "OBJ"["INT"]="OBJ" invalid.", o, i, oo);
 					//wscmWrite(memVectorObject(o, 2), 0, 1);
 					valid=0;
 				}
 			}
 	}
 	if (!valid) {
-		fprintf (stderr, "ERROR memValidateObject() found bad object "OBJ NL, o);
+		fprintf (stderr, "\nERROR memValidateObject() found bad object "OBJ NL, o);
 		memDebugDumpObject (o, NULL);
+		fflush(stdout);
+		sysDebugger();
 		//memDebugDumpAll(NULL);
 		*(int*)0=0;
 		exit(-1);
 	}
+	DB("      --%s", __func__);
 }
 
 
@@ -1144,7 +1148,7 @@ void memValidateHeapStructures (void) {
 		memValidateObject (o);
 		o += memObjectSize(o);
 	}
-	DB("--memValidateHeapStructures()");
+	DB("   --%s", __func__);
 }
 
 

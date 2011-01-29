@@ -12,9 +12,11 @@
 ;;      from printing at the same time to the same port.
 
 ; Keep track of internal implemenations.
+;(garbage-collect)
+;(quit)
 (define sdisplay display)
 (define swrite write)
-(quit
+
 ; display
 (define (display-list-serialize-list o r)
   (display-list-serialize
@@ -23,7 +25,6 @@
                  (if (null? (cdr o))
                      r
                      (cons " . " (display-list-serialize (cdr o) r))))))
-
 (define (display-list-serialize-vector v r)
  (let ~ ((i (- (vector-length v) 1))
          (r (cons ")" r)))

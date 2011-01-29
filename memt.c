@@ -118,6 +118,7 @@ l:
 	//memDebugDumpHeapStructures();
 goto  l;
 ret:
+memGarbageCollect();
 	fprintf (stderr,"\n");
 	return 0;
 }
