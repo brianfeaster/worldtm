@@ -1905,7 +1905,7 @@ void sysOpen (int oflag, mode_t mode) {
 	r1 = (Obj)(Int)open((char*)name, oflag, mode);
 
 	if ((Int)r1==-1) {
-		fprintf (stderr, "ERROR: sysOpen() Unable to open local file %d::%s.", errno, strerror(errno));
+		fprintf (stderr, "ERROR: sysOpen() Unable to open local file '%s' errno %d %s.", name, errno, strerror(errno));
 		r0 = false;
 	} else {
 		objNewInt(oflag);  r3=r0;
@@ -2984,22 +2984,37 @@ void sysDebugger (void) {
 	ioctl(1, TIOCGWINSZ, &win); printf ("\e[%dH", win.ws_row); /* Move cursor to bottom of screen */
 	while (!done) {
 		printf ("\n\e[1m-------------------------------");
-		printf ("\nc  vmDebugDumpCode(code=1c, stderr)");
-		printf ("\ne  sysDumpEnv(env)");
-		printf ("\ns  wscmWrite(stack, stderr)");
-		printf ("\ny  wscmWrite(symbols, stderr)");
-		printf ("\nh  memDebugDumpHeapHeaders(stderr)"); 
-		printf ("\nR  return");
-		printf ("\nX  crash");
-		printf ("\nQ  exit(-1)");
+		printf ("\nc    vmDebugDumpCode(r1c, stderr)");
+		printf ("\nC a  vmDebugDumpCode(a, stderr)");
+		printf ("\ne    sysDumpEnv(env)");
+		printf ("\ns    wscmWrite(stack, stderr)");
+		printf ("\ny    wscmWrite(symbols, stderr)");
+		printf ("\nh    memDebugDumpHeapHeaders(stderr)"); 
+		printf ("\n3    memDebugDumpYoungHeap(stderr)"); 
+		printf ("\nw a  wscmWrite(a1, stderr)");
+		printf ("\nR    return");
+		printf ("\nX    crash");
+		printf ("\nQ    exit(-1)");
 		printf ("\n-------------------------------\e[0m");
 		printf ("\nwscmdbg>");
 		while (strchr("\r\n \t", cmd=getchar())); /* Skip whitespace */
 		if (cmd=='c') vmDebugDumpCode(code, stderr);
+	   if (cmd=='C') {
+			Obj arg;
+			scanf("%lx", &arg);
+			vmDebugDumpCode(arg, stderr);
+		}
 		if (cmd=='e') sysDumpEnv(env);
 		if (cmd=='s') wscmWrite(stack, stderr);
 		if (cmd=='y') wscmWrite(symbols, stderr);
 	   if (cmd=='h') memDebugDumpHeapHeaders(stderr);
+	   if (cmd=='3') memDebugDumpYoungHeap (stderr);
+	   if (cmd=='w') {
+			Obj arg;
+			scanf("%lx", &arg);
+			if (memObjString(arg)) printf (memObjString(arg));
+			else wscmWrite(arg, stderr);
+		}
 		if (cmd=='R') done=1;
 		if (cmd=='X') *(Int*)0=0;
 		if (cmd=='Q') exit(-1);
