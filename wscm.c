@@ -22,25 +22,18 @@ void wscmCReadEvalPrintLoop (void) {
 	while (r0 != eof) {
 		env = tge; /* Evaluate in TGE */
 		//DBE wscmDumpTGE();
-		//DBE wscmWrite(ready, stderr), write (2, "\n", 1);
-		//DBE wscmWrite(sleeping, stderr), write (2, "\n", 1);
-		//DBE wscmWrite(blocked, stderr);
-		DB("== Parsing ======================");
-		write (1, "\nC>", 3);
+		fprintf(stderr, "\n== Read and parse ===============\nWSCM>");
 		yyparse();/* Expr read into r0. */
-		DB("== Compiling ====================\n");
 
-		DBE wscmWrite(r0, stderr);
+		fprintf(stderr, "\n== Compile ======================\n");
+		wscmWrite(r0, stderr);
 		compCompile();   /* Expr in r0 compiled into VM runable code in r0. */
 		code=r0; ip=0;
-
-		DB("== Running ======================\n");
-		DBE wscmWrite(code, stderr);
 		vmDebugDumpCode(code, stderr);
 
-		DB("== Output ======================\n");
+		fprintf(stderr, "== Execute and return value =====\n");
 		vmRun();
-		wscmDisplay(r0, 0, 1);
+		wscmDisplay(r0, 0, 2);
 
 		DB("== Debug =======================");
 		DBE memDebugDumpHeapHeaders(stdout);

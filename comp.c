@@ -1531,7 +1531,8 @@ void compAsmNonTailCall () {
 
 void compCombination (Num flags) {
  Int operandCount=0;
-	DB("-->%s", __func__);
+	DB("-->%s expr=", __func__);
+	DBE memDebugDumpObject(expr, stdout);
 
 	/* Make sure we push/pop the jump and linked code/ip registers at the start
 	   and just before the last expression.  This must be done before arguments
@@ -1718,7 +1719,8 @@ void compCallcc (Num flags) {
 	An expression is either a symbol, syntax, combination or self evaluating.
 */
 Int compExpression (Num flags) {
-	DB("-->%s", __func__);
+	DB("-->%s expr=", __func__);
+	DBE memDebugDumpObject(expr, stdout);
 	switch (memObjectType(expr)) {
 		case TSYMBOL :
 			compVariableReference();

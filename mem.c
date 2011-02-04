@@ -1,8 +1,8 @@
 #define DEBUG 0
-#define DEBUG_ASSERT 1
-#define DEBUG_ASSERT_VECTOR 1
-#define DEBUG_ASSERT_STACK 1
-#define VALIDATE_HEAP 1
+#define DEBUG_ASSERT 0
+#define DEBUG_ASSERT_VECTOR 0
+#define DEBUG_ASSERT_STACK 0
+#define VALIDATE_HEAP 0
 #define DB_MODULE "MEM "
 #include "debug.h"
 #include <errno.h>
@@ -360,17 +360,15 @@ int memIsObjectValid  (Obj o) {
 */
 void memArraySet (Obj obj, Num offset, u8 item) {
 	#if DEBUG_ASSERT
-	if(!(memIsObjectInHeap(&heap, obj)
-	      || memIsObjectInHeap(&heapOld, obj)
-	      || memIsObjectInHeap(&heapStatic, obj))) {
+	if (!memIsObjectValid(obj)) {
 		DB("ERROR memArraySet(obj "OBJ" offset "NUM" item %02x) Invalid object.",
 		    obj, offset, item);
 		memError();
-	}else if(!memIsObjectArray(obj)) {
+	} else if(!memIsObjectArray(obj)) {
 		DB("ERROR memArraySet(obj "OBJ" offset "NUM" item %02x) Not array class.",
 		    obj, offset, item);
 		memError();
-	}else if(offset<0 || memObjectLength(obj)<=offset ) {
+	} else if(offset<0 || memObjectLength(obj)<=offset ) {
 		DB("ERROR memArraySet(obj "OBJ" offset "NUM" item %02x) Invalid offset.",
 		    obj, offset, item);
 		memError();
@@ -417,8 +415,7 @@ void memStackPush (Obj obj, Obj item) {
 
 void memStackSet (Obj obj, Num topOffset, Obj item) {
 	#if DEBUG_ASSERT
-	if (!(memIsObjectInHeap(&heap, obj) || memIsObjectInHeap(&heapOld, obj)
-	      || memIsObjectInHeap(&heapStatic, obj))) {
+	if (!memIsObjectValid(obj)) {
 		DB ("ERROR memStackSet(obj "OBJ" topOffset %x item "OBJ") Invalid object.",
 		    obj, topOffset, item);
 		memError();
@@ -437,9 +434,7 @@ void memStackSet (Obj obj, Num topOffset, Obj item) {
 Obj  memStackPop (Obj obj) {
  Obj ret;
 	#if DEBUG_ASSERT
-	if (!(memIsObjectInHeap(&heap, obj)
-	      || memIsObjectInHeap(&heapOld, obj)
-	      || memIsObjectInHeap(&heapStatic, obj))) {
+	if (!memIsObjectValid(obj)) {
 		DB ("ERROR memStackPop(obj "OBJ") Invalid object.", obj);
 		memError();
 	} else if (!memIsObjectStack(obj)) {
@@ -451,8 +446,19 @@ Obj  memStackPop (Obj obj) {
 	}
 	#endif
 	ret = **(Obj**)obj;
-	// BF TODO: For debugging purposes set the value to 0 then pop.
-	*(*(Obj***)obj)-- = 0;
+	/* After popping, clear the value.  Mainly for debugging.  During a garbage
+	   collection, the object pointers will be ignored. */
+	*(*(Obj**)obj)-- = 0;
+
+	// Trying this
+	//**(Obj**)obj = 0;
+	//(*(Obj**)obj)--;
+
+	// This works.
+	//wscmWrite(obj, stdout);
+	//(*(Obj**)obj)--; // Pop the stack
+	//wscmWrite(obj, stdout);
+	//return *(*(Obj**)obj+1); // Return what was popped
 	return  ret;
 }
 
@@ -462,9 +468,7 @@ Obj  memStackPop (Obj obj) {
  */
 u8 memArrayObject (Obj obj, Num offset) {
 	#if DEBUG_ASSERT
-	if (!(memIsObjectInHeap(&heap, obj)
-	      || memIsObjectInHeap(&heapOld, obj)
-	      || memIsObjectInHeap(&heapStatic, obj))) {
+	if (!memIsObjectValid(obj)) {
 		DB ("ERROR memArrayObject(obj "OBJ" offset "NUM") Invalid object.",
 		    obj, offset);
 		memError();
@@ -483,9 +487,7 @@ u8 memArrayObject (Obj obj, Num offset) {
 
 Obj memVectorObject (Obj obj, Num offset) {
 	#if DEBUG_ASSERT_VECTOR
-	if (!(memIsObjectInHeap(&heap, obj)
-	      || memIsObjectInHeap(&heapOld, obj)
-	      || memIsObjectInHeap(&heapStatic, obj))) {
+	if (!memIsObjectValid(obj)) {
 		DB ("ERROR memVectorObject(obj "OBJ" offset "NUM") Invalid object.",
 		    obj, offset);
 		memError();
@@ -506,9 +508,7 @@ Obj memVectorObject (Obj obj, Num offset) {
 
 Obj memStackObject (Obj obj, Num topOffset) {
 	#if DEBUG_ASSERT
-	if (!(memIsObjectInHeap(&heap, obj)
-	      || memIsObjectInHeap(&heapOld, obj)
-	      || memIsObjectInHeap(&heapStatic, obj))) {
+	if (!memIsObjectValid(obj)) {
 		DB ("ERROR memStackObject(obj "OBJ" topOffset "NUM"): Invalid object.",
 		    obj, topOffset);
 		memError();
@@ -925,15 +925,33 @@ void memDebugDumpHeapHeaders (FILE *stream) {
 	        heapStatic.finalizerCount,  heapOld.finalizerCount,
 	        heap.finalizerCount,        heapNew.finalizerCount);
 
-	fprintf (stream, "r00 "OBJ"  r08 "OBJ"  r10 "OBJ"  r18 "OBJ"\n", r0, r8, r10, r18);
-	fprintf (stream, "r01 "OBJ"  r09 "OBJ"  r11 "OBJ"  r19 "OBJ"\n", r1, r9, r11, r19);
-	fprintf (stream, "r02 "OBJ"  r0a "OBJ"  r12 "OBJ"  r1a "OBJ"\n", r2, ra, r12, r1a);
-	fprintf (stream, "r03 "OBJ"  r0b "OBJ"  r13 "OBJ"  r1b "OBJ"\n", r3, rb, r13, r1b);
-	fprintf (stream, "r04 "OBJ"  r0c "OBJ"  r14 "OBJ"  r1c "OBJ"\n", r4, rc, r14, r1c);
-	fprintf (stream, "r05 "OBJ"  r0d "OBJ"  r15 "OBJ"  r1d "OBJ"\n", r5, rd, r15, r1d);
-	fprintf (stream, "r06 "OBJ"  r0e "OBJ"  r16 "OBJ"  r1e "OBJ"\n", r6, re, r16, r1e);
-	fprintf (stream, "r07 "OBJ"  r0f "OBJ"  r17 "OBJ"  r1f "OBJ"\n", r7, rf, r17, r1f);
+	fprintf (stream, "r00 "OBJ"  r08 "OBJ"  r10 "OBJ"  r18 "OBJ"     blocked  expr\n", r0, r8, r10, r18);
+	fprintf (stream, "r01 "OBJ"  r09 "OBJ"  r11 "OBJ"  r19 "OBJ"     threads  symb\n", r1, r9, r11, r19);
+	fprintf (stream, "r02 "OBJ"  r0a "OBJ"  r12 "OBJ"  r1a "OBJ"     sleeping asmstk\n", r2, ra, r12, r1a);
+	fprintf (stream, "r03 "OBJ"  r0b "OBJ"  r13 "OBJ"  r1b "OBJ"     running  ip\n", r3, rb, r13, r1b);
+	fprintf (stream, "r04 "OBJ"  r0c "OBJ"  r14 "OBJ"  r1c "OBJ"     ready    code\n", r4, rc, r14, r1c);
+	fprintf (stream, "r05 "OBJ"  r0d "OBJ"  r15 "OBJ"  r1d "OBJ"     retenv   rip\n", r5, rd, r15, r1d);
+	fprintf (stream, "r06 "OBJ"  r0e "OBJ"  r16 "OBJ"  r1e "OBJ"     env      rcode\n", r6, re, r16, r1e);
+	fprintf (stream, "r07 "OBJ"  r0f "OBJ"  r17 "OBJ"  r1f "OBJ" sem tge      stack\n", r7, rf, r17, r1f);
 }
+#define semaphores rf  /* WSCM: semaphore counters */
+#define blocked    r10 /* WSCM: I/O and Semaphore blocked threads */
+#define threads    r11 /* WSCM: Thread vector */
+#define sleeping   r12 /* WSCM: Sleeping thread */
+#define running    r13 /* WSCM: Current thread */
+#define ready      r14 /* WSCM: Thread list */
+
+#define retenv     r15 /* VM: Caller's environment */
+#define env        r16 /* WSCM: Current active environment */
+#define tge        r17 /* WSCM: Global environment */
+#define expr       r18 /* WSCM: Expression being compiled */
+#define symbols    r19 /* OBJ: Symbol table used by scanner and OS */
+#define asmstack   r1a /* VM: Opcode stack where machine code is emitted */
+#define ip         r1b /* VM: Current running program instruction pointer */
+#define code       r1c /* VM: Currently running code object */
+#define retip      r1d /* VM: Caller's ip */
+#define retcode    r1e /* VM: Caller's code block */
+#define stack      r1f /* VM: Global stack used by VM */
 
 
 
@@ -1103,8 +1121,13 @@ void memValidateObject (Obj o) {
 		else if (memIsObjectVector(o))
 			for (i=0; i<memObjectLength(o); i++) {
 				oo = memVectorObject(o, i);
-				if (!(memIsObjectInHeap(&heapOld, oo) || memIsObjectInHeap(&heap, oo) || memIsObjectInHeap(&heapStatic, oo))
-				    && (oo > (Obj)0x430000 && oo < (Obj)-0x430000) /* Was 0xffff.  Allowing positive and negative 'immediate' values. */
+				/* Originally immediate value range was 0xffff.  Allowing positive and negative
+				   immediate values also include internal C code goto addresses which are used
+				   as opcodes in the virtual machine. */
+				if (!(memIsObjectInHeap(&heapOld, oo)
+				      || memIsObjectInHeap(&heap, oo)
+				      || memIsObjectInHeap(&heapStatic, oo))
+				    && (oo > (Obj)0x430000 && oo < (Obj)-0x430000) /* Immediate values */
 				    && !memObjString(oo)) { /* Ignore registered internal pointers. */
 					fprintf (stderr, "\nERROR memValidateObject() vector object "OBJ"["INT"]="OBJ" invalid.", o, i, oo);
 					//wscmWrite(memVectorObject(o, 2), 0, 1);
@@ -1113,13 +1136,9 @@ void memValidateObject (Obj o) {
 			}
 	}
 	if (!valid) {
-		fprintf (stderr, "\nERROR memValidateObject() found bad object "OBJ NL, o);
+		fprintf (stderr, "\nERROR memValidateObject() found bad object:"OBJ NL, o);
 		memDebugDumpObject (o, NULL);
-		fflush(stdout);
 		sysDebugger();
-		//memDebugDumpAll(NULL);
-		*(int*)0=0;
-		exit(-1);
 	}
 	DB("      --%s", __func__);
 }

@@ -84,11 +84,12 @@
         (entitiesAdd entity)))
     ; Return the new or modified entity
     entity))
-       
+
 ; Create the map agent
 (define avatar (Avatar DNA (ipc 'PrivatePort) MYNAME  0 0 0))
 (entitiesAdd avatar)
 (entitiesAdd (Entity 0 0 "System" #(0 1 #\S 0 1 #\Y) 0 0 0))
+
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -124,7 +125,7 @@
         (vector-set! vec
                  (+ (* 256 (+ (modulo (/ i 32) 32) (* (/ i 8192) 32)))
                     (+ (modulo i 32) (* (modulo (/ i 1024) 8) 32)))
-                 (+ 0 (read-char fd))) ; Hack to convert char to integer
+                 (+ 0 (read-char #f fd))) ; Hack to convert char to integer
         (~ (+ i 1)))))))
 
 ; Return cell number from U4 map
@@ -140,7 +141,7 @@
 (define (ultMapVector fn)
  (let ((fd (open-file fn))
        (ultVec (make-vector 1024)))
-  (loop 1024 (lambda (i) (vector-set! ultVec i (+ 0 (read-char fd))))) ; Hack to convert char to integer
+  (loop 1024 (lambda (i) (vector-set! ultVec i (+ 0 (read-char #f fd))))) ; Hack to convert char to integer
   (close fd)
   ultVec))
 
@@ -148,7 +149,7 @@
 (define (conMapVector fn)
  (let ((fd (open-file fn))
        (ultVec (make-vector 1024 4)))
-  (loop2 10 21 10 21 (lambda (y x) (vector-set! ultVec (+ (* y 32) x) (+ 0 (read-char fd))))) ; Hack to convert char to integer
+  (loop2 10 21 10 21 (lambda (y x) (vector-set! ultVec (+ (* y 32) x) (+ 0 (read-char #f fd))))) ; Hack to convert char to integer
   (close fd)
   ultVec))
 

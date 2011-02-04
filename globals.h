@@ -154,11 +154,4 @@ static const unsigned R0 =       0x00000001;
 
 #define NL "\n"
 
-#define TAB0 ""
-#define TAB1 TAB0 "   "
-#define TAB2 TAB1 "   "
-#define TAB3 TAB2 "   "
-#define TAB4 TAB3 "   "
-#define TAB5 TAB4 "   "
-
 #endif

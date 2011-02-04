@@ -44,6 +44,7 @@ int vmGCCount=0;
 void vmPreGarbageCollect (void) {
 	DB("::vmPreGarbageCollect  ip "OBJ"  code"OBJ, ip, code);
 	if (vmGCCount++ == 0) {
+		/* These are passed from obj.c */
 		if (vmCallerPreGarbageCollect) vmCallerPreGarbageCollect();
 		/* Only convert ip to offset if it's a pointer (big number larger pointing
 			into the code object).  Multiply by eight to force opcode offset (not
@@ -523,9 +524,9 @@ void vmVm (Int cmd) {
    offset in immediate ip (r1b).
 */
 void vmRun (void) {
-	DB(TAB0"::"STR  " code:"OBJ  " ip:"INT, __func__, code, ip);
+	DB(INDENT0"::"STR  " code:"OBJ  " ip:"INT, __func__, code, ip);
 	vmVm (RUN);
-	DB(TAB1"--"STR, __func__);
+	DB(INDENT1"--"STR, __func__);
 }
 
 
@@ -569,7 +570,7 @@ void vmDebugDumpCode (Obj c, FILE *stream) {
 
 	fcntl (0, F_SETFL, (fdState=fcntl(0, F_GETFL, 0))&~O_NONBLOCK);
 
-	DB (TAB1"::"STR " "OBJ"  code:"OBJ"  ip:"OBJ, __func__, c, code, ip);
+	DB (INDENT1"::"STR " "OBJ"  code:"OBJ"  ip:"OBJ, __func__, c, code, ip);
 
 	if (stream == NULL) stream=stderr;
 
@@ -687,6 +688,6 @@ void vmDebugDumpCode (Obj c, FILE *stream) {
 	}
 	printf (NL);
 	fcntl (0, F_SETFL, fdState);
-	DB (TAB2"--"STR, __func__);
+	DB (INDENT2"--"STR, __func__);
 }
 #undef DB_MODULE

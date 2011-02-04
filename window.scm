@@ -10,7 +10,7 @@
                                    ";38;5;" (number->string (modulo i 256)) "m"))))
     tbl))
 
-(define colorTable
+(rem define colorTable
   (let ((tbl (make-vector 65536)))
     (loop 65536 (lambda (i)
         (vector-set! tbl i (string "\e[" (if (> (modulo i 16) 7) "1;3" "0;3")
