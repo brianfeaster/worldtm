@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <unistd.h> // for sleep TODO TEMPORARY
 
 #if DEBUG
 
@@ -24,7 +25,14 @@
 #define BCYN  "\e[0;1;36m"
 #define BWHT  "\e[0;1;37m"
 
-#define DB(...) fprintf(stderr, "\n" DB_MODULE __VA_ARGS__);
+#define INDENT0 ""
+#define INDENT1 INDENT0"   "
+#define INDENT2 INDENT1"   "
+#define INDENT3 INDENT2"   "
+#define INDENT4 INDENT3"   "
+#define INDENT5 INDENT4"   "
+
+#define DB(...) fprintf(stderr, "\n" DB_MODULE __VA_ARGS__)
 #define DBE if(1)
 #define ENTER "-->"
 #define LEAVE "<--"

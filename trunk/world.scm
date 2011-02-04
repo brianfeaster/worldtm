@@ -893,7 +893,7 @@
 
 ; This needs to be called in a separate thread
 (define (keyScannerAgentLoop)
- (let ((c (read-char stdin)))
+ (let ((c (read-char #f stdin)))
    (if (eq? c CHAR-ESC)
      (keyScannerEsc) ; Escape char so attempt to read an escape sequence
      (keyDispatcher c)) ; Add new keyboard character to queue
@@ -901,20 +901,22 @@
 
 ; An "\e" scanned
 (define (keyScannerEsc)
- (let ((c (read-char stdin)))
+ (let ((c (read-char 500 stdin))) ; Timeout after half a second.  Will return #f.
    (if (eq? c #\[)
      (keyScannerEscBracket)
    (if (eq? c CHAR-ESC)
      (begin
        (keyDispatcher CHAR-ESC)
        (keyScannerEsc))
+   (if (not c) ; Timed out so accept escape char and start over
+       (keyDispatcher CHAR-ESC)
    (begin ; Not a recognized escape sequence, so send escape and the [ character
      (keyDispatcher CHAR-ESC)
-     (keyDispatcher c))))))
+     (keyDispatcher c)))))))
 
 ; An "\e[" scanned
 (define (keyScannerEscBracket)
-  (let ((c (read-char stdin)))
+  (let ((c (read-char #f stdin)))
     (if (eq? c #\A) (keyDispatcher 'up)
     (if (eq? c #\B) (keyDispatcher 'down)
     (if (eq? c #\C) (keyDispatcher 'right)
@@ -927,14 +929,14 @@
 
 ; An "\e[M" has been scanned
 (define (keyScannerEscBracketM)
- (letrec ((c (read-char stdin))
+ (letrec ((c (read-char #f stdin))
           (action (if (eq? c #\ ) 'mouse0
                   (if (eq? c #\!) 'mouse2
                   (if (eq? c #\") 'mouse1
                   (if (eq? c #\#) 'mouseup
                   'mouse)))))
-          (x (- (read-char stdin) #\  1))
-          (y (- (read-char stdin) #\  1)))
+          (x (- (read-char #f stdin) #\  1))
+          (y (- (read-char #f stdin) #\  1)))
   (mouseDispatcher action y x)))
 
 ;TODO move this

@@ -2646,9 +2646,45 @@ Thu Jan 27 02:04:02 EST 2011
 
 
 Sat Jan 29 14:47:20 EST 2011
-7fb9bfa6c498 82 VECTOR   50#(4225f3 8 4225ef 1a 422119 2a 422bea 30 4225d1 44 4225df 61 4225d7 7e 4225cc 9b 4225c2 b8 4225b8 c7 4225b1 ce 422c89 d5 4225a9 dc 4225a4 e3 4225a0 ea 42259c f1 422595 f8 42258f ff 42258a 106 422582 10d 422e0f 10f 42257e 122 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0)
 
-7fb9bfa6c720 82 VECTOR   50#(4225f3 13 4225ef 16 422119 1c 422bea 2c 4225d1 32 422e0f 43 4225df 46 422e0f 60 4225d7 63 422e0f 7d 4225cc 80 422e0f 9a 4225c2 9d 422e0f b7 4225b8 ba 422e0f c6 4225b1 c9 422e0f cd 422c89 d0 422e0f d4 4225a9 d7 422e0f db 4225a4 de 422e0f e2 4225a0 e5 422e0f e9 42259c ec 422e0f f0 422595 f3 422e0f f7 42258f fa 422e0f fe 42258a 101 422e0f 105 422582 108 422e0f 10c 42257e 111 0 0 0 0 0 0)
+7fb9bfa6c498 82 VECTOR   50#(4225f3 8 4225ef 1a 422119 2a 422bea 30 4225d1...
+7fb9bfa6c720 82 VECTOR   50#(4225f3 13 4225ef 16 422119 1c 422bea 2c 4225d1...
 
-7fb9bfa6c9a8 85 CODE    122#(41252b:BRA 8 7fb9bfa6c488 412890:MVI4 0 412900:MVI6 0 412820:MVI2 7fb9c0611008 412678:SYSI 40f030:wscmRecvBlock 412a28:MV20 4127b0:MVI0 0 412678:SYSI 405dd0:sysTransition 413330:BEQI0 0 ffffffffffffffa0 4133d0:BNEI0 84 18 4127b0:MVI0 7fb9c0611008 412628:RET 4133d0:BNEI0 d0 68 4130d0:PUSH7 413100:PUSH1D 413110:PUSH1E 412938:MVI7 1 4129e0:MV01C 4125b8:JAL0 413210:POP1E 4131e0:POP1D 413198:POP7 412b90:LDI00 0 412628:RET 4133d0:BNEI0 88 18 4127b0:MVI0 7fb9c0612cb8 412628:RET 4133d0:BNEI0 82 88 4130d0:PUSH7 413100:PUSH1D 413110:PUSH1E 412938:MVI7 1 4129e0:MV01C 4125b8:JAL0 413210:POP1E 4131e0:POP1D 413198:POP7 413090:PUSH1 4129f0:MV10 412678:SYSI 40ca20:objListToVector 413138:POP1 41252b:BRA 658 4133d0:BNEI0 83 d0 4130d0:PUSH7 413100:PUSH1D 413110:PUSH1E 412938:MVI7 0 4129e0:MV01C 4125b8:JAL0 413210:POP1E 4131e0:POP1D 413198:POP7 413090:PUSH1 4130a0:PUSH2 4129f0:MV10 412820:MVI2 7fb9c0611008 412678:SYSI 40bc10:objCons12 4127e8:MVI1 7fb9c0611070 412a28:MV20 412678:SYSI 40bc10:objCons12 413150:POP2 413138:POP1 41252b:BRA 570 4133d0:BNEI0 8a d0 4130d0:PUSH7 413100:PUSH1D 413110:PUSH1E 412938:MVI7 0 4129e0:MV01C 4125b8:JAL0 413210:POP1E 4131e0:POP1D 413198:POP7 413090:PUSH1 4130a0:PUSH2 4129f0:MV10 412820:MVI2 7fb9c0611008 412678:SYSI 40bc10:objCons12 4127e8:MVI1 7fb9c06110a8 412a28:MV20 412678:SYSI 40bc10:objCons12 413150:POP2 413138:POP1 41252b:BRA 488 4133d0:BNEI0 cb d0 4130d0:PUSH7 413100:PUSH1D 413110:PUSH1E 412938:MVI7 0 4129e0:MV01C 4125b8:JAL0 413210:POP1E 4131e0:POP1D 413198:POP7 413090:PUSH1 4130a0:PUSH2 4129f0:MV10 412820:MVI2 7fb9c0611008 412678:SYSI 40bc10:objCons12 4127e8:MVI1 7fb9c0611080 412a28:MV20 412678:SYSI 40bc10:objCons12 413150:POP2 413138:POP1 41252b:BRA 3a0 4133d0:BNEI0 89 d0 4130d0:PUSH7 413100:PUSH1D 413110:PUSH1E 412938:MVI7 0 4129e0:MV01C 4125b8:JAL0 413210:POP1E 4131e0:POP1D 413198:POP7 413090:PUSH1 4130a0:PUSH2 4129f0:MV10 412820:MVI2 7fb9c0611008 412678:SYSI 40bc10:objCons12 4127e8:MVI1 7fb9c0611090 412a28:MV20 412678:SYSI 40bc10:objCons12 413150:POP2 413138:POP1 41252b:BRA 2b8 4133d0:BNEI0 80 60 4130d0:PUSH7 413100:PUSH1D 413110:PUSH1E 412938:MVI7 1 4129e0:MV01C 4125b8:JAL0 413210:POP1E 4131e0:POP1D 413198:POP7 41252b:BRA 240 4133d0:BNEI0 87 20 412678:SYSI 404f50 41252b:BRA 208 4133d0:BNEI0 cd 20 412678:SYSI 40da70 41252b:BRA 1d0 4133d0:BNEI0 81 20 412678:SYSI 40c560 41252b:BRA 198 4133d0:BNEI0 d2 20 412678:SYSI 40c4d0 41252b:BRA 160 4133d0:BNEI0 d1 20 412678:SYSI 40baa0 41252b:BRA 128 4133d0:BNEI0 cf 20 412678:SYSI 40d5c0 41252b:BRA f0 4133d0:BNEI0 ce 20 412678:SYSI 40cfa0 41252b:BRA b8 4133d0:BNEI0 cc 20 412678:SYSI 40c450 41252b:BRA 80 4133d0:BNEI0 86 20 4127b0:MVI0 7fb9c0611030 41252b:BRA 48 4133d0:BNEI0 85 20 4127b0:MVI0 7fb9c0611040 41252b:BRA 10 4127b0:MVI0 7fb9c0611008 4133a8:BEQI7 0 80 413050:PUSH0 413100:PUSH1D 413110:PUSH1E 4129e0:MV01C 4125b8:JAL0 413210:POP1E 4131e0:POP1D 413168:POP3 413090:PUSH1 4130a0:PUSH2 412a08:MV13 412a28:MV20 412678:SYSI 40bc10:objCons12 413150:POP2 413138:POP1 412628:RET)
+When compiling World scheme from the all-files-concatenated file, some internal
+pointers exceeded the presumed top memory limit.  This will change in the future
+and is dirty.  I upped the value to #x430000.
 
+Since world needs more entities, I need to distill the bare minimum
+functionality from world.scm and abstract an entity class.  The user's avatar
+will then exstend this.  New entities can then be created separate from the
+avatar in its own thread.  It eventually will not be bound to the process it is
+instantiated on.  Migratable threads will be another big project and preferably
+an internal World Scheme mechanism.
+
+A World avatar is comprised of map caching, message handling and rendering.
+Rendering is only needed for the user.  Map caching is required as it is the
+entity's view of the universe.  Message handling is required as it is the basis
+for an entity's behavior.  This needs to tie into the IPC at all times.
+
+Another strange concatenated compilation bug.  This time I belive it's due to
+the #define of r1f which redefines any occurance of stack with r1f.  This is
+probably clobbering local variable symbol's "stack".  I never really like the
+preprocessor and this is one situation where it can break this unusal style of
+compilation.
+
+
+Mon Jan 31 14:56:08 EST 2011
+
+Unable to determine the cause of the bug.  Comparing the -O2 and -O2 optimized
+preprocessor output doesn't reveal any preprocessing issues. Comparing i-code
+output is a headache.  I'll just trace the offending executable.
+
+
+Thu Feb  3 19:05:45 EST 2011
+
+The bug was a bad cut/paste when I added an extra register peek of the stack in
+wscmScheduleBlocked for the call to wscmRecv.  The scheduling code which checks
+if characters are ready or not for the thread to run again.
+
+Continuing to implement timeout-reads.  So far the syscall and scheduler handles
+the extra arguments to wscmRecv.

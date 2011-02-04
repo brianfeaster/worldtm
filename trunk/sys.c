@@ -268,6 +268,7 @@ Int wscmWriteR (Obj a, long islist, FILE *stream, Int max) {
 Int wscmWrite    (Obj a, FILE *stream) { return wscmWriteR (a, 0, stream, LONG_MAX); }
 Int wscmWriteMax (Obj a, FILE *stream, Int max) { return wscmWriteR (a, 0, stream, max); }
 
+/* TODO convert this to FILE oriented output like I did to wscmWrite */
 void wscmDisplay (Obj a, long islist, int fd) {
  static char buff[64];
  Int i, len;
@@ -660,7 +661,7 @@ void wscmOpenLocalSocket (void) {
 
 	fcntl (ld, F_SETFL, fcntl (ld, F_GETFL) | O_NONBLOCK);
 
-	r1=(Obj)ld;
+	r1=(Obj)(Int)ld;
 	r2=r3;         /* Put port number in host field for the hell of it. */
 	r4=saccepting; /* State object starts out in accepting state. */
 	objNewPort();
@@ -735,32 +736,37 @@ ret:
 
 
 
-/* Given  : r1 - Port object.
-            r2 - String object buffer.
-            r3 - Bytes read immediate.
-   Return : r0 = ""     No data ready yet.
-                 #eof   No data will ever be ready.
-                 "blah" Here is your data.  Thank you, drive through.
-                 #f     Blocked state.
-   A nullstring in r2 implies read any amount of chars (including none).
-   A null in r2 implies read a character.
-   Otherwise will block if exactly (string-length r2) bytes aren't read yet.
+/* In  r1 Port object.
+       r2 Timeout integer or #f
+       r3 Thing to read:  "..." specific length  "" any length including nothing  () one char
+       r4 Bytes currently read already as an immediate integer
+
+   Out r0 ""     No data ready yet
+          #eof   No data will ever be ready
+          "blah" All the read characters
+          #f     No characters ready yet
+
+	Blocks until timeout is reached (unless timeout is #f) or all the specified characters
+	have been successfully read.
 */
 void wscmRecv (void) {
  u8 buffer[0x2000];
  Int ret=0, len;
 	DB("SYS -->wscmRecv <= ");
-	//DBE wscmWrite(r1, stderr);
-	//DBE wscmWrite(r2, stderr);
-	//DBE wscmWrite(r3, stderr);
+	DBE wscmWrite(r1, stderr);
+	DBE wscmWrite(r2, stderr);
+	DBE wscmWrite(r3, stderr);
+	DBE wscmWrite(r4, stderr);
+	if (r2 == 0) sysDebugger();
 
 	/* Port is open and data is flowing. */
 	if (memVectorObject(r1, 3) == sopen) {
 		DB("SYS    reading from filedescriptor");
 		/* Consider push-back character, will be #f if none there. */
 		r0 = memVectorObject(r1, 4);
+
 		/* Deal with 'any length' read request. */
-		if (r2 == nullstr) {
+		if (r3 == nullstr) {
 			DB("SYS    reading any length");
 			/* If char in push-back, deal with it. */
 			if (r0 != false) {
@@ -775,40 +781,40 @@ void wscmRecv (void) {
 			else if (ret==0) r0=eof;              /* File Descriptor closed. */
 			else r0=nullstr;                      /* No bytes available yet. */
 		/* Deal with character read and return. */
-		} else if (r2==null) {
+		} else if (r3==null) {
 			DB("SYS    reading single character");
 			/* Character already in push-back buffer. */
 			if (r0 != false) {
 				memVectorSet(r1, 4, false); /* Clear push-back character. */
 			} else {
-				DB("SYS    before ret=%x *buffer=%x errno=%x", ret, *buffer, errno);
+				DB("SYS    before ret="INT" *buffer="HEX02" errno="INT" %s", ret, *buffer, errno, strerror(errno));
 				ret = read(*(Int*)r1, buffer, 1);
-				DB("SYS    after  ret=%x *buffer=%x errno=%x", ret, *buffer, errno);
+				DB("SYS    after  ret="INT" *buffer="HEX02" errno="INT" %s", ret, *buffer, errno, strerror(errno));
 				if (ret == 1) r0=memVectorObject(characters, *buffer);
 				else if (ret==0) r0=eof;
 				else r0=false;
 			}
 		/* Deal with fixed length read request. */
 		} else {
-			DB("SYS    dealing with fixed length read request");
-			len = memObjectLength(r2);
-			DB("SYS    reading fixed length %d/%d", r3, len);
+			DB("SYS    dealing with fixed length read request.  r3="HEX" Buffer = ", r3);
+			len = memObjectLength(r3);
+			DB("SYS    reading fixed length "NUM"/"INT, r4, len);
 			if (r0 != false) {
-				*((char*)r2+(Int)r3) = *(char*)r0;
-				ret = read(*(Int*)r1, r2+(Int)r3+1, len-(Int)r3-1);
+				*((char*)r3+(Int)r4) = *(char*)r0;
+				ret = read(*(Int*)r1, r3+(Int)r4+1, len-(Int)r4-1);
 				if (ret<=0) ret = 1;
 				else ret++;
 				memVectorSet(r1, 4, false); /* Clear push-back character. */
 			} else
-				ret = read(*(Int*)r1, r2+(Int)r3, len-(Int)r3);
+				ret = read(*(Int*)r1, r3+(Int)r4, len-(Int)r4);
 			if (ret>0) {
-				r3+=ret;
-				if ((Int)r3 == len) r0=r2; /* Return the string buffer obj. */
+				r4+=ret;
+				if ((Int)r4 == len) r0=r3; /* Return the string buffer obj. */
 				else r0 = false;           /* Not ready yet ret false and block. */
 			} else if (ret<0) r0=false;   /* Nothing read so keep blocking. */
 			else { /* ret==0 File descriptor closed...see if anything was read. */
-				if (r3 == 0) r0 = eof;
-				else objNewString(r2, (Int)r3);
+				if (r4 == 0) r0 = eof;
+				else objNewString(r3, (Int)r4);
 			}
 		}
 	} else { /* Port state must be closed. */
@@ -816,24 +822,42 @@ void wscmRecv (void) {
 		r0 = eof;
 	}
 
-	DB("SYS <--wscmRecv => r0=%x", r0);
+	DB("SYS <--wscmRecv => r0="HEX, r0);
 	//DBE wscmWrite (r0, stderr);
 }
 
 /* Called by sysRecv or VM syscall instruction.
-   in:  r1:port object   r2:string object buffer
+   in   r1 port object
+        r2 timout
+        r3 string object buffer  "" any length  () one char  " ..." fill string
+   use  r4 read count
+   out  r0 string buffer
 */
 void wscmRecvBlock (void) {
-	DB(BRED "-->%s"NOR, __func__);
-	/* Count read so far initialized to 0. */
-	r3=0;
+ s64 wakeupTime;
+	DB("::%s  <= ", __func__);
+	DBE wscmWrite(r4, stderr);
+	DBE wscmWrite(r3, stderr);
+	DBE wscmWrite(r2, stderr);
+	DBE wscmWrite(r1, stderr);
+
+	/* Time can be false meaning wait forever or the time the thread
+	   should be woken up regardless of character availability. */
+	if (r2 != false) {
+		wakeupTime = wscmTime() + *(Int*)r2;
+		objNewInt(wakeupTime);
+		r2=r0;
+	}
+
+	r4=0; /* Character read count initialized to 0. */
+
 	wscmRecv();
-	if (r0 == false) {
+	if ((r2==false || (wscmTime() < *(Int*)r2)) && (r0 == false)) {
 		wscmUnRun();
 		wscmMoveToQueue(running, blocked, sreadblocked);
 		wscmSchedule();
 	}
-	DB(RED"<--%s: r0=%x"NOR, __func__, r0);
+	DB("  --%s  r0="OBJ, __func__, r0);
 }
 
 
@@ -1084,24 +1108,24 @@ void wscmSleepThread (void) {
    nor blocked queue then wait for topmost thread to wakeup. */
 void wscmScheduleSleeping (void) {
  Obj sleepingThreadDescriptor;
- s64 nextWakeupTime;
+ s64 wakeupTime;
 	DB("-->%s", __func__);
 	sleepingThreadDescriptor = cadr(sleeping);
 	/* Next thread's wakeup time on top of its stack. */
-	nextWakeupTime = *(s64*)memStackObject(memVectorObject(sleepingThreadDescriptor,0),0) - wscmTime();
+	wakeupTime = *(s64*)memStackObject(memVectorObject(sleepingThreadDescriptor,0),0) - wscmTime();
 	/* Only sleeping threads exist so wait for next one to wakeup. */
-	if (nextWakeupTime>0 && wscmIsQueueEmpty(ready) && wscmIsQueueEmpty(blocked)) {
-		DB("OS    Waiting %lld", nextWakeupTime);
+	if (wakeupTime>0 && wscmIsQueueEmpty(ready) && wscmIsQueueEmpty(blocked)) {
+		DB("OS    Waiting %lld", wakeupTime);
 		/* Disable scheduler's interrupt timer as it'll interrupt our
 		   sleeping.  It will be reactivated by the scheduler*/
 		ualarm(0,0);
-		usleep(nextWakeupTime*1000);
-		nextWakeupTime=0;
+		usleep(wakeupTime*1000);
+		wakeupTime=0;
 	}
 
 	/* If next sleeping thread is ready to be woken up, insert into ready
 	   queue. */
-	if (nextWakeupTime <= 0) {
+	if (wakeupTime <= 0) {
 		DB("OS    Waking");
 		/* Pop wake-time from stack. */
 		memStackPop(memVectorObject(sleepingThreadDescriptor, 0));
@@ -1112,108 +1136,114 @@ void wscmScheduleSleeping (void) {
 }
 
 /* Move all blocked threads that can and have read a chracter from their
-   descriptor to the ready queue. */
-/* Have yet to block threads on a remote connection...blocks the
-   entire process on an (open-socket "remote" port). FIXED.*/
+   descriptor to the ready queue.
+   Have yet to block threads on a remote connection...blocks the
+   entire process on an (open-socket "remote" port). FIXED.
+
+	use r1 r5
+
+*/
 void wscmScheduleBlocked (void) {
 	DB("-->%s <= %d blocked threads", __func__, objListLength(blocked)-1);
 
 	DBE fprintf(stderr, "   %s          sleeping queue:%d\r\n", __func__, wscmQueueCount(sleeping));
 	DBE fprintf(stderr, "   %s          blocked queue :%d\r\n", __func__, wscmQueueCount(blocked));
-	/* For each thread r4 in blocked queue... */
-	r4=cdr(blocked);
-	while (r4!=blocked) {
-	DB("   %s considering thread %d\r", __func__, memVectorObject(car(r4), 1));
+	/* For each thread r5 in blocked queue... */
+	r5=cdr(blocked);
+	while (r5!=blocked) {
+	DB("   %s considering thread %d\r", __func__, memVectorObject(car(r5), 1));
 		/* Consider status in the descriptor of this thread. */
-		r1 = memVectorObject(car(r4),2);
+		r1 = memVectorObject(car(r5),2);
 
 		if (r1 == sreadblocked) {
 			DB("   dealing with a read blocked thread");
-			r1 = memStackObject(memVectorObject(car(r4),0),1);
-			r2 = memStackObject(memVectorObject(car(r4),0),2);
-			r3 = memStackObject(memVectorObject(car(r4),0),3);
+			r1 = memStackObject(memVectorObject(car(r5),0),1l);
+			r2 = memStackObject(memVectorObject(car(r5),0),2l);
+			r3 = memStackObject(memVectorObject(car(r5),0),3l);
+			r4 = memStackObject(memVectorObject(car(r5),0),4l);
 			wscmRecv();
-			if (r0 != false) {
+			if (r0 != false || (r2!=false && *(Int*)r2 <= wscmTime())) {
 				/* Set thread's return value (r0 register top of stack) with
-			   	newly-read string. */
-				memStackSet(memVectorObject(car(r4), 0), 0, r0);
-				r1=cdr(r4);
-				wscmMoveToQueue(r4, ready, sready);
-				r4=r1;
+			   	newly-read string or #f if it has timed out. */
+				memStackSet(memVectorObject(car(r5), 0), 0, r0);
+				r1=cdr(r5);
+				wscmMoveToQueue(r5, ready, sready);
+				r5=r1;
 			/* Store back registers into thread keeping it blocked. */
 			} else {
-				memStackSet(memVectorObject(car(r4), 0), 1, r1);
-				memStackSet(memVectorObject(car(r4), 0), 2, r2);
-				memStackSet(memVectorObject(car(r4), 0), 3, r3);
-				r4 = cdr(r4);
+				memStackSet(memVectorObject(car(r5), 0), 1l, r1);
+				memStackSet(memVectorObject(car(r5), 0), 2l, r2);
+				memStackSet(memVectorObject(car(r5), 0), 3l, r3);
+				memStackSet(memVectorObject(car(r5), 0), 4l, r4);
+				r5 = cdr(r5);
 			}
 		}
 		else if (r1 == swriteblocked) {
 			DB("   dealing with a write blocked thread");
-			r1 = memStackObject(memVectorObject(car(r4),0),1);
-			r2 = memStackObject(memVectorObject(car(r4),0),2);
-			r3 = memStackObject(memVectorObject(car(r4),0),3);
+			r1 = memStackObject(memVectorObject(car(r5),0),1);
+			r2 = memStackObject(memVectorObject(car(r5),0),2);
+			r3 = memStackObject(memVectorObject(car(r5),0),3);
 			wscmSend();
 			if (r0 != false) {
 				DB("   unblocking thread");
 				/* Set thread's return value (r0 register top of stack) with
 			   	sent string. */
-				memStackSet(memVectorObject(car(r4), 0), 0, r2);
-				r1=cdr(r4);
-				wscmMoveToQueue(r4, ready, sready);
-				r4=r1;
+				memStackSet(memVectorObject(car(r5), 0), 0, r2);
+				r1=cdr(r5);
+				wscmMoveToQueue(r5, ready, sready);
+				r5=r1;
 			/* Store back registers into thread since wscmSend more than likely
 			   changed them and keep this thread blocked. */
 			} else {
 				DB("   not unblocking thread");
-				memStackSet(memVectorObject(car(r4), 0), 1, r1);
-				memStackSet(memVectorObject(car(r4), 0), 2, r2);
-				memStackSet(memVectorObject(car(r4), 0), 3, r3);
-				r4 = cdr(r4);
+				memStackSet(memVectorObject(car(r5), 0), 1, r1);
+				memStackSet(memVectorObject(car(r5), 0), 2, r2);
+				memStackSet(memVectorObject(car(r5), 0), 3, r3);
+				r5 = cdr(r5);
 			}
 		} else if (r1 == sopenblocked) {
 			DB("OS    dealing with a open-blocked thread");
 			/* Snag port from sleeping thread (r1). */
-			r1 = memStackObject(memVectorObject(car(r4),0),1);
+			r1 = memStackObject(memVectorObject(car(r5),0),1);
 			/* If a connection is made on the port and set to a non-accepting
 			   state, set the threads return value (r0) to the port and move the
 			   thread to the ready queue. */
 			if (memVectorObject(r1, 3) == saccepting) {
 				DB("OS    dealing with a new incomming stream connection thread");
-				push(r4); /* Since the following clobbers r4. */
+				push(r5); /* Since the following clobbers r5. */
 				wscmAcceptLocalStream();
-				r4=pop();
+				r5=pop();
 				if (memVectorObject(r1, 3) != saccepting) {
-					memStackSet(memVectorObject(car(r4), 0), 0, r1);
-					r1=cdr(r4);
-					wscmMoveToQueue(r4, ready, sready);
-					r4=r1;
+					memStackSet(memVectorObject(car(r5), 0), 0, r1);
+					r1=cdr(r5);
+					wscmMoveToQueue(r5, ready, sready);
+					r5=r1;
 				}
-				r4 = cdr(r4);
+				r5 = cdr(r5);
 			} else if (memVectorObject(r1, 3) == sconnecting) {
 				DB("OS    dealing with a new remote stream connection thread");
 				wscmAcceptRemoteStream();
 				if (r1==eof || memVectorObject(r1, 3) != sconnecting) {
-					memStackSet(memVectorObject(car(r4), 0), 0, r1);
-					r1=cdr(r4);
-					wscmMoveToQueue(r4, ready, sready);
-					r4=r1;
+					memStackSet(memVectorObject(car(r5), 0), 0, r1);
+					r1=cdr(r5);
+					wscmMoveToQueue(r5, ready, sready);
+					r5=r1;
 				}
-				r4 = cdr(r4);
+				r5 = cdr(r5);
 			} else if (memVectorObject(r1, 3) == sclosed) {
-				memStackSet(memVectorObject(car(r4), 0), 0, eof);
-				r1=cdr(r4);
-				wscmMoveToQueue(r4, ready, sready);
-				r4=r1;
+				memStackSet(memVectorObject(car(r5), 0), 0, eof);
+				r1=cdr(r5);
+				wscmMoveToQueue(r5, ready, sready);
+				r5=r1;
 			} else { /* Must be in a connecting state. */
-				r4 = cdr(r4);
+				r5 = cdr(r5);
 			}
 		} else if (r1 == ssemaphore) {
 			/* Skip semaphore blocked threads. */
-			r4 = cdr(r4);
+			r5 = cdr(r5);
 		} else {
 			fprintf (stderr, "ERROR; wscmScheduleBlocked: unknown thread state.");
-			r4 = cdr(r4);
+			r5 = cdr(r5);
 		}
 	}
 	DB("<--%s", __func__);
@@ -1272,7 +1302,7 @@ void wscmSchedule (void) {
 		   again later. */
 		if (wscmIsQueueEmpty(ready)  && !wscmIsQueueEmpty(blocked)) {
 			ualarm(0,0);       /* Disable scheduler's interrupt timer. */
-			usleep(100*1000);  /* Sleep 100 milliseconds and try again. */
+			usleep(50*1000);  /* Sleep 50 milliseconds and try again. */
 		}
 	}
 
@@ -1910,7 +1940,7 @@ void sysOpen (int oflag, mode_t mode) {
 	} else {
 		objNewInt(oflag);  r3=r0;
 		r4=sopen;
-		r5=false;
+		r5=false; /* TODO this not needed as the pushback char is forced to #f anyways in objNewPort */
 		objNewPort();
 	}
 	DB("  --%s", __func__);
@@ -1944,16 +1974,22 @@ void sysClose(void) {
 void sysRecv (void) {
 	DB("::%s", __func__);
 
-	/* r1 gets port object. */
-	r1=pop();
+	r1=pop(); /* Port object in r1 */
 
-	/* r2 gets a new string that'll hold the desired count or nullstr if 0
-	   is specified for the byte count implying any length string. */
-	r2=*(Obj*)pop();
-	if (r2) {
-   	memNewArray(TSTRING, (Int)r2);
-		r2=r0;
-	} else r2 = nullstr;
+	r2=pop(); /* Timeout in r2 */
+
+	/* r3 gets the byte count.  It's then assigned an empty string
+	   character buffer with the specified length of characters to
+	   read.  A count of zero (null string) implies read any count
+	   of bytes. */
+	r3=*(Obj*)pop();
+
+	if (r3) {
+		memNewArray(TSTRING, (Int)r3);
+		r3=r0;
+	} else {
+		r3 = nullstr;
+	}
 
 	if (memObjectType(r1) != TSOCKET
 		 && memObjectType(r1) != TPORT) {
@@ -1968,15 +2004,17 @@ void sysRecv (void) {
 
 void sysReadChar (void) {
 	DB("-->%s", __func__);
-	r1=pop(); /* Port object. */
+	r1=pop(); /* Port object */
+	r2=pop(); /* Timout */
 	if (memObjectType(r1) != TSOCKET
 	    && memObjectType(r1) != TPORT) {
 		printf ("WARNING: sysReadChar: not a socket: ");
 		wscmDisplay(r1, 0, 1);
 		r0 = eof;
-	} else
-		r2=null;  /* tells recv that we just want a character. */
+	} else {
+		r3=null;  /* tells recv that we just want a character. */
 		wscmRecvBlock();
+	}
 	DB("<--%s", __func__);
 }
 
@@ -2159,35 +2197,6 @@ void sysVectorLength (void) {
 	r0 = pop();
 	objNewInt(r0==nullvec?0:memObjectLength(r0));
 	DB("<--%s", __func__);
-}
-
-/* Given  - r1:port object  r2:pointer to char
-            r4:current state (see scanner.c)   r5:yytext  r6:yylen
-   Return - r4:next state   r5:yytext   r6:yylen
-            r0:final state if complete token scanned (reached final state).
-*/
-void sysTransition (void) {
-	DB(TAB0"::"STR" r2=%x r4=%x", __func__, r2, r4);
-	//DBE wscmWrite (r2, stderr);
-	//DBE wscmWrite (r4, stderr);
-	/* Make the transition on char in r2 given state in r4. */
-	r4 = (Obj)transition(*(Num*)r2, (Num)r4);
-	DB(TAB1"transition to state => "HEX, r4);
-	/* Append char to scanned token and inc yylen. */
-	*((u8*)r5+(Num)r6++) = *(u8*)r2;
-	/*  Reset yylen to 0 if we ever end up back to the initial state.*/
-	if ((Int)r4 == 0x00) r6=0;
-	else if ((Int)r4 & FINALSTATE) {
-		/* Push back character to stream if in pushback state and not eof. */
-		if (((Int)r4 & PUSHBACK) && (r2!=eof)) {
-			r6--;
-			memVectorSet(r1, 4, memVectorObject(characters, *(Num*)r2));
-		}
-		r0=r4;
-	}
-	DB(TAB1"--"STR" final state r0="HEX, __func__, r0);
-	//DBE wscmWrite(r4, stderr);
-	//DBE wscmWrite(r5, stderr);
 }
 
 /* Deserializers:  String representation in r5, length r6 => new atom in r0. */
@@ -2463,31 +2472,66 @@ void wscmDefine (char* sym) {
 	DBE wscmWrite (r1, stderr);
 }
 
+/* Given  - r1:port object  r3:pointer to char
+            r4:current state (see scanner.c)   r5:yytext  r6:yylen
+   Return - r4:next state   r5:yytext   r6:yylen
+            r0:final state if complete token scanned (reached final state).
+*/
+void sysTransition (void) {
+	DB(INDENT0"::"STR" *r3="HEX" state:r4="HEX, __func__, *(Chr*)r3, r4);
+	//DBE wscmWrite (r3, stderr);
+	//DBE wscmWrite (r4, stderr);
+	/* Make the transition on char in r3 given state in r4. */
+	r4 = (Obj)transition(*(Num*)r3, (Num)r4);
+	DB(INDENT1"transition to state => "HEX, r4);
+	/* Append char to scanned token and inc yylen. */
+	*((u8*)r5+(Num)r6++) = *(u8*)r3;
+	/*  Reset yylen to 0 if we ever end up back to the initial state.*/
+	if ((Int)r4 == 0x00) r6=0;
+	else if ((Int)r4 & FINALSTATE) {
+		/* Push back character to stream if in pushback state and not eof. */
+		if (((Int)r4 & PUSHBACK) && (r3!=eof)) {
+			r6--;
+			memVectorSet(r1, 4, memVectorObject(characters, *(Num*)r3));
+		}
+		r0=r4;
+	}
+	DB(INDENT1"--"STR" final state r0="HEX, __func__, r0);
+	//DBE wscmWrite(r4, stderr);
+	//DBE wscmWrite(r5, stderr);
+}
+
 /* Call to the read scheme closure will setup registers for calls to internal
    scanning and parsing code blocks.  This function creates that closure.
-   wscmRecv - r1:port object   r2:string buffer   r3:read count
+	Create atom parser code block.  Modeled after the C equivalent in scanner.c
+
    scanner  - r4:state   r5:token buffer   r6:token length  r7:islist boolean
+
+	Uses -- r1:port object   r2:timeout=0  r3:wantChar=()  r4:used by recv
+	        r4:state   r5:token buffer   r6:token length   r7:is list bool.
+
+	wscmRecvBlock in: r1 port  r2 timeout  r3 string buffer
+	              use: r4
+	              out: r0 string
 */
 void wscmCreateRead (void) {
 	DB("::%s\n", __func__);
-	/* Create atom parser code block.  Modeled after the C equivalent in
-	   scanner.c
-	   Uses -- r1:port object   r2:()  r3:used by recv
-	           r4:state   r5:token buffer   r6:token length   r7:is list bool.
-	*/
-	objNewString((Str)"Parser",6);
+	objNewString((Str)"Parser",6); /* Label */
 	asmAsm (
 		BRA, 8l,
-		r0,
+		r0, /* Label */
 		MVI4, 0l,             /* r4 <- Initial state. */
 		MVI6, 0l,             /* r6 <- initial yylength. */
 	LABEL, "scan",
-		MVI2, null, /* tell recv that we want a character.  */
-		SYSI, wscmRecvBlock, /* Syscall to read char. */
-		MV20,                     /* move char to r2 */
-		MVI0, 0l,
+		/* Call recv block to read one char */
+		MVI2, false, /* tell recv to not timeout */
+		MVI3, null, /* tell recv that we want a character */
+		PUSH4,
+			SYSI, wscmRecvBlock, /* Syscall to read char. */
+		POP4,
+		MV30,                     /* move char to r3 */
+		MVI0, 0l, /* Initialize final state to 0.  Will return 0 when still in non-final state. */
 		SYSI, sysTransition, /* Syscall to get next state. */
-		/* sysTransition returns 0 when in nonfinal state. */
 		BEQI0, 0l, ADDR, "scan",
 
 		/* close paren? */
@@ -2532,12 +2576,12 @@ void wscmCreateRead (void) {
 		JAL0,
 		POP1E, POP1D, POP7,
 		PUSH1, PUSH2, /* Save r1 and r2 */
-		MV10,           /* Car object. */
-		MVI2, null,/* Cdr object. */
-		SYSI, objCons12,
-		MVI1, squote,/* Car object. */
-		MV20,            /* Cdr object. */
-		SYSI, objCons12,
+			MV10,           /* Car object. */
+			MVI2, null,/* Cdr object. */
+			SYSI, objCons12,
+			MVI1, squote,/* Car object. */
+			MV20,            /* Cdr object. */
+			SYSI, objCons12,
 		POP2, POP1,   /* Restore r1 and r2 */
 		BRA, ADDR, "done",
 	LABEL, "unquotesplicing",
@@ -2549,12 +2593,12 @@ void wscmCreateRead (void) {
 		JAL0,
 		POP1E, POP1D, POP7,
 		PUSH1, PUSH2, /* Save r1 and r2 */
-		MV10,           /* Car object. */
-		MVI2, null,/* Cdr object. */
-		SYSI, objCons12,
-		MVI1, sunquotesplicing,/* Car object. */
-		MV20,            /* Cdr object. */
-		SYSI, objCons12,
+			MV10,           /* Car object. */
+			MVI2, null,/* Cdr object. */
+			SYSI, objCons12,
+			MVI1, sunquotesplicing,/* Car object. */
+			MV20,            /* Cdr object. */
+			SYSI, objCons12,
 		POP2, POP1,   /* Restore r1 and r2 */
 		BRA, ADDR, "done",
 		/* unquote? */
@@ -2566,12 +2610,12 @@ void wscmCreateRead (void) {
 		JAL0,
 		POP1E, POP1D, POP7,
 		PUSH1, PUSH2, /* Save r1 and r2 */
-		MV10,            /* Car object. */
-		MVI2, null,      /* Cdr object. */
-		SYSI, objCons12,
-		MVI1, sunquote,  /* Car object. */
-		MV20,            /* Cdr object. */
-		SYSI, objCons12,
+			MV10,            /* Car object. */
+			MVI2, null,      /* Cdr object. */
+			SYSI, objCons12,
+			MVI1, sunquote,  /* Car object. */
+			MV20,            /* Cdr object. */
+			SYSI, objCons12,
 		POP2, POP1,   /* Restore r1 and r2 */
 		BRA, ADDR, "done",
 		/* quasiquote? */
@@ -2583,12 +2627,12 @@ void wscmCreateRead (void) {
 		JAL0,
 		POP1E, POP1D, POP7,
 		PUSH1, PUSH2, /* Save r1 and r2 */
-		MV10,             /* Car object. */
-		MVI2, null,       /* Cdr object. */
-		SYSI, objCons12,
-		MVI1, squasiquote,/* Car object. */
-		MV20,             /* Cdr object. */
-		SYSI, objCons12,
+			MV10,             /* Car object. */
+			MVI2, null,       /* Cdr object. */
+			SYSI, objCons12,
+			MVI1, squasiquote,/* Car object. */
+			MV20,             /* Cdr object. */
+			SYSI, objCons12,
 		POP2, POP1,   /* Restore r1 and r2 */
 		BRA, ADDR, "done",
 		/* open paren? */
@@ -2659,7 +2703,7 @@ void wscmCreateRead (void) {
 		BEQI7, 0l, ADDR, "ret",
 		PUSH0, /* Save object just parsed. */
 		PUSH1D, PUSH1E, /* Recurse. */
-		MV01C,
+		MV01C, /* r0 <- code register*/
 		JAL0,
 		POP1E, POP1D,
 		/* Create pair from top of stack and just parsed object.  Since we need
@@ -2690,16 +2734,16 @@ void wscmCreateRead (void) {
 	                  "--------------------------------------------------------------------------------"
 	                  "--------------------------------------------------------------------------------", 640);
 	r2=r0;
-	objNewString((Str)"ParserMain",10);
+	objNewString((Str)"ParserMain",10); /* Label */
 	asmAsm (
 		BRA, 8l,
-		r0,
+		r0, /* Label */
 		MVI1, r2, /* The string buffer. */
 		SYSI, objCopyString,
 		MV50,
 		/* Initialize boolean to 'not parsing a list'. */
 		MVI7, 0l,
-		/* r1 gets port object (read portObject). */
+		/* r1 gets port object from the required parameter to read.  (read portObject). */
 		POP1,
 		/* Call parser. */
 		MVI0, r1,  /* Insert code block object directly via r1 from above. */
@@ -2720,8 +2764,8 @@ void wscmCreateRead (void) {
 void wscmCreateRepl (void) {
 	DB("-->%s\n", __func__);
 	objNewSymbol ((Str)"\nVM>", 4);  r2=r0;
-	objNewSymbol ((Str)"stdin", 5);  r1=r0;  wscmTGEFind(); r3=car(r0);
-	objNewSymbol ((Str)"read", 4);  r1=r0;  wscmTGEFind();  r4=caar(r0);
+	objNewSymbol ((Str)"stdin", 5);  r1=r0;  wscmTGEFind(); r3=car(r0); /* The binding value is the car */
+	objNewSymbol ((Str)"read", 4);  r1=r0;  wscmTGEFind();  r4=caar(r0); /* The binding value is a closure so we need to car again for the code object. */
 	objNewString ((Str)"bye\n", 4);  r5=r0;
 	objNewString ((Str)"Entering REPL\n", 14);  r6=r0;
 	asmAsm (
@@ -2986,6 +3030,7 @@ void sysDebugger (void) {
 		printf ("\n\e[1m-------------------------------");
 		printf ("\nc    vmDebugDumpCode(r1c, stderr)");
 		printf ("\nC a  vmDebugDumpCode(a, stderr)");
+		printf ("\nu    sysDumpCallStackCode()");
 		printf ("\ne    sysDumpEnv(env)");
 		printf ("\ns    wscmWrite(stack, stderr)");
 		printf ("\ny    wscmWrite(symbols, stderr)");
@@ -3004,6 +3049,7 @@ void sysDebugger (void) {
 			scanf("%lx", &arg);
 			vmDebugDumpCode(arg, stderr);
 		}
+		if (cmd=='u') sysDumpCallStackCode();
 		if (cmd=='e') sysDumpEnv(env);
 		if (cmd=='s') wscmWrite(stack, stderr);
 		if (cmd=='y') wscmWrite(symbols, stderr);
