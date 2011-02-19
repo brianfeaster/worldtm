@@ -771,9 +771,9 @@
 
 
 ; Screen redraw function and signal handler
-(define (handleTerminalResize)
-  (WinConsoleDisplay "\r\nSIGWINCH::TerminalSize=" (terminal-size))
-  ((Terminal 'ResetTerminal) (terminal-size))
+(define (handleTerminalResize termSize)
+  (WinConsoleDisplay "\r\nSIGWINCH::TerminalSize=" termSize)
+  ((Terminal 'ResetTerminal) termSize)
   ((WinChat 'resize)  (- (Terminal 'Theight) 1) (Terminal 'Twidth))
   ((myViewport 'move)     0 (- (Terminal 'Twidth) (myViewport 'Wwidth) 2))
   ((WinColumn 'move)  1 (- (Terminal 'Twidth) 2) )
@@ -785,7 +785,7 @@
  (let ((sig28Semaphore (open-semaphore 1)))
   (lambda ()
    (semaphore-down sig28Semaphore)
-   (handleTerminalResize)
+   (handleTerminalResize (terminal-size))
    (semaphore-up sig28Semaphore))))
 
 (signal-set 28 (lambda () (sigwinch) (unthread)))
