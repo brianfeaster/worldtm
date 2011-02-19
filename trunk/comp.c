@@ -11,7 +11,9 @@ void sysCompile (void);
 Int wscmWrite (Obj a, FILE *stream);
 Int  wscmEnvFind (void);
 void wscmTGEFind (void);
+void wscmEnvGet (void);
 void sysError (void);
+void sysDebugger (void);
 void sysTGELookup (void);
 void wscmTGEBind (void);
 void sysTGEMutate (void);
@@ -37,57 +39,72 @@ void compEval (Num flags) {
 	DB("::%s", __func__);
 	expr = cadr(expr);
 	compExpression(flags & ~TAILCALL);
-	asm(SYSI); asm(sysCompile);
+	asmAsm(
+		SYSI, sysCompile,
+	END);
 	if (flags & TAILCALL) {
 		asm(J0);
 	} else {
-		asm(PUSH1D); asm(PUSH1E); asm(PUSH15);
-		asm(JAL0);
-		asm(POP15); asm(POP1E); asm(POP1D);
+		asmAsm(
+			PUSH1D, PUSH1E, PUSH15,
+			JAL0,
+			POP15, POP1E, POP1D,
+		END);
 	}
 	DB("  --%s", __func__);
 }
 
+/* Doesn't need compiling so just return it.
+*/
 void compSelfEvaluating (void) {
 	DB("-->compSelfEvaluating ");
 	asm(MVI0); asm(expr);
 	DB("<--compSelfEvaluating ");
 }
 
-void compVariableReference (void) {
+void compVariableReference (Num flags) {
  Int ret, depth;
 	DB("-->compVariableReference: ");
 	DBE wscmWrite(expr, stderr);
 	r1 = expr;
-	/* Scan local environments.  Returned is a 16 bit number, the high 8 bits
-	   is the environment chain depth, the low 8 bits the binding offset. The
-	   offset will be 2 or greater if a variable is found in any environment
-	   excluding the global environment. */
-	ret = wscmEnvFind();
-	if (ret) {
-	DB("   found in a local environment %02x", ret);
-		/* Emit code that traverses the environment chain and references the
-		   proper binding. */
-		if ((ret>>8) == 0) {
-			asm(LDI016); asm(ret & 0xff);
+
+	if (flags & MACRO) {
+		/* Dynamic binding requires runtime lookup */
+		asmAsm(
+			MVI1, r1,
+			SYSI, wscmEnvGet,
+			END);
+	} else {
+		/* Scan local environments.  Returned is a 16 bit number, the high 8 bits
+		   is the environment chain depth, the low 8 bits the binding offset. The
+		   offset will be 2 or greater if a variable is found in any environment
+		   excluding the global environment. */
+		ret = wscmEnvFind();
+		if (ret) {
+		DB("   found in a local environment %02x", ret);
+			/* Emit code that traverses the environment chain and references the
+			   proper binding. */
+			if ((ret>>8) == 0) {
+				asm(LDI016); asm(ret & 0xff);
+			} else {
+				asm(LDI016); asm(0l);
+				for (depth=1; depth < (ret>>8); depth++) {
+					asm(LDI00); asm(0l);
+				}
+				asm(LDI00); asm(ret & 0xff); /* Mask the offset value. */
+			}
 		} else {
-			asm(LDI016); asm(0l);
-			for (depth=1; depth < (ret>>8); depth++) {
+			/* Scan tge... */
+			wscmTGEFind();
+			if (r0 == null) {
+				DB("   can't find in TGE...maybe at runtime");
+				asm(MVI1); asm(expr);
+				asm(SYSI); asm(sysTGELookup);
+			} else {
+				DB("   found in TGE");
+				asm(MVI0); asm(r0);
 				asm(LDI00); asm(0l);
 			}
-			asm(LDI00); asm(ret & 0xff); /* Mask the offset value. */
-		}
-	} else {
-		/* Scan tge... */
-		wscmTGEFind();
-		if (r0 == null) {
-			DB("   can't find in TGE...maybe at runtime");
-			asm(MVI1); asm(expr);
-			asm(SYSI); asm(sysTGELookup);
-		} else {
-			DB("   found in TGE");
-			asm(MVI0); asm(r0);
-			asm(LDI00); asm(0l);
 		}
 	}
 
@@ -294,9 +311,8 @@ void compLambdaBody (Num flags) {
 	push(asmstack);
 	memNewStack(); asmstack=r0;
 
-	/* The first opcode emitted is a branch over the next bogus instruction.  The
-	   instruction is really the original expression being compiled.  This is a
-	   quick and dirty debugging aid. */
+	/* The first opcode emitted is a branch past a pointer to the original
+	   expression being compiled.  This is a quick and dirty debugging aid. */
 	asmAsm(
 		BRA, 8l,
 		expr,
@@ -307,8 +323,12 @@ void compLambdaBody (Num flags) {
 	   statically compiled?  r2 is assumed to hold the environment to be
 	   extended, r1 the argument count, r3 the formal arguments. */
 	if (null == car(expr)) {
-		/* Since empty formals function, just set env to closure's env. */
-		asm(LDI160); asm(1l);
+		if (flags & MACRO) {
+			/* Leave environment as is.  Dynamic binding. */
+		} else {
+			/* Since empty formals function, just set env to closure's env. */
+			asm(LDI160); asm(1l);
+		}
 	} else {
 		/* Emit code that extends the environment.  Pops the top most arguments
 		   into a list for the 'rest' formal parameter  (lambda (a b . rest)...).
@@ -316,7 +336,10 @@ void compLambdaBody (Num flags) {
 		   function above). */
 		opcodeStart = memStackLength(asmstack);
 		asmAsm (
-			LDI50, 1l,  /* Temporarily save lexical environment to r5. */
+			LDI50, 1l,  /* Temporarily save lexical environment, from closure in r0, to r5 */
+			BNEI5, null, ADDR, "keepLexicalEnvironment",
+			MV516, /* Macro, so keep track of the dynamic environment instead of a lexical */
+		LABEL, "keepLexicalEnvironment",
 			MVI0, null, /* Initial formal argument 'rest' value (empty list). */
 			/* r3 is non-dotted formal argument length. */
 			BLTI1, r3, ADDR, "notEnoughArguments",
@@ -332,7 +355,7 @@ void compLambdaBody (Num flags) {
 			MVI0, "Not enough arguments to closure",
 			PUSH0,
 			MVI1, 1l,
-			SYSI, sysError, // TODO BF First attempt at error correction.
+			SYSI, sysError, /* Error correction */
 			PUSH0,
 			ADDI1, 1l,
 			BNEI1, r3, ADDR, "notEnoughArguments",
@@ -453,10 +476,85 @@ void compLambda (Num flags) {
 
 	/* Generate code that generates a closure.  Closure returned in r0 created
 	   from r1 (code) and r16 (current environment). */
-	asm(MVI1); asm(r0); /* Load r1 with code. */
-	asm(SYSI); asm(objNewClosure1Env); /* Create closure from r1 and env (r16) */
+	asmAsm(
+		MVI1, r0, /* Load r1 with code. */
+		SYSI, objNewClosure1Env, /* Create closure from r1 and env (r16) */
+		END);
 
 	DB("<--%s", __func__);
+}
+
+#if 0
+// 1st Attempt at a macro special form.
+void compMacro (Num flags) {
+	DB("-->%s", __func__);
+	expr = cdr(expr); /* Skip 'lambda. */
+
+	/* Save env. */
+	push(env);
+
+	/* Extend pseudo environment only if the formals list is not empty to
+	   mimic the runtime optimized environment chain.   A pseudo environment
+	   is just the pair (parent-environment . formals-list)*/
+	if (car(expr) != null) {
+		r0=car(expr);
+		wscmNormalizeFormals(); /* Get normalized list in r0, length in r3. */
+		r1=null;  r2=r0;  objCons12();  env=r0;
+	}
+
+	/* Create closures code block in r0. */
+	compLambdaBody(flags | MACRO);
+
+	/* Restore env. */
+	env = pop();
+
+	/* Generate code that generates a closure.  Closure returned in r0 created
+	   from r1 (code) and r16 (current environment). */
+	asmAsm(
+		MVI1, r0, /* Load r1 with code. */
+		SYSI, objNewClosure1Env, /* Create closure from r1 and env (r16) */
+		MVI2, null, /* Remove stored environment so extended environment eventually used the current environment */
+		STI20, 1,
+		END);
+
+	DB("<--%s", __func__);
+}
+#endif
+
+void compMacro (Num flags) {
+	DB("::%s", __func__);
+
+	push(asmstack);
+	memNewStack(); asmstack=r0;
+
+	/* Transform (macro ... ...) => (lambda .. ...) assigned to r0 */
+	r1=slambda;  r2 = cdr(expr);  objCons12();
+
+	asmAsm(
+		PUSH1,
+		MVI0, r0,
+		SYSI, sysCompile,
+		PUSH1D, PUSH1E, PUSH15,
+		JAL0,
+		POP15, POP1E, POP1D,
+		LDI20, 0l, /* load r2 with code and jump. */
+		POP1,
+		J2,
+	END);
+
+	asmNewCode(); /* Transfer code stack to fixed size code vector into r0. */
+	asmstack=pop();
+
+	/* Generate code that generates a closure.  Closure returned in r0 created
+	   from r1 (code) and r16 (current environment). */
+	asmAsm(
+		MVI1, r0, /* Load r1 with code. */
+		SYSI, objNewClosure1Env, /* Create closure from r1 and env (r16) */
+		MVI2, null, /* Remove stored environment so extended environment eventually used the current environment */
+		STI20, 1l,
+	END);
+
+	DB("  --%s", __func__);
 }
 
 void compVerifyVectorRef (void) {
@@ -1723,13 +1821,14 @@ Int compExpression (Num flags) {
 	DBE memDebugDumpObject(expr, stdout);
 	switch (memObjectType(expr)) {
 		case TSYMBOL :
-			compVariableReference();
+			compVariableReference(flags);
 			break;
 		case TPAIR :
 			if      (srem       == car(expr)) compRem(flags);
 			else if (sdefine    == car(expr)) compDefine(flags);
 			else if (ssetb      == car(expr)) compSetb(flags);
 			else if (slambda    == car(expr)) compLambda(flags);
+			else if (smacro     == car(expr)) compMacro(flags);
 			else if (snot       == car(expr)) compNot(flags);
 			else if (sadd       == car(expr)) compAdd(flags);
 			else if (svectorref == car(expr)) compVectorRef(flags);

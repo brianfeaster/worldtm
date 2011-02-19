@@ -1,7 +1,6 @@
 #define DEBUG 0
-#define DEBUG_ASSERT 0
-#define DEBUG_ASSERT_VECTOR 0
-#define DEBUG_ASSERT_STACK 0
+#define DEBUG_ASSERT 1
+#define DEBUG_ASSERT_STACK 1
 #define VALIDATE_HEAP 0
 #define DB_MODULE "MEM "
 #include "debug.h"
@@ -303,6 +302,12 @@ void memNewArray (Type type, LengthType length) {
 
 void memNewVector (Type type, LengthType length) {
 	DB("::memNewVector(type "X64", length %d)", type, length);
+	#if DEBUG_ASSERT
+	if (MEMOBJECTMAXSIZE < length) { /* Sanity check. For now prevent 4G sized objects. */
+		fprintf (stderr, "ERROR memNewVector (Type "HEX016" length "HEX016"): length too big.", type, length);
+		memError();
+	}
+	#endif
 	memNewObject (memMakeDescriptor(type, length),
 	              memVectorLengthToObjectSize(length));
 	DB("--memNewVector()");
@@ -378,7 +383,7 @@ void memArraySet (Obj obj, Num offset, u8 item) {
 }
 
 void memVectorSet (Obj obj, Num offset, Obj item) {
-	#if DEBUG_ASSERT_VECTOR
+	#if DEBUG_ASSERT
 	if (!memIsObjectValid(obj)) {
 		DB ("ERROR memVectorSet(obj "OBJ" offset "NUM" item "OBJ") Invalid object.",
 		    obj, offset, item);
@@ -450,15 +455,6 @@ Obj  memStackPop (Obj obj) {
 	   collection, the object pointers will be ignored. */
 	*(*(Obj**)obj)-- = 0;
 
-	// Trying this
-	//**(Obj**)obj = 0;
-	//(*(Obj**)obj)--;
-
-	// This works.
-	//wscmWrite(obj, stdout);
-	//(*(Obj**)obj)--; // Pop the stack
-	//wscmWrite(obj, stdout);
-	//return *(*(Obj**)obj+1); // Return what was popped
 	return  ret;
 }
 
@@ -486,7 +482,7 @@ u8 memArrayObject (Obj obj, Num offset) {
 }
 
 Obj memVectorObject (Obj obj, Num offset) {
-	#if DEBUG_ASSERT_VECTOR
+	#if DEBUG_ASSERT
 	if (!memIsObjectValid(obj)) {
 		DB ("ERROR memVectorObject(obj "OBJ" offset "NUM") Invalid object.",
 		    obj, offset);
@@ -1138,7 +1134,7 @@ void memValidateObject (Obj o) {
 	if (!valid) {
 		fprintf (stderr, "\nERROR memValidateObject() found bad object:"OBJ NL, o);
 		memDebugDumpObject (o, NULL);
-		sysDebugger();
+		//sysDebugger();
 	}
 	DB("      --%s", __func__);
 }

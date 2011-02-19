@@ -15,7 +15,7 @@ Obj null, nullvec, nullstr, false, true, eof,
     srem, srunning, sready, ssleeping, sblocked, sdead, ssemaphore,
     sopenblocked, sreadblocked, swriteblocked,
     saccepting, sconnecting, sopen, sclosed,
-    sdefine, slambda, squote, sunquote, squasiquote, sbegin, sunquotesplicing,
+    sdefine, slambda, smacro, squote, sunquote, squasiquote, sbegin, sunquotesplicing,
     sif, sor, sand, ssetb,
     svectorref, svectorvectorref, svectorvectorsetb, svectorsetb, svectorlength,
     scons, scar, scdr, ssetcarb, ssetcdrb,
@@ -216,7 +216,7 @@ void objNewVector1 (void) {
 void objNewClosure1Env (void) {
    memNewVector(TCLOSURE, 2);
 	memVectorSet(r0, 0, r1);
-	memVectorSet(r0, 1, env);
+	memVectorSet(r0, 1, env); /* r16 */
 }
 
 #if 0
@@ -341,7 +341,7 @@ void objDumpR (Obj o, FILE *stream, int islist) {
 			if (tge == o) {
 				fprintf(stream, "#<TGE "OBJ">", o);
 			} else {
-				fprintf(stream, OBJ, o);
+				fprintf(stream, HEX, o);
 			}
 			/* Dump the object description. */
 			c = memObjString(o);
@@ -411,6 +411,7 @@ void objInitialize (Func scheduler) {
 	for (i=0; i<2029; i++) memVectorSet (symbols, i, null);
 	objNewSymbolStatic("define");       sdefine = r0;
 	objNewSymbolStatic("lambda");       slambda = r0;
+	objNewSymbolStatic("macro");        smacro = r0;
 	objNewSymbolStatic("quote");        squote = r0;
 	objNewSymbolStatic("unquote");      sunquote = r0;
 	objNewSymbolStatic("quasiquote");   squasiquote = r0;
