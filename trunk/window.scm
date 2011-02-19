@@ -84,8 +84,8 @@
  (define WindowMask ())
  ; Methods
  (define (ResetTerminal termSize)
-  (set! Theight (cdr termSize))
-  (set! Twidth  (car termSize))
+  (set! Theight (cdr termSize)) (if (< Theight 2) (set! Theight 2))
+  (set! Twidth  (car termSize)) (if (< Twidth 2) (set! Twidth 2))
   (set! WindowMask (make-vector-vector Theight Twidth #f))
   (WindowMaskReset 0 0 (- Theight 1) (- Twidth 1)))
 

@@ -484,42 +484,7 @@ void compLambda (Num flags) {
 	DB("<--%s", __func__);
 }
 
-#if 0
-// 1st Attempt at a macro special form.
-void compMacro (Num flags) {
-	DB("-->%s", __func__);
-	expr = cdr(expr); /* Skip 'lambda. */
 
-	/* Save env. */
-	push(env);
-
-	/* Extend pseudo environment only if the formals list is not empty to
-	   mimic the runtime optimized environment chain.   A pseudo environment
-	   is just the pair (parent-environment . formals-list)*/
-	if (car(expr) != null) {
-		r0=car(expr);
-		wscmNormalizeFormals(); /* Get normalized list in r0, length in r3. */
-		r1=null;  r2=r0;  objCons12();  env=r0;
-	}
-
-	/* Create closures code block in r0. */
-	compLambdaBody(flags | MACRO);
-
-	/* Restore env. */
-	env = pop();
-
-	/* Generate code that generates a closure.  Closure returned in r0 created
-	   from r1 (code) and r16 (current environment). */
-	asmAsm(
-		MVI1, r0, /* Load r1 with code. */
-		SYSI, objNewClosure1Env, /* Create closure from r1 and env (r16) */
-		MVI2, null, /* Remove stored environment so extended environment eventually used the current environment */
-		STI20, 1,
-		END);
-
-	DB("<--%s", __func__);
-}
-#endif
 
 void compMacro (Num flags) {
 	DB("::%s", __func__);
@@ -556,6 +521,8 @@ void compMacro (Num flags) {
 
 	DB("  --%s", __func__);
 }
+
+
 
 void compVerifyVectorRef (void) {
 	if (*(Int*)r0 < 0 || memObjectLength(r1) <= *(Int*)r0) {
@@ -1874,24 +1841,26 @@ Int compExpression (Num flags) {
 
 
 /* Compile expression.
-   r0 -> Expression we're compiling.
-   r0 <- Resuling code object (vector of VM opcodes).
+   r18 -> Expression we're compiling.
+   r0  <- Resuling code object (vector of VM opcodes).
 */
 Int compCompile (void) {
  Int ret;
 	DB ("::%s", __func__);
-	//env = tge;               /* We'll be using a pseudo env (r16=r17). */
-	expr = r0;                 /* Move expression to expr (r18). */
+
+	CompError = 0; /* Clear error flag. */
+	//env = tge;   /* Force evaluation in the global environment */
+
 	asmAsm ( /* Keep track of original expression for debugging. */
-		BRA, 8,
+		BRA, 8l,
 		expr,
 		END
 	);
-	CompError = 0;             /* Clear error flag. */
-	/* START the compilation process with empty flags. */
-	ret = compExpression(0);
+
+	ret = compExpression(0);  /* No compiler flags */
 	asm(QUIT); /* Emit the QUIT opcode which exits the VM. */
 	asmNewCode();
+
 	DB("  --%s", __func__);
 	return ret;
 }

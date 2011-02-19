@@ -44,7 +44,7 @@ int main (void) {
 	//yy_scan_string((Str)"(display (eval '(+ 1 2)))");
 	
 	yyparse(); //wscmWrite(r0, 0, 1);
-	compCompile();
+	expr=r0; compCompile();
 
 	// Fire up VM.
 	sleep(1); interrupt=0; /* Give the interrupt handler time to trigger so forcing it to 0 actually stays 0. */

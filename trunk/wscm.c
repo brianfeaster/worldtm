@@ -27,7 +27,7 @@ void wscmCReadEvalPrintLoop (void) {
 
 		fprintf(stderr, "\n== Compile ======================\n");
 		wscmWrite(r0, stderr);
-		compCompile();   /* Expr in r0 compiled into VM runable code in r0. */
+		expr=r0; compCompile(); /* Expr/r18 VM runable code in r0. */
 		code=r0; ip=0;
 		vmDebugDumpCode(code, stderr);
 
@@ -58,7 +58,7 @@ void wscmStringReadEvalPrintLoop (void) {
         (send \"\r\nbye.\r\n\" stdout)\
         (~ FILE:SCM.SCM)))");
 	yyparse();
-	compCompile();
+	expr=r0; compCompile();
 	wscmNewThread();
 	wscmSchedule();
 	vmRun();

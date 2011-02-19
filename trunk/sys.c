@@ -2255,6 +2255,7 @@ void sysNewHex (void) {
 
 /* Compiles s-expression in r0 into code block in r0.  Probably messes up
    a bunch of registers.
+	TODO: does this mangle r15/1d/1e retenv/retip/retcode?
 */
 extern Num CompError;
 void sysCompile (void) {
@@ -2262,7 +2263,7 @@ void sysCompile (void) {
 	expr=r0;
 	push(env);
 	CompError=0;
-	asmAsm ( /* Keep track of original expression for debuggin. */
+	asmAsm ( /* Keep track of original expression for debugging. */
 		BRA, 8,
 		expr,
 		END
