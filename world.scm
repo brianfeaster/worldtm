@@ -383,17 +383,13 @@
 ; Initial map window size is 25 or terminal width/height fit.
 (define initialMapSize (min 25 (min (- (Terminal 'Theight) 1) (/ (Terminal 'Twidth) 2))))
 
-(define (Viewport)
- (((Terminal 'WindowNew) ; Parent
+(define (Viewport . args)
+ ((((Terminal 'WindowNew) ; Parent
    0   (- (Terminal 'Twidth) (* initialMapSize 2))
-   initialMapSize   (* 2 initialMapSize)  #x000f)
-  '((lambda () ; Child
+   initialMapSize   (* 2 initialMapSize)  #x000f) 'inherit)
+  (macro (canvas) ; Child
     (define (self msg) (eval msg))
-    (define canvas ())
-    (define canvasGlyph ())
-    (define (setCanvas c)
-      (set! canvas c)
-      (set! canvasGlyph (canvas 'glyph)))
+    (define canvasGlyph (canvas 'glyph))
     (define mapY 0) ; Map location of viewport origin
     (define mapX 0) ; 
     (define winHeight 0)
@@ -449,7 +445,8 @@
          ((Terminal 'unlock)))))) ; This shouldn't be such an all encompasing lock.
     ; Disable cursor in map window
     (cursor-visible #f)
-    self)))) ; Viewport
+    self)
+  args)) ;  Argument list passed to the child object
 
 
 
@@ -464,7 +461,7 @@
   ; The objects which make up a map object
   (define myField (Field FieldSize))
   (define myCanvas (Canvas myField))
-  (define myViewport (Viewport))
+  (define myViewport (Viewport myCanvas))
   ; Some nice aliases
   (define fieldReset (myField 'reset))
   (define topHeight (myField 'topHeight))
@@ -567,9 +564,7 @@
 
 (define FieldSize 256) ; Field grid is 256x256
 (define myMap (Map FieldSize))
-(define myCanvas (myMap 'myCanvas))
 (define myViewport (myMap 'myViewport))
-((myViewport 'setCanvas) myCanvas)
 
 (define mapDelEntitySprite(myMap 'delEntitySprite)) ; entitiesSet die
 (define mapMoveObject     (myMap 'moveObject)) ; moveEntity entity
