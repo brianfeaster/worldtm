@@ -179,7 +179,7 @@
    (define ALPHA (make-vector-vector Wheight Wwidth #t))
    (define CURSOR-VISIBLE #t)
    (define ENABLED #t)
-   (define topRow 0) ; For horizontal scrolling.
+   (define topRow 0) ; For vertical scrolling.
    (define needToScroll #f) ; For bottom right character printing.
    (define (cursor-visible s) (set! CURSOR-VISIBLE s))
    (define WindowSemaphore (open-semaphore 1))
@@ -235,27 +235,27 @@
              (vector-set! desc 1 #\ ))))
          (set! topRow (modulo (+ topRow 1) Wheight)) ; Shift buffer
          (repaintRow (- Wheight 1)))
-     (begin
-     ; Clear top-row which is to become the bottom row.
-     ; Force topmost line off the top of the terminal in hopes
-     ; of filling the client's terminal backscroll buffer. Set
-     ; 2 line scrolling region, move cursor, clear line.
-     (if ScrollbackHack (begin
-       (display "\e7\e[1;2r\e[H")
-       (let ~ ((x 0))
-         (if (>= x Wwidth) 'done
+       (begin
+         ; Clear top-row which is to become the bottom row.
+         ; Force topmost line off the top of the terminal in hopes
+         ; of filling the client's terminal backscroll buffer. Set
+         ; 2 line scrolling region, move cursor, clear line.
+         (if ScrollbackHack (begin
+           (display "\e7\e[1;2r\e[H")
+           (let ~ ((x 0))
+             (if (>= x Wwidth) 'done
+               (let ((desc (vector-vector-ref DESC topRow x)))
+                  (displayl (integer->colorstring (vector-ref desc 0)) (vector-ref desc 1))
+                  (~ (+ x 1)))))
+           (display "\e[K\n\n\e[r\e8")
+           (WindowMaskReset 0 0 2 Twidth)))
+         (loop Wwidth (lambda (x) ; Clear row which will become the bottom row
            (let ((desc (vector-vector-ref DESC topRow x)))
-              (displayl (integer->colorstring (vector-ref desc 0)) (vector-ref desc 1))
-              (~ (+ x 1)))))
-       (display "\e[K\n\n\e[r\e8")
-       (WindowMaskReset 0 0 2 Twidth)))
-     (loop Wwidth (lambda (x) ; Clear row which will become the bottom row
-       (let ((desc (vector-vector-ref DESC topRow x)))
-         (vector-set! desc 0 COLOR)
-         (vector-set! desc 1 #\ ))))
-     (set! topRow (modulo (+ topRow 1) Wheight)) ; Shift buffer
-     ; Refresh window.
-     (repaint))))
+             (vector-set! desc 0 COLOR)
+             (vector-set! desc 1 #\ ))))
+         (set! topRow (modulo (+ topRow 1) Wheight)) ; Shift buffer
+         ; Refresh window.
+         (repaint))))
    (define (repaintRow row)
      (loop Wwidth (lambda (x)
        (let ((desc (vector-vector-ref DESC (modulo (+ row topRow) Wheight) x)))
@@ -346,6 +346,7 @@
        (set! DESC (vector-vector-map! (lambda (x) (vector COLOR #\ ))
                                       (make-vector-vector Wheight Wwidth ())))
        (if ENABLED (WindowMaskReset Y0 X0 (max oY1 Y1) (max oX1 X1))) ; Redraw window
+       (set! topRow 0)
        (semaphore-up WindowSemaphore)))
    (define (moveresize y x h w)
      (let ((oY0 Y0)
@@ -367,6 +368,7 @@
        (if ENABLED (WindowMaskReset
                       (min oY0 Y0) (min oX0 X0) ; Redraw window
                       (max oY1 Y1) (max oX1 X1)))
+       (set! topRow 0)
        (semaphore-up WindowSemaphore)))
    (define (delete)
     (set! WINDOWS
