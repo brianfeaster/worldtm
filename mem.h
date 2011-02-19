@@ -12,6 +12,7 @@
 
 #include "globals.h"
 
+#define MEMOBJECTMAXSIZE 0xffffffffl 
 
 /* This must be called before usage of this library.  Two functions are passed
    (or NULL for either) and are called before and after every GC.

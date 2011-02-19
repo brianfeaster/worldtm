@@ -112,7 +112,7 @@ void vmVm (Int cmd) {
 		MV01=&&mv01;   MV02=&&mv02;   MV03=&&mv03;  MV04=&&mv04; MV07=&&mv07;
 		MV016=&&mv016; MV01C=&&mv01c;
 		MV10=&&mv10;   MV13=&&mv13;  MV116=&&mv116; MV20=&&mv20;   MV23=&&mv23;
-		MV30=&&mv30;   MV416=&&mv416; MV50=&&mv50;
+		MV30=&&mv30;   MV416=&&mv416; MV516=&&mv516; MV50=&&mv50;
       MV160=&&mv160; MV162=&&mv162; MV164=&&mv164;
 		MV61=&&mv61;   MV72=&&mv72;
 
@@ -136,7 +136,7 @@ void vmVm (Int cmd) {
 
 		BLTI1=&&blti1;
 		BEQI0=&&beqi0; BEQI1=&&beqi1; BEQI7=&&beqi7;
-		BNEI0=&&bnei0; BNEI1=&&bnei1;
+		BNEI0=&&bnei0; BNEI1=&&bnei1; BNEI5=&&bnei5;
 		BRTI0=&&brti0; BNTI0=&&bnti0;
 		BRA=&&bra;
 
@@ -147,7 +147,7 @@ void vmVm (Int cmd) {
 		SYSI=&&sysi;   SYS0=&&sys0;   QUIT=&&quit;
 
 		//-----------
-		memObjStringSet(NOP); memObjStringSet(MVI0); memObjStringSet(MVI1); memObjStringSet(MVI2); memObjStringSet(MVI3); memObjStringSet(MVI4); memObjStringSet(MVI5); memObjStringSet(MVI6); memObjStringSet(MVI7); memObjStringSet(MV01); memObjStringSet(MV02); memObjStringSet(MV03); memObjStringSet(MV04); memObjStringSet(MV07); memObjStringSet(MV016); memObjStringSet(MV01C); memObjStringSet(MV10); memObjStringSet(MV13); memObjStringSet(MV116); memObjStringSet(MV20); memObjStringSet(MV23); memObjStringSet(MV30); memObjStringSet(MV416); memObjStringSet(MV50); memObjStringSet(MV160); memObjStringSet(MV162); memObjStringSet(MV164); memObjStringSet(MV61); memObjStringSet(MV72); memObjStringSet(LDI00); memObjStringSet(LDI02); memObjStringSet(LDI016); memObjStringSet(LDI11); memObjStringSet(LDI116); memObjStringSet(LDI20); memObjStringSet(LDI22); memObjStringSet(LDI40); memObjStringSet(LDI50); memObjStringSet(LDI160); memObjStringSet(LDI1616); memObjStringSet(LD012); memObjStringSet(STI01); memObjStringSet(STI016); memObjStringSet(STI20); memObjStringSet(STI21); memObjStringSet(STI30); memObjStringSet(STI40); memObjStringSet(STI50); memObjStringSet(ST012); memObjStringSet(ST201); memObjStringSet(PUSH0); memObjStringSet(PUSH1); memObjStringSet(PUSH2); memObjStringSet(PUSH3); memObjStringSet(PUSH4); memObjStringSet(PUSH7); memObjStringSet(PUSH15); memObjStringSet(PUSH16); memObjStringSet(PUSH1D); memObjStringSet(PUSH1E); memObjStringSet(POP0); memObjStringSet(POP1); memObjStringSet(POP2); memObjStringSet(POP3); memObjStringSet(POP4); memObjStringSet(POP7); memObjStringSet(POP15); memObjStringSet(POP1D); memObjStringSet(POP1E); memObjStringSet(ADDI0); memObjStringSet(ADDI1); memObjStringSet(ADD10); memObjStringSet(MUL10); memObjStringSet(BLTI1); memObjStringSet(BEQI0); memObjStringSet(BEQI1); memObjStringSet(BEQI7); memObjStringSet(BNEI0); memObjStringSet(BNEI1); memObjStringSet(BRTI0); memObjStringSet(BNTI0); memObjStringSet(BRA); memObjStringSet(J0); memObjStringSet(J2); memObjStringSet(JAL0); memObjStringSet(JAL2); memObjStringSet(RET); memObjStringSet(SYSI); memObjStringSet(SYS0); memObjStringSet(QUIT);
+		memObjStringSet(NOP); memObjStringSet(MVI0); memObjStringSet(MVI1); memObjStringSet(MVI2); memObjStringSet(MVI3); memObjStringSet(MVI4); memObjStringSet(MVI5); memObjStringSet(MVI6); memObjStringSet(MVI7); memObjStringSet(MV01); memObjStringSet(MV02); memObjStringSet(MV03); memObjStringSet(MV04); memObjStringSet(MV07); memObjStringSet(MV016); memObjStringSet(MV01C); memObjStringSet(MV10); memObjStringSet(MV13); memObjStringSet(MV116); memObjStringSet(MV20); memObjStringSet(MV23); memObjStringSet(MV30); memObjStringSet(MV416); memObjStringSet(MV516); memObjStringSet(MV50); memObjStringSet(MV160); memObjStringSet(MV162); memObjStringSet(MV164); memObjStringSet(MV61); memObjStringSet(MV72); memObjStringSet(LDI00); memObjStringSet(LDI02); memObjStringSet(LDI016); memObjStringSet(LDI11); memObjStringSet(LDI116); memObjStringSet(LDI20); memObjStringSet(LDI22); memObjStringSet(LDI40); memObjStringSet(LDI50); memObjStringSet(LDI160); memObjStringSet(LDI1616); memObjStringSet(LD012); memObjStringSet(STI01); memObjStringSet(STI016); memObjStringSet(STI20); memObjStringSet(STI21); memObjStringSet(STI30); memObjStringSet(STI40); memObjStringSet(STI50); memObjStringSet(ST012); memObjStringSet(ST201); memObjStringSet(PUSH0); memObjStringSet(PUSH1); memObjStringSet(PUSH2); memObjStringSet(PUSH3); memObjStringSet(PUSH4); memObjStringSet(PUSH7); memObjStringSet(PUSH15); memObjStringSet(PUSH16); memObjStringSet(PUSH1D); memObjStringSet(PUSH1E); memObjStringSet(POP0); memObjStringSet(POP1); memObjStringSet(POP2); memObjStringSet(POP3); memObjStringSet(POP4); memObjStringSet(POP7); memObjStringSet(POP15); memObjStringSet(POP1D); memObjStringSet(POP1E); memObjStringSet(ADDI0); memObjStringSet(ADDI1); memObjStringSet(ADD10); memObjStringSet(MUL10); memObjStringSet(BLTI1); memObjStringSet(BEQI0); memObjStringSet(BEQI1); memObjStringSet(BEQI7); memObjStringSet(BNEI0); memObjStringSet(BNEI1); memObjStringSet(BNEI5); memObjStringSet(BRTI0); memObjStringSet(BNTI0); memObjStringSet(BRA); memObjStringSet(J0); memObjStringSet(J2); memObjStringSet(JAL0); memObjStringSet(JAL2); memObjStringSet(RET); memObjStringSet(SYSI); memObjStringSet(SYS0); memObjStringSet(QUIT);
 		//-----------
 
 		return;
@@ -198,6 +198,7 @@ void vmVm (Int cmd) {
 	mv30: OPDB("mv30"); r3=r0; goto **(void**)(ip+=8);
 	mv50: OPDB("mv50"); r5=r0; goto **(void**)(ip+=8);
 	mv416: OPDB("mv416"); r4=r16; goto **(void**)(ip+=8);
+	mv516: OPDB("mv516"); r5=r16; goto **(void**)(ip+=8);
 	mv160: OPDB("mv160"); r16=r0; goto **(void**)(ip+=8);
 	mv162: OPDB("mv162"); r16=r2; goto **(void**)(ip+=8);
 	mv164: OPDB("mv164"); r16=r4; goto **(void**)(ip+=8);
@@ -418,6 +419,19 @@ void vmVm (Int cmd) {
 		goto **(void**)(ip);
 	}
 
+	bnei5: OPDB("bnei5");
+	if (r5!=*(void**)(ip+=8)) {
+		ip += 8;
+		ip += *(Int*)ip;
+		ip +=8;
+		if (interrupt) vmInterruptHandler();
+		goto **(void**)(ip);
+	} else {
+		ip += 2*8;
+		if (interrupt) vmInterruptHandler();
+		goto **(void**)(ip);
+	}
+
 	/* Jump to immediate 2 if r0's type equals to immediate 1. */
 	brti0: OPDB("brti0");
 	if (((Num)r0>0xfffff) && (memObjectType(r0))==*(Num*)(ip+=8)) {
@@ -604,6 +618,7 @@ void vmDebugDumpCode (Obj c, FILE *stream) {
 		else if (*i==MV30)  {fprintf(stream, "mv_3_0 ");}
 		else if (*i==MV50)  {fprintf(stream, "mv_5_0 ");}
 		else if (*i==MV416) {fprintf(stream, "mv_4_16 ");}
+		else if (*i==MV516) {fprintf(stream, "mv_5_16 ");}
 		else if (*i==MV160) {fprintf(stream, "mv_16_0 ");}
 		else if (*i==MV162) {fprintf(stream, "mv_16_2 ");}
 		else if (*i==MV164) {fprintf(stream, "mv_16_4 ");}
@@ -665,6 +680,10 @@ void vmDebugDumpCode (Obj c, FILE *stream) {
 									 *(i+1), 3+i-(Obj*)c+(Int)*(i+2)/8); i+=2;}
 		else if (*i==BNEI1) {fprintf(stream, "bnei_1 %x %04x",
 									 *(i+1), 3+i-(Obj*)c+(Int)*(i+2)/8); i+=2;}
+		else if (*i==BNEI5) {fprintf(stream, "bnei_5 ");
+									vmObjectDumper(*(i+1), stream);
+									fprintf(stream, " %04x", 3+i-(Obj*)c+(Int)*(i+2)/8);
+									i+=2;}
 		else if (*i==BRTI0) {fprintf (stream, "brti_0 %x %04x",
 									 *(i+1), 3+i-(Obj*)c+(Int)*(i+2)/8); i+=2;}
 		else if (*i==BNTI0) {fprintf (stream, "bnti_0 %08x %04x",

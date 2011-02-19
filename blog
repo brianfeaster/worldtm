@@ -2688,3 +2688,43 @@ if characters are ready or not for the thread to run again.
 
 Continuing to implement timeout-reads.  So far the syscall and scheduler handles
 the extra arguments to wscmRecv.
+
+
+Mon Feb  7 20:17:51 EST 2011
+
+Error conditions to catch:
+
+ * compVectorVectorRef needs argument count checks.
+ * (make-vector-vector 20) halts with a cryptic message ERROR::(9a30b 9a30b)
+ * (define (Class)
+     (define (column) ...)
+     (define (fun)
+       (letrec ((column (column))) ; Since letrec, call to column is really a
+         ...)))                    ; call to undefined letrec var.
+   In this case report an error with a clear description of the environment the 
+   variable lives.  Currently it defaults to null.
+
+
+Fri Feb 11 02:41:42 EST 2011
+
+Refactoring the viewport code into a Viewport object will be a lot of work as
+all viewport related code is scattered around.  Character walking, screen
+resizing, auto-refreshing, etc.
+
+
+Thu Feb 17 00:07:20 EST 2011
+
+Implementing a dynamic scoped function "macro" is not trivial.  I can't just
+use existing lambda compilation code since it includes some optimizing
+functionality.  Emitted lambda code will replace the variable lookup call
+with environment traversal and indexing.  If the variable is unfound it
+assumes a global variable and run-time optimization/JIT.
+
+A lexical closure inherits the compilable constraints of a dynamic closure.
+
+
+Fri Feb 18 02:34:31 EST 2011
+
+Yea so how does (macro () (lambda () ...)) compile?  Looks like macro taints
+everything below it.
+

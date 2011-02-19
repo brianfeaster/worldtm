@@ -3,7 +3,7 @@
 
 void compEval (Num flags);
 void compSelfEvaluating (void);
-void compVariableReference (void);
+void compVariableReference (Num flags);
 void compDefine (Num flags);
 void compSetb (Num flags);
 void compLambdaBody (Num flags);

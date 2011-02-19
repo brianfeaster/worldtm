@@ -510,8 +510,17 @@ void wscmEnvGet (void) {
 		}
 		env = memVectorObject(env, 0);
 	}
-	wscmTGEFind(); /* It better be in TGE. */
-	r0 = car(r0);
+	wscmTGEFind();
+
+	if (r0==null) {
+		/* Symbol nonexistant.  Display error and return symbol. */
+		fprintf (stderr, "\nERROR: wscmEnvGet() Unbound symbol:");
+		wscmWrite(r1, stderr);
+		fprintf (stderr, ".\n");
+		r0 = r1;
+	} else {
+		r0 = car(r0);
+	}
  ret:
 	env=pop(); /* Restore environment. */
 	DB("<--%s", __func__);
@@ -2261,7 +2270,6 @@ void sysCompile (void) {
 	if (compExpression(0))
 	{
 		sysError();
-		//asmNewCode();
 		goto ret;
 	}
 	asmAsm(
@@ -2838,6 +2846,7 @@ void wscmInitialize (void) {
 	memObjStringSet(objCopyInteger);
 	memObjStringSet(sysCreateContinuation);
 	memObjStringSet(sysReinstateContinuation);
+	memObjStringSet(wscmEnvGet);
 	memObjStringSet("Not enough arguments to closure");
  
 	objInitialize(sysSchedule);
@@ -3025,7 +3034,7 @@ void sysDebugger (void) {
 	fl=fcntl(0, F_GETFL, 0);
 	fcntl (0, F_SETFL, fl&~O_NONBLOCK);
 
-	ioctl(1, TIOCGWINSZ, &win); printf ("\e[%dH", win.ws_row); /* Move cursor to bottom of screen */
+	ioctl(1, TIOCGWINSZ, &win); printf ("\e[0m\e[%dH\n", win.ws_row); /* Move cursor to bottom of screen */
 	while (!done) {
 		printf ("\n\e[1m-------------------------------");
 		printf ("\nc    vmDebugDumpCode(r1c, stderr)");

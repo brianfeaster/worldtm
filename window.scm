@@ -10,6 +10,7 @@
                                    ";38;5;" (number->string (modulo i 256)) "m"))))
     tbl))
 
+; 16 color version of the 256 color table
 (rem define colorTable
   (let ((tbl (make-vector 65536)))
     (loop 65536 (lambda (i)
@@ -82,9 +83,9 @@
  ; having a default base window always in existence which could act as a static/dynamic background image.
  (define WindowMask ())
  ; Methods
- (define (ResetTerminal)
-  (set! Theight (cdr (terminal-size)))
-  (set! Twidth  (car (terminal-size)))
+ (define (ResetTerminal termSize)
+  (set! Theight (cdr termSize))
+  (set! Twidth  (car termSize))
   (set! WindowMask (make-vector-vector Theight Twidth #f))
   (WindowMaskReset 0 0 (- Theight 1) (- Twidth 1)))
 
@@ -161,6 +162,7 @@
  ;;
  (define (WindowNew Y0 X0 Wheight Wwidth COLOR . switches)
    (define (self msg) (eval msg))
+   (define (inherit macro args) (apply macro args))
    (define id (+ 1 (length WINDOWS)))
    (define Y1 (+ Y0 Wheight))
    (define X1 (+ X0 Wwidth))
@@ -433,7 +435,7 @@
    (((WindowNew Y0 X0 Wheight Wwidth COLOR) 'Buffer)) )
 
  (display "\e[?1000h") ; Enable mouse reporting
- (ResetTerminal)
+ (ResetTerminal (terminal-size))
  self)
 ;;
 ;; Terminal of Windows Class
