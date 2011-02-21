@@ -66,9 +66,12 @@ asmtest: asmt
 wscmtest: wscmt
 	./wscmt
 
+worldscheme: wscm
+	./wscm scmt.scm
+
 tests: memt objt vmt asmt wscmt
 
-test: memtest objtest vmtest asmtest wscmtest
+test: memtest objtest vmtest asmtest wscmtest worldscheme
 
 linecount:
 	wc Makefile asm.c asm.h asmt.c comp.c comp.h debug.h globals.h mem.c mem.h memt.c obj.c obj.h objt.c scanner.c scanner.h vm.c vm.h vmt.c sys.h sys.c wscm.c wscmt.c

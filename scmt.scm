@@ -6,3 +6,6 @@
    (begin
     (+ (vector-ref (make-vector 7 (random 2)) 0))
     (~ (+ c 1)))))
+
+; Verify too many threads won't crash wscheme
+(loop 1030 (lambda (t) (thread (sleep 1000) (displayl t #\ )))) (sleep 2000)

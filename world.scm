@@ -759,22 +759,48 @@
 
 
 ; Screen redraw function and signal handler
-(define (handleTerminalResize termSize)
-  (WinConsoleDisplay "\r\nSIGWINCH::TerminalSize=" termSize)
-  ((Terminal 'ResetTerminal) termSize)
-  ((WinChat 'resize)  (- (Terminal 'Theight) 1) (Terminal 'Twidth))
-  ((myViewport 'move)     0 (- (Terminal 'Twidth) (myViewport 'Wwidth) 2))
-  ((WinColumn 'move)  1 (- (Terminal 'Twidth) 2) )
-  ((WinStatus 'move)  (myViewport 'Y0) (- (Terminal 'Twidth) 14))
-  ((WinInput 'resize) 1 (Terminal 'Twidth))
-  ((WinInput 'move)   (- (Terminal 'Theight) 1) 0))
+(define handleTerminalResize
+ (let ((sem (open-semaphore 1))) (lambda ()
+  (semaphore-down sem)
+  (let ((tw (Terminal 'Twidth))
+        (th (Terminal 'Theight))
+        (newTermSize (terminal-size)))
+    (if (or (!= (cdr newTermSize) th)
+            (!= (car newTermSize) tw)) (begin
+      (WinConsoleDisplay "\r\nSIGWINCH::newTermSize=" newTermSize)
+      ((Terminal 'ResetTerminal) newTermSize)
+      (set! th (Terminal 'Theight))
+      (set! tw (Terminal 'Twidth))
+      ((WinChat 'resize)     (- th 1) tw)
+      ((myViewport 'move)                0 (- tw (myViewport 'Wwidth) 2))
+      ((WinColumn 'move)                 1 (- tw 2) )
+      ((WinStatus 'move)  (myViewport 'Y0) (- tw 14))
+      ((WinInput 'resize)                1 tw)
+      ((WinInput 'move)      (- th 1) 0))))
+  (semaphore-up sem))))
 
 (define sigwinch
- (let ((sig28Semaphore (open-semaphore 1)))
-  (lambda ()
-   (semaphore-down sig28Semaphore)
-   (handleTerminalResize (terminal-size))
-   (semaphore-up sig28Semaphore))))
+ (let ((count 0)
+       (sem (open-semaphore 1))) (lambda ()
+   (semaphore-down sem)
+   (set! count (+ count 1))
+   (if (!= count 1)
+     ; Already redrawing but still keep track of the count
+     (semaphore-up sem)
+     ; Enter redraw state while incoming requests occur
+     (let ~ ()
+       (semaphore-up sem)
+       (handleTerminalResize)
+       (semaphore-down sem)
+       (set! count (- count 1))
+       ; Either no more redraw requests so done or reset counter to 1 and redraw again
+       (if (= 0 count)
+         (semaphore-up sem)
+         (begin
+           (WinConsoleDisplay "\r\nSIGWINCH::request count=" count)
+           (set! count 1)
+           (~))))))))
+          
 
 (signal-set 28 (lambda () (sigwinch) (unthread)))
 
