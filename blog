@@ -2728,3 +2728,7 @@ Fri Feb 18 02:34:31 EST 2011
 Yea so how does (macro () (lambda () ...)) compile?  Looks like macro taints
 everything below it.
 
+
+Sat Feb 19 19:41:20 EST 2011
+
+Disabled cirularized.  Moved to the Map object.

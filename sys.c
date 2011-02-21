@@ -968,14 +968,19 @@ void wscmMoveToQueue (Obj thread, Obj queue, Obj state) {
 	Returns: r0 thread id
 */
 void wscmNewThread (void) {
- Int id;
+ Int tid;
 	DB("-->%s", __func__);
 
 	/* Find next available thread id.  Thread table's first entry
 	   is the count so index range is 1 to MAX_THREADS inclusive. */
-	for (id=1; memVectorObject(threads, id) != null; ++id);
-	assert(id <= MAX_THREADS);
-	DB("\nOS    Thread id: %d\n", id);
+	for (tid=1; memVectorObject(threads, tid) != null; ++tid)
+		if (MAX_THREADS <= tid) {
+			fprintf (stderr, "WARNING: wscmNewThread: Too many threads.");
+			r0 = false;
+			goto done;
+		}
+
+	DB("\nOS    Thread id: %d\n", tid);
 
 	/* Create thread's stack (in an un-running state). */
 	r1=r0; /* Code block */
@@ -998,11 +1003,11 @@ void wscmNewThread (void) {
 	/* Create thread descriptor #( #<stack> tid 'state) and add to thread table vector */
 	objNewVector(3);
 	memVectorSet(r0, 0, r2);      /* Set stack */
-	memVectorSet(r0, 1, (Obj)id); /* Set id */
+	memVectorSet(r0, 1, (Obj)tid); /* Set id */
 	memVectorSet(r0, 2, sready);  /* Set 'ready' state */
 
 	/* Add thread descriptor to thread table vector and increment count */
-	memVectorSet(threads, id, r0);
+	memVectorSet(threads, tid, r0);
 	memVectorSet(threads, 0, memVectorObject(threads, 0)+1);
 
 	/* Create new doubly linked list queue element for this thread descriptor and
@@ -1012,8 +1017,9 @@ void wscmNewThread (void) {
 	memVectorSet(r0, 0, r1);
 	wscmInsertThread (r0, running);
 
-	objNewInt(id);
-	DB("<--%s id:"INT, __func__, id);
+	objNewInt(tid);
+done:
+	DB("<--%s id:"INT, __func__, tid);
 }
 
 Obj wscmThreadStack (Obj t) { return memVectorObject (t, 0); }
@@ -2853,7 +2859,8 @@ void wscmInitialize (void) {
 	objInitialize(sysSchedule);
 
 	/* Create empty thread vector.  All active threads are assigned a number
-	   and stored here for easy constant time lookup. */
+	   1-1024 and stored here for easy constant time lookup.  The first entry
+	   in the thread table is the thread count as an immediate number. */
 	objNewVector(MAX_THREADS+1);  threads=r0;
 	memVectorSet(threads, 0, 0); /* Initialize thread count. */
 	for (i=1; i<=MAX_THREADS; i++) memVectorSet(threads, i, null);
