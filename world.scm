@@ -758,26 +758,25 @@
   (if (> z -6) (~ (- z 1))))) ; dumpColumnInfo
 
 
-; Screen redraw function and signal handler
-(define handleTerminalResize
- (let ((sem (open-semaphore 1))) (lambda ()
-  (semaphore-down sem)
-  (let ((tw (Terminal 'Twidth))
-        (th (Terminal 'Theight))
-        (newTermSize (terminal-size)))
-    (if (or (!= (cdr newTermSize) th)
-            (!= (car newTermSize) tw)) (begin
-      (WinConsoleDisplay "\r\nSIGWINCH::newTermSize=" newTermSize)
-      ((Terminal 'ResetTerminal) newTermSize)
-      (set! th (Terminal 'Theight))
-      (set! tw (Terminal 'Twidth))
-      ((WinChat 'resize)     (- th 1) tw)
-      ((myViewport 'move)                0 (- tw (myViewport 'Wwidth) 2))
-      ((WinColumn 'move)                 1 (- tw 2) )
-      ((WinStatus 'move)  (myViewport 'Y0) (- tw 14))
-      ((WinInput 'resize)                1 tw)
-      ((WinInput 'move)      (- th 1) 0))))
-  (semaphore-up sem))))
+; Screen redraw and signal handler
+(define handlerCount 0)
+(define (handleTerminalResize)
+  ; TODO Temporary assertion
+  (if (!= handlerCount 0)
+    (WinChatDisplay "\r\nWARNING: handleTerminalResize is not reentrant"))
+  (set! handlerCount 1)
+  (letrec ((newTermSize (terminal-size))
+           (tw (car newTermSize))
+           (th (cdr newTermSize)))
+    (WinConsoleDisplay "\r\nSIGWINCH::newTermSize=" newTermSize)
+    ((Terminal 'ResetTerminal) newTermSize)
+    ((WinChat 'resize)          (- th 1) tw)
+    ((myViewport 'move)                0 (- tw (myViewport 'Wwidth) 2))
+    ((WinColumn 'move)                 1 (- tw 2) )
+    ((WinStatus 'move)  (myViewport 'Y0) (- tw 14))
+    ((WinInput 'resize)                1 tw)
+    ((WinInput 'move)           (- th 1) 0))
+  (set! handlerCount 0))
 
 (define sigwinch
  (let ((count 0)
@@ -800,7 +799,6 @@
            (WinConsoleDisplay "\r\nSIGWINCH::request count=" count)
            (set! count 1)
            (~))))))))
-          
 
 (signal-set 28 (lambda () (sigwinch) (unthread)))
 
