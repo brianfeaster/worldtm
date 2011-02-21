@@ -162,7 +162,7 @@
  ;;
  (define (WindowNew Y0 X0 Wheight Wwidth COLOR . switches)
    (define (self msg) (eval msg))
-   (define (inherit macro args) (apply macro args))
+   (define (inherit args macro) (apply macro args))
    (define id (+ 1 (length WINDOWS)))
    (define Y1 (+ Y0 Wheight))
    (define X1 (+ X0 Wwidth))

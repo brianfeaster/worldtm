@@ -245,7 +245,7 @@
 ;; assumed to be the lowest and higest specified cells in the vector.  Setting
 ;; a cell outside the explicit stack range expands the actual vector and
 ;; adjusts the start-height value.
-(define (Field size) ; Size is currently 256
+(define (Field size) ; Field dimension is currently 256x256
   (define (self msg) (eval msg))
   (define field (make-vector-vector size size #f))
   (define (reset defaultColumn)
@@ -321,7 +321,6 @@
  (define size (field 'size))
  (define fieldCell (field 'firstRef))
  (define fieldTopHeight (field 'topHeight))
- (define (info) (list (list 'size size)))
  (define canvas (make-vector-vector size size #f))
  ; Initialize the canvas which is a vector of pairs (cellGlyph . cellHeight)
  ; walkDetails Genesis
@@ -386,9 +385,10 @@
 (define (Viewport . args)
  ((((Terminal 'WindowNew) ; Parent
    0   (- (Terminal 'Twidth) (* initialMapSize 2))
-   initialMapSize   (* 2 initialMapSize)  #x000f) 'inherit)
+   initialMapSize   (* 2 initialMapSize)  #x000f) 'inherit) args ; The inherit method expects arg list first
   (macro (canvas) ; Child
     (define (self msg) (eval msg))
+    (define canvasSize (canvas 'size))
     (define canvasGlyph (canvas 'glyph))
     (define mapY 0) ; Map location of viewport origin
     (define mapX 0) ; 
@@ -437,16 +437,15 @@
     ; But it would seem modulo distributes:  (a%m - b%m)%m == (a-b)%m%m == (a-b)%m
     ; so the actual computation is a bit simpler.  Smokin.
     (define (render gy gx)
-      (let ((y (modulo (- gy mapY) FieldSize)) ; Normalize avatar position.
-            (x (modulo (- gx mapX) FieldSize)))
+      (let ((y (modulo (- gy mapY) canvasSize)) ; Normalize avatar position.
+            (x (modulo (- gx mapX) canvasSize)))
        (and (< y winHeight) (< x winWidth) (begin
          ((Terminal 'lock)) ; This shouldn't be such an all encompasing lock.
          (plot (canvasGlyph gy gx) y (* x 2))
          ((Terminal 'unlock)))))) ; This shouldn't be such an all encompasing lock.
     ; Disable cursor in map window
     (cursor-visible #f)
-    self)
-  args)) ;  Argument list passed to the child object
+    self))) ; Viewport
 
 
 
@@ -456,19 +455,17 @@
 ;;  Composed of Glyphs, Cells, Columns, a Field, a Canvas and a
 ;;  Viewport.
 
-(define (Map FieldSize)
+(define (Map fieldSize)
   (define (self msg) (eval msg))
   ; The objects which make up a map object
-  (define myField (Field FieldSize))
+  (define myField (Field fieldSize))
   (define myCanvas (Canvas myField))
   (define myViewport (Viewport myCanvas))
   ; Some nice aliases
-  (define fieldReset (myField 'reset))
-  (define topHeight (myField 'topHeight))
-  (define fieldCeiling (myField 'ceiling))
+  (define fieldReset (myField 'reset)) ; Genesis
+  (define fieldCeiling (myField 'ceiling)) ; walkDetails
   (define fieldAdd (myField 'add))
   (define fieldDelete (myField 'delete))
-  (define updateColumns (myField 'updateColumns))
   ; Drop a cell on the map
   (define (mapDropCell y x cell)
    (let ((z (+ 1 (fieldTopHeight 100 y x))))
@@ -552,29 +549,45 @@
       (moveEntitySprite cell zo yo xo z y x centerMap)
       (moveCell            cell zo yo xo z y x))
     (semaphore-up MAP-MOVE-CELL-SEMAPHORE))
-  (define firstCell (myField 'firstRef))
-  (define baseCell (myField 'baseRef))
-  (define viewportReset (myViewport 'reset))
+  ; Make Map window circular
+  (define (circularize . val)
+   (set! val (not (null? val))) ; Default to disabling circular corners of map.
+   (let ~ ((y 0)(x 0))
+    (if (< y (/ (myViewport 'Wheight) 2))
+    (if (= x (/ (myViewport 'Wwidth) 2)) (~ (+ y 1) 0)
+     (begin
+      (if (> (sqrt (+ (* 4 (^2 (- y (/ (myViewport 'Wheight) 2))))
+                      (^2 (- x  (/ (myViewport 'Wwidth) 2)))))
+             (+ 0 (myViewport 'Wheight)))
+          (begin
+            ((myViewport 'alpha) y x val)
+            ((myViewport 'alpha) y (- (myViewport 'Wwidth) x 1) val)
+            ((myViewport 'alpha) (- (myViewport 'Wheight) y 1) x val)
+            ((myViewport 'alpha) (- (myViewport 'Wheight) y 1)
+                             (- (myViewport 'Wwidth) x 1) val)
+            ))
+      (~ y (+ x 1)))))))
+  ; The 2d vector of columns will most likely come from a map agent.
+  ; The map block coordinate and map block size is also passed.
+  (define (updateColumns y x blockSize cellAry) ; Called from map agent via IPC
+    (let ((fieldy (modulo y fieldSize))
+          (fieldx (modulo x fieldSize)))
+     ; Update the field block
+     ((myField 'updateColumns) fieldy fieldx blockSize cellAry)
+     ; Render map block
+     (loop2 fieldy (+ fieldy blockSize)
+            fieldx (+ fieldx blockSize)
+            (lambda (y x) (canvasRender 100 y x)))))
+  (define fieldFirstCell (myField 'firstRef))
+  (define baseCell       (myField 'baseRef))
+  (define viewportReset  (myViewport 'reset))
   (define viewportRender (myViewport 'render))
-  (define toggleWindow (myViewport 'toggle))
-  (define canvasReset (myCanvas 'reset))
-  (define canvasHeight (myCanvas 'height))
-  (define canvasRender (myCanvas 'render))
+  (define toggleWindow   (myViewport 'toggle))
+  (define canvasReset    (myCanvas 'reset))
+  (define canvasHeight   (myCanvas 'height))
+  (define canvasRender   (myCanvas 'render))
+  (circularize)
   self) ; Map
-
-(define FieldSize 256) ; Field grid is 256x256
-(define myMap (Map FieldSize))
-(define myViewport (myMap 'myViewport))
-
-(define mapDelEntitySprite(myMap 'delEntitySprite)) ; entitiesSet die
-(define mapMoveObject     (myMap 'moveObject)) ; moveEntity entity
-(define mapFieldCell      (myMap 'firstCell)) ; Canvas dumpColumnInfo walk Pong
-(define mapBaseCell       (myMap 'baseCell)) ; dumpColumnInfo walk grab pacman
-(define mapViewportReset  (myMap 'viewportReset)) ; winMapResize ^L Genesis
-(define mapViewportRender (myMap 'viewportRender)) ; Entity Die
-(define mapCanvasReset    (myMap 'canvasReset)) ; Genesis
-(define mapCanvasHeight   (myMap 'canvasHeight))
-(define mapCanvasRender   (myMap 'canvasRender)) ; entity die mapUpdateColumns
 
 
 
@@ -712,26 +725,6 @@
   (WinPaletteColor (+ 16 i) 0)
   (WinPaletteDisplay #\ )))
 
-; Make Map window circular
-(define (circularize . val)
- (set! val (not (null? val))) ; Default to disabling circular corners of map.
- (let ~ ((y 0)(x 0))
-  (if (< y (/ (myViewport 'Wheight) 2))
-  (if (= x (/ (myViewport 'Wwidth) 2)) (~ (+ y 1) 0)
-   (begin
-    (if (> (sqrt (+ (* 4 (^2 (- y (/ (myViewport 'Wheight) 2))))
-                    (^2 (- x  (/ (myViewport 'Wwidth) 2)))))
-           (+ 0 (myViewport 'Wheight)))
-        (begin
-          ((myViewport 'alpha) y x val)
-          ((myViewport 'alpha) y (- (myViewport 'Wwidth) x 1) val)
-          ((myViewport 'alpha) (- (myViewport 'Wheight) y 1) x val)
-          ((myViewport 'alpha) (- (myViewport 'Wheight) y 1)
-                           (- (myViewport 'Wwidth) x 1) val)
-          ))
-    (~ y (+ x 1)))))))
-(circularize)
-
 ; Plot column of cells.
 (define (dumpColumnInfo y x)
  (WinStatusDisplay "\r\n"
@@ -744,7 +737,7 @@
     (number->string (/ (avatar 'x) MapBlockSize)) " C" (avatar 'ceiling))
  ((WinColumn 'home))
  (let ~ ((z 11))
-  (let ((c (mapFieldCell z y x)))
+  (let ((c (mapFirstCell z y x)))
    (if (eqv? cellAIR c)
     (begin (WinColumnSetColor 0 8)
            (WinColumnPuts "()   "))
@@ -954,10 +947,10 @@
           (y (- (read-char #f stdin) #\  1)))
   (mouseDispatcher action y x)))
 
-;TODO move this
 ; Base keyboard read queue.  Continuously read stdin and append to a FIFO.
 ; Call getKey to read it.  It is possible that another dispatcher has been
 ; registered and captures characters before this.
+; TODO move this to terminal class
 (define KeyQueue (QueueCreate))
 (define (getKey) (QueueGet KeyQueue))
 (define (keyQueueAdd c) (QueueAdd KeyQueue c)) ; List of characters and button symbols
@@ -988,7 +981,7 @@
        0 (- (Terminal 'Twidth) (myViewport 'Wwidth) 2)
        (+ 1 (myViewport 'Wheight))
        (+ 2 (myViewport 'Wwidth)))
-  (circularize)
+  ((myMap 'circularize))
   ((Terminal 'unlock))
   (mapViewportReset (avatar 'y) (avatar 'x))
   (set! deltaMoveTime (+ 125 (utime))))))
@@ -1006,7 +999,7 @@
        0 (- (Terminal 'Twidth) (myViewport 'Wwidth) -2)
        (+ -1 (myViewport 'Wheight))
        (+ -2 (myViewport 'Wwidth))))
-  (circularize)
+  ((myMap 'circularize))
   ((Terminal 'unlock))
   (mapViewportReset (avatar 'y) (avatar 'x))
   (set! deltaMoveTime (+ 125 (utime))))))
@@ -1032,8 +1025,8 @@
     (if (!= oldCeiling (avatar 'ceiling))
       (thread (mapCanvasReset (avatar 'ceiling)))))) ; walkDetails
 
-;(if (eq? 'help  (cellSymbol (mapFieldCell (avatar 'z) (avatar 'y) (avatar 'x))))  (help))
-;(if (eq? 'snake (cellSymbol (mapFieldCell (avatar 'z) (avatar 'y) (avatar 'x)))) (thread (snake-random)))
+;(if (eq? 'help  (cellSymbol (mapFirstCell (avatar 'z) (avatar 'y) (avatar 'x))))  (help))
+;(if (eq? 'snake (cellSymbol (mapFirstCell (avatar 'z) (avatar 'y) (avatar 'x)))) (thread (snake-random)))
 ;(if (eq? 'brit2 (cellSymbol (mapBaseCell (avatar 'z) (avatar 'y) (avatar 'x)))) (thread (spawnKitty)))
 
 (define walkSemaphore (open-semaphore 1))
@@ -1047,7 +1040,7 @@
     ; Consider cell I'm walking into.  If cell is entity push it.
     ; Otherwise move to facing cell or on top of obstructing cell.
     ((avatar 'look) dir)
-    (let ((nextCell (apply mapFieldCell ((avatar 'gpsLook)))))
+    (let ((nextCell (apply mapFirstCell ((avatar 'gpsLook)))))
       ; Case 1 push entity
       (if (and #f (< CellMax nextCell))
         (ipcWrite `(force ,@((avatar 'gpsLook)) ,dir 10))
@@ -1067,7 +1060,7 @@
 ; Fall down one cell if a non-entity and non-solid cell below me
 (define (fall)
  ((avatar 'look) 8) ; Look down
- (let ((nextCell (apply mapFieldCell ((avatar 'gpsLook)))))
+ (let ((nextCell (apply mapFirstCell ((avatar 'gpsLook)))))
    (if (= nextCell CellMax)
      (begin
        (walkDetails)))))
@@ -1279,8 +1272,8 @@
 (setButton #\? '(help))
 (setButton #\< '(winMapSmaller))
 (setButton #\> '(winMapBigger))
-(setButton #\z '(circularize))
-(setButton #\Z '(circularize #t))
+(setButton #\z '((myMap 'circularize)))
+(setButton #\Z '((myMap 'circularize) #t))
 (setButton #\Q '(set! state 'done))
 (setButton #eof '(set! state 'done))
 (setButton CHAR-CTRL-C '((WinConsole 'toggle)))
@@ -1355,19 +1348,9 @@
     (WinChatDisplay text)))
  (if (and (!= dna DNA) (eqv? text "unatco")) (say "no Savage")))
 
-; The 2d vector of columns will most likely come from a map agent.
-; The map block coordinate and map block size is also passed.
-(define (mapUpdateColumns y x blockSize cellAry)
- (let ((fieldy (modulo y FieldSize))
-       (fieldx (modulo x FieldSize)))
-  ; Update the field block
-  ((myMap 'updateColumns) fieldy fieldx blockSize cellAry)
-  ; Render map block
-  (loop2 fieldy (+ fieldy blockSize)
-         fieldx (+ fieldx blockSize)
-         (lambda (y x) (mapCanvasRender 100 y x))))) ; TODO this should not be here
+;define mapUpdateColumns "defined below"
+;define mapSetCell "define below
 
-(define mapSetCell (myMap 'setCell)) ; buttonSetCell
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -1726,7 +1709,7 @@
       (if (pair? l) (begin
         ((ball 'look) (car l))
         ; Is there something there?
-        (if (= cellAIR (apply mapFieldCell ((ball 'gpsLook))))
+        (if (= cellAIR (apply mapFirstCell ((ball 'gpsLook))))
           (begin
             (apply moveEntity ball ((ball 'gpsLook)))
             (ipcWrite (list 'move (ball 'dna) (ball 'z) (ball 'y) (ball 'x)))
@@ -1735,7 +1718,9 @@
           (set! wall (+ 1 wall))))))
     (~ (modulo (+ wall 1) 4)))))))) ; pong
 
-(define (p m) (mapUpdateColumns 3456 2752 32 (read (open-file m))))
+; Load a map file and dump in the current map
+;(define (p m) (mapUpdateColumns 3456 2752 32 (read (open-file m))))
+
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -1757,7 +1742,22 @@
 (load "ultima4.cells")
 (load "scrabble.scm") ; TODO temporary
 
-; Initialize field and canvas structures
+; Initialize map object
+(define myMap (Map 256))
+(define myViewport (myMap 'myViewport)) ; Genesis moveEntity handleTerminalResize mouseWalkAction winMapBigger/move
+(define mapDelEntitySprite (myMap 'delEntitySprite)) ; entitiesSet die
+(define mapMoveObject      (myMap 'moveObject)) ; moveEntity entity
+(define mapFirstCell       (myMap 'fieldFirstCell)) ; dumpColumnInfo walk fall Pong
+(define mapBaseCell        (myMap 'baseCell)) ; dumpColumnInfo walk grab pacman
+(define mapViewportReset   (myMap 'viewportReset)) ; winMapResize ^L Genesis
+(define mapViewportRender  (myMap 'viewportRender)) ; entity Die
+(define mapCanvasReset     (myMap 'canvasReset)) ; Genesis walkDetails
+(define mapCanvasHeight    (myMap 'canvasHeight)) ; die
+(define mapCanvasRender    (myMap 'canvasRender)) ; entity die mapUpdateColumns
+; Incomming_IPC_messages
+(define mapUpdateColumns   (myMap 'updateColumns))
+(define mapSetCell         (myMap 'setCell)) ; buttonSetCell
+
 ((myMap 'fieldReset) (columnMake 0 cellXX cellAIR))
 (mapCanvasReset 100 glyphXX)
 
