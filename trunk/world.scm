@@ -762,13 +762,12 @@
 (define handlerCount 0)
 (define (handleTerminalResize)
   ; TODO Temporary assertion
-  (if (!= handlerCount 0)
-    (WinChatDisplay "\r\nWARNING: handleTerminalResize is not reentrant"))
+  (if (!= handlerCount 0) (WinChatDisplay "\r\nWARNING: handleTerminalResize is not reentrant"))
   (set! handlerCount 1)
   (letrec ((newTermSize (terminal-size))
            (tw (car newTermSize))
            (th (cdr newTermSize)))
-    (WinConsoleDisplay "\r\nSIGWINCH::newTermSize=" newTermSize)
+    (WinConsoleDisplay "\r\nSIGWINCH: newTermSize " newTermSize)
     ((Terminal 'ResetTerminal) newTermSize)
     ((WinChat 'resize)          (- th 1) tw)
     ((myViewport 'move)                0 (- tw (myViewport 'Wwidth) 2))
@@ -783,20 +782,20 @@
        (sem (open-semaphore 1))) (lambda ()
    (semaphore-down sem)
    (set! count (+ count 1))
+   ; Either already redrawing but still keep track of the count or
+   ; enter redraw state while more incoming requests occur.
    (if (!= count 1)
-     ; Already redrawing but still keep track of the count
-     (semaphore-up sem)
-     ; Enter redraw state while incoming requests occur
+     (semaphore-up sem) ; Done
      (let ~ ()
        (semaphore-up sem)
-       (handleTerminalResize)
+       (handleTerminalResize) ; Count always at 1 here but might increase after returning
        (semaphore-down sem)
        (set! count (- count 1))
        ; Either no more redraw requests so done or reset counter to 1 and redraw again
        (if (= 0 count)
-         (semaphore-up sem)
+         (semaphore-up sem) ; Done
          (begin
-           (WinConsoleDisplay "\r\nSIGWINCH::request count=" count)
+           (WinConsoleDisplay "  count " count)
            (set! count 1)
            (~))))))))
 
