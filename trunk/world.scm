@@ -1,21 +1,22 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; World
+;; The World Client
+;;
 ;;   Windows
-;;    Cells_object
-;;    Column_object
-;;    Field_object
-;;    Canvas_object
-;;    Viewport_object
-;;    Map_object
-;;   Entites_and_avatar
-;;    Window_functions_and_initialization
-;;   Keyboard_mouse
-;;    Button_commands
-;;    Buttons
-;;   Incomming_IPC_messages
-;;    Typing_and_talking
-;;   Prototypes_and_fun_things
-;;    Genesis
+;;    Keyboard_mouse
+;;   Cells_object
+;;   Column_object
+;;   Field_object
+;;   Canvas_object
+;;   Viewport_object
+;;   Map_object
+;;    Entites_and_avatar
+;;   Window_functions_and_initialization
+;;   Button_commands
+;;   Buttons
+;;    Incomming_IPC_messages
+;;   Typing_and_talking
+;;    Prototypes_and_fun_things
+;;   Genesis
 ;;
 (load "ipc.scm")
 (load "window.scm")
@@ -33,11 +34,14 @@
 (define EDIT #f)
 
 
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Windows
 ;;
-(define Terminal (Terminal)) ; Force only one instance of the Terminal object by
-                             ; setting the object value to an instance of itself.
+
+; Force only one instance of the Terminal object by assigning the object instance to its symbol.
+(define Terminal (Terminal))
+
 ; Chat window.
 (define WinChat ((Terminal 'BufferNew)
   0 0
@@ -106,6 +110,93 @@
 ((WinPalette 'toggle))
 
 
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Keyboard_mouse
+;;
+(define keyDispatcherStack ())
+(define (keyDispatcherRegister fn) (set! keyDispatcherStack (cons fn keyDispatcherStack)))
+(define (keyDispatcherUnRegister fn) (set! keyDispatcherStack (list-delete keyDispatcherStack fn)))
+(define (keyDispatcher c)
+  ;(WinChatDisplay "\r\n keyDispatcher  c=" c)
+  (if (pair? keyDispatcherStack)
+      ((car keyDispatcherStack) c)))
+
+; Vector of fuctions accepting (action y x).  TODO only 128 windows supported
+(define mouseDispatchVector (make-vector 128 #f))
+
+(define (mouseDispatcherRegister win fn)
+  (vector-set! mouseDispatchVector (win 'id) fn))
+
+(define (mouseDispatcherUnRegister win)
+  (mouseDispatcherRegister win #f))
+
+(define (mouseDispatcher event y x)
+  (letrec ((win ((Terminal 'topWin) y x))
+           (id (if win (win 'id) #f))
+           (fn (if id (vector-ref mouseDispatchVector id) #f)))
+  ;(WinChatDisplay "\r\n mouseDispatcher  event=" event " y=" y " x=" x " winid=" id "  fn=" fn)
+  (if fn (fn event (- y (win 'Y0)) (- x (win 'X0))))))
+
+; This needs to be called in a separate thread
+(define (keyScannerAgentLoop)
+ (let ((c (read-char #f stdin)))
+   (if (eq? c CHAR-ESC)
+     (keyScannerEsc) ; Escape char so attempt to read an escape sequence
+     (keyDispatcher c)) ; Add new keyboard character to queue
+   (keyScannerAgentLoop))) ; rinse and repeat
+
+; An "\e" scanned
+(define (keyScannerEsc)
+ (let ((c (read-char 500 stdin))) ; Timeout after half a second.  Will return #f.
+   (if (eq? c #\[)
+     (keyScannerEscBracket)
+   (if (eq? c CHAR-ESC)
+     (begin
+       (keyDispatcher CHAR-ESC)
+       (keyScannerEsc))
+   (if (not c) ; Timed out so accept escape char and start over
+       (keyDispatcher CHAR-ESC)
+   (begin ; Not a recognized escape sequence, so send escape and the [ character
+     (keyDispatcher CHAR-ESC)
+     (keyDispatcher c)))))))
+
+; An "\e[" scanned
+(define (keyScannerEscBracket)
+  (let ((c (read-char #f stdin)))
+    (if (eq? c #\A) (keyDispatcher 'up)
+    (if (eq? c #\B) (keyDispatcher 'down)
+    (if (eq? c #\C) (keyDispatcher 'right)
+    (if (eq? c #\D) (keyDispatcher 'left)
+    (if (eq? c #\M) (keyScannerEscBracketM)
+    (begin ; Not an arrow key sequence, so send all the character to the key queue
+      (keyDispatcher CHAR-ESC)
+      (keyDispatcher #\[)
+      (keyDispatcher c)))))))))
+
+; An "\e[M" has been scanned
+(define (keyScannerEscBracketM)
+ (letrec ((c (read-char #f stdin))
+          (action (if (eq? c #\ ) 'mouse0
+                  (if (eq? c #\!) 'mouse2
+                  (if (eq? c #\") 'mouse1
+                  (if (eq? c #\#) 'mouseup
+                  'mouse)))))
+          (x (- (read-char #f stdin) #\  1))
+          (y (- (read-char #f stdin) #\  1)))
+  (mouseDispatcher action y x)))
+
+; Base keyboard read queue.  Continuously read stdin and append to a FIFO.
+; Call getKey to read it.  It is possible that another dispatcher has been
+; registered and captures characters before this.
+; TODO move this to terminal class
+(define getKeyQueue (QueueCreate))
+(define (getKeyQueueAdd c) (QueueAdd getKeyQueue c)) ; List of characters and button symbols
+(define (getKey) (QueueGet getKeyQueue))
+(keyDispatcherRegister getKeyQueueAdd)
+
+
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Cells_object - A table of vectors #(symbol solidFlag glyph)
 ;;
@@ -118,7 +209,7 @@
           (if (null? (memq 'solid flags)) #f 'solid)
           glyph))
 
-(define CellMax 1023)
+(define CellMax 1023) ; Max cell index
 (define Cells (make-vector (+ 1 CellMax) (cellMake 'unknown glyphUNKNOWN)))
 
 ; Get the cell index given its symbol
@@ -131,10 +222,10 @@
       (~ (+ index 1)))))))
 
 ; Get the cell given a symbol or index
-; Return #f if index out of range of symbol nonexistent
+; Return #f if index out of range or the symbol is non-existent
 (define (cellRef o)
   (if (integer? o)
-    (if (and (<= 0 o) (<= o CellMax)) (vector-ref Cells o) #f)
+    (if (cellValidIndex? o) (vector-ref Cells o) #f)
     (let ~ ((i 0)) ; Find the cell via symbol
       (if (< CellMax i) #f
       (let ((cell (vector-ref Cells i)))
@@ -142,6 +233,7 @@
         (~ (+ i 1))))))))
 
 ; Create a new cell and save in Cells table
+; Currently used by ultima4.cells
 (define (cellSet i symb glyph . flags)
   (vector-set! Cells i
     (if (null? (memq 'solid flags))
@@ -152,6 +244,17 @@
 ; Air is CellMax value.  Maybe it should be 0?
 (define (cellVisible? c)
  (and (<= 0 c) (< c CellMax)))
+
+(define (cellValidIndex? o) (and (<= 0 o) (<= o CellMax)))
+
+(define cellxx  (- CellMax 2))
+(define cellXX  (- CellMax 1))
+(define cellAIR CellMax)
+
+(cellSet cellxx  'xx  (Glyph 7  0 #\x  7  0 #\x) 'solid)
+(cellSet cellXX  'XX  (Glyph 7  0 #\X  7  0 #\X) 'solid)
+(cellSet cellAIR 'air (Glyph 3 12 #\A  4  3 #\r))
+
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -240,7 +343,7 @@
 ;; Field_object
 ;;
 ;; Fields are arrays of columns.  Columns are quasi-compressed stacks of cells
-;; that consist of a start height and specified stack of cells.  #(3 1 1 2) 
+;; that consist of a start height and specified stack of cells.  #(3 1 1 2)
 ;; would be cells (1 1 2) starting at z=4=(3+1). Cells below and above are
 ;; assumed to be the lowest and higest specified cells in the vector.  Setting
 ;; a cell outside the explicit stack range expands the actual vector and
@@ -265,8 +368,8 @@
   ; Scan down map column starting at z for first visibile cell.  Return height.
   (define (topHeight z y x)
    (letrec ((col (column y x))
-            (top    (columnHeightTop col)) ;1st implicit top cell in column
-            (bot    (+ (columnHeightBottom col) 1)));1st implicit bottom cell in col
+            (top (columnHeightTop col)) ;1st implicit top cell in column
+            (bot (+ (columnHeightBottom col) 1)));1st implicit bottom cell in col
     ; Adjust the z coor down to the first explicit cell in the column
     (let findNonAir~ ((z (if (<= top z) (- top 1) z)))
       (if (or (!= (columnRef col z) cellAIR)
@@ -307,6 +410,9 @@
      (lambda (y x)
        (vector-vector-set! field (+ y fieldy) (+ x fieldx)
           (vector-vector-ref cellAry y x)))))
+  ; Initialize the field with a default column
+  ;(WinChatDisplay "\r\nInitializing field...")
+  (reset (columnMake 0 cellXX cellAIR)) ; Initialize the canvas with a bogus cell and height to speed up initializing
   self) ; Field
 
 
@@ -317,58 +423,61 @@
 ;; coordinate (the top most visible cell relative to the user usually).
 ;;
 (define (Canvas field)
- (define (self msg) (eval msg))
- (define size (field 'size))
- (define fieldCell (field 'firstRef))
- (define fieldTopHeight (field 'topHeight))
- (define canvas (make-vector-vector size size #f))
- ; Initialize the canvas which is a vector of pairs (cellGlyph . cellHeight)
- ; walkDetails Genesis
- (define (reset ceilingHeight . defaultGlyph)
-   (set! defaultGlyph (if (null? defaultGlyph) #f (car defaultGlyph)))
-   (loop2 0 size 0 size (lambda (y x)
-     ; Each canvas entry consists of a map cell and its height.
-     (vector-vector-set! canvas y x
-       (if defaultGlyph
-         ; default pair
-         (cons defaultGlyph 0)
-         ; pair based on visible cell in field
-         (letrec ((t (fieldTopHeight ceilingHeight y x))
-                  (celli (fieldCell t y x)))
-           (cons (if (< CellMax celli)
-                     ((entitiesGet celli) 'glyph)
-                     (cellGlyph (cellRef celli)))
-                 t)))))))
- (define (glyph y x)
-   (car (vector-vector-ref canvas
-          (modulo y size)
-          (modulo x size))))
- (define (height y x) ; Map ipc::die
-   (cdr (vector-vector-ref canvas
-          (modulo y size)
-          (modulo x size))))
- (define (glyphSet y x c) ; Canvas
-   (set-car! (vector-vector-ref canvas
+  (define (self msg) (eval msg))
+  (define size (field 'size))
+  (define fieldCell (field 'firstRef))
+  (define fieldTopHeight (field 'topHeight))
+  (define canvas (make-vector-vector size size #f))
+  ; Initialize the canvas which is a vector of pairs (cellGlyph . cellHeight)
+  ; walkDetails Genesis
+  (define (reset ceilingHeight . defaultGlyph)
+    (set! defaultGlyph (if (null? defaultGlyph) #f (car defaultGlyph)))
+    (loop2 0 size 0 size (lambda (y x)
+      ; Each canvas entry consists of a map cell and its height.
+      (vector-vector-set! canvas y x
+        (if defaultGlyph
+          ; default pair
+          (cons defaultGlyph 0)
+          ; pair based on visible cell in field
+          (letrec ((t (fieldTopHeight ceilingHeight y x))
+                   (celli (fieldCell t y x)))
+            (cons (if (< CellMax celli)
+                      ((entitiesGet celli) 'glyph) ; An entity
+                      (cellGlyph (cellRef celli))) ; A cell
+                  t)))))))
+  (define (glyph y x)
+    (car (vector-vector-ref canvas
+           (modulo y size)
+           (modulo x size))))
+  (define (height y x) ; Map ipc::die
+    (cdr (vector-vector-ref canvas
+           (modulo y size)
+           (modulo x size))))
+  (define (glyphSet y x c) ; Canvas
+    (set-car! (vector-vector-ref canvas
+                (modulo y size)
+                (modulo x size))
+              c))
+  (define (heightSet y x h)
+   (set-cdr! (vector-vector-ref canvas
                (modulo y size)
                (modulo x size))
-             c))
- (define (heightSet y x h)
-  (set-cdr! (vector-vector-ref canvas
-              (modulo y size)
-              (modulo x size))
-            h))
- (define (render top y x) ; Map ipc::entity ipc::die !Field!
-  (let ((z (fieldTopHeight top y x))) ; Get z of first cell starting at top
-    (let ((celli (fieldCell z y x))) ; Field might contain an entity's dna
-      (glyphSet y x (if (< CellMax celli)
-                              (letrec ((ent (entitiesGet celli))
-                                       (sprite (ent 'sprite))
-                                       (ey (ent 'y))
-                                       (ex (ent 'x)))
-                                ((sprite 'glyphRef) (- y ey) (- x ex)))
-                              (cellGlyph (cellRef celli)))))
-    (heightSet y x z)))
- self) ; Canvas
+             h))
+  (define (render top y x) ; Map ipc::entity ipc::die !Field!
+   (let ((z (fieldTopHeight top y x))) ; Get z of first cell starting at top
+     (let ((celli (fieldCell z y x))) ; Field might contain an entity's dna
+       (glyphSet y x (if (< CellMax celli)
+                               (letrec ((ent (entitiesGet celli))
+                                        (sprite (ent 'sprite))
+                                        (ey (ent 'y))
+                                        (ex (ent 'x)))
+                                 ((sprite 'glyphRef) (- y ey) (- x ex)))
+                               (cellGlyph (cellRef celli)))))
+     (heightSet y x z)))
+  ;(WinChatDisplay "\r\nInitializing canvas...")
+  ; Initialize the canvas
+  (reset 10 (cellGlyph (cellRef cellxx)))
+  self) ; Canvas
 
 
 
@@ -391,11 +500,11 @@
     (define canvasSize (canvas 'size))
     (define canvasGlyph (canvas 'glyph))
     (define mapY 0) ; Map location of viewport origin
-    (define mapX 0) ; 
+    (define mapX 0) ;
     (define winHeight 0)
     (define winWidth 0)
     (define mapCenterY 0) ; Map location of viewport center
-    (define mapCenterX 0) ; 
+    (define mapCenterX 0) ;
     (define NextDrawTime (utime))
     (define (plot glyph y x)
       ; The glyph index is based on the time which cycles to the next one every second.
@@ -423,10 +532,6 @@
         (plot (canvasGlyph (+ mapY y) (+ mapX x))
                       y (* x 2))))
       (unlock)) ; TODO This shouldn't be such an all encompasing lock.
-    (define (animationAgentLoop)
-      (sleep 1000)
-      (and VIEWPORTANIMATION (< NextDrawTime (utime)) (reset mapCenterY mapCenterX))
-      (animationAgentLoop))
     ; The cell position and viewport position (upper left corner) are on a torus
     ; coordinate system (wrap along the two dimensions).  I want to render to
     ; the screen cells plotted within the viewport .  I can do this by shifting
@@ -443,8 +548,13 @@
          ((Terminal 'lock)) ; This shouldn't be such an all encompasing lock.
          (plot (canvasGlyph gy gx) y (* x 2))
          ((Terminal 'unlock)))))) ; This shouldn't be such an all encompasing lock.
+    (define (animationAgentLoop)
+      (sleep 1000)
+      (and VIEWPORTANIMATION (< NextDrawTime (utime)) (reset mapCenterY mapCenterX))
+      (animationAgentLoop))
     ; Disable cursor in map window
     (cursor-visible #f)
+    ;(WinChatDisplay "\r\nInitializing viewport...")
     self))) ; Viewport
 
 
@@ -452,26 +562,27 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Map_object
 ;;
-;;  Composed of Glyphs, Cells, Columns, a Field, a Canvas and a
-;;  Viewport.
+;;  Composed of:  glyphs cells columns field canvas viewport IPC
+;;
 
-(define (Map fieldSize)
+(define (Map fieldSize ipc)
   (define (self msg) (eval msg))
   ; The objects which make up a map object
   (define myField (Field fieldSize))
   (define myCanvas (Canvas myField))
   (define myViewport (Viewport myCanvas))
-  ; Some nice aliases
-  (define fieldReset (myField 'reset)) ; Genesis
+  ; Often used aliases
+  (define ipcRead ((ipc 'newReader)))
+  (define ipcWrite (ipc 'qwrite))
   (define fieldCeiling (myField 'ceiling)) ; walkDetails
   (define fieldAdd (myField 'add))
   (define fieldDelete (myField 'delete))
-  ; Drop a cell on the map
-  (define (mapDropCell y x cell)
-   (let ((z (+ 1 (fieldTopHeight 100 y x))))
-    ((myField 'fieldSet!) z y x cell)
-    (canvasRender 100 y x)
-    (viewportRender y x)))
+  ;; Drop a cell on the map  *TODO this references nonexistant global function*
+  ;(define (mapDropCell y x cell)
+  ; (let ((z (+ 1 (fieldTopHeight 100 y x))))
+  ;  ((myField 'fieldSet!) z y x cell)
+  ;  (canvasRender 100 y x)
+  ;  (viewportRender y x)))
   ; Set map cell and force rendering of cell through entire pipeline.
   (define (setCell z y x cell)
     ((myField 'fieldSet!) z y x cell)
@@ -542,13 +653,14 @@
     (if centerMap (viewportReset y x))
     (if (WinColumn 'ENABLED) (dumpColumnInfo y x)))
   ; Given a cell index or entity DNA value, move it in the field, canvas and viewport.
-  (define MAP-MOVE-CELL-SEMAPHORE (open-semaphore 1))
-  (define (moveObject cell zo yo xo z y x centerMap)
-    (semaphore-down MAP-MOVE-CELL-SEMAPHORE)
-    (if (< CellMax cell)
-      (moveEntitySprite cell zo yo xo z y x centerMap)
-      (moveCell            cell zo yo xo z y x))
-    (semaphore-up MAP-MOVE-CELL-SEMAPHORE))
+  (define moveObject
+    (let ((MAP-MOVE-CELL-SEMAPHORE (open-semaphore 1)))
+    (lambda (cell zo yo xo z y x centerMap)
+      (semaphore-down MAP-MOVE-CELL-SEMAPHORE)
+      (if (cellValidIndex? cell)
+        (moveCell         cell zo yo xo z y x) ; Move cell
+        (moveEntitySprite cell zo yo xo z y x centerMap)) ; Move entity
+      (semaphore-up MAP-MOVE-CELL-SEMAPHORE))))
   ; Make Map window circular
   (define (circularize . val)
    (set! val (not (null? val))) ; Default to disabling circular corners of map.
@@ -569,7 +681,7 @@
       (~ y (+ x 1)))))))
   ; The 2d vector of columns will most likely come from a map agent.
   ; The map block coordinate and map block size is also passed.
-  (define (updateColumns y x blockSize cellAry) ; Called from map agent via IPC
+  (define (updateColumnsIPC y x blockSize cellAry) ; Called from map agent via IPC
     (let ((fieldy (modulo y fieldSize))
           (fieldx (modulo x fieldSize)))
      ; Update the field block
@@ -578,6 +690,10 @@
      (loop2 fieldy (+ fieldy blockSize)
             fieldx (+ fieldx blockSize)
             (lambda (y x) (canvasRender 100 y x)))))
+  (define (moveIPC dna z y x)
+   (or (= dna DNA) ; Skip if this is me since map rendering is handled during movement handling
+       (let ((entity (entitiesGet dna)))
+         (if entity (moveEntity entity z y x)))))
   (define fieldFirstCell (myField 'firstRef))
   (define baseCell       (myField 'baseRef))
   (define viewportReset  (myViewport 'reset))
@@ -586,7 +702,18 @@
   (define canvasReset    (myCanvas 'reset))
   (define canvasHeight   (myCanvas 'height))
   (define canvasRender   (myCanvas 'render))
+  ;(WinChatDisplay "\r\nInitializing map...")
   (circularize)
+  ; IPC message handler
+  (thread (let ~ ()
+    (let ((e (ipcRead)))
+      (WinConsoleDisplay " [map<-" (car e)"]")
+      ; IPC message (move dna z y x)
+      (if (pair? e) (begin
+        (if (eq? (car e) 'move)             (apply moveIPC (cdr e))
+        (if (eq? (car e) 'mapUpdateColumns) (apply updateColumnsIPC (cdr e))
+        (if (eq? (car e) 'mapSetCell)       (apply setCell (cdr e)))))))
+      (~))))
   self) ; Map
 
 
@@ -599,18 +726,19 @@
 ; Association list of entites to their DNA values.
 (define EntityDB ())
 
-(define (entitiesAdd entity)
+(define (entitiesAdd entity) ; Genesis:add avatar  entitiesSet
  (set! EntityDB (cons (cons (entity 'dna) entity) EntityDB)))
 
-; Lookup entity in database.
+; Lookup entity in database. TODO use hastable
 (define (entitiesGet dna)
   (let ((entity (assv dna EntityDB)))
     (if (null? entity) #f (cdr entity))))
 
-(define (entitiesSet dna . args)
+(define (entitiesSet dna . args) ; IPC:Entity
   (let ((entity (entitiesGet dna)))
     (if entity
-      (each-for args ; Update only name and glyph if entity already exists
+      ; Update only name and glyph if entity already exists
+      (each-for args
         (lambda (a)
           (if (integer? a)   ((entity 'setPort) a)
           (if (string? a)    ((entity 'setName) a)
@@ -621,8 +749,8 @@
           (if (procedure? a) (begin
                 (mapDelEntitySprite dna (entity 'z) (entity 'y) (entity 'x)) ; Remove it first from the map
                 ((entity 'setSprite) a)))))))) ; TODO BF sprite update mechanism stinks
+      ; Create a new entity.  Massage the arguments (port name glyph (x y z))->(port name glyph x y z)
       (begin
-        ; Create a new entity.  Massage the arguments (port name glyph (x y z))->(port name glyph x y z)
         (set! entity (apply Entity dna (let ~ ((args args))
                                          (if (pair? (car args)) (car args)
                                              (cons (car args) (~ (cdr args)))))))
@@ -632,12 +760,13 @@
 
 ; The user's avatar.  An extended entity object that includes positioning and directional observation vectors
 (define (Avatar port name z y x) ; Inherits Entity
- ((Entity (random) port name z y x)
-  `(let () ; This let block is passed in as the inheriting child object
+ (((Entity (random) port name z y x) 'inherit) ; Parent
+  () ; no args to child
+  (macro () ; Child
     (define (self msg) (eval msg))
     (define cell 19) ; TODO replace with a generalize item container
     (define dir 0)
-    (define tz 0) ; Translation coordinates 
+    (define tz 0) ; Translation coordinates
     (define ty 0)
     (define tx 0)
     (define (look ndir . rloc) ; Look in a direction plus a relative (not rotational) zyx location
@@ -780,23 +909,25 @@
 (define sigwinch
  (let ((count 0)
        (sem (open-semaphore 1))) (lambda ()
+   ; Either inc count because already redrawing or start
+   ; redraw loop while more potential requests occur
    (semaphore-down sem)
-   (set! count (+ count 1))
-   ; Either already redrawing but still keep track of the count or
-   ; enter redraw state while more incoming requests occur.
-   (if (!= count 1)
-     (semaphore-up sem) ; Done
+   (if (!= 0 count)
+     (begin
+       (set! count (+ count 1))
+       (semaphore-up sem)) ; Done
      (let ~ ()
+       (set! count 1)
        (semaphore-up sem)
-       (handleTerminalResize) ; Count always at 1 here but might increase after returning
+       (handleTerminalResize) ; Count may increase during this call
        (semaphore-down sem)
-       (set! count (- count 1))
-       ; Either no more redraw requests so done or reset counter to 1 and redraw again
-       (if (= 0 count)
-         (semaphore-up sem) ; Done
+       ; Either no more redraw requests so done or redraw again while resetting count to 1
+       (if (= 1 count)
+         (begin
+           (set! count 0)
+           (semaphore-up sem)) ; Done
          (begin
            (WinConsoleDisplay "  count " count)
-           (set! count 1)
            (~))))))))
 
 (signal-set 28 (lambda () (sigwinch) (unthread)))
@@ -900,87 +1031,6 @@
 
 
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; Keyboard_mouse
-;;
-(define keyDispatcherStack ())
-(define (keyDispatcherRegister fn) (set! keyDispatcherStack (cons fn keyDispatcherStack)))
-(define (keyDispatcherUnRegister fn) (set! keyDispatcherStack (list-delete keyDispatcherStack fn)))
-(define (keyDispatcher c)
-  ;(WinChatDisplay "\r\n keyDispatcher  c=" c)
-  (if (pair? keyDispatcherStack)
-      ((car keyDispatcherStack) c)))
-
-; Vector of fuctions accepting (action y x).  TODO only 128 windows supported
-(define mouseDispatchVector (make-vector 128 #f))
-(define (mouseDispatcherRegister id fn) (vector-set! mouseDispatchVector id fn)) ; was mouseActionRegister
-(define (mouseDispatcherUnRegister id fn) (vector-set! mouseDispatchVector id #f))
-(define (mouseDispatcher event y x)
-  (letrec ((win ((Terminal 'topWin) y x))
-           (id (if win (win 'id) #f))
-           (fn (if id (vector-ref mouseDispatchVector id) #f)))
-  ;(WinChatDisplay "\r\n mouseDispatcher  event=" event " y=" y " x=" x " winid=" id "  fn=" fn)
-  (if fn (fn event (- y (win 'Y0)) (- x (win 'X0))))))
-
-; This needs to be called in a separate thread
-(define (keyScannerAgentLoop)
- (let ((c (read-char #f stdin)))
-   (if (eq? c CHAR-ESC)
-     (keyScannerEsc) ; Escape char so attempt to read an escape sequence
-     (keyDispatcher c)) ; Add new keyboard character to queue
-   (keyScannerAgentLoop))) ; rinse and repeat
-
-; An "\e" scanned
-(define (keyScannerEsc)
- (let ((c (read-char 500 stdin))) ; Timeout after half a second.  Will return #f.
-   (if (eq? c #\[)
-     (keyScannerEscBracket)
-   (if (eq? c CHAR-ESC)
-     (begin
-       (keyDispatcher CHAR-ESC)
-       (keyScannerEsc))
-   (if (not c) ; Timed out so accept escape char and start over
-       (keyDispatcher CHAR-ESC)
-   (begin ; Not a recognized escape sequence, so send escape and the [ character
-     (keyDispatcher CHAR-ESC)
-     (keyDispatcher c)))))))
-
-; An "\e[" scanned
-(define (keyScannerEscBracket)
-  (let ((c (read-char #f stdin)))
-    (if (eq? c #\A) (keyDispatcher 'up)
-    (if (eq? c #\B) (keyDispatcher 'down)
-    (if (eq? c #\C) (keyDispatcher 'right)
-    (if (eq? c #\D) (keyDispatcher 'left)
-    (if (eq? c #\M) (keyScannerEscBracketM)
-    (begin ; Not an arrow key sequence, so send all the character to the key queue
-      (keyDispatcher CHAR-ESC) 
-      (keyDispatcher #\[) 
-      (keyDispatcher c)))))))))
-
-; An "\e[M" has been scanned
-(define (keyScannerEscBracketM)
- (letrec ((c (read-char #f stdin))
-          (action (if (eq? c #\ ) 'mouse0
-                  (if (eq? c #\!) 'mouse2
-                  (if (eq? c #\") 'mouse1
-                  (if (eq? c #\#) 'mouseup
-                  'mouse)))))
-          (x (- (read-char #f stdin) #\  1))
-          (y (- (read-char #f stdin) #\  1)))
-  (mouseDispatcher action y x)))
-
-; Base keyboard read queue.  Continuously read stdin and append to a FIFO.
-; Call getKey to read it.  It is possible that another dispatcher has been
-; registered and captures characters before this.
-; TODO move this to terminal class
-(define KeyQueue (QueueCreate))
-(define (getKey) (QueueGet KeyQueue))
-(define (keyQueueAdd c) (QueueAdd KeyQueue c)) ; List of characters and button symbols
-(keyDispatcherRegister keyQueueAdd)
-
-
-
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Button_commands
 ;;
@@ -1035,7 +1085,7 @@
 (define (walkDetails)
   ; Update avatar locally in the field/canvas/viewport and via IPC
   (apply moveEntity avatar ((avatar 'gpsLook)))
-  (ipcWrite (list 'move DNA (avatar 'z) (avatar 'y) (avatar 'x)))
+  (IpcWrite (list 'move DNA (avatar 'z) (avatar 'y) (avatar 'x)))
   (letrec ((cellNum (apply mapBaseCell ((avatar 'gps))))
            (baseSym (cellSymbol (cellRef cellNum))))
     (if (and (<= 512 cellNum) (<= cellNum 612)) (WinChatDisplay "\r\n" (twoLetterDefinition baseSym))
@@ -1065,10 +1115,10 @@
     ((avatar 'look) dir)
     (let ((nextCell (apply mapFirstCell ((avatar 'gpsLook)))))
       ; Case 1 push entity
-      (if (and #f (< CellMax nextCell))
-        (ipcWrite `(force ,@((avatar 'gpsLook)) ,dir 10))
+      (if (< CellMax nextCell)
+        (IpcWrite `(force ,@((avatar 'gpsLook)) ,dir 10))
       ; Case 2 walk normally
-      (if (or #t (or EDIT (not (cellSolid? (cellRef nextCell))))) ; TODO this always true
+      (if (or EDIT (not (cellSolid? (cellRef nextCell)))) ; TODO this always true
         (walkDetails)
       ; Case 3 step up
       (begin
@@ -1090,7 +1140,7 @@
 
 ; Notify IPC of my name and glyph change
 (define (changeName str)
-  (ipcWrite
+  (IpcWrite
    (list 'entity DNA str
             (Glyph (glyph0bg (avatar 'glyph))
                    (glyph0fg (avatar 'glyph))
@@ -1100,9 +1150,9 @@
                    (string-ref str (if (< 1 (string-length str)) 1 0)))))) ; Notify IPC of my name change
 
 (define (rollcall)
- (ipcWrite ; Force all to evaluate the following
+ (IpcWrite ; Force all to evaluate the following
   `(if (!= DNA ,DNA) ; Skip if I sent this message
-   (ipcWrite ; Force all (except me) to evaluate the following
+   (IpcWrite ; Force all (except me) to evaluate the following
     `(if (= DNA ,,DNA) ; If me, evaluate this expression from the other peer
      (voice 0 10
       (string ,(avatar 'name) " "
@@ -1117,13 +1167,13 @@
    ; Send to map agent. If map agent doesn't respond
    ; then ignore it just send to everyone.
    (or ((ipc 'private) PortMapAgent `(setCellAgent ,(avatar 'z) ,(avatar 'y) ,(avatar 'x) ,cell))
-     (begin 
-       (set! PortMapAgent #f)
+     (begin
+       (set! PortMapAgent #f) ; No response so unset the port and recurse
        (buttonSetCell)))
    ; Send to everyone
-   (ipcWrite `(mapSetCell ,(avatar 'z) ,(avatar 'y) ,(avatar 'x) ,cell))))
+   (IpcWrite `(mapSetCell ,(avatar 'z) ,(avatar 'y) ,(avatar 'x) ,cell))))
 
-(define (mouseWalkAction action wy wx)
+(define (mouseWalkActionHandler action wy wx)
  (if (eq? action 'mouse0)
  (letrec ((mapy (+ (myViewport 'mapY) wy))
           (mapx (+ (myViewport 'mapX) (/ wx 2))))
@@ -1154,7 +1204,7 @@
  (if (pair? (memv c (list CHAR-ESC TAB #\C #\c #\q #\Q)))
     (avatarColorToggle)
  (if (pair? (memv c (list RETURN NEWLINE SPACE)))
-   (mouseColorsAction 'mouse0 (car CursorYX) (cdr CursorYX))
+   (mouseColorsActionHandler 'mouse0 (car CursorYX) (cdr CursorYX))
  (let ((y (car CursorYX))
        (x (cdr CursorYX)))
    (if (eq? c #\j)
@@ -1175,7 +1225,7 @@
      ((WinPalette 'move)       (WinPalette 'Y0) (+  1 (WinPalette 'X0)))))))))))
    (updatePaletteCursor y x)))))
 
-(define (mouseColorsAction action wy wx) ; Was (mouseHandler)
+(define (mouseColorsActionHandler action wy wx) ; Was (mouseHandler)
  (if (eq? action 'mouse0)
  (letrec ((clr (/ ((WinPalette 'getColor) wy wx) 256)))
 
@@ -1188,7 +1238,7 @@
        (WinPaletteColor (car lst) 0)
        (WinPaletteDisplay #\ )
        (~ (+ i 1) (cdr lst)))))))
-   
+
    (updatePaletteCursor wy wx)
 
    (WinPaletteGoto 8 0) (WinPaletteColor 0 7)(WinPaletteDisplay "                                    ")
@@ -1201,7 +1251,7 @@
    (WinPaletteGoto 8 30) (WinPaletteColor #xf clr) (WinPaletteDisplay "**XX")
    ;(WinChatDisplay "\r\n" wy " " wx " New color=" clr)
    (let ((glyph (avatar 'glyph)))
-     (ipcWrite (list 'entity DNA 
+     (IpcWrite (list 'entity DNA
                       (Glyph
                         (glyph0bg glyph) clr (glyph0ch glyph)
                         (glyph1bg glyph) clr (glyph1ch glyph))))))))
@@ -1312,14 +1362,8 @@
 ;; Incomming_IPC_messages
 ;;
 (define (who . dna) ; TODO handle explicit request from specified peer
-  (ipcWrite
+  (IpcWrite
     `(entity ,DNA ,(avatar 'port) ,(avatar 'name) ',((avatar 'gps)))))
-
-; Update an entity's location
-(define (move dna z y x)
- (or (= dna DNA) ; Skip if this is me since map rendering is handled during movement handling
-     (let ((entity (entitiesGet dna)))
-       (if entity (moveEntity entity z y x)))))
 
 ; Update one or more of an entity's attribute: dna port name glyph z y x
 (define (entity dna . args)
@@ -1369,10 +1413,13 @@
     (WinChatDisplay "\r\n" (if (null? entity) "???" (entity 'name)) VOICEDELIMETER)
     (WinChatSetColor (glyph1bg glyph) (glyph1fg glyph))
     (WinChatDisplay text)))
- (if (and (!= dna DNA) (eqv? text "unatco")) (say "no Savage")))
+ (if (and (!= dna DNA) (eqv? text "unatco"))
+     (say "no Savage")))
 
-;define mapUpdateColumns "defined below"
-;define mapSetCell "define below
+; These moved to Map object
+(define move list) ; Update an entity's location. Moved to Map object
+(define mapUpdateColumns list)
+(define mapSetCell list)
 
 
 
@@ -1380,16 +1427,16 @@
 ;; Typing_and_talking
 ;;
 (define (say talkInput . level)
- (ipcWrite (list 'voice DNA (if (null? level) 10 (car level)) (apply string (display->strings talkInput)))))
+ (IpcWrite (list 'voice DNA (if (null? level) 10 (car level)) (apply string (display->strings talkInput)))))
 
 (define (saySystem talkInput)
- (ipcWrite (list 'voice 0 10 talkInput)))
+ (IpcWrite (list 'voice 0 10 talkInput)))
 
 (define (sayHelloWorld)
- (saySystem (string
-     (avatar 'name)
-     " says "
-     (vector-random #("*PUSH* *SQUIRT* *SPANK* *WAAAAAAAAA*" "*All Worldlians Want to Get Borned*" "*Happy Birthday*" "*I thought you were in Hong Kong*")))))
+ (saySystem (string (avatar 'name)
+  (vector-random #(" emerges from the Interwebs" " turns on a VT100" " CONNECT 2400" " CONNECT 14400/ARQ/V34/LAPM/V42BIS"))
+  ;" says " (vector-random #("*PUSH* *SQUIRT* *SPANK* *WAAAAAAAAA*" "*All Worldlians Want to Get Borned*" "*Happy Birthday*" "*I thought you were in Hong Kong*"))
+ )))
 
 (define (sayByeBye)
   (saySystem (string (avatar 'name) " exits")))
@@ -1476,7 +1523,7 @@
           (happyVector (vector 0 0 0 0 0 0 0 0))
           (dist 0))
  ; Tell everyone who this kitteh is.
- (ipcWrite `(entity ,(kitty 'dna) 0 "kitty" ',((kitty 'gps))))
+ (IpcWrite `(entity ,(kitty 'dna) 0 "kitty" ',((kitty 'gps))))
  (let ~ ((tic 0)) ; Main loop
    ; Distance from parent avatar
    (set! dist (distance ((kitty 'gps)) ((avatar 'gps))))
@@ -1498,15 +1545,15 @@
             (if (< kd dist) 1
             (if (= kd dist) -1 -2)))
           (vector-ref happyVector (kitty 'dir))))
-   (ipcWrite `(move ,(kitty 'dna) ,@((kitty 'gps))))
+   (IpcWrite `(move ,(kitty 'dna) ,@((kitty 'gps))))
    (sleep 200)
    (if (equal? ((kitty 'gps)) ((avatar 'gps))) ; If avatar and kitty meet...
      (begin
-        (ipcWrite `(voice ,(kitty 'dna) 10 "Hiss!"))
+        (IpcWrite `(voice ,(kitty 'dna) 10 "Hiss!"))
         (set! tic (+ cycles 30))))
    ; Kill entity or loop again
    (if (> tic (+ cycles (random 30)))
-       (ipcWrite `(die ,(kitty 'dna)))
+       (IpcWrite `(die ,(kitty 'dna)))
        (~ (+ tic 1))))))
 
 (define march (let ((walkForeverFlag #f)) (lambda ()
@@ -1557,7 +1604,7 @@
     (if (and (> strLen 11) (string=? "my name is " (substring talkInput 0 11)))
       (thread (changeName (substring talkInput 11 strLen))))))
  (if tankIsListening (begin
-   (if (string=? "who" talkInput) (ipcWrite '(say "I'm here!")))
+   (if (string=? "who" talkInput) (IpcWrite '(say "I'm here!")))
    (if (string=? "load the jump program" talkInput) (tankTalk "I can't find the disk")
    (if (string=? "march" talkInput) (thread (march))
    (if (string=? "edit" talkInput) (begin (set! EDIT (not EDIT)) (tankTalk "Edit mode " EDIT))
@@ -1721,7 +1768,7 @@
   ((ball 'setLoc) (avatar 'z) (avatar 'y) (avatar 'x))
   (set! oy (* (/ (avatar 'y) MapBlockSize) MapBlockSize)) ; Origin of this map block
   (set! ox (* (/ (avatar 'x) MapBlockSize) MapBlockSize))
-  (ipcWrite `(entity ,(ball 'dna) ,(ball 'port) ,(ball 'name) ',((ball 'gps))))
+  (IpcWrite `(entity ,(ball 'dna) ,(ball 'port) ,(ball 'name) ',((ball 'gps))))
   (sleep 500)
   (let ~ ((wall 0)) (if power (begin
     (if (= wall 0) (begin (set! m (random MapBlockSize)) (set! n (- MapBlockSize 1)))
@@ -1735,7 +1782,7 @@
         (if (= cellAIR (apply mapFirstCell ((ball 'gpsLook))))
           (begin
             (apply moveEntity ball ((ball 'gpsLook)))
-            (ipcWrite (list 'move (ball 'dna) (ball 'z) (ball 'y) (ball 'x)))
+            (IpcWrite (list 'move (ball 'dna) (ball 'z) (ball 'y) (ball 'x)))
             (sleep 100)
             (if power (~ (cdr l))))
           (set! wall (+ 1 wall))))))
@@ -1749,47 +1796,34 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Genesis
 ;;
-
-; Initial cell indices and glyphs
-(define cellWATER1 1)
-(define cellBRICK  19)
-(define cellXX     (- CellMax 1))
-(define cellAIR    CellMax)
-
-(define glyphXX  (Glyph 7  0 #\X  7  0 #\X))
-(define glyphAIR (Glyph 3 12 #\A  4  3 #\r))
-
-(cellSet cellXX  'xx  glyphXX 'solid)
-(cellSet cellAIR 'air glyphAIR)
-
 (load "ultima4.cells")
 (load "scrabble.scm") ; TODO temporary
 
+; Create ipc object.  Pass in a debug message output port (can be empty lambda)
+(define ipc (Ipc WinConsoleDisplay))
+(ipc '(set! Debug #f))
+(define IpcRead ((ipc 'newReader)))
+(define IpcWrite (ipc 'qwrite))
+
+; Start keyboard and mouse reader agents
+(thread (keyScannerAgentLoop))
+
 ; Initialize map object
-(define myMap (Map 256))
-(define myViewport (myMap 'myViewport)) ; Genesis moveEntity handleTerminalResize mouseWalkAction winMapBigger/move
+(define myMap (Map 256 ipc))
+(define myViewport (myMap 'myViewport)) ; Genesis moveEntity handleTerminalResize mouseWalkActionHandler winMapBigger/move
 (define mapDelEntitySprite (myMap 'delEntitySprite)) ; entitiesSet die
 (define mapMoveObject      (myMap 'moveObject)) ; moveEntity entity
 (define mapFirstCell       (myMap 'fieldFirstCell)) ; dumpColumnInfo walk fall Pong
 (define mapBaseCell        (myMap 'baseCell)) ; dumpColumnInfo walk grab pacman
 (define mapViewportReset   (myMap 'viewportReset)) ; winMapResize ^L Genesis
 (define mapViewportRender  (myMap 'viewportRender)) ; entity Die
-(define mapCanvasReset     (myMap 'canvasReset)) ; Genesis walkDetails
+(define mapCanvasReset     (myMap 'canvasReset)) ; walkDetails
 (define mapCanvasHeight    (myMap 'canvasHeight)) ; die
-(define mapCanvasRender    (myMap 'canvasRender)) ; entity die mapUpdateColumns
-; Incomming_IPC_messages
-(define mapUpdateColumns   (myMap 'updateColumns))
-(define mapSetCell         (myMap 'setCell)) ; buttonSetCell
-
-((myMap 'fieldReset) (columnMake 0 cellXX cellAIR))
-(mapCanvasReset 100 glyphXX)
-
-; Start keyboard and mouse reader agents
-(thread (keyScannerAgentLoop))
+(define mapCanvasRender    (myMap 'canvasRender)) ; entity die
 
 ; Register windows and action handlers for mouse events
-(mouseDispatcherRegister (myViewport 'id)  mouseWalkAction)
-(mouseDispatcherRegister (WinPalette 'id)  mouseColorsAction)
+(mouseDispatcherRegister myViewport mouseWalkActionHandler)
+(mouseDispatcherRegister WinPalette mouseColorsActionHandler)
 
 (or QUIETLOGIN (begin
  ; Welcome marquee
@@ -1798,17 +1832,18 @@
  (let ((name (boxInput "Enter your name")))
    (or (eq? name "") (set! NAME name)))))
 
-; Create ipc object.  Pass in a debug message output port (can be empty lambda)
-(define ipc (Ipc WinConsoleDisplay))
-(ipc '(set! Debug #f))
-(define ipcReadQueue ((ipc 'newReader)))
-(define ipcWrite (ipc 'qwrite))
+; Avatar creation
+; TODO does the private port make sense when there will be more
+; than one entity/IPCreader?
+(define avatar
+  (Avatar (ipc 'PrivatePort) NAME 99 3456 2751))
 
-; Create avatar object and add to entity list
-(define avatar (Avatar (ipc 'PrivatePort) NAME 99 3456 2751))
+(entitiesAdd avatar) ; TODO entity store concept needs to be redone
+
+(set! DNA (avatar 'dna)) ; Copy my avatar's DNA value to the global variable
 
 (define (setSprite x)
- (ipcWrite (list 'entity DNA 
+ (IpcWrite (list 'entity DNA
   (if (= x 0)
     `(Sprite 1 1 ,(vector (avatar 'glyph)))
   (if (= x 1)
@@ -1824,10 +1859,8 @@
                    #(0 15 #\| 0 15 #\|)
                    #(0 15 #\| 0 15 #\|)))))))))
 
-(entitiesAdd avatar)
-(set! DNA (avatar 'dna))
 (moveEntity avatar 1 3456 2751) ; Move avatar to entrance of Lord British's castle near 108 86
-(mapViewportReset    3456 2751) ; Must reset the viewport to initialize synchronize location with avatar
+;(mapViewportReset    3455 2751) ; Once had to reset the viewport to initialize synchronize avatar location
 
 ; Display some initial information
 (or QUIETLOGIN (begin
@@ -1846,7 +1879,7 @@
  (let ((s (call/cc (lambda (c) (vector-set! ERRORS (tid) c) 'starting))))
     (or (eq? s 'starting) (WinChatDisplay "\r\nIPC-REPL-ERROR::" s)))
  (let ~ ()
-  (let ((sexp (QueueGet ipcReadQueue)))
+  (let ((sexp (IpcRead)))
      (eval sexp)
      (~))))
 
@@ -1855,7 +1888,7 @@
 
 (define (shutdown)
   (or QUIETLOGIN (sayByeBye))
-  (ipcWrite `(die ,DNA)) ; Kill avatar's entity
+  (IpcWrite `(die ,DNA)) ; Kill avatar's entity
   (sleep 1000) ; wait for ipc to flush
   (displayl "\e[" (Terminal 'Theight) "H\r\n\e[0m\e[?25h\e[?1000l")
   (quit))
@@ -1870,7 +1903,7 @@
 (signal-set 15 (lambda () (say "signal 15 TERM")  (shutdown)))
 
 (or QUIETLOGIN (sayHelloWorld))
-(ipcWrite '(who))
+(IpcWrite '(who))
 
 (wrepl)
 (shutdown)

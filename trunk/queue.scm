@@ -21,12 +21,24 @@
     (set-cdr! head (cons e (cdr head))))
   (semaphore-up (vector-ref l 0)))
 
+; Delete first list element that is eqv to e
 (define (ListDel l e)
   (semaphore-down (vector-ref l 0)) ; Critical section
   (let ~ ((lst (vector-ref l 1))
           (nxt (cdr (vector-ref l 1))))
     (if (pair? nxt)
         (if (eqv? (car nxt) e)
+            (set-cdr! lst (cdr nxt))
+            (~ nxt (cdr nxt)))))
+  (semaphore-up (vector-ref l 0)))
+
+; Delete first list element which passes the call to pred
+(define (ListDelFn l pred)
+  (semaphore-down (vector-ref l 0)) ; Critical section
+  (let ~ ((lst (vector-ref l 1))
+          (nxt (cdr (vector-ref l 1))))
+    (if (pair? nxt)
+        (if (pred (car nxt))
             (set-cdr! lst (cdr nxt))
             (~ nxt (cdr nxt)))))
   (semaphore-up (vector-ref l 0)))
@@ -38,8 +50,8 @@
 ; This is considered an empty queue.  The last read
 ; item will continue to exist as a placeholder.
 ;
-; The first semaphore is serialize internal access
-; and the second is to count waiting messages.
+; The first semaphore serializes internal access
+; and the second counts waiting queued messages.
 ;
 ; #( *  SEM  SEM  *-)---->( queue . () )
 ;    `--------------^

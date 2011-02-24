@@ -2018,7 +2018,8 @@ void sysRecv (void) {
 }
 
 void sysReadChar (void) {
-	DB("-->%s", __func__);
+	DB("::%s", __func__);
+	if (wscmAssertArgumentCount(2, __func__)) return;
 	r1=pop(); /* Port object */
 	r2=pop(); /* Timout */
 	if (memObjectType(r1) != TSOCKET
@@ -2030,12 +2031,12 @@ void sysReadChar (void) {
 		r3=null;  /* tells recv that we just want a character. */
 		wscmRecvBlock();
 	}
-	DB("<--%s", __func__);
+	DB("  --%s", __func__);
 }
 
 void sysUnreadChar (void) {
 	DB("-->%s()", __func__);
-	if (wscmAssertArgumentCountRange(2, 2, __func__)) return;
+	if (wscmAssertArgumentCount(2, __func__)) return;
 	r1=pop(); /* Port. */
 	r0=pop(); /* Character. */
 	if (memObjectType(r1) != TSOCKET && memObjectType(r1) != TPORT) {
