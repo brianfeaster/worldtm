@@ -30,8 +30,8 @@
 ;;
 (load "ipc.scm")
 (define ipc (Ipc #f)) ; Instead of #f can pass in a serializer for debug messages
-(define ipcReadQueue ((ipc 'newReader)))
-(define ipcWrite (ipc 'qwrite))
+(define ipcReader ((ipc 'newReader)))
+(define IpcWrite (ipc 'qwrite))
 
 (define (makeCounter i)
  (lambda ()
@@ -230,7 +230,7 @@
       (displayl "\r\nSending block " (list y x) " to " (e 'name) ":" (e 'port) ":" ((e 'counter))) ; DEBUG
       ((ipc 'private) (e 'port) ; Send the block to the peer
          `(mapUpdateColumns ,(* y MapBlockSize) ,(* x MapBlockSize) ,MapBlockSize ,(getMapBlock y x #t)))))
-  ((ipc 'private) (e 'port) '(ipcWrite '(who))))) ; Force the peer to request roll call from everyone
+  ((ipc 'private) (e 'port) '(IpcWrite '(who))))) ; Force the peer to request roll call from everyone
 
 ; Determine if the coordinate is above or below the inner field block area.
 ; An avatar that moves outside of the inner field range will cause the
@@ -291,7 +291,7 @@
 ;; Incomming_IPC_messages
 ;;
 (define (who . dna)
- (ipcWrite
+ (IpcWrite
  `(entity ,DNA ,(avatar 'port) ,(avatar 'name) ',((avatar 'gps)))))
 
 (define (entity dna . args)
@@ -377,7 +377,7 @@
            (column (vector-vector-ref block by bx)))
     (vector-vector-set! block by bx (columnSet column z cell))
     (saveMapBlock (/ y MapBlockSize) (/ x MapBlockSize) block)
-    (ipcWrite `(mapSetCell ,z ,y ,x ,cell))))
+    (IpcWrite `(mapSetCell ,z ,y ,x ,cell))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -386,13 +386,13 @@
 (define log (open-file "talk.log"))
 (seek-end log 0)
 
-(ipcWrite '(who)) ; Force everyone, including this map agent, to identify themselves
+(IpcWrite '(who)) ; Force everyone, including this map agent, to identify themselves
 
 (thread 
  (let ((s (call/cc (lambda (c) (vector-set! ERRORS (tid) c) '*))))
     (or (eq? s '*) (displayl "\nIPC-REPL-ERROR::" s)))
  (let ~ () 
-  (let ((e (QueueGet ipcReadQueue)))
+  (let ((e (ipcReader)))
      (display "\n\e[1;30mIPC::")
      (write e)
      (display "\e[0m")

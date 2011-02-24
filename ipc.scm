@@ -24,7 +24,7 @@
                       (quit))
                (~)))))))
  (define PeerList (ListCreate))
- (define QueueList (ListCreate))
+ (define QueueList (ListCreate)) ; List of pairs (readerFunction . msgQueue)
 
  ;--- Peer structure ----------------------------------------------------------
  ; A peer is a  #(socket  message-queue  message-queue-semaphore)
@@ -33,14 +33,16 @@
  (define (peerQueue p) (vector-ref p 1))
 
  ;--- Reader Queues -----------------------------------------------------------
- (define (newReader) ; return a new IPC queue reader
-   (let ((q (QueueCreate)))
-     (ListAdd QueueList q)
-     q))
+ (define (newReader) ; return a new IPC queue reader but stored as a (readerFunction . msgQueue)
+   (letrec ((q (QueueCreate))
+            (f (lambda () (QueueGet q))))
+     (ListAdd QueueList (cons f q))
+     f))
 
- (define (delReader q)
+ (define (delReaderQueue q) ; destroy an IPC queue reader returned from newReader
    (QueueDestroy q)
-   (ListDel QueueList q))
+   (ListDelFn QueueList ; remove the first readerFunction matched
+              (lambda (o) (eq? q (car o)))))
 
  ; Append e to each peer's outgoing message queue as well as my own.
  (define (qwrite e)
@@ -50,7 +52,7 @@
 
  (define (msgQueuesAdd e)
    (Display e)
-   (map (lambda (q) (QueueAdd q e))
+   (map (lambda (q) (QueueAdd (cdr q) e))
         (ListGet QueueList)))
 
  ;--- Socket communication ----------------------------------------------------

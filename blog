@@ -2732,3 +2732,26 @@ everything below it.
 Sat Feb 19 19:41:20 EST 2011
 
 Disabled cirularized.  Moved to the Map object.
+
+
+Mon Feb 21 18:20:25 EST 2011
+
+i've refactored map code now to refactor entity and interprocess communication
+code IPC i noticed all IPC calls are related to entities so i'm combining them
+into one object eventually I want to be able to "create new entity" then give
+it instructions on how to behave in the world i don't want to have to worry
+about rendering, IPC and other details pacman ghosts are the first milestone.
+
+
+Tue Feb 22 21:43:42 EST 2011
+
+Ported all IPC calls that are for map rendering to the Map object.  Initial
+attempts at creating a 2nd map window hovered over the initial starting
+position failed.
+
+(define myMap2 (Map 256 ipc))
+(thread (sleep 5000)
+ ((myMap2 'fieldReset) (columnMake 0 cellXX cellAIR))
+ ((myMap2 'canvasReset) 100 glyphXX)
+ ((myMap2 'viewportReset) 3456 2751)
+ ((myMap2 'viewportRender) 3456 2751))
