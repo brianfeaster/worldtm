@@ -388,6 +388,8 @@
 
 (IpcWrite '(who)) ; Force everyone, including this map agent, to identify themselves
 
+(define (say s) (IpcWrite (list 'voice DNA 10 s)))
+
 (thread 
  (let ((s (call/cc (lambda (c) (vector-set! ERRORS (tid) c) '*))))
     (or (eq? s '*) (displayl "\nIPC-REPL-ERROR::" s)))

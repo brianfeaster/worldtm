@@ -9,7 +9,8 @@
 ;;   Canvas_object
 ;;   Viewport_object
 ;;   Map_object
-;;    Entites_and_avatar
+;;    Entity_DB
+;;    Avatar_object
 ;;   Window_functions_and_initialization
 ;;   Button_commands
 ;;   Buttons
@@ -489,12 +490,8 @@
 ;;   and redrawing individual cells.
 ;;
 ; Initial map window size is 25 or terminal width/height fit.
-(define initialMapSize (min 25 (min (- (Terminal 'Theight) 1) (/ (Terminal 'Twidth) 2))))
-
-(define (Viewport . args)
- ((((Terminal 'WindowNew) ; Parent
-   0   (- (Terminal 'Twidth) (* initialMapSize 2))
-   initialMapSize   (* 2 initialMapSize)  #x000f) 'inherit) args ; The inherit method expects arg list first
+(define (Viewport y x h w clr . childArgs)
+ ((((Terminal 'WindowNew) y x h w clr) 'inherit) childArgs ; Parent and args to child
   (macro (canvas) ; Child
     (define (self msg) (eval msg))
     (define canvasSize (canvas 'size))
@@ -564,13 +561,16 @@
 ;;
 ;;  Composed of:  glyphs cells columns field canvas viewport IPC
 ;;
+(define initialMapSize (min 25 (min (- (Terminal 'Theight) 1) (/ (Terminal 'Twidth) 2))))
 
 (define (Map fieldSize ipc)
   (define (self msg) (eval msg))
   ; The objects which make up a map object
   (define myField (Field fieldSize))
   (define myCanvas (Canvas myField))
-  (define myViewport (Viewport myCanvas))
+  (define myViewport (Viewport 0   (- (Terminal 'Twidth) (* initialMapSize 2))
+                               initialMapSize   (* 2 initialMapSize)  #x000f
+                               myCanvas))
   ; Often used aliases
   (define ipcRead ((ipc 'newReader)))
   (define ipcWrite (ipc 'qwrite))
@@ -707,8 +707,6 @@
   ; IPC message handler
   (thread (let ~ ()
     (let ((e (ipcRead)))
-      (WinConsoleDisplay " [map<-" (car e)"]")
-      ; IPC message (move dna z y x)
       (if (pair? e) (begin
         (if (eq? (car e) 'move)             (apply moveIPC (cdr e))
         (if (eq? (car e) 'mapUpdateColumns) (apply updateColumnsIPC (cdr e))
@@ -719,8 +717,7 @@
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; Entites_and_avatar
-;; Simple objects more dynamic than just cells.
+;; Entity_DB
 ;;
 
 ; Association list of entites to their DNA values.
@@ -758,17 +755,25 @@
     ; Return the new or modified entity
     entity))
 
-; The user's avatar.  An extended entity object that includes positioning and directional observation vectors
-(define (Avatar port name z y x) ; Inherits Entity
- (((Entity (random) port name z y x) 'inherit) ; Parent
-  () ; no args to child
-  (macro () ; Child
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Avatar_object
+;;
+;; The user's avatar.  An extended entity object that includes positioning
+;; and directional observation vectors
+
+(define (Avatar ipc name z y x . childArgs) ; Inherits Entity
+ (((Entity (random) (if ipc (ipc 'PrivatePort) 0) name z y x) 'inherit) (append (list ipc) childArgs) ; Parent and args to child
+  (macro (ipc) ; Child
     (define (self msg) (eval msg))
     (define cell 19) ; TODO replace with a generalize item container
     (define dir 0)
     (define tz 0) ; Translation coordinates
     (define ty 0)
     (define tx 0)
+    (define ipcRead (if ipc ((ipc 'newReader)) #f))
+    (define ipcWrite (if ipc (ipc 'qwrite) #f))
     (define (look ndir . rloc) ; Look in a direction plus a relative (not rotational) zyx location
       (set! dir ndir)
       (if (pair? rloc)
@@ -801,7 +806,33 @@
       (if (= dir 9) (list (+ z  1 tz) (+ y    ty) (+ x    tx)))))))))))))
     (define ceiling z)
     (define (setCeiling z) (set! ceiling z))
-    self)))
+    (define (IPCvoice dna level text)
+     (if (= dna 0)
+      (begin ; Message from the system
+        (WinChatDisplay "\r\n")
+        (WinChatSetColor 0 9) (WinChatDisplay "W")
+        (WinChatSetColor 0 11) (WinChatDisplay "O")
+        (WinChatSetColor 0 10) (WinChatDisplay "R")
+        (WinChatSetColor 0 12) (WinChatDisplay "L")
+        (WinChatSetColor 0 13) (WinChatDisplay "D")
+        (WinChatSetColor 0 8) (WinChatDisplay VOICEDELIMETER)
+        (WinChatSetColor 0 7) (WinChatDisplay text))
+      (letrec ((entity (entitiesGet dna))
+               (glyph (entity 'glyph)))
+        (WinChatSetColor (glyph0bg glyph) (glyph0fg glyph))
+        (WinChatDisplay "\r\n" (if (null? entity) "???" (entity 'name)) VOICEDELIMETER)
+        (WinChatSetColor (glyph1bg glyph) (glyph1fg glyph))
+        (WinChatDisplay text)))
+     (if (and (!= dna DNA) (eqv? text "unatco"))
+         (say "no Savage")))
+    ; IPC message handler
+    (if ipc (thread (let ~ ()
+      (let ((e (ipcRead)))
+        (if (pair? e) (begin
+          (if (eq? (car e) 'voice) (apply IPCvoice (cdr e)))))
+        (~)))))
+    self))) ; Avatar
+
 
 ; Update an avatar's postion internaly and in the map.  Also handle map redrawing and centering.
 (define (moveEntity entity z y x)
@@ -1396,25 +1427,8 @@
  (if (and (= z (avatar 'z)) (= y (avatar 'y)) (= x (avatar 'x)))
    (walk dir)))
 
-(define (voice dna level text)
- (if (= dna 0)
-  (begin ; Message from the system
-    (WinChatDisplay "\r\n")
-    (WinChatSetColor 0 9) (WinChatDisplay "W")
-    (WinChatSetColor 0 11) (WinChatDisplay "O")
-    (WinChatSetColor 0 10) (WinChatDisplay "R")
-    (WinChatSetColor 0 12) (WinChatDisplay "L")
-    (WinChatSetColor 0 13) (WinChatDisplay "D")
-    (WinChatSetColor 0 8) (WinChatDisplay VOICEDELIMETER)
-    (WinChatSetColor 0 7) (WinChatDisplay text))
-  (letrec ((entity (entitiesGet dna))
-           (glyph (entity 'glyph)))
-    (WinChatSetColor (glyph0bg glyph) (glyph0fg glyph))
-    (WinChatDisplay "\r\n" (if (null? entity) "???" (entity 'name)) VOICEDELIMETER)
-    (WinChatSetColor (glyph1bg glyph) (glyph1fg glyph))
-    (WinChatDisplay text)))
- (if (and (!= dna DNA) (eqv? text "unatco"))
-     (say "no Savage")))
+; These moved to Avatar object
+(define voice list)
 
 ; These moved to Map object
 (define move list) ; Update an entity's location. Moved to Map object
@@ -1519,7 +1533,7 @@
 ;; Walking kitty soldier
 (define (spawnKitty . cycles)
  (set! cycles (if (null? cycles) 128 (car cycles))) ; Set max cycles
- (letrec ((kitty (Avatar 0 "Kat" (avatar 'z) (avatar 'y) (avatar 'x)))
+ (letrec ((kitty (Avatar #f "Kat" (avatar 'z) (avatar 'y) (avatar 'x)))
           (happyVector (vector 0 0 0 0 0 0 0 0))
           (dist 0))
  ; Tell everyone who this kitteh is.
@@ -1755,9 +1769,9 @@
         (lineIncrements ax ay 2 3)))))) ; 2
 
 
-(define pong
+(rem define pong
  (let ((power #f)
-       (ball (Avatar 0 "()" 0 0 0))
+       (ball (Avatar #f "()" 0 0 0))
        (oy 0) ; Origin of this map block
        (ox 0)
        (m 0)
@@ -1835,8 +1849,7 @@
 ; Avatar creation
 ; TODO does the private port make sense when there will be more
 ; than one entity/IPCreader?
-(define avatar
-  (Avatar (ipc 'PrivatePort) NAME 99 3456 2751))
+(define avatar (Avatar ipc NAME 99 3456 2751))
 
 (entitiesAdd avatar) ; TODO entity store concept needs to be redone
 
