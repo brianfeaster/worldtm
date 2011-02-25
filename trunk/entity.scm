@@ -41,7 +41,7 @@
 ;
 ; The entity's name defines the initial glyph, sprite and color.
 (define (Entity dna port name z y x)
- (define (self msg) (eval msg))
+ (define (self msg . args) (eval msg))
  (define (inherit args macro) (apply macro args))
  (define glyph (Glyph 0 15 (string-ref name 0)
                       0 15 (string-ref name (if (< 1 (string-length name)) 1 0))))

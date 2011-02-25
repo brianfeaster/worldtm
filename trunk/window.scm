@@ -160,7 +160,7 @@
  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
  ;; Window_subclass
  ;;
- (define (WindowNew Y0 X0 Wheight Wwidth COLOR . switches)
+ (define (WindowNew Y0 X0 Wheight Wwidth COLOR)
    (define (self msg) (eval msg))
    (define (inherit args macro) (apply macro args))
    (define id (+ 1 (length WINDOWS)))
