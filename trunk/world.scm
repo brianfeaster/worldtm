@@ -577,12 +577,12 @@
   (define fieldCeiling (myField 'ceiling)) ; walkDetails
   (define fieldAdd (myField 'add))
   (define fieldDelete (myField 'delete))
-  ;; Drop a cell on the map  *TODO this references nonexistant global function*
-  ;(define (mapDropCell y x cell)
-  ; (let ((z (+ 1 (fieldTopHeight 100 y x))))
-  ;  ((myField 'fieldSet!) z y x cell)
-  ;  (canvasRender 100 y x)
-  ;  (viewportRender y x)))
+  ; Drop a cell on the map  *TODO this references nonexistant global function*
+  (define (mapDropCell y x cell)
+   (let ((z (+ 1 (fieldTopHeight 100 y x))))
+    ((myField 'fieldSet!) z y x cell)
+    (canvasRender 100 y x)
+    (viewportRender y x)))
   ; Set map cell and force rendering of cell through entire pipeline.
   (define (setCell z y x cell)
     ((myField 'fieldSet!) z y x cell)
@@ -616,7 +616,6 @@
         (lambda (c)
           (if c (let ((m (car c))
                       (n (cdr c)))
-            (WinConsoleDisplay (list m n))
             ; First update field
             (fieldDelete zo (+ m yo) (+ n xo) dna)
             ; Render old deleted location
@@ -808,6 +807,55 @@
       (if (= dir 9) (list (+ z  1 tz) (+ y    ty) (+ x    tx)))))))))))))
     (define ceiling z)
     (define (setCeiling z) (set! ceiling z))
+    (define (die) (ipcWrite `(die ,dna))) ; Announce that I'm leaving
+    (define (jump z y x)
+     (vatar 'setLoc z y x)
+     (walkDetails))
+    (define walkSemaphore (open-semaphore 1))
+    (define (walkDetails)
+      ; Update avatar locally in the field/canvas/viewport and via IPC
+      (apply moveEntity self (gpsLook))
+      (IpcWrite (list 'move DNA z y x))
+      ; Special case to handle cells that change the Avatar's sprite
+      (letrec ((cellNum (apply mapBaseCell (gps)))
+               (baseSym (cellSymbol (cellRef cellNum))))
+        (if (and (<= 512 cellNum) (<= cellNum 612)) (WinChatDisplay "\r\n" (twoLetterDefinition baseSym))
+        (if (eq? baseSym 'sprite0) (setSprite 0)
+        (if (eq? baseSym 'sprite1) (setSprite 1)
+        (if (eq? baseSym 'sprite2) (setSprite 2))))))
+      ; If ceiling changes, repaint canvas using new ceiling height
+      (let ((oldCeiling ceiling))
+        (setCeiling (- (apply (myMap 'fieldCeiling) (gps)) 1))
+        (if (!= oldCeiling ceiling)
+          (thread (mapCanvasReset ceiling))))) ; walkDetails
+    (define (walk dir)
+      (semaphore-down walkSemaphore)
+        ; Consider cell I'm walking into.  If cell is entity push it.
+        ; Otherwise move to facing cell or on top of obstructing cell.
+        (look dir)
+        (let ((nextCell (apply mapFirstCell (gpsLook))))
+          ; Case 1 push entity
+          (if (< CellMax nextCell)
+            (IpcWrite `(force ,@(gpsLook) ,dir 10))
+          ; Case 2 walk normally
+          (if (or EDIT (not (cellSolid? (cellRef nextCell)))) ; TODO this always true
+            (walkDetails)
+          ; Case 3 step up
+          (begin
+            (look dir 1) ; Peek at the cell above the one in front of me
+            (set! nextCell (apply mapBaseCell (gpsLook)))
+            (or (cellSolid? (cellRef nextCell))
+              (walkDetails))))))
+        ; Gravity
+        (or EDIT (fall))
+      (semaphore-up walkSemaphore)) ; walk
+    ; Fall down one cell if a non-entity and non-solid cell below me
+    (define (fall)
+     (look 8) ; Look down
+     (let ((nextCell (apply mapFirstCell (gpsLook))))
+       (if (= nextCell cellAIR)
+         (begin
+           (walkDetails)))))
     (define (IPCvoice dna level text)
      (if (= dna 0)
        (begin
@@ -827,11 +875,11 @@
          (WinChatDisplay text)))
      (if (and (!= dna DNA) (eqv? text "unatco"))
          (say "no Savage")))
-    (define (IPCforce z y x dir str)
-     (if (and (= z (avatar 'z)) (= y (avatar 'y)) (= x (avatar 'x)))
+    (define (IPCforce fz fy fx dir mag)
+     (if (and (= fz z) (= fy y) (= fx x))
        (walk dir)))
     (define (IPCwho . dna) ; TODO handle explicit request from specified peer
-      (IpcWrite
+      (ipcWrite
         `(entity ,DNA ,(avatar 'port) ,(avatar 'name) ',((avatar 'gps)))))
     ; Update one or more of an entity's attribute: dna port name glyph z y x
     (define (entity dna . args)
@@ -868,6 +916,7 @@
           (if (eq? (car e) 'entity)(eval e)
           (if (eq? (car e) 'die)   (apply IPCdie  (cdr e)))))))))
         (~)))))
+    (ipcWrite '(who))
     self))) ; Avatar
 
 
@@ -1150,61 +1199,63 @@
 (define (winMapLeft) ((myViewport 'move)       (myViewport 'Y0) (+ -1 (myViewport 'X0))))
 (define (winMapRight)((myViewport 'move)       (myViewport 'Y0) (+  1 (myViewport 'X0))))
 
-(define (walkDetails)
-  ; Update avatar locally in the field/canvas/viewport and via IPC
-  (apply moveEntity avatar ((avatar 'gpsLook)))
-  (IpcWrite (list 'move DNA (avatar 'z) (avatar 'y) (avatar 'x)))
-  (letrec ((cellNum (apply mapBaseCell ((avatar 'gps))))
-           (baseSym (cellSymbol (cellRef cellNum))))
-    (if (and (<= 512 cellNum) (<= cellNum 612)) (WinChatDisplay "\r\n" (twoLetterDefinition baseSym))
-    (if (eq? baseSym 'sprite0) (setSprite 0)
-    (if (eq? baseSym 'sprite1) (setSprite 1)
-    (if (eq? baseSym 'sprite2) (setSprite 2))))))
-  ; If ceiling changes, repaint canvas using new ceiling height
-  (let ((oldCeiling (avatar 'ceiling)))
-    ((avatar 'setCeiling) (- (apply (myMap 'fieldCeiling) ((avatar 'gps))) 1))
-    (if (!= oldCeiling (avatar 'ceiling))
-      (thread (mapCanvasReset (avatar 'ceiling)))))) ; walkDetails
-
 ;(if (eq? 'help  (cellSymbol (mapFirstCell (avatar 'z) (avatar 'y) (avatar 'x))))  (help))
 ;(if (eq? 'snake (cellSymbol (mapFirstCell (avatar 'z) (avatar 'y) (avatar 'x)))) (thread (snake-random)))
 ;(if (eq? 'brit2 (cellSymbol (mapBaseCell (avatar 'z) (avatar 'y) (avatar 'x)))) (thread (spawnKitty)))
 
-(define walkSemaphore (open-semaphore 1))
+;(define (walkDetails)
+;  ; Update avatar locally in the field/canvas/viewport and via IPC
+;  (apply moveEntity avatar ((avatar 'gpsLook)))
+;  (IpcWrite (list 'move DNA (avatar 'z) (avatar 'y) (avatar 'x)))
+;  (letrec ((cellNum (apply mapBaseCell ((avatar 'gps))))
+;           (baseSym (cellSymbol (cellRef cellNum))))
+;    (if (and (<= 512 cellNum) (<= cellNum 612)) (WinChatDisplay "\r\n" (twoLetterDefinition baseSym))
+;    (if (eq? baseSym 'sprite0) (setSprite 0)
+;    (if (eq? baseSym 'sprite1) (setSprite 1)
+;    (if (eq? baseSym 'sprite2) (setSprite 2))))))
+;  ; If ceiling changes, repaint canvas using new ceiling height
+;  (let ((oldCeiling (avatar 'ceiling)))
+;    ((avatar 'setCeiling) (- (apply (myMap 'fieldCeiling) ((avatar 'gps))) 1))
+;    (if (!= oldCeiling (avatar 'ceiling))
+;      (thread (mapCanvasReset (avatar 'ceiling)))))) ; walkDetails
+;
+;(define walkSemaphore (open-semaphore 1))
+;
+;(define (jump z y x)
+; ((avatar 'setLoc) z y x)
+; (walkDetails))
+;
+;(define (walk dir)
+;  (semaphore-down walkSemaphore)
+;    ; Consider cell I'm walking into.  If cell is entity push it.
+;    ; Otherwise move to facing cell or on top of obstructing cell.
+;    ((avatar 'look) dir)
+;    (let ((nextCell (apply mapFirstCell ((avatar 'gpsLook)))))
+;      ; Case 1 push entity
+;      (if (< CellMax nextCell)
+;        (IpcWrite `(force ,@((avatar 'gpsLook)) ,dir 10))
+;      ; Case 2 walk normally
+;      (if (or EDIT (not (cellSolid? (cellRef nextCell)))) ; TODO this always true
+;        (walkDetails)
+;      ; Case 3 step up
+;      (begin
+;        ((avatar 'look) dir 1) ; Peek at the cell above the one in front of me
+;        (set! nextCell (apply mapBaseCell ((avatar 'gpsLook))))
+;        (or (cellSolid? (cellRef nextCell))
+;          (walkDetails))))))
+;    ; Gravity
+;    (or EDIT (fall))
+;  (semaphore-up walkSemaphore)) ; walk
+;
+;; Fall down one cell if a non-entity and non-solid cell below me
+;(define (fall)
+; ((avatar 'look) 8) ; Look down
+; (let ((nextCell (apply mapFirstCell ((avatar 'gpsLook)))))
+;   (if (= nextCell cellAIR)
+;     (begin
+;       (walkDetails)))))
 
-(define (jump z y x)
- ((avatar 'setLoc) z y x)
- (walkDetails))
-
-(define (walk dir)
-  (semaphore-down walkSemaphore)
-    ; Consider cell I'm walking into.  If cell is entity push it.
-    ; Otherwise move to facing cell or on top of obstructing cell.
-    ((avatar 'look) dir)
-    (let ((nextCell (apply mapFirstCell ((avatar 'gpsLook)))))
-      ; Case 1 push entity
-      (if (< CellMax nextCell)
-        (IpcWrite `(force ,@((avatar 'gpsLook)) ,dir 10))
-      ; Case 2 walk normally
-      (if (or EDIT (not (cellSolid? (cellRef nextCell)))) ; TODO this always true
-        (walkDetails)
-      ; Case 3 step up
-      (begin
-        ((avatar 'look) dir 1) ; Peek at the cell above the one in front of me
-        (set! nextCell (apply mapBaseCell ((avatar 'gpsLook))))
-        (or (cellSolid? (cellRef nextCell))
-          (walkDetails))))))
-    ; Gravity
-    (or EDIT (fall))
-  (semaphore-up walkSemaphore)) ; walk
-
-; Fall down one cell if a non-entity and non-solid cell below me
-(define (fall)
- ((avatar 'look) 8) ; Look down
- (let ((nextCell (apply mapFirstCell ((avatar 'gpsLook)))))
-   (if (= nextCell CellMax)
-     (begin
-       (walkDetails)))))
+(define (walk d) ((avatar 'walk) d))
 
 ; Notify IPC of my name and glyph change
 (define (changeName str)
@@ -1423,34 +1474,6 @@
 (setButton #\3 '(thread (spawnKitty 1000)))
 ;(setButton #\1 '((WinChat 'resize) (WinChat 'Wheight) (WinChat 'Wwidth)))
 ;(setButton #\1 '((WinChat 'scrollUp)))
-
-
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; Incomming_IPC_messages
-;;
-; These moved to Avatar object
-;(define voice list)
-;(define force list)
-;(define die list)
-;(define entity list)
-;(define who list)
-
-; These moved to Map object
-;(define move list) ; Update an entity's location. Moved to Map object
-;(define mapUpdateColumns list)
-;(define mapSetCell list)
-
-;; Always read and evaluate everything from IPC.
-;(thread
-; ; Set the thread's error handler to a continuation so any user or IPC scheme error is caught
-; ; causing the thread to begin again from the let block.
-; (let ((s (call/cc (lambda (c) (vector-set! ERRORS (tid) c) 'starting))))
-;    (or (eq? s 'starting) (WinChatDisplay "\r\nIPC-REPL-ERROR::" s)))
-; (let ~ ()
-;  (let ((sexp (IpcRead)))
-;     (eval sexp)
-;     (~))))
 
 
 
@@ -1824,6 +1847,36 @@
 
 
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Incomming_IPC_messages
+;;
+; These moved to Avatar object
+;(define voice list)
+;(define force list)
+;(define die list)
+;(define entity list)
+;(define who list)
+
+; These moved to Map object
+;(define move list) ; Update an entity's location. Moved to Map object
+;(define mapUpdateColumns list)
+;(define mapSetCell list)
+
+;; Always read and evaluate everything from IPC.
+;(thread
+; ; Set the thread's error handler to a continuation so any user or IPC scheme error is caught
+; ; causing the thread to begin again from the let block.
+; (let ((s (call/cc (lambda (c) (vector-set! ERRORS (tid) c) 'starting))))
+;    (or (eq? s 'starting) (WinChatDisplay "\r\nIPC-REPL-ERROR::" s)))
+; (let ~ ()
+;  (let ((sexp (IpcRead)))
+;     (eval sexp)
+;     (~))))
+
+;(define IpcRead ((ipc 'newReader)))
+
+
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Genesis
 ;;
@@ -1833,7 +1886,6 @@
 ; Create ipc object.  Pass in a debug message output port (can be empty lambda)
 (define ipc (Ipc WinConsoleDisplay))
 (ipc '(set! Debug #f))
-(define IpcRead ((ipc 'newReader)))
 (define IpcWrite (ipc 'qwrite))
 
 ; Start keyboard and mouse reader agents
@@ -1864,8 +1916,7 @@
    (or (eq? name "") (set! NAME name)))))
 
 ; Avatar creation
-; TODO does the private port make sense when there will be more
-; than one entity/IPCreader?
+; TODO does the private port make sense when there will be more than one entity/IPCreader?
 (define avatar (Avatar ipc NAME 99 3456 2751))
 
 (entitiesAdd avatar) ; TODO entity store concept needs to be redone
@@ -1892,6 +1943,14 @@
 (moveEntity avatar 1 3456 2751) ; Move avatar to entrance of Lord British's castle near 108 86
 ;(mapViewportReset    3455 2751) ; Once had to reset the viewport to initialize synchronize avatar location
 
+; Mess with creating new entities using new Avatar oject
+(rem loop 4 (lambda (x)
+  (let ((pacman (Avatar ipc (string "P" (number->string x)) 99 (+ 3456 x) 2751)))
+  (entitiesAdd pacman)
+  (thread
+    (sleep 2000)
+    (moveEntity pacman 1 (+ 3456 x) 2751))))) ; Move avatar to entrance of Lord British's castle near 108 86
+
 ; Display some initial information
 (or QUIETLOGIN (begin
  (fancyDisplay 5 "Welcome to World")
@@ -1907,7 +1966,7 @@
 
 (define (shutdown)
   (or QUIETLOGIN (sayByeBye))
-  (IpcWrite `(die ,DNA)) ; Kill avatar's entity
+  ((avatar 'die)) ; Announce through IPC that I'm going away
   (sleep 1000) ; wait for ipc to flush
   (displayl "\e[" (Terminal 'Theight) "H\r\n\e[0m\e[?25h\e[?1000l")
   (quit))
@@ -1922,7 +1981,7 @@
 (signal-set 15 (lambda () (say "signal 15 TERM")  (shutdown)))
 
 (or QUIETLOGIN (sayHelloWorld))
-(IpcWrite '(who))
+;(IpcWrite '(who))
 
 (wrepl)
 (shutdown)

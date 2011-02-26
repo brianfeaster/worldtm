@@ -316,7 +316,9 @@
    (displayl "\n\e[32m" (e 'name) " moves to " ((e 'gps))) ; DEBUG
    (or (entityWithinBounds e) (sendNewBlocks e))))
 
-(define (die . x) ())
+(define die list)
+
+(define force list)
 
 ;-----------------------------------------------------------
 

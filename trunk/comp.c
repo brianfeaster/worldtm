@@ -355,9 +355,10 @@ void compLambdaBody (Num flags) {
 		   the dotted formal list. */
 		if (r4==0) {
 			asmAsm (
-				MVI0, "Too many arguments to function",
+				MVI0, expr, /* Add expression to stack */
 				PUSH0,
-				MVI1, 1l,
+				ADDI1, 1l,
+				MVI0, "Too many arguments to function",
 				SYSI, sysError, /* Error correction */
 				END);
 		}
@@ -371,9 +372,10 @@ void compLambdaBody (Num flags) {
 			BNEI1, r3, ADDR, "buildRestList",
 			BRA, ADDR, "normalFormals",
 		LABEL, "notEnoughArguments",
-			MVI0, "Not enough arguments to closure",
+			MVI0, expr, /* Add expression to stack */
 			PUSH0,
-			MVI1, 1l,
+			ADDI1, 1l,
+			MVI0, "Not enough arguments to closure",
 			SYSI, sysError, /* Error correction */
 			PUSH0,
 			ADDI1, 1l,
