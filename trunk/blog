@@ -2755,3 +2755,10 @@ position failed.
  ((myMap2 'canvasReset) 100 glyphXX)
  ((myMap2 'viewportReset) 3456 2751)
  ((myMap2 'viewportRender) 3456 2751))
+
+
+Fri Feb 25 20:37:06 EST 2011
+
+Added a catch in emitted lambda body assembly for too many passed arguments.
+This revealed a long time bug in the map agent code which was incorrectly
+created a new "system" entity.

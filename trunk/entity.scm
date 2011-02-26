@@ -1,7 +1,11 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Glyphs - Two multi-colored characters.
 ;;
-(define (Glyph bg0 fg0 ch0 bg1 fg1 ch1) (vector bg0 fg0 ch0 bg1 fg1 ch1))
+
+; Need to accept any number of objects since rest of vector could be other proper-glyphs.
+(define Glyph vector)
+;(define (Glyph bg0 fg0 ch0 bg1 fg1 ch1) (vector bg0 fg0 ch0 bg1 fg1 ch1))
+
 (define (glyph0bg cell) (vector-ref cell 0))
 (define (glyph0fg cell) (vector-ref cell 1))
 (define (glyph0ch cell) (vector-ref cell 2))

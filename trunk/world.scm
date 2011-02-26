@@ -702,6 +702,7 @@
   (define canvasReset    (myCanvas 'reset))
   (define canvasHeight   (myCanvas 'height))
   (define canvasRender   (myCanvas 'render))
+  (define canvasGlyph    (myCanvas 'glyph)) ; Debugging
   ;(WinChatDisplay "\r\nInitializing map...")
   (circularize)
   ; IPC message handler
@@ -749,7 +750,8 @@
       ; Create a new entity.  Massage the arguments (port name glyph (x y z))->(port name glyph x y z)
       (begin
         (set! entity (apply Entity dna (let ~ ((args args))
-                                         (if (pair? (car args)) (car args)
+                                         (if (pair? (car args))
+                                             (car args)
                                              (cons (car args) (~ (cdr args)))))))
         (entitiesAdd entity)))
     ; Return the new or modified entity
@@ -808,28 +810,63 @@
     (define (setCeiling z) (set! ceiling z))
     (define (IPCvoice dna level text)
      (if (= dna 0)
-      (begin ; Message from the system
-        (WinChatDisplay "\r\n")
-        (WinChatSetColor 0 9) (WinChatDisplay "W")
-        (WinChatSetColor 0 11) (WinChatDisplay "O")
-        (WinChatSetColor 0 10) (WinChatDisplay "R")
-        (WinChatSetColor 0 12) (WinChatDisplay "L")
-        (WinChatSetColor 0 13) (WinChatDisplay "D")
-        (WinChatSetColor 0 8) (WinChatDisplay VOICEDELIMETER)
-        (WinChatSetColor 0 7) (WinChatDisplay text))
-      (letrec ((entity (entitiesGet dna))
-               (glyph (entity 'glyph)))
-        (WinChatSetColor (glyph0bg glyph) (glyph0fg glyph))
-        (WinChatDisplay "\r\n" (if (null? entity) "???" (entity 'name)) VOICEDELIMETER)
-        (WinChatSetColor (glyph1bg glyph) (glyph1fg glyph))
-        (WinChatDisplay text)))
+       (begin
+         (WinChatDisplay "\r\n")
+         (WinChatSetColor 0 9) (WinChatDisplay "W")
+         (WinChatSetColor 0 11) (WinChatDisplay "O")
+         (WinChatSetColor 0 10) (WinChatDisplay "R")
+         (WinChatSetColor 0 12) (WinChatDisplay "L")
+         (WinChatSetColor 0 13) (WinChatDisplay "D")
+         (WinChatSetColor 0 8) (WinChatDisplay VOICEDELIMETER)
+         (WinChatSetColor 0 7) (WinChatDisplay text))
+       (letrec ((entity (entitiesGet dna))
+                (glyph (entity 'glyph)))
+         (WinChatSetColor (glyph0bg glyph) (glyph0fg glyph))
+         (WinChatDisplay "\r\n" (if (null? entity) "???" (entity 'name)) VOICEDELIMETER)
+         (WinChatSetColor (glyph1bg glyph) (glyph1fg glyph))
+         (WinChatDisplay text)))
      (if (and (!= dna DNA) (eqv? text "unatco"))
          (say "no Savage")))
+    (define (IPCforce z y x dir str)
+     (if (and (= z (avatar 'z)) (= y (avatar 'y)) (= x (avatar 'x)))
+       (walk dir)))
+    (define (IPCwho . dna) ; TODO handle explicit request from specified peer
+      (IpcWrite
+        `(entity ,DNA ,(avatar 'port) ,(avatar 'name) ',((avatar 'gps)))))
+    ; Update one or more of an entity's attribute: dna port name glyph z y x
+    (define (entity dna . args)
+      (let ((entity (entitiesGet dna)))
+        (if entity
+          (begin ; Modify entity attributes
+            (apply entitiesSet dna args)
+            (mapMoveObject (entity 'dna) (entity 'z) (entity 'y) (entity 'x)
+                                         (entity 'z) (entity 'y) (entity 'x) #f)
+            (mapCanvasRender (avatar 'ceiling) (entity 'y) (entity 'x))
+            (mapViewportRender (entity 'y) (entity 'x)))
+          (begin ; Create new entity with all args
+            (set! entity (apply entitiesSet dna args))
+            (mapMoveObject (entity 'dna) (entity 'z) (entity 'y) (entity 'x)
+                                         (entity 'z) (entity 'y) (entity 'x) #f)))
+        (if (= dna 17749) (set! PortMapAgent (entity 'port))))) ; The map agent's DNA number
+    (define (IPCdie dna)
+     (let ((entity (entitiesGet dna))
+           (thisIsMe (= dna DNA)))
+      (if entity ; Ignore unknown entities
+        (begin
+          ; Remove from here
+          (mapDelEntitySprite dna (entity 'z) (entity 'y) (entity 'x)) ; Remove it first from the map
+          (if (>= (entity 'z) (mapCanvasHeight (entity 'y) (entity 'x))) (begin
+            (mapCanvasRender 100 (entity 'y) (entity 'x))
+            (or thisIsMe (mapViewportRender (entity 'y) (entity 'x)))))))))
     ; IPC message handler
     (if ipc (thread (let ~ ()
       (let ((e (ipcRead)))
         (if (pair? e) (begin
-          (if (eq? (car e) 'voice) (apply IPCvoice (cdr e)))))
+          (if (eq? (car e) 'voice) (apply IPCvoice (cdr e))
+          (if (eq? (car e) 'force) (apply IPCforce (cdr e))
+          (if (eq? (car e) 'who)  (apply IPCwho (cdr e))
+          (if (eq? (car e) 'entity)(eval e)
+          (if (eq? (car e) 'die)   (apply IPCdie  (cdr e)))))))))
         (~)))))
     self))) ; Avatar
 
@@ -1392,48 +1429,28 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Incomming_IPC_messages
 ;;
-(define (who . dna) ; TODO handle explicit request from specified peer
-  (IpcWrite
-    `(entity ,DNA ,(avatar 'port) ,(avatar 'name) ',((avatar 'gps)))))
-
-; Update one or more of an entity's attribute: dna port name glyph z y x
-(define (entity dna . args)
-  (let ((entity (entitiesGet dna)))
-    (if entity
-      (begin ; Modify entity attributes
-        (apply entitiesSet dna args)
-        (mapMoveObject (entity 'dna) (entity 'z) (entity 'y) (entity 'x)
-                                     (entity 'z) (entity 'y) (entity 'x) #f)
-        (mapCanvasRender (avatar 'ceiling) (entity 'y) (entity 'x))
-        (mapViewportRender (entity 'y) (entity 'x)))
-      (begin ; Create new entity with all args
-        (set! entity (apply entitiesSet dna args))
-        (mapMoveObject (entity 'dna) (entity 'z) (entity 'y) (entity 'x)
-                                     (entity 'z) (entity 'y) (entity 'x) #f)))
-    (if (= dna 17749) (set! PortMapAgent (entity 'port))))) ; The map agent's DNA number
-
-(define (die dna)
- (let ((entity (entitiesGet dna))
-       (thisIsMe (= dna DNA)))
-  (if entity ; Ignore unknown entities
-    (begin
-      ; Remove from here
-      (mapDelEntitySprite dna (entity 'z) (entity 'y) (entity 'x)) ; Remove it first from the map
-      (if (>= (entity 'z) (mapCanvasHeight (entity 'y) (entity 'x))) (begin
-        (mapCanvasRender 100 (entity 'y) (entity 'x))
-        (or thisIsMe (mapViewportRender (entity 'y) (entity 'x)))))))))
-
-(define (force z y x dir str)
- (if (and (= z (avatar 'z)) (= y (avatar 'y)) (= x (avatar 'x)))
-   (walk dir)))
-
 ; These moved to Avatar object
-(define voice list)
+;(define voice list)
+;(define force list)
+;(define die list)
+;(define entity list)
+;(define who list)
 
 ; These moved to Map object
-(define move list) ; Update an entity's location. Moved to Map object
-(define mapUpdateColumns list)
-(define mapSetCell list)
+;(define move list) ; Update an entity's location. Moved to Map object
+;(define mapUpdateColumns list)
+;(define mapSetCell list)
+
+;; Always read and evaluate everything from IPC.
+;(thread
+; ; Set the thread's error handler to a continuation so any user or IPC scheme error is caught
+; ; causing the thread to begin again from the let block.
+; (let ((s (call/cc (lambda (c) (vector-set! ERRORS (tid) c) 'starting))))
+;    (or (eq? s 'starting) (WinChatDisplay "\r\nIPC-REPL-ERROR::" s)))
+; (let ~ ()
+;  (let ((sexp (IpcRead)))
+;     (eval sexp)
+;     (~))))
 
 
 
@@ -1884,17 +1901,6 @@
  (WinChatDisplay "\r\nHit ? to toggle the help window")
  (WinChatSetColor 0 10)
  (WinChatDisplay (string "\r\nYour name is " (avatar 'name)))))
-
-; Always read and evaluate everything from IPC.
-(thread
- ; Set the thread's error handler to a continuation so any user or IPC scheme error is caught
- ; causing the thread to begin again from the let block.
- (let ((s (call/cc (lambda (c) (vector-set! ERRORS (tid) c) 'starting))))
-    (or (eq? s 'starting) (WinChatDisplay "\r\nIPC-REPL-ERROR::" s)))
- (let ~ ()
-  (let ((sexp (IpcRead)))
-     (eval sexp)
-     (~))))
 
 ; Redraw map resulting in animated cells.
 (thread ((myViewport 'animationAgentLoop)))
