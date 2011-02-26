@@ -88,7 +88,7 @@
 ; Create the map agent
 (define avatar (Avatar DNA (ipc 'PrivatePort) MYNAME  0 0 0))
 (entitiesAdd avatar)
-(entitiesAdd (Entity 0 0 "System" #(0 1 #\S 0 1 #\Y) 0 0 0))
+(entitiesAdd (Entity 0 0 "System" 0 0 0))
 
 
 

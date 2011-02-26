@@ -264,26 +264,18 @@ void compTransformInternalDefinitions(void) {
 	DBE wscmWrite(expr, stdout);
 }
 
-/*        ( (square.#<closure>) (x.5) (y.9) )
-          ^
-       #( | (y . 9) )
-       ^
-    #( | (x . ?) )
-
-   (define makeAdder (lambda (y)  (lambda (x) (+ x y)))    )
-   (define y*y+y*y   (lambda (y) ((lambda (sqr) (+ sqr sqr))(* y y))) )
-
-   applying function: stack[ argn ... arg2 arg1
-     * bind args to bound formals parameters.
-     * left over assembled into a list.
-*/
-
-/* Given (args body) in expr (r18) create a new code block that basically
+/*
+   Given (args body) in expr (r18) create a new code block that basically
    handles a call to a closures function.  The code assumes the closure is
    in r0.  A closure is a pair (code . environment) containing the code itself
    and the closures instantiated environment.
-	Expr better be of the form (args body) where args is currently of the
+
+   Expr assumed to be of the form (args body) where args is currently of the
    form: (sym+).  Emit code that keeps track of the current environment
+
+	Emitted code assumes the caller's code sets up the stack with all evaluated
+   arguments pushed with r1 containing the arg count.  The count includes
+   arguments to be grouped into the dotted formal argument list.
 
    Create an extended environment given:
    wscmExtendEnvironment moved from system call to inlined assembly.
@@ -291,16 +283,24 @@ void compTransformInternalDefinitions(void) {
     r2   - lexical environment
     r3   - symbol list
     r1f (stack) - arguments on the stack.
-  IE: ==> #( #<PARENT-ENV> (x y z rest) 1 2 3 (4 5 6))
- So a local environment is of the form #(parent-env (1 . x) (2 . y) ...)
- Symbol lookup will be (1) compiled either as direct reference or a sysCall
- that mutates itself into a direct reference or (2) traversal up the
- environment stack then reference to the local environment's binding then a
- reference to the bindings value.  Guaranteed to never be called with no
- formals to extend as that case is optimized in CompileLambdaBody.
- TODO: 'specialize' this with emitted VM code
-*/
 
+  IE: ==> #( #<PARENT-ENV> (x y z rest) 1 2 3 (4 5 6))
+
+ A local environment is of the form #(parent-env (x y . z) 1 2 (3 4 5))
+
+    #( * (a . ()))
+        \
+         #( * (x y . z))
+             \
+              (TGE (square . #<closure>) (x . 5) (y . 9))
+
+ A symbol lookup will be:
+  (1) Compiled either as direct reference to a global environment binding
+  (2) Compiled into a series of parent environment references and one
+      local environment reference.
+  (3) A syscall that attempts to locate the named binding which will then
+      code modify itslef into case (1).
+*/
 void compLambdaBody (Num flags) {
  Int opcodeStart;
 	DB("-->%s", __func__);
@@ -336,14 +336,33 @@ void compLambdaBody (Num flags) {
 		   function above). */
 		opcodeStart = memStackLength(asmstack);
 		asmAsm (
-			LDI50, 1l,  /* Temporarily save lexical environment, from closure in r0, to r5 */
+			/* Temporarily save lexical environment, from closure in r0, to r5.
+			   The stored environment might be null in which case keep track of
+			   the current/dynamic environment instead of the stored lexical. */
+			LDI50, 1l,
 			BNEI5, null, ADDR, "keepLexicalEnvironment",
-			MV516, /* Macro, so keep track of the dynamic environment instead of a lexical */
+			MV516,
 		LABEL, "keepLexicalEnvironment",
 			MVI0, null, /* Initial formal argument 'rest' value (empty list). */
 			/* r3 is non-dotted formal argument length. */
 			BLTI1, r3, ADDR, "notEnoughArguments",
 			BEQI1, r3, ADDR, "normalFormals",
+			END);
+
+		/* Emit code for functions lacking a dotted formal argument.  This code
+		   will be reached if there are more values passed to the function than
+		   there are formal arguments.  Otherwise it will just continue to build
+		   the dotted formal list. */
+		if (r4==0) {
+			asmAsm (
+				MVI0, "Too many arguments to function",
+				PUSH0,
+				MVI1, 1l,
+				SYSI, sysError, /* Error correction */
+				END);
+		}
+
+		asmAsm (
 		LABEL, "buildRestList",
 			MV30,
 			POP2,
@@ -362,7 +381,7 @@ void compLambdaBody (Num flags) {
 		LABEL, "normalFormals",
 			PUSH0,
 			/* Create the local environment. r1 is the length of the vector.
-				3 is added to account for the parent env, formal argument list
+			   3 is added to account for the parent env, formal argument list
 			   and rest formal argument. */
 			ADDI1, 3l,
 			SYSI,  objNewVector1, /* New vector in r0 of size imm:r1. */
@@ -374,6 +393,7 @@ void compLambdaBody (Num flags) {
 			END
 		);
 		asmCompileAsmstack(opcodeStart);
+
 		/* Emit code that pops arguments off stack and stores into proper
 		   local environment locations.  */
 		r3++;
@@ -427,31 +447,50 @@ void compLambdaBody (Num flags) {
 
 
 
-/* Given a 'formals' list in r0 (from a lambda expression) normalize it.  IE:
-   (x)->(x())   (x y)->(x y ())   (x . r)->(x r)   (x y . r)->(x y r)   r->(r)
-   () (())
-	Return:  r0 : normalized formal list
-            r3 : non-dotted formal parameter length
+/* Normalize a scheme formals list into an internal normalized formals
+   environment list.  A proper list with a symbol or null as the "rest"
+   formal.
+
+   (x)       ->  (x ())
+   (x y)     ->  (x y ())
+   (x . r)   ->  (x r)
+   (x y . r) ->  (x y r)
+   r         ->  (r)
+   ()        ->  (())
+
+   Given   r0   A lambda expression's formals list
+
+   Uses    r1   List creation
+
+   Return  r0   Normalized formal parameter list
+           r3   Number of non-dotted formal parameters
+           r4   0 or 1 dotted formals
 */
 void wscmNormalizeFormals(void) {
  Int i;
 	r3=0; /* Keep track of non-dotted formal count. */
+
 	/* Push formals onto stack. */
 	while (memObjectType(r0) == TPAIR) {
 		r3++;
 		push(car(r0));
 		r0=cdr(r0);
 	}
-	r1=r0;  r2=null;  objCons12(); /* Create (()) or (rest-arg) */
-	/* Pop formals from stack creating list of args. */
+
+	/* Keep track of the existence of a dotter formal */
+	r4 = (r0==null) ? 0 : 1;
+
+	/* Pop formals from stack creating list of args starting
+      with (()) or (dotted-formal) */
+	r1=r0;  r2=null;  objCons12();
 	i=(Int)r3;
-	while (i--) {
-		r2=r0;  r1=pop();  objCons12();
-	}
+	while (i--) { r2=r0;  r1=pop();  objCons12(); }
 }
 
 
 
+/* Uses  r0 r1 r2 r3 r4
+*/
 void compLambda (Num flags) {
 	DB("-->%s", __func__);
 	expr = cdr(expr); /* Skip 'lambda. */
@@ -464,7 +503,7 @@ void compLambda (Num flags) {
 	   is just the pair (parent-environment . formals-list)*/
 	if (car(expr) != null) {
 		r0=car(expr);
-		wscmNormalizeFormals(); /* Get normalized list in r0, length in r3. */
+		wscmNormalizeFormals(); /* Get normalized list in r0, length in r3, dotted-formal bool in r4. */
 		r1=env;  r2=r0;  objCons12();  env=r0;
 	}
 
@@ -515,7 +554,7 @@ void compMacro (Num flags) {
 	asmAsm(
 		MVI1, r0, /* Load r1 with code. */
 		SYSI, objNewClosure1Env, /* Create closure from r1 and env (r16) */
-		MVI2, null, /* Remove stored environment so extended environment eventually used the current environment */
+		MVI2, null, /* Replace stored lexical environment with null so dynamic environment is used when applied */
 		STI20, 1l,
 	END);
 
