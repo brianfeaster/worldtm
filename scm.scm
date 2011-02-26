@@ -458,14 +458,16 @@
 
 (define db debugger) ; Because typing (debugger) gets repetitive.
 
-;  Default error handlers for all thread IDs:  Shutdown the entire machine.
+; Default error handlers for all thread IDs:  Shutdown the entire machine.
+; It is a function of one argument because exception handler could be a
+; continuation.
 (define ERRORS (make-vector 1024 
-  (lambda (x)
-    (displayl "\nERROR::" x)
+  (lambda (o)
+    (displayl "\nERROR::" o)
     (debugger)
     (quit))))
 
-(define WELCOME-MESSAGE "Welcome to \e[1;31mW\e[33mO\e[32mR\e[34mL\e[35mD\e[01;m.\r\n\e[?25l")
+(define WELCOME-MESSAGE "Welcome to \e[1;31mW\e[33mO\e[32mR\e[34mL\e[35mD\e[01;m.\e[?25l")
 
 
 ; The read eval print loop.

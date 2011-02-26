@@ -92,11 +92,12 @@ Int wscmAssertArgumentCountMin (Num min, const char *functionName) {
 }
 
 /* Pop stack operand arguments into a new list.
-		Requires:  r1 operand count
-		Mutates: r2
-		Returns: r0 new list
+
+   Given   r1 operand count
+   Uses    r2
+   Return  r0 new list
 */
-void sysList (void) {
+void sysStackToList (void) {
  Int count = (Int)r1;
 	r0=null;
 	while (count--) { r1=pop(); r2=r0; objCons12(); }
@@ -416,6 +417,8 @@ void sysDumpEnv (Obj env) {
 
 /* Look for the symbol in r1 in the global environment.  Return in r0 the
    binding (value . symbol) or null if not found.
+	Given   r1
+	Return  r0
 */
 void wscmTGEFind (void) {
 	DB("ENV     -->wscmTGEFind <= ");
@@ -634,8 +637,9 @@ void wscmOpenLocalSocket (void) {
 
 	/* Local host port number. */
 	if (memObjectType(r3=pop()) != TINTEGER) {
-		r0 = "Invalid argument to wscmOpenLocalSocket().";
+		push(r3); /* Push invalid object */
 		r1 = (Obj)1;
+		r0 = "Invalid argument to wscmOpenLocalSocket()...";
 		sysError();
 		return;
 	}
@@ -1331,19 +1335,20 @@ void wscmSchedule (void) {
 	//fprintf(stderr, "  --%s =>%d\rn", __func__, memVectorObject(car(running), 1));
 }
 
-/* Force a call to the error continuation.  This better be defined in
-   The Global Environment.  R1 contains number of expressions on stack
-	to display as part of the error handling.  R0 holds the invalid
-	operator or message.
+/* Force a call to the error handler/continuation which must be defined in
+   the global environment in the ERRORS vector indexed  by thread ID.
+
+	Given  r1  number of expression on stack to pop and group into a message list
+   r0 holds the invalid operator or message.
 */
 void sysError (void) {
  Int tid;
 	DB("::%s", __func__);
 
-	/* Create list in r4 of the operator and stack operand arguments.
+	/* Create list in r3 of the operator and stack operand arguments.
 	   Operator is in r0, operands are on the stack and r1 is operand count. */
-	r3=r0;
-	sysList();
+	objNewString(r0, strlen(r0)); r3=r0;
+	sysStackToList(); /* uses r0-2 */
 	r1=r3; r2=r0; objCons12(); r3=r0;
 	
 	/* Look up error function/continuation in ERRORS vector
@@ -1355,9 +1360,10 @@ void sysError (void) {
 	     (cdr closure) Parent environment */
 	objNewSymbol ((Str)"ERRORS", 6);  r1=r0;  wscmTGEFind(); r0=car(r0);
 	tid = (Int)cdr(car(running));
-	/* r0 needs to remain the closure when a code block is first run
-	   since it needs to initially extend the lexical environment */
 	r0 = memVectorObject(r0, tid);
+	/* r0 needs to remain the closure when a code block is first run
+	   since the called code expects to find a lexical enviroment in the
+	   closure in r0 */
 	code=car(r0);  ip=0;
 
 	/* Push operand and set operand count */
@@ -1366,6 +1372,7 @@ void sysError (void) {
 
 	DB("  --%s", __func__);
 }
+
 
 /******************************************************************************
  System calls
@@ -1414,6 +1421,7 @@ void sysReinstateContinuation (void) {
 	env = pop();
 	retenv = pop();
 }
+
 void sysCreateContinuation (void) {
 	DB("-->%s", __func__);
  Int length;
@@ -1500,10 +1508,10 @@ void sysSubString (void) {
 		r0=nullstr;
 	} else {
 		if (end-start < 0) {
-			pop();
-			objNewString((u8*)"Invalid range to substring.", 27);  push(r0);
-			push(r2); push(r1);
+			push(r1);
+			push(r2);
 			r1 = (Obj)3;
+			r0 = "Invalid range to substring";
 			sysError();
 		} else {
 			memNewArray(TSTRING, end-start);
@@ -1891,7 +1899,7 @@ void sysOpenSocket (void) {
 	else if (2 == (Int)r1)
 		wscmOpenRemoteSocket();
 	else {
-		sysList();  r1=r0;
+		sysStackToList();  r1=r0;
 		objNewString((u8*)"Invalid arguments to open-socket:", 33);  push(r0);
 		push(r1);
 		r1 = (Obj)2;

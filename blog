@@ -2762,3 +2762,9 @@ Fri Feb 25 20:37:06 EST 2011
 Added a catch in emitted lambda body assembly for too many passed arguments.
 This revealed a long time bug in the map agent code which was incorrectly
 created a new "system" entity.
+
+
+Sat Feb 26 17:04:04 EST 2011
+
+The refactored Avatar entity can instantiate new avatars now.  I'm able to
+spawn 4 ghosts at start-up and push them around in the map.
