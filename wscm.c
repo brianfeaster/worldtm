@@ -15,7 +15,7 @@
    mode.
 */
 void wscmCReadEvalPrintLoop (void) {
- Int i;
+ Num i;
 	yyrestart(0);     /* Tell scanner to use stdin as input. */
 	wscmNewThread();  /* Create a new thread. */
 	wscmSchedule();   /* Prepare it for the VM. */
@@ -33,12 +33,12 @@ void wscmCReadEvalPrintLoop (void) {
 
 		fprintf(stderr, "== Execute and return value =====\n");
 		vmRun();
-		wscmDisplay(r0, 0, 2);
+		wscmDisplay(r0, stderr);
 
 		DB("== Debug =======================");
 		DBE memDebugDumpHeapHeaders(stdout);
 		DBE wscmWrite(stack, stderr);
-		DBE for (i=memStackLength(stack)-1; 0<=i; --i) wscmWrite(memStackObject(stack, i), stdout);
+		DBE for (i=memStackLength(stack); 0<i; --i) wscmWrite(memStackObject(stack, i-1), stdout);
 	}
 	sysUnthread();
 	printf ("WEL loop done\n");
@@ -68,8 +68,8 @@ void wscmStringReadEvalPrintLoop (void) {
 
 /* Bind wscheme's command line arguments to the vector 'argv
 */
-void wscmBindArgs (int argc, char *argv[]) {
- Int i=0;
+void wscmBindArgs (Num argc, char *argv[]) {
+ Num i=0;
 	objNewVector(argc); r1=r0;
 	for (i=0; i<argc; i++) {
 		objNewString((u8*)argv[i], strlen(argv[i]));
@@ -82,9 +82,9 @@ void wscmBindArgs (int argc, char *argv[]) {
 int main (int argc, char *argv[]) {
 	setbuf(stdout, NULL);
 	signal(SIGPIPE, SIG_IGN);
-	srandom(time(NULL));
+	srandom((unsigned int)time(NULL));
 	wscmInitialize();
-	wscmBindArgs(argc, argv);
+	wscmBindArgs((Num)argc, argv);
 
 	/* Three ways of firing up a repl. */
 

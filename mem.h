@@ -77,7 +77,7 @@ Obj  memStackPop  (Obj stack);
 Descriptor memObjectDescriptor (Obj o);
 Type memObjectType   (Obj obj);
 Num  memObjectLength (Obj obj);
-Int  memStackLength  (Obj obj);
+Num  memStackLength  (Obj obj);
 
 u8   memArrayObject  (Obj obj, Num offset);
 Obj  memVectorObject (Obj obj, Num offset);

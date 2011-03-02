@@ -8,7 +8,7 @@
 #include "comp.h"
 
 void sysCompile (void);
-Int wscmWrite (Obj a, FILE *stream);
+Num wscmWrite (Obj a, FILE *stream);
 Int  wscmEnvFind (void);
 void wscmTGEFind (void);
 void wscmEnvGet (void);
@@ -302,7 +302,7 @@ void compTransformInternalDefinitions(void) {
       code modify itslef into case (1).
 */
 void compLambdaBody (Num flags) {
- Int opcodeStart;
+ Num opcodeStart;
 	DB("-->%s", __func__);
 	DBE wscmWrite(expr, stdout);
 
@@ -469,7 +469,7 @@ void compLambdaBody (Num flags) {
            r4   0 or 1 dotted formals
 */
 void wscmNormalizeFormals(void) {
- Int i;
+ Num i;
 	r3=0; /* Keep track of non-dotted formal count. */
 
 	/* Push formals onto stack. */
@@ -480,12 +480,12 @@ void wscmNormalizeFormals(void) {
 	}
 
 	/* Keep track of the existence of a dotter formal */
-	r4 = (r0==null) ? 0 : 1;
+	r4 = (r0==null) ? (Obj)0 : (Obj)1;
 
 	/* Pop formals from stack creating list of args starting
       with (()) or (dotted-formal) */
 	r1=r0;  r2=null;  objCons12();
-	i=(Int)r3;
+	i=(Num)r3;
 	while (i--) { r2=r0;  r1=pop();  objCons12(); }
 }
 
@@ -737,7 +737,7 @@ Int parseUnary (void) {
 }
 
 void compCar (Num flags) {
- Int opcodeStart;
+ Num opcodeStart;
 	DB("-->%s", __func__);
 	if (parseUnary()) {
 		CompError = 1;
@@ -887,7 +887,7 @@ void compPairP (Num flags) {
 }
 
 void compVectorP (Num flags) {
- Int opcodeStart;
+ Num opcodeStart;
 	DB("-->%s", __func__);
 	if (memObjectType(cdr(expr)) != TPAIR) {
 		write (1, "ERROR: vector? illegal operand count: ", 38);
@@ -913,7 +913,7 @@ void compVectorP (Num flags) {
 }
 
 void compStringP (Num flags) {
- Int opcodeStart;
+ Num opcodeStart;
 	DB("-->%s", __func__);
 	if (memObjectType(cdr(expr)) != TPAIR) {
 		write (1, "ERROR: string? illegal operand count: ", 38);
@@ -939,7 +939,7 @@ void compStringP (Num flags) {
 }
 
 void compIntegerP (Num flags) {
- Int opcodeStart;
+ Num opcodeStart;
 	DB("-->%s", __func__);
 	if (memObjectType(cdr(expr)) != TPAIR) {
 		write (1, "ERROR: integer? illegal operand count: ", 38);
@@ -965,7 +965,7 @@ void compIntegerP (Num flags) {
 }
 
 void compSymbolP (Num flags) {
- Int opcodeStart;
+ Num opcodeStart;
 	DB("-->%s", __func__);
 	if (memObjectType(cdr(expr)) != TPAIR) {
 		write (1, "ERROR: symbol? illegal operand count: ", 38);
@@ -1010,7 +1010,7 @@ void compPortP (Num flags) {
 
 
 void compEOFObjectP (Num flags) {
- Int opcodeStart;
+ Num opcodeStart;
 	DB("-->%s", __func__);
 	if (memObjectType(cdr(expr)) != TPAIR) {
 		printf ("ERROR: eof-object? illegal operand count: ");
@@ -1073,7 +1073,7 @@ void compQuote (void) {
 /* Compiles expressions of the form (if test consequent alternate).
 */
 void compIf (Num flags) {
- Int falseBraAddr, trueContAddr;
+ Num falseBraAddr, trueContAddr;
 	DB("-->%s", __func__);
 	expr = cdr(expr); /* Skip 'if symbol. */
 	push (cddr(expr)); /* Push alternate expressions list.  Could be NULL. */
@@ -1125,7 +1125,7 @@ void compIf (Num flags) {
 		branch if not false to end
 */
 void compOr (Num flags) {
- Int opcodeStart;
+ Num opcodeStart;
 	DB("-->%s", __func__);
 	expr = cdr(expr); /* Skip 'or. */
 
@@ -1161,7 +1161,7 @@ void compOr (Num flags) {
 		branch if false to end
 */
 void compAnd (Num flags) {
- Int opcodeStart;
+ Num opcodeStart;
 	DB("-->%s", __func__);
 	expr = cdr(expr); /* Skip 'and. */
 
@@ -1216,7 +1216,7 @@ void compThread (void) {
 }
 
 void compTransformLet (void) {
- Int bindingLen, i;
+ Num bindingLen, i;
 	DB("-->%s", __func__);
 	r4=car(expr);     /* Consider the let bindings. */
 	r5 = cdr(expr);   /* Consider the let body. */
@@ -1267,7 +1267,7 @@ void compTransformLet (void) {
 }
 
 void compTransformNamedLet (void) {
- Int bindingLen, i;
+ Num bindingLen, i;
 	DB("-->%s", __func__);
 	r3=car(expr);   /* Consider the named-let name symbol. */
 	expr = cdr(expr);
@@ -1351,7 +1351,7 @@ void compLet (Num flags) {
    Why not:  ((lambda (v ...) (set! v exp) ... body) () ...)
 */
 void compTransformLetrec (void) {
- Int len;
+ Num len;
 	DB("-->%s", __func__);
 	expr=cdr(expr); /* Skip letrec. */
 
@@ -1510,7 +1510,7 @@ void compSyntaxRules (void) {
 }
 
 void compNot (Num flags) {
- Int opcodeStart;
+ Num opcodeStart;
 	DB("-->%s", __func__);
 	expr = cadr(expr);           /* Compile this expression */
 	compExpression(flags & ~TAILCALL);
@@ -1572,7 +1572,7 @@ DB("   compAdd constant folding:%d", sum);
 void compAsmTailCall () {
 	/* Keep track of this opcode position for the compiling of the
 	   labels and branches. */
- Int opcodeStart = memStackLength(asmstack);
+ Num opcodeStart = memStackLength(asmstack);
 	DB("::%s", __func__);
 	asmAsm (
 		BRTI0,  TSYSCALL, ADDR, "syscall",
@@ -1603,7 +1603,7 @@ void compAsmTailCall () {
 void compAsmNonTailCall () {
 	/* Keep track of this opcode position for the compiling of the
 	   labels and branches. */
- Int opcodeStart = memStackLength(asmstack);
+ Num opcodeStart = memStackLength(asmstack);
 	DB("::%s", __func__);
 	asmAsm (
 		BRTI0,  TSYSCALL, ADDR, "syscall",
@@ -1699,8 +1699,7 @@ ret:
 /* Compile the form (apply fn argument-list).  This should be similar to
    a combination expression. */
 void compApply (Num flags) {
- Int opcodeStart;
- Int operandCount=0;
+ Num opcodeStart, operandCount=0;
 	DB("-->%s", __func__);
 
 	expr = cdr(expr); /* Skip over 'apply symbol */
@@ -1781,7 +1780,7 @@ void compApply (Num flags) {
    be in a tail context.
 */
 void compCallcc (Num flags) {
- Int opcodeStart;
+ Num opcodeStart;
 	DB("-->%s", __func__);
 	expr = cdr(expr); /* Skip over 'call/cc symbol in (call/cc fn)*/
 
@@ -1824,7 +1823,7 @@ void compCallcc (Num flags) {
    env (r16) -> Pseudo environment
 	An expression is either a symbol, syntax, combination or self evaluating.
 */
-Int compExpression (Num flags) {
+Num compExpression (Num flags) {
 	DB("-->%s expr=", __func__);
 	DBE memDebugDumpObject(expr, stdout);
 	switch (memObjectType(expr)) {
@@ -1885,8 +1884,8 @@ Int compExpression (Num flags) {
    r18 -> Expression we're compiling.
    r0  <- Resuling code object (vector of VM opcodes).
 */
-Int compCompile (void) {
- Int ret;
+Num compCompile (void) {
+ Num ret;
 	DB ("::%s", __func__);
 
 	CompError = 0; /* Clear error flag. */

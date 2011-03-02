@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <string.h> /* memcpy */
+#include <assert.h>
 
 #include "obj.h"
 
@@ -25,15 +26,15 @@ Obj null, nullvec, nullstr, false, true, eof,
     seval, sapply, scallcc, ssyntaxrules, seof,
     snot, sadd, ssub, smul, sdiv, slogand, characters, staticIntegers, signalhandlers;
 
-int wscmDebug=0;
+Num wscmDebug=0;
 
 
 /* This is a very popular hashing algorithm found online and in various texts.
    My tweak is to feed the last char back into the algorithm which seems to
    help distribute more single-length symbols.
 */
-unsigned hashpjw (Str s, int len) {
- unsigned ret=0, mask;
+Num hashpjw (Str s, Num len) {
+ Num ret=0, mask;
 	while (len--) {
 		if ((mask=(ret=(ret<<4)+*s++)&0xf<<28)) ret^=(mask|mask>>24);
 	}
@@ -57,8 +58,8 @@ void tree_copy (void) { /* COPIES TREE ACC INTO ACC */
 }
 #endif
 
-int objListLength (Obj o) {
- int i=0;
+Num objListLength (Obj o) {
+ Num i=0;
 	while (memObjectType(o) == TPAIR) {
 		o = cdr(o);
 		i++;
@@ -66,9 +67,9 @@ int objListLength (Obj o) {
 	return i;
 }
 
-int objDoublyLinkedListLength (Obj o) {
+Num objDoublyLinkedListLength (Obj o) {
  Obj next=cdr(o);
- int i=0;
+ Num i=0;
 	while (next!=o) {next=cdr(next); i++; }
 	return i;
 }
@@ -76,7 +77,7 @@ int objDoublyLinkedListLength (Obj o) {
 /* Creates vector in r0 from list in r1.
 */
 void objListToVector (void) {
- int i=0, len;
+ Num i=0, len;
 	r1=r0;
 	len = objListLength(r0);
 	if (len) {
@@ -92,17 +93,20 @@ void objListToVector (void) {
 /* Creates a new integer object in r0.
 */
 void objNewInt  (Int i) {
-/* Attempt at implementing static integers.
-	if (staticIntegers && -255<=i && i<=256) {
+/* Attempt at implementing static integers. */
+	if (-255l<=i && i<=256l) {
 		r0 = ((Obj*)staticIntegers)[i+255];
+		assert (*(Int*)r0 == i);
 	} else {
    	memNewArray(TINTEGER, sizeof(Int));
    	*(Int*)r0 = i;
 	}
-*/
+/*
    memNewArray(TINTEGER, sizeof(Int));
    *(Int*)r0 = i;
+*/
 }
+
 /* Create and set object in r0 to immediate signed integer value in r1.
 */
 void objCopyInteger (void) {
@@ -125,7 +129,7 @@ void objCopyReal (void) {
 
 /* Create new string copying len bytes from str to object in r0.
 */
-void objNewString (Str str, int len) {
+void objNewString (Str str, Num len) {
    memNewArray(TSTRING, len);
    if (str) memcpy(r0, str, len);
 }
@@ -133,12 +137,12 @@ void objNewString (Str str, int len) {
 /* Create new string based on the string object in r1.
 */
 void objCopyString (void) {
- int len;
+ Num len;
    memNewArray(TSTRING, len=memObjectLength(r1));
 	memcpy(r0, r1, len);
 }
 
-void objNewSymbol (Str str, int len) {
+void objNewSymbol (Str str, Num len) {
  static unsigned hash, i;
 	i = hash = hashpjw(str, len) % 2029;
 	do {
@@ -203,7 +207,7 @@ void objCons23 (void) {
 
 /* Create uninitialized vector in r0 of length r1:immediate
 */
-void objNewVector (int len) {
+void objNewVector (Num len) {
    memNewVector(TVECTOR, len);
 }
 void objNewVector1 (void) {
@@ -257,8 +261,8 @@ void new_continuation(void) {
 #endif
 
 
-void objDumpR (Obj o, FILE *stream, int islist) {
- Int i;
+void objDumpR (Obj o, FILE *stream, Num islist) {
+ Num i;
  char *c;
 
 	if ((Num)o < 0x100000) {
@@ -394,6 +398,7 @@ void objGCPost (void) {
 /* Called by sys.c */
 void objInitialize (Func scheduler) {
  Int i;
+ Num n;
 	DB("::%s", __func_);
 	DB("  initializing memory module");
 	asmInitialize(scheduler, objGCPre, objGCPost, objDump);
@@ -408,7 +413,7 @@ void objInitialize (Func scheduler) {
 	memNewStatic(TTRUE, 2);    true=r0;    memcpy(r0, "#t", 2);
 
 	memNewVector(TVECTOR, 2029);        symbols = r0; /* Symbol table */
-	for (i=0; i<2029; i++) memVectorSet (symbols, i, null);
+	for (n=0; n<2029; n++) memVectorSet (symbols, n, null);
 	objNewSymbolStatic("define");       sdefine = r0;
 	objNewSymbolStatic("lambda");       slambda = r0;
 	objNewSymbolStatic("macro");        smacro = r0;
@@ -473,9 +478,9 @@ void objInitialize (Func scheduler) {
 
 	/* Table of character objects.  The 257th character is the EOF object. */
 	memNewStaticVector(TVECTOR, 257);   characters = r0;
-	for (i=0; i<256; i++) {
-		memNewStatic(TCHAR, 1);  *(Int*)r0=i;
-		memVectorSet(characters, i, r0);
+	for (n=0; n<256; n++) {
+		memNewStatic(TCHAR, 1);  *(Num*)r0=n;
+		memVectorSet(characters, n, r0);
 	}
 
 	/* Treat character number 256 0x100 as a char and as the eof object. */
@@ -488,7 +493,7 @@ void objInitialize (Func scheduler) {
 	for (i=-255l; i<=256l; ++i) {
    	memNewStatic(TINTEGER, sizeof(Int));
 		*(Int*)r0 = i;
-		memVectorSet(staticIntegers, i+255, r0);
+		memVectorSet(staticIntegers, (Num)i+255, r0);
 	}
 
 	DB("  --%s", __func_);
