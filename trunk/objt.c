@@ -57,6 +57,7 @@ int main (int argc, char *argv[]) {
 
 	setbuf(stdout, 0);
 	memInitialize(0, 0);
+	objInitialize(0);
 
 	objTestCreateObjects();
 	objTestVerifyObjects();

@@ -26,10 +26,11 @@
 #include "obj.h"
 #include "comp.h"
 
-Int wscmWriteR (Obj a, long islist, FILE *stream, Int max);
-Int wscmWrite (Obj a, FILE *stream);
-Int wscmWriteMax (Obj a, FILE *stream, Int max);
-void wscmDisplay (Obj a, long islist, int fd);
+Int wscmWriteR (Obj a, Num islist, FILE *stream, Int max);
+Num wscmWrite (Obj a, FILE *stream);
+Num wscmWriteMax (Obj a, FILE *stream, Int max);
+void wscmDisplayR (Obj a, Num islist, FILE *stream);
+void wscmDisplay (Obj a, FILE *stream);
 void wscmTGEFind (void);
 void wscmInsertThread (Obj t, Obj q);
 void wscmRemoveThread (Obj t);

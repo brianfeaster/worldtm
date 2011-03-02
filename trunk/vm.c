@@ -593,7 +593,7 @@ void vmDebugDumpCode (Obj c, FILE *stream) {
 	if (stream == NULL) stream=stderr;
 
 	while (i < ((Obj*)c + memObjectLength(c))) { // Forcing pointer arithmetic.
-		asmLineNumber = i-(Obj*)c;
+		asmLineNumber = (Num)(i-(Obj*)c);
 		fprintf (stream, NL OBJ STR HEX04" ",
 			i,
 			(i==ip || asmLineNumber==(Num)ip)?"*":" ",

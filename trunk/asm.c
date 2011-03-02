@@ -22,8 +22,8 @@ void asmAsm (Obj o,...) {
 }
 
 
-void asmCompileAsmstack (Int opcodeStart) {
- Int j, i, opcodeEnd, opcodeWrite, labelCount=0, addrCount=0;
+void asmCompileAsmstack (Num opcodeStart) {
+ Num j, i, opcodeEnd, opcodeWrite, labelCount=0, addrCount=0;
 	DB(TAB0"::%s", __func__);
 	memStackPush(stack, r0);
 	memStackPush(stack, r1);
@@ -64,7 +64,7 @@ void asmCompileAsmstack (Int opcodeStart) {
 	   pointer.
 	*/
 	opcodeEnd = memStackLength(asmstack)+1;
-	opcodeWrite = opcodeStart+1l;
+	opcodeWrite = opcodeStart+1;
 	for (i=opcodeWrite; i<opcodeEnd; i++) {
 		r0 = memVectorObject(asmstack, i);
 		if (r0 == LABEL) {
@@ -119,7 +119,7 @@ void asmCompileAsmstack (Int opcodeStart) {
 
 
 void asmNewCode (void) {
- Int len;
+ Num len;
 	DB("::%s", __func__);
 	memNewVector(TCODE, len=memStackLength(asmstack));
 	memcpy(r0, asmstack+8, len*8);

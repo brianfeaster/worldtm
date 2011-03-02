@@ -19,7 +19,7 @@ void compQuote (void);
 void compIf (Num flags);
 void compSyntaxRules (void);
 void compCombination (Num flags);
-Int compExpression (Num flags);
-Int compCompile (void);
+Num compExpression (Num flags);
+Num compCompile (void);
 
 #endif

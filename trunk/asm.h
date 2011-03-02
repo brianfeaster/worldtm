@@ -15,7 +15,7 @@ void asmAsm (Obj o,...);
 /* Assemble code in the asmstack inline.  For now it just takes care of
    'label' and 'address' assembly opcodes.  They refer to branch locations
    and branch points in the code. */ 
-void asmCompileAsmstack (Int opcodeStart);
+void asmCompileAsmstack (Num opcodeStart);
 
 /* Create code object from stack of opcodes.  Since stack and asmstack
    objects are really just vectors, it's just a matter of copying all the

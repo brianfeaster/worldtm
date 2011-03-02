@@ -83,8 +83,8 @@ Heap heapOld,   /* Where old objects live during runtime. */
 
 /* Initialize a heap struct and allocate 'count' number of blocks.
  */
-void memInitializeHeap (Heap *h, long blockCount) {
- long bytes = BLOCK_BYTE_SIZE * blockCount;
+void memInitializeHeap (Heap *h, Num blockCount) {
+ Num bytes = BLOCK_BYTE_SIZE * blockCount;
 	DB ("   ::memInitializeHeap(heap &%s)", h==&heapOld?"heapOld":h==&heap?"heap":h==&heapNew?"heapNew":h==&heapStatic?"heapStatic":"???");
 	h->start = h->next =
 		mmap(0x0, bytes, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, 0, 0);
@@ -101,8 +101,8 @@ void memInitializeHeap (Heap *h, long blockCount) {
 }
 
 /* Unallocate blockCount from tail part of object linux-memory. */
-void memShrinkHeap (Heap *h, long blockCount) {
- long newBlockCount;
+void memShrinkHeap (Heap *h, Num blockCount) {
+ Num newBlockCount;
 	DB ("::memShrinkHeap(%s)", h==&heapOld?"old":h==&heap?"heap":h==&heapNew?"new":"???");
 	if (0 < blockCount && blockCount <= h->blockCount) {
 		newBlockCount = h->blockCount - blockCount;
@@ -264,7 +264,7 @@ void memNewObject (Descriptor desc, Num byteSize) {
 
 /* Allocate a static object.  Like memNewObject except it can't fail.
 */
-void memNewStaticObject (Descriptor desc, long byteSize) {
+void memNewStaticObject (Descriptor desc, Num byteSize) {
 	DB("::memNewStaticObject(desc "HEX", byteSize %lx)", desc, byteSize);
 	*(Descriptor*)heapStatic.next = desc;
 	r0 = heapStatic.next + DescSize;
@@ -523,7 +523,7 @@ Obj memStackObject (Obj obj, Num topOffset) {
 
 /* Number of elements pushed onto stack.
 */
-Int memStackLength (Obj obj) {
+Num memStackLength (Obj obj) {
 	#if DEBUG_ASSERT_STACK
 	if (!(memIsObjectInHeap(&heap, obj)
 	      || memIsObjectInHeap(&heapOld, obj)
@@ -536,14 +536,14 @@ Int memStackLength (Obj obj) {
 		memError();
 	}
 	#endif
-	return ((Obj**)obj)[0] - (Obj*)obj;
+	return (Num)(((Obj**)obj)[0] - (Obj*)obj);
 }
 
 /* Calculate a pointer object's index offset into the object it's pointing
    at. A pointer is a vector whos first element is a void* and the second
    element is the object the void* should be pointing somewhere inside of. */
-unsigned memPointerOffset (Obj obj) {
-	return (Obj*)memVectorObject(obj, 0) - (Obj*)memVectorObject(obj, 1);
+Num memPointerOffset (Obj obj) {
+	return (Num)((Obj*)memVectorObject(obj, 0) - (Obj*)memVectorObject(obj, 1));
 }
 
 
@@ -657,7 +657,7 @@ char memGCFlag=0;
 */
 void memGarbageCollectInternal (Descriptor desc, Num byteSize) {
  Obj newObj;
- Int  i, len;
+ Num i, len;
 
 #if 0
  FILE *stream=NULL;
@@ -833,7 +833,7 @@ DB("   collecting and compacting mutated old object references...");
 		memFreeHeap (&heapOld);
 		memResetHeap(&heapOld);
 		/* Shrink newHeap (soon to be oldHeap) bounds to fit actual usage. */
-		memShrinkHeap(&heapNew, (heapNew.last-heapNew.next)/BLOCK_BYTE_SIZE);
+		memShrinkHeap(&heapNew, (Num)(heapNew.last-heapNew.next)/BLOCK_BYTE_SIZE);
 		/* Reassign new heap to old heap. */
 		heapOld = heapNew;
 		memInitializeHeap (&heap, HEAP_BLOCK_COUNT);
@@ -844,7 +844,7 @@ DB("   collecting and compacting mutated old object references...");
 		heap = heapNew;
 		/* If a non-generational collection results in a certain heap usage still,
 		   then force a generational collection next time around. */
-		if (((heap.next-heap.start)/BLOCK_BYTE_SIZE)*BLOCK_BYTE_SIZE
+		if (((Num)(heap.next-heap.start)/BLOCK_BYTE_SIZE)*BLOCK_BYTE_SIZE
 		    > HEAP_BLOCK_COUNT/2) {
 			//printf ("\n\aWARNING: memGarbageCollectInternal() young heap usage beyond half.\n");
 			GarbageCollectionMode = GC_MODE_OLD;
@@ -1081,7 +1081,7 @@ void memDebugDumpAll (FILE *stream) {
 void memValidateObject (Obj o) {
  Obj oo, op;
  Int valid=1;
- Int i;
+ Num i;
 	DB("   ::%s", __func__);
 	
 	if ((memIsObjectInHeap(&heapOld, o)

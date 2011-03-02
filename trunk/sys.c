@@ -7,7 +7,7 @@
 #include "sys.h"
 #include <termios.h>
 
-const int MaxSemaphoreCount=64;
+const Num MaxSemaphoreCount=64;
 
 /* Concepts:
      (Operator operand operand operand ...)
@@ -38,13 +38,13 @@ s64 wscmTime (void) {
 /* Check that r1, argument stack count, is between the argument count range.
 */
 Int wscmAssertArgumentCount (Num count, const char *functionName) {
- Int i;
+ Num i;
 	if (count == (Num)r1) return 0;
 	/* Dump error and syscall/arguments. */
 	if (count==1)
 		fprintf(stderr, "\r\nERROR: Expecting 1 argument (%s",functionName);
 	else
-		fprintf(stderr, "\r\nERROR: Expecting %u arguments (%s",count,functionName);
+		fprintf(stderr, "\r\nERROR: Expecting "NUM" arguments (%s",count,functionName);
 	for (i=0; i<(Num)r1; i++) {
 		write(1, " ", 1);
 		wscmWrite(memStackObject(stack,(Num)r1-i-1), stderr);
@@ -57,10 +57,10 @@ Int wscmAssertArgumentCount (Num count, const char *functionName) {
 }
 
 Int wscmAssertArgumentCountRange (Num min, Num max, const char *functionName) {
- Int i;
+ Num i;
 	if (min <= (Num)r1 && (Num)r1 <= max) return 0;
 	/* Dump error and syscall/arguments. */
-	fprintf(stderr, "\r\nERROR: Expecting %u to %u arguments (%s",min,max,functionName);
+	fprintf(stderr, "\r\nERROR: Expecting "NUM" to "NUM" arguments (%s",min,max,functionName);
 	for (i=0; i<(Num)r1; i++) {
 		write(1, " ", 1);
 		wscmWrite(memStackObject(stack,(Num)r1-i-1), stderr);
@@ -73,13 +73,13 @@ Int wscmAssertArgumentCountRange (Num min, Num max, const char *functionName) {
 }
 
 Int wscmAssertArgumentCountMin (Num min, const char *functionName) {
- Int i;
+ Num i;
 	if (min <= (Num)r1) return 0;
 	/* Dump error and syscall/arguments. */
 	if (min == 1)
-		fprintf(stderr, "\r\nERROR: Expecting at least %u argument (%s",min,functionName);
+		fprintf(stderr, "\r\nERROR: Expecting at least "NUM" argument (%s",min,functionName);
 	else
-		fprintf(stderr, "\r\nERROR: Expecting at least %u arguments (%s",min,functionName);
+		fprintf(stderr, "\r\nERROR: Expecting at least "NUM" arguments (%s",min,functionName);
 	for (i=0; i<(Num)r1; i++) {
 		write(1, " ", 1);
 		wscmWrite(memStackObject(stack,(Num)r1-i-1), stderr);
@@ -98,7 +98,7 @@ Int wscmAssertArgumentCountMin (Num min, const char *functionName) {
    Return  r0 new list
 */
 void sysStackToList (void) {
- Int count = (Int)r1;
+ Num count = (Num)r1;
 	r0=null;
 	while (count--) { r1=pop(); r2=r0; objCons12(); }
 }
@@ -112,34 +112,44 @@ void sysStackToList (void) {
 /* Given a signed integer and base, create a new string object in r0
    representing the number's external signed representation.
    IE: wscmSerializeInteger(-256 16) => "-100"
+
+	In C on this machine, the sign of the base doesn't matter but I don't
+	expect the desired base of a number to be negative, as interesting as
+	negative base numbers are.
 */
-void wscmSerializeInteger (Int num, Int base) {
- u8 buff[32], /* Big enough to contain signed 32bit binary ascii number. */
-    *ptr=buff+32;
- Int  signBit, nybble;
+void wscmSerializeInteger (Int theint, Num base) {
+ u8 buff[64], /* Big enough to contain signed 64bit binary ascii number. */
+    *ptr=buff+64;
+ Num  signBit, dividend, glyph;
 	DB("-->%s", __func__);
+	assert(base<32);
 	// Special cases which the general algorithm doesn't handle gracefully.
-	if (num == 0x80000000) objNewString((u8*)"-2147483648", 11);
-	else if (num == 0) objNewString((u8*)"0", 1);
+	if (theint == LLONG_MIN) objNewString((u8*)"-9223372036854775808", 20); /* TODO handle all bases */
+	else if (theint == 0) objNewString((u8*)"0", 1);
 	else {
-	 	if (num<0) {    /* Figure sign and normalize into a positive value. */
- 			signBit=1;
- 			num *= -1;
- 		} else
- 			signBit=0;
-		while (num) { /* Construct the string in reverse. */
-			nybble = num%base;
-			*--ptr = nybble + (nybble<10 ? '0' : 'a'-10);
-			num /= base;
+		if (theint<0) {    /* Consider sign and normalize dividen into a positive number. */
+			signBit=1;
+			dividend = -(Num)theint;
+		} else {
+			signBit=0;
+			dividend = (Num)theint;
 		}
+
+		while (dividend) { /* Construct the string in reverse. */
+			glyph = dividend % base; /* Both dividend and divisor positive here */
+			*--ptr = (u8)(glyph + (glyph<10 ? '0' : 'a'-10));
+			dividend /= base;
+		}
+
 		if (signBit) *--ptr = '-'; /* Here's the sign. */
-		objNewString(ptr, buff+32-ptr);
+		objNewString(ptr, (Num)(buff+64-ptr));
 	}
 	DB("<--%s", __func__);
 }
 
-Int wscmWriteR (Obj a, long islist, FILE *stream, Int max) {
- Int i, count=0;
+Int wscmWriteR (Obj a, Num islist, FILE *stream, Int max) {
+ Num i;
+ Int count=0;
 
 	if (NULL==stream) stream=stderr;
 
@@ -195,7 +205,7 @@ Int wscmWriteR (Obj a, long islist, FILE *stream, Int max) {
 			count += fprintf(stream, "\"");
 			break;
 		case TSYMBOL:
-			count += fwrite(a, 1, memObjectLength(a), stream);
+			count += (Int)fwrite(a, 1, memObjectLength(a), stream);
 			break;
 		case TINTEGER:
 			count += fprintf(stream, INT, *(Int*)a);
@@ -203,7 +213,7 @@ Int wscmWriteR (Obj a, long islist, FILE *stream, Int max) {
 		case TREAL: 
 			count += fprintf(stream, REAL, *(Real*)a);
 			break;
-	 	case TPAIR:
+		case TPAIR:
 			if (!islist) count += fprintf(stream, "(");
 			count += wscmWriteR(car(a), 0, stream, max-count);
 			if (TPAIR == memObjectType(cdr(a))) {
@@ -215,7 +225,7 @@ Int wscmWriteR (Obj a, long islist, FILE *stream, Int max) {
 					count += wscmWriteR(cdr(a), 0, stream, max-count);
 				}
 			}
-      	if (!islist) count += fprintf(stream, ")");
+			if (!islist) count += fprintf(stream, ")");
 			break;
 		case TVECTOR:
 			count += fprintf(stream, "#(");
@@ -259,123 +269,114 @@ Int wscmWriteR (Obj a, long islist, FILE *stream, Int max) {
 			}
 			count += fprintf(stream, "]");
 			break;
-	 	default:
+		default:
 			count += fprintf(stream, "#???<"HEX">", a);
 	}
 
 	return count;
 }
 
-Int wscmWrite    (Obj a, FILE *stream) { return wscmWriteR (a, 0, stream, LONG_MAX); }
-Int wscmWriteMax (Obj a, FILE *stream, Int max) { return wscmWriteR (a, 0, stream, max); }
+Num wscmWrite    (Obj a, FILE *stream) { return (Num)wscmWriteR (a, 0, stream, LONG_MAX); }
+Num wscmWriteMax (Obj a, FILE *stream, Int max) { return (Num)wscmWriteR (a, 0, stream, max); }
 
-/* TODO convert this to FILE oriented output like I did to wscmWrite */
-void wscmDisplay (Obj a, long islist, int fd) {
- static char buff[64];
- Int i, len;
-	if ((Num)a < 0x100000) {
-		i = sprintf(buff, "#<%x>", a);
-		write(fd, buff, i);
-	}
+void wscmDisplayR (Obj a, Num islist, FILE *stream) {
+ Num i;
+
+	if ((Num)a < 0x100000)
+		fprintf(stream, "#<"HEX">", a);
 	else switch (memObjectType(a)) {
 		case TFALSE:
-			write (fd, "#f", 2);
+			fprintf(stream, "#f");
 			break;
 		case TTRUE:
-			write (fd, "#t", 2);
+			fprintf(stream, "#t");
 			break;
 		case TNULL:
-			write (fd, "()", 2);
+			fprintf(stream, "()");
 			break;
 		case TNULLVEC:
-			write (fd, "#()", 3);
+			fprintf(stream, "#()");
 			break;
 		case TNULLSTR:
 			break;
 		case TEOF:
-			write (fd, "#eof", 4);
+			fprintf(stream, "#eof");
 			break;
 		case TCHAR:
 		case TSTRING:
 		case TSYMBOL:
-			i=0;
-			while (i<memObjectLength(a)) {
-				len = write (fd, a+i, memObjectLength(a)-i);
-				if (len > 0) i+=len;
-			}
+			fwrite(a, 1, memObjectLength(a), stream);
 			break;
 		case TINTEGER:
-			len = sprintf(buff, INT, *(Int*)a);
-			write(fd, buff, len);
+			fprintf(stream, INT, *(Int*)a);
 			break;
 		case TREAL: 
-			len = sprintf(buff, "%.2f", *(Real*)a);
-			write(fd, buff, len);	
+			fprintf(stream, REAL, *(Real*)a);
 			break;
-	 	case TPAIR:
-			if (!islist) write (fd, "(", 1);
-			wscmDisplay(car(a), 0, fd);
+		case TPAIR:
+			if (!islist) fprintf(stream, "(");
+			wscmDisplayR(car(a), 0, stream);
 			if (TPAIR == memObjectType(cdr(a))) {
-				write (fd, " ", 1);
-				wscmDisplay(cdr(a), 1, fd);
+				fprintf(stream, " ");
+				wscmDisplayR(cdr(a), 1, stream);
 			} else {
 				if (cdr(a)!=null) {
-					write (fd, " . ", 3);
-					wscmDisplay(cdr(a), 0, fd);
+					fprintf(stream, " . ");
+					wscmDisplayR(cdr(a), 0, stream);
 				}
 			}
-      	if (!islist) write (fd, ")", 1);
+			if (!islist) fprintf(stream, ")");
 			break;
 		case TVECTOR:
-			write (fd, "#(", 2);
+			fprintf(stream, "#(");
 			for (i=0; i<memObjectLength(a); i++) {
-				if (i) write (fd, " ", 1);
-				wscmDisplay(memVectorObject(a, i), 0, fd);
+				if (i) fprintf(stream, " ");
+				 wscmDisplayR(memVectorObject(a, i), 0, stream);
 			}
-			write (fd, ")", 1);
+			fprintf(stream, ")");
 			break;
 		case TCLOSURE:
-			len=sprintf (buff, "#CLOSURE<CODE "OBJ"  ENV:"OBJ">", car(a), cdr(a));
-			write(fd, buff, len);
+			fprintf(stream, "#CLOSURE<CODE "OBJ"  ENV "OBJ">", car(a), cdr(a));
 			break;
 		case TCONTINUATION:
+			fprintf(stream, "#CONTINUATION<"OBJ">", a);
 			break;
 		case TCODE:
-			len = sprintf(buff, "#CODE<"OBJ">", a);
-			write(fd, buff, len);
+			fprintf(stream, "#CODE<"OBJ">", a);
 			break;
 		case TPORT:
 		case TSOCKET:
-			write(fd, "#SOCKET<", 8);
-			wscmDisplay (memVectorObject(a, 0), 0, fd); write(fd, " ", 1);
-			wscmDisplay (memVectorObject(a, 1), 0, fd); write(fd, " ", 1);
-			wscmDisplay (memVectorObject(a, 2), 0, fd); write(fd, " ", 1);
-			wscmDisplay (memVectorObject(a, 3), 0, fd); write(fd, " ", 1);
-			wscmDisplay (memVectorObject(a, 4), 0, fd);
-			write(fd, ">", 1);
+			fprintf(stream, "#SOCKET<");
+			wscmDisplayR (memVectorObject(a, 0), 0, stream); fprintf(stream, " ");
+			wscmDisplayR (memVectorObject(a, 1), 0, stream); fprintf(stream, " ");
+			wscmDisplayR (memVectorObject(a, 2), 0, stream); fprintf(stream, " ");
+			wscmDisplayR (memVectorObject(a, 3), 0, stream); fprintf(stream, " ");
+			wscmDisplayR (memVectorObject(a, 4), 0, stream);
+			fprintf(stream, ">");
 			break;
 		case TSYSCALL:
-			i = sprintf(buff, "#SYSCALL<"OBJ">", a);
-			write(fd, buff, i);
+			fprintf(stream, "#SYSCALL<"OBJ">", a);
 			break;
 		case TSTACK :
-			len = sprintf(buff, "#["HEX" |", memStackLength(a));
-			write(fd, buff, len);
+			fprintf(stream, "#[%x |", memStackLength(a));
 			for (i=0; i<memStackLength(a); i++) {
-				len=sprintf(buff, " "HEX, memStackObject(a, memStackLength(a)-i-1));
-				write(fd, buff, len);
+				fprintf(stream, " "HEX, memStackObject(a, memStackLength(a)-i-1));
 			}
-			write(fd, "]", 1);
+			fprintf(stream, "]");
 			break;
-	 	default:
-			len = sprintf(buff, "#<"OBJ">", a);
-			write(fd, buff, len);
+		default:
+			fprintf(stream, "#<"OBJ">", a);
 	}
 }
 
+void wscmDisplay (Obj a, FILE *stream) {
+	wscmDisplayR (a, 0, stream);
+}
+
+
 void wscmDumpTGE (void) {
  Obj o;
- Int len;
+ Num len;
 	o = cdr(tge);
 	fprintf (stderr, "\n----TGE "OBJ"------------------------------------", o);
 	while (o != null) {
@@ -390,7 +391,7 @@ void wscmDumpTGE (void) {
 
 void sysDumpEnv (Obj env) {
  Obj formals;
- Int i, len;
+ Num ret, i;
 
 	if (env==tge) fprintf (stderr, "\n----TGE "OBJ"------------------------------------\n...", env);
 
@@ -399,8 +400,8 @@ void sysDumpEnv (Obj env) {
 		fprintf (stderr, "\n----ENV "OBJ"------------------------------------", env);
 		for (i=2; memObjectType(formals) == TPAIR; i++) {
 			fprintf (stderr, "\n"OBJ" ", memVectorObject(env, i));
-			len=wscmWrite (car(formals), stderr);
-			fprintf(stderr, "                "+((len<17)?len-1:15));
+			ret=wscmWrite (car(formals), stderr);
+			fprintf(stderr, "                "+((ret<17)?ret-1:15));
 			wscmWriteMax (memVectorObject(env, i), stderr, 80);
 			formals = cdr(formals);
 		}
@@ -496,7 +497,7 @@ Int wscmEnvFind (void) {
    Return: r0
 */
 void wscmEnvGet (void) {
- Int offset;
+ Num offset;
 	DB("-->%s", __func__);
 	push(env); /* Save environment. */
 	while (env != tge) {
@@ -550,7 +551,7 @@ void wscmSend (void);
 
 void wscmOpenRemoteSocket (void) {
  char  hostname[128]={0};
- Int fd;
+ int fd;
  struct hostent *he;
  struct sockaddr_in sai;
 	DB("-->%s", __func__);
@@ -575,13 +576,14 @@ void wscmOpenRemoteSocket (void) {
 	}
 	sai.sin_family = AF_INET;
 	sai.sin_port = htons(*(Num*)r3);
-	sai.sin_addr.s_addr = *((Num*)he->h_addr);
+	sai.sin_addr.s_addr = *((in_addr_t*)he->h_addr);
 	if (-1 == connect (fd, (struct sockaddr*)&sai, sizeof(sai))) {
 		r4=sconnecting;
 	} else {
 		r4=sopen;
 	}
-	r1=(Obj)fd;
+	/* Force the fd to a long int to avoid the warning: cast to pointer from integer of different size */
+	r1=(Obj)(0l +fd);
 	objNewPort();
 	
 ret:
@@ -605,7 +607,7 @@ void wscmOpenRemoteStream (void) {
 */
 void wscmAcceptRemoteStream (void) {
  Int ret;
- struct pollfd fds={(Int)car(r1), POLLOUT, 0};
+ struct pollfd fds={(int)car(r1), POLLOUT, 0};
 	DB("-->%s", __func__);
 	ret = poll(&fds, 1, 0);
 	if (ret == 1) {
@@ -698,8 +700,8 @@ void wscmOpenLocalStream (void) {
 	DB("<--%s", __func__);
 }
 
-/* IN:  r1:port
-  OUT:  r1:modified port
+/* IN:  r1:port object
+  OUT:  r1:port object, possibly new
    Accept blocks.  Need to implement a blocking mechanism with the
    scheduler.  Hopefully it can coexist with the current fd blocked
    mechanism.  Expect a listening socket in r1.
@@ -710,11 +712,11 @@ void wscmOpenLocalStream (void) {
 void wscmAcceptLocalStream (void) {
  struct sockaddr sa;
  socklen_t salen;
- Int ld, fd2;
+ int ld, fd2;
  char *name;
 	DB("SYS -->wscmAcceptLocalStream <=");
 	DBE wscmWrite(r1, stderr);
-	ld = (Int)memVectorObject(r1, 0);
+	ld = (int)memVectorObject(r1, 0);
 	salen = sizeof(struct sockaddr);
 	if (-1 == (fd2=accept(ld, &sa, &salen))) {
 		goto ret;
@@ -726,7 +728,7 @@ void wscmAcceptLocalStream (void) {
 	fcntl (fd2, F_SETFL, fcntl (fd2, F_GETFL) | O_NONBLOCK);
 
 	/* The file descriptor. */
-	r1 = (Obj)fd2;
+	r1 = (Obj)(0l + fd2);
 
 	/* The host IP address string. */
 	name=inet_ntoa(((struct sockaddr_in*)&sa)->sin_addr);
@@ -744,7 +746,7 @@ void wscmAcceptLocalStream (void) {
 
 ret:
 	DB("SYS <--wscmAcceptLocalStream => ");
-	DBE wscmDisplay(r1, 0, 2);
+	DBE wscmDisplay(r1, stderr);
 }
 
 
@@ -763,8 +765,9 @@ ret:
 	have been successfully read.
 */
 void wscmRecv (void) {
- u8 buffer[0x2000];
- Int ret=0, len;
+ Chr buffer[0x2000];
+ Int ret;
+ Num len;
 	DB("SYS -->wscmRecv <= ");
 	DBE wscmWrite(r1, stderr);
 	DBE wscmWrite(r2, stderr);
@@ -783,14 +786,14 @@ void wscmRecv (void) {
 			DB("SYS    reading any length");
 			/* If char in push-back, deal with it. */
 			if (r0 != false) {
-				*buffer = *(char*)r0;
-				ret = read(*(Int*)r1, buffer+1, 0xfff);
+				*buffer = *(Chr*)r0;
+				ret = read(*(int*)r1, buffer+1, 0xfff);
 				if (ret<=0) ret=1;
 				else ret++;
 				memVectorSet(r1, 4, false); /* Clear push-back character. */
 			} else
-				ret = read(*(Int*)r1, buffer, 0x1000);
-			if (ret>0) objNewString(buffer, ret); /* Return new string. */
+				ret = read(*(int*)r1, buffer, 0x1000);
+			if (ret>0) objNewString(buffer, (Num)ret); /* Return new string. */
 			else if (ret==0) r0=eof;              /* File Descriptor closed. */
 			else r0=nullstr;                      /* No bytes available yet. */
 		/* Deal with character read and return. */
@@ -801,7 +804,7 @@ void wscmRecv (void) {
 				memVectorSet(r1, 4, false); /* Clear push-back character. */
 			} else {
 				DB("SYS    before ret="INT" *buffer="HEX02" errno="INT" %s", ret, *buffer, errno, strerror(errno));
-				ret = read(*(Int*)r1, buffer, 1);
+				ret = read(*(int*)r1, buffer, 1);
 				DB("SYS    after  ret="INT" *buffer="HEX02" errno="INT" %s", ret, *buffer, errno, strerror(errno));
 				if (ret == 1) r0=memVectorObject(characters, *buffer);
 				else if (ret==0) r0=eof;
@@ -814,12 +817,12 @@ void wscmRecv (void) {
 			DB("SYS    reading fixed length "NUM"/"INT, r4, len);
 			if (r0 != false) {
 				*((char*)r3+(Int)r4) = *(char*)r0;
-				ret = read(*(Int*)r1, r3+(Int)r4+1, len-(Int)r4-1);
+				ret = read(*(int*)r1, r3+(Int)r4+1, len-(Num)r4-1);
 				if (ret<=0) ret = 1;
 				else ret++;
 				memVectorSet(r1, 4, false); /* Clear push-back character. */
 			} else
-				ret = read(*(Int*)r1, r3+(Int)r4, len-(Int)r4);
+				ret = read(*(int*)r1, r3+(Int)r4, len-(Num)r4);
 			if (ret>0) {
 				r4+=ret;
 				if ((Int)r4 == len) r0=r3; /* Return the string buffer obj. */
@@ -827,7 +830,7 @@ void wscmRecv (void) {
 			} else if (ret<0) r0=false;   /* Nothing read so keep blocking. */
 			else { /* ret==0 File descriptor closed...see if anything was read. */
 				if (r4 == 0) r0 = eof;
-				else objNewString(r3, (Int)r4);
+				else objNewString(r3, (Num)r4);
 			}
 		}
 	} else { /* Port state must be closed. */
@@ -878,7 +881,8 @@ void wscmRecvBlock (void) {
    port object.
 */
 void wscmSend (void) {
- Int ret, len;
+ Num len;
+ Int ret;
 	DB("-->%s : ", __func__);
 	//DB("   r1 "); DBE wscmWrite(r1, stderr);
 	//DB("   r2 "); DBE wscmWrite(r2, stderr);
@@ -888,8 +892,8 @@ void wscmSend (void) {
 	/* Port is open and data is flowing. */
 	else if (memVectorObject(r1, 3) == sopen) {
 		len = memObjectLength(r2);
-		DB("   sent so far %d/%d", r3, len);
-		ret = write(*(Int*)r1, r2+(Int)r3, len-(Int)r3);
+		DB("   sent so far "INT"/"INT"", r3, len);
+		ret = write(*(int*)r1, r2+(Int)r3, len-(Num)r3);
 		if (ret>0) {
 			r3 = (Obj)(ret + (Int)r3);
 			/* Return true. Can't return the string in case the 'string' is #f.
@@ -972,7 +976,7 @@ void wscmMoveToQueue (Obj thread, Obj queue, Obj state) {
 	Returns: r0 thread id
 */
 void wscmNewThread (void) {
- Int tid;
+ Num tid;
 	DB("-->%s", __func__);
 
 	/* Find next available thread id.  Thread table's first entry
@@ -984,7 +988,7 @@ void wscmNewThread (void) {
 			goto done;
 		}
 
-	DB("\nOS    Thread id: %d\n", tid);
+	DB("\nOS    Thread id: "NUM"\n", tid);
 
 	/* Create thread's stack (in an un-running state). */
 	r1=r0; /* Code block */
@@ -1021,7 +1025,7 @@ void wscmNewThread (void) {
 	memVectorSet(r0, 0, r1);
 	wscmInsertThread (r0, running);
 
-	objNewInt(tid);
+	objNewInt((Int)tid);
 done:
 	DB("<--%s id:"INT, __func__, tid);
 }
@@ -1072,7 +1076,7 @@ void wscmRun (void) {
 	DB("OS -->wscmRun() <= thread:%d ", memVectorObject(car(running),1));
 	if (memVectorObject(car(running),2) != sready) {
 		fprintf (stderr, "WARNING: wscmRun: not a 'ready thread:");
-		wscmDisplay(memVectorObject(car(running),2), 0, 2);
+		wscmDisplay(memVectorObject(car(running),2), stderr);
 	} else {
 		/* Get stack from descriptor. */
 		stack = memVectorObject(car(running),0);
@@ -1127,7 +1131,7 @@ void wscmSleepThread (void) {
    nor blocked queue then wait for topmost thread to wakeup. */
 void wscmScheduleSleeping (void) {
  Obj sleepingThreadDescriptor;
- s64 wakeupTime;
+ Int wakeupTime;
 	DB("-->%s", __func__);
 	sleepingThreadDescriptor = cadr(sleeping);
 	/* Next thread's wakeup time on top of its stack. */
@@ -1138,7 +1142,7 @@ void wscmScheduleSleeping (void) {
 		/* Disable scheduler's interrupt timer as it'll interrupt our
 		   sleeping.  It will be reactivated by the scheduler*/
 		ualarm(0,0);
-		usleep(wakeupTime*1000);
+		usleep((useconds_t)wakeupTime*1000);
 		wakeupTime=0;
 	}
 
@@ -1268,7 +1272,7 @@ void wscmScheduleBlocked (void) {
 	DB("<--%s", __func__);
 }
 
-void wscmScheduleSemaphoreBlocked (Int sem) {
+void wscmScheduleSemaphoreBlocked (Num sem) {
  Int value, found=0;
 	DB("\e[33m-->%s\n", __func__);
 	r4=cdr(blocked); /* For each thread r4 in blocked queue... */
@@ -1342,7 +1346,7 @@ void wscmSchedule (void) {
    r0 holds the invalid operator or message.
 */
 void sysError (void) {
- Int tid;
+ Num tid;
 	DB("::%s", __func__);
 
 	/* Create list in r3 of the operator and stack operand arguments.
@@ -1359,7 +1363,7 @@ void sysError (void) {
 	     (car closure) Code block
 	     (cdr closure) Parent environment */
 	objNewSymbol ((Str)"ERRORS", 6);  r1=r0;  wscmTGEFind(); r0=car(r0);
-	tid = (Int)cdr(car(running));
+	tid = (Num)cdr(car(running));
 	r0 = memVectorObject(r0, tid);
 	/* r0 needs to remain the closure when a code block is first run
 	   since the called code expects to find a lexical enviroment in the
@@ -1382,12 +1386,7 @@ void sysQuit (void) { exit(0); }
 
 /* This can do anything.  I change it mainly for debugging and prototyping. */
 void sysFun (void) {
- Int i;
-	//memDebugDumpYoungHeap(stderr);
-	//memValidateHeapStructures();
-	//sysDumpCallStackCode();
-	fprintf (stderr, "[%d]", memStackLength(stack));
-	for (i=memStackLength(stack)-1; 0<=i; --i) wscmWrite(memStackObject(stack, i), stdout);
+	fprintf (stderr, "Stacklength=[%d]", memStackLength(stack));
 }
 
 
@@ -1401,7 +1400,7 @@ void sysFun (void) {
 /* Stored stack expected in r1.
 */
 void sysReinstateContinuation (void) {
- Int length;
+ Num length;
 
 	if ((Int)r1==1) r0=pop();
 	else {
@@ -1423,8 +1422,8 @@ void sysReinstateContinuation (void) {
 }
 
 void sysCreateContinuation (void) {
+ Num length;
 	DB("-->%s", __func__);
- Int length;
 	push(retenv);
 	push(env);
 	push(retip);
@@ -1462,25 +1461,31 @@ void sysDumpThreads (void) {
 }
 
 void sysString (void) {
- Int i=0, l=0, len;
+ Num totalLen=0, s=0, len;
+
 	DB("SYS -->sysString");
-	while (l<(Int)r1) i += memObjectLength(memStackObject(stack, l++));
-	if (!i) {
-		while (l--) pop();
-		r0= nullstr;
+
+	/* Consider sum of lengths of string argumens on stack TODO error checking */
+	while (s < (Int)r1)
+		totalLen += memObjectLength(memStackObject(stack, s++));
+
+	if (!totalLen) {
+		/* All strings were "".  Pop them off stack and return "". */
+		while (s--) pop();
+		r0 = nullstr;
 	} else {
-		memNewArray(TSTRING, i);
-		while (l--) {
-			r1 = pop();
-			i -= (len = memObjectLength(r1));
-			memcpy(r0+i, r1, len);
+		memNewArray(TSTRING, totalLen);
+		while (s--) {
+			totalLen -= (len = memObjectLength(r1=pop()));
+			memcpy(r0+totalLen, r1, len); /* New string is built in reverse */
 		}
 	}
+
 	DB("SYS <--sysString");
 }
 
 void sysMakeString (void) {
- Int len;
+ Num len;
  char fill=' ';
 	DB("-->%s", __func__);
 	if (wscmAssertArgumentCountRange(1, 2, __func__)) return;
@@ -1489,7 +1494,7 @@ void sysMakeString (void) {
 	if (2 == (Int)r1)  fill = *(char*)pop();
 
 	/* Create string of passed length. */
-	objNewString(NULL, len=*(Int*)pop());
+	objNewString(NULL, len=*(Num*)pop());
 
 	/* Fill string if fill character specified. */
 	if (2 == (Int)r1)  while (len--) ((char*)r0)[len]=fill;
@@ -1498,11 +1503,11 @@ void sysMakeString (void) {
 }
 
 void sysSubString (void) {
- Int end=0, start=0;
+ Num end=0, start=0;
 	DB("SYS -->sysSubString");
 	if (wscmAssertArgumentCount(3, __func__)) return;
-	end=*(Int*)(r2=pop());
-	start=*(Int*)(r1=pop());
+	end=*(Num*)(r2=pop());
+	start=*(Num*)(r1=pop());
 	if (end==start) {
 		r1=pop();
 		r0=nullstr;
@@ -1525,7 +1530,7 @@ void sysSubString (void) {
 void sysStringLength (void) {
 	DB("SYS -->sysStringLength");
 	if (wscmAssertArgumentCount(1, __func__)) return;
-	objNewInt(memObjectLength(pop()));
+	objNewInt((Int)memObjectLength(pop()));
 	DB("SYS <--sysStringLength");
 }
 
@@ -1536,13 +1541,14 @@ void sysStringLength (void) {
 */
 void sysSerializeDisplay (void) {
  static u8 buff[8192];
- Int len;
+ Int ret;
 	DB("-->%s", __func__);
 	if (wscmAssertArgumentCount(1, __func__)) return;
 	r0 = pop();
 	if ((Num)r0 < 0x100000l) {
-		len = sprintf((char*)buff, "#"OBJ, (Num)r0);
-		objNewString(buff, len);
+		ret = sprintf((char*)buff, "#"OBJ, (Num)r0);
+		assert(0<ret);
+		objNewString(buff, (Num)ret);
 	} else switch (memObjectType(r0)) {
 		case TSTRING : 
 		case TSYMBOL : 
@@ -1559,28 +1565,33 @@ void sysSerializeDisplay (void) {
 			wscmSerializeInteger(*(Int*)r0, 10);
 			break;
 		case TREAL   : 
-			len = sprintf((char*)buff, "%.2f", *(Real*)r0);
-			objNewString(buff, len);
+			ret = sprintf((char*)buff, "%.2f", *(Real*)r0);
+			assert(0<ret);
+			objNewString(buff, (Num)ret);
 			break;
 		case TCHAR   : 
 			objNewString(r0, 1);
 			break;
 		default      :
-			len = sprintf((char*)buff, HEX, (Num*)r0);
-			objNewString(buff, len);
+			ret = sprintf((char*)buff, HEX, (Num*)r0);
+			assert(0<ret);
+			objNewString(buff, (Num)ret);
 			break;
 	}
 	DB("<--%s", __func__);
 }
+
 void sysSerializeWrite (void) {
  static Chr buff[8192];
- Int len, i;
+ Int ret;
+ Num len, i;
 	DB("SYS -->%s", __func__);
 	if (wscmAssertArgumentCount(1, __func__)) return;
 	r0 = pop();
 	if ((Num)r0 < 0x100000l) {
-		len = sprintf((char*)buff, "#"HEX, (Num)r0);
-		objNewString(buff, len);
+		ret = sprintf((char*)buff, "#"HEX, (Num)r0);
+		assert(0<ret);
+		objNewString(buff, (Num)ret);
 	} else switch (memObjectType(r0)) {
 		case TSYMBOL : 
 		case TEOF    :
@@ -1593,12 +1604,14 @@ void sysSerializeWrite (void) {
 			wscmSerializeInteger(*(Int*)r0, 10);
 			break;
 		case TREAL   : 
-			len = sprintf((char*)buff, "%.2f", *(Real*)r0);
-			objNewString(buff, len);
+			ret = sprintf((char*)buff, "%.2f", *(Real*)r0);
+			assert(0<ret);
+			objNewString(buff, (Num)ret);
 			break;
 		case TCHAR   : 
-			len = sprintf((char*)buff, "#\\%c", *(char*)r0);
-			objNewString(buff, len);
+			ret = sprintf((char*)buff, "#\\%c", *(char*)r0);
+			assert(0<ret);
+			objNewString(buff, (Num)ret);
 			break;
 		case TNULLSTR:
 		case TSTRING : 
@@ -1616,21 +1629,23 @@ void sysSerializeWrite (void) {
 				case '\t'   : buff[len++]='\\'; buff[len++]='t'; break;
 				case '\v'   : buff[len++]='\\'; buff[len++]='v'; break;
 				case '\b'   : buff[len++]='\\'; buff[len++]='b'; break;
-				default     : buff[len++]=((char*)r0)[i];
+				default     : buff[len++]=((Chr*)r0)[i];
 			 }
 			buff[len++] = '"';
 			objNewString(buff, len);
 			break;
 		default      :
-			len = sprintf((char*)buff, "#"HEX, (Num*)r0);
-			objNewString(buff, len);
+			ret = sprintf((char*)buff, "#"HEX, (Num*)r0);
+			assert(0<ret);
+			objNewString(buff, (Num)ret);
 			break;
 	}
 	DB("SYS <--%s", __func__);
 }
 
 void sysNumber2String (void) {
- Int num, base;
+ Int num;
+ Num base;
 	DB("SYS -->%s", __func__);
 	if (wscmAssertArgumentCountRange(1, 2, __func__)) return;
 	base = (Num)r1==2 ? *(Num*)pop() : 10; /* Default base is 10. */
@@ -1645,6 +1660,7 @@ void sysNumber2String (void) {
 void sysWrite (void) {
  Int fd=1;
  FILE *stream=NULL;
+
 	DB("SYS -->sysWrite");
 
 	if (wscmAssertArgumentCountRange(1, 2, __func__)) return;
@@ -1655,20 +1671,30 @@ void sysWrite (void) {
 	assert(NULL != stream);
 
 	wscmWrite(r0=pop(), stream);
+
 	DB("SYS <--sysWrite");
 }
+
 void sysDisplay (void) {
  Int fd=1;
+ FILE *stream=NULL;
 	DB("SYS -->sysDisplay");
+
 	if (wscmAssertArgumentCountRange(1, 2, __func__)) return;
 	if ((Int)r1==2) fd=*(Int*)pop(); /* Descriptor. */
-	wscmDisplay(r0=pop(), 0, fd);
+
+	if (fd==1) stream = stdout;
+	if (fd==2) stream = stderr;
+	assert(NULL != stream);
+
+	wscmDisplay(r0=pop(), stream);
+
 	DB("SYS <--sysDisplay");
 	return;
 }
 
 void sysVector (void) {
- Int l=(Int)r1;
+ Num l=(Num)r1;
 	DB("SYS -->sysVector");
 	if (l==0) r0=nullvec;
 	else {
@@ -1698,7 +1724,7 @@ void sysRandom (void) {
 	DB("SYS -->sysRandom");
 	if (wscmAssertArgumentCountRange(0, 1, __func__)) return;
 	if ((Int)r1 == 1)
-		objNewInt(random()%*(Num*)pop());
+		objNewInt(random() % *(Int*)pop());
 	else
 		objNewInt(random());
 	DB("SYS <--sysRandom");
@@ -1724,7 +1750,7 @@ void sysEqP (void) {
 }
 
 void sysStringEqualsP (void) {
- Int len;
+ Num len;
 	DB("-->%s", __func__);
 	if (wscmAssertArgumentCount(2, __func__)) return;
 	r1=pop();  r0=pop();
@@ -1825,7 +1851,7 @@ void sysLogAnd (void) {
 void sysSqrt (void) {
 	DB("-->%s", __func__);
 	if (wscmAssertArgumentCountRange(1, 1, __func__)) return;
-	objNewInt(sqrt((double)*(Int*)pop()));
+	objNewInt((Int)sqrt((double)*(Int*)pop()));
 	DB("<--%s", __func__);
 }
 
@@ -1884,7 +1910,7 @@ void sysTID (void) {
 void sysUnthread (void) {
 	DB("SYS -->sysUnthread <= %d", memVectorObject(car(running), 1));
 	/* Remove from thread vector table. */
-	memVectorSet(threads, (Int)memVectorObject(car(running), 1), null);
+	memVectorSet(threads, (Num)memVectorObject(car(running), 1), null);
 	/* Decrement thread count. */
 	memVectorSet(threads, 0, memVectorObject(threads, 0)-1);
 	wscmRemoveThread(running);
@@ -1937,7 +1963,7 @@ void sysOpenStream (void) {
 */
 void sysOpen (int oflag, mode_t mode) {
  Chr name[160]={0};
- Int i, filenameLen;
+ Num i, filenameLen;
 	DB("::%s", __func__);
 	if (wscmAssertArgumentCount(1, __func__)) return;
 
@@ -1983,9 +2009,9 @@ void sysClose(void) {
 	if (memObjectType(r0) != TSOCKET
 		 && memObjectType(r0) != TPORT) {
 		printf ("WARNING: sysClose: not a socket: ");
-		wscmDisplay(r0, 0, 1);
+		wscmDisplay(r0, stdout);
 	} else {
-		close(*(Int*)r0);
+		close(*(int*)r0);
 		memVectorSet(r0, 3, sclosed);
 	}
 	DB("  --%s", __func__);
@@ -2008,7 +2034,7 @@ void sysRecv (void) {
 	r3=*(Obj*)pop();
 
 	if (r3) {
-		memNewArray(TSTRING, (Int)r3);
+		memNewArray(TSTRING, (Num)r3);
 		r3=r0;
 	} else {
 		r3 = nullstr;
@@ -2017,7 +2043,7 @@ void sysRecv (void) {
 	if (memObjectType(r1) != TSOCKET
 		 && memObjectType(r1) != TPORT) {
 		fprintf (stderr, "WARNING: sysRecv: not a socket: ");
-		wscmDisplay(r1, 0, 1);
+		wscmDisplay(r1, stdout);
 		r0 = eof;
 	} else {
 		wscmRecvBlock();
@@ -2033,7 +2059,7 @@ void sysReadChar (void) {
 	if (memObjectType(r1) != TSOCKET
 	    && memObjectType(r1) != TPORT) {
 		printf ("WARNING: sysReadChar: not a socket: ");
-		wscmDisplay(r1, 0, 1);
+		wscmDisplay(r1, stdout);
 		r0 = eof;
 	} else {
 		r3=null;  /* tells recv that we just want a character. */
@@ -2049,11 +2075,11 @@ void sysUnreadChar (void) {
 	r0=pop(); /* Character. */
 	if (memObjectType(r1) != TSOCKET && memObjectType(r1) != TPORT) {
 		printf ("WARNING: sysUnreadChar: arg2 not a socket: ");
-		wscmDisplay(r1, 0, 1);
+		wscmDisplay(r1, stdout);
 		r0 = eof;
 	} else if (memObjectType(r0) != TCHAR) {
 		printf ("WARNING: sysUnreadChar: arg1 not a char: ");
-		wscmDisplay(r0, 0, 1);
+		wscmDisplay(r0, stdout);
 		r0 = eof;
 	} else
 		memVectorSet(r1, 4, r0);
@@ -2086,7 +2112,7 @@ void sysSend (void) {
 	r3=0;
 	if (memObjectType(r1) != TSOCKET && memObjectType(r1) != TPORT) {
 		printf ("WARNING: sysSend: not a socket is (type 02x%x): ", memObjectType(r1));
-		wscmDisplay(r1, 0, 1);
+		wscmDisplay(r1, stdout);
 		*(int*)0=0;
 		r0 = eof;
 	} else {
@@ -2101,23 +2127,23 @@ void sysSend (void) {
 }
 
 void sysSeek (void) {
- Int fd, offset, whence;
+ int fd, offset, whence;
 	DB("-->%s", __func__);
 	if (wscmAssertArgumentCount(3, __func__)) return;
-	whence = *(Int*)pop(); /* Whence */
+	whence = *(int*)pop(); /* Whence */
 	assert(whence==SEEK_SET || whence==SEEK_CUR || whence==SEEK_END);
-	offset = *(Int*)pop(); /* Offset */
-	fd=*(Int*)pop(); /* Descriptor. */
+	offset = *(int*)pop(); /* Offset */
+	fd=*(int*)pop(); /* Descriptor. */
 	lseek(fd, offset, whence);
 	DB("<--%s", __func__);
 }
 
 void sysIllegalOperator (void) {
- Int i;
+ Num i;
 	fprintf (stderr, "ERROR: Illegal expression ");
 	write(2, "(", 1);
 	wscmWrite (r0, stderr);
-	i=(Int)r1;
+	i=(Num)r1;
 	while (0 < i--) {
 		write (2, " ", 1);
 		wscmWrite (memStackObject(stack, i), stderr);
@@ -2139,11 +2165,11 @@ void sysTGELookup (void) {
 		r0 = r1;
 		// TODO  Kill thread, stop machine, return to monitor/shell?
 	} else {
-		DB("SYS    found in tge @ opcode %x", (Int)ip-4);
+		DB("SYS    found in tge @ opcode %x", (Num)ip-4);
 		/* Specialization optimization.  Muate code that originally called
 		   this function into a code that references the binding's value. */
-		memVectorSet(code, (Int)ip-4, MVI0);  memVectorSet(code, (Int)ip-3, r0);
-		memVectorSet(code, (Int)ip-2, LDI00); memVectorSet(code, (Int)ip-1, 0);
+		memVectorSet(code, (Num)ip-4, MVI0);  memVectorSet(code, (Num)ip-3, r0);
+		memVectorSet(code, (Num)ip-2, LDI00); memVectorSet(code, (Num)ip-1, 0);
 		/* Force virtual machine to run this code. */
 		ip -= 4;
 	}
@@ -2166,8 +2192,8 @@ void sysTGEMutate (void) {
 		DB("SYS    found in tge at opcode %0x", (Int)ip-4);
 		/* Specialization optimization.  Muate code that originally called
 		   this function into a code that references the binding's value. */
-		memVectorSet(code, (Int)ip-4, MVI1);  memVectorSet(code, (Int)ip-3, r0);
-		memVectorSet(code, (Int)ip-2, STI01); memVectorSet(code, (Int)ip-1, 0);
+		memVectorSet(code, (Num)ip-4, MVI1);  memVectorSet(code, (Num)ip-3, r0);
+		memVectorSet(code, (Num)ip-2, STI01); memVectorSet(code, (Num)ip-1, 0);
 		r0 = r2; /* Restore value we're trying to set!. */
 		/* Force virtual machine to run this code. */
 		ip -= 4;
@@ -2196,7 +2222,7 @@ void sysStringRef (void) {
 	offset = *(Int*)pop();
 	o=pop();
 	/* A (negative? offset) implies (absolute offset) from end. */
-	if (offset < 0) offset = memObjectLength(o)+offset;
+	if (offset < 0) offset = (Int)memObjectLength(o)+offset;
 	r0 = memVectorObject(characters, *((Chr*)o+offset));
 	DB("<--%s", __func__);
 }
@@ -2204,14 +2230,16 @@ void sysStringRef (void) {
 void sysStringSetB (void) {
  Obj strObj;
  Int offset;
- char ch;
+ Chr ch;
 	DB("-->%s", __func__);
 	if (wscmAssertArgumentCount(3, __func__)) return;
-	ch = *(char*)pop();
+	ch = *(Chr*)pop();
 	offset=*(Int*)pop();
 	strObj = pop();
-	if (offset < 0) offset = memObjectLength(strObj)+offset;
-	memArraySet(strObj, offset, ch);
+	/* A (negative? offset) implies (absolute offset) from end. */
+	if (offset < 0) offset = (Int)memObjectLength(strObj)+offset;
+	assert(0<=offset);
+	memArraySet(strObj, (Num)offset, ch);
 	DB("<--%s", __func__);
 }
 
@@ -2219,18 +2247,18 @@ void sysVectorLength (void) {
 	DB("-->%s", __func__);
 	if (wscmAssertArgumentCount(1, __func__)) return;
 	r0 = pop();
-	objNewInt(r0==nullvec?0:memObjectLength(r0));
+	objNewInt(r0==nullvec?0:(Int)memObjectLength(r0));
 	DB("<--%s", __func__);
 }
 
 /* Deserializers:  String representation in r5, length r6 => new atom in r0. */
 void sysNewSymbol (void) {
 	DB("-->sysNewSymbol()");
-	objNewSymbol((Str)r5, (Int)r6);
+	objNewSymbol((Str)r5, (Num)r6);
 	DB("<--sysNewSymbol()");
 }
 void sysNewString (void) {
- Int len = parseString(r5); /* Mutates the string & returns the new length. */
+ Num len = parseString(r5); /* Mutates the string & returns the new length. */
 	DB("-->sysNewString()");
 	if ((Int)r6 == 2) r0 = nullstr;
 	else objNewString((u8*)r5, len);
@@ -2315,57 +2343,71 @@ void sysTrace (void) {
 }
 
 void sysOpenSemaphore (void) {
- int i=0;
+ Num i=0;
 	if (wscmAssertArgumentCount(1, __func__)) return;
 	/* Look for next available semaphore. */
 	while (memVectorObject(semaphores, i) != null) i++;
 	assert(i<MaxSemaphoreCount);
 	/* Create new integer object from passed initial count value. */
-	objNewInt(*(Num*)pop());
+	objNewInt(*(Int*)pop());
 	memVectorSet(semaphores, i, r0);
 	/* Return the semaphore index. */
-	objNewInt(i);
+	objNewInt((Int)i);
 }
 
 void sysCloseSemaphore (void) {
- Int index;
+ Num index;
 	if (wscmAssertArgumentCount(1, __func__)) return;
 	r0 = memVectorObject(semaphores, index=*(Num*)pop());
 	memVectorSet(semaphores, index, null);
 }
 
 void sysSemaphoreDown (void) {
- Obj sem, value;
+ Obj semIdx, sem;
+ Int newCount;
 	DB("-->%s ", __func__);
 	if (wscmAssertArgumentCountRange(1, 1, __func__)) return;
-	/* Store semaphore index in r0. */
-	sem = pop();
-	value = memVectorObject(semaphores, *(Num*)sem);
-	(*(Int*)value)--;
-	if (*(Int*)value < 0) {
+
+	semIdx = pop();
+	sem = memVectorObject(semaphores, *(Num*)semIdx);
+	newCount = *(Int*)sem - 1;
+
+	/* New decremented counter object into r0 */
+	objNewInt(newCount);
+	memVectorSet(semaphores, *(Num*)semIdx, r0);
+
+	if (newCount < 0) {
 		/* Block thread on this semaphore.  Store semaphore index in r1. */
 		DB ("   %s !!! Blocking thread %d", __func__, memVectorObject(car(running), 1));
-		r1 = (Obj)*(Num*)sem;
+		r1 = (Obj)*(Num*)semIdx;
 		wscmUnRun();
 		wscmMoveToQueue(running, blocked, ssemaphore);
 		wscmSchedule();
-	} else {
-		objNewInt(*(Int*)value);
 	}
+	/* Return new decremented counter value already in r0 */
+
 	DB("<--%s ", __func__);
 }
 
 void sysSemaphoreUp (void) {
- Obj sem, value;
+ Obj semIdx, sem;
+ Int newCount;
 	DB("-->%s\n", __func__);
 	if (wscmAssertArgumentCountRange(1, 1, __func__)) return;
-	sem = pop();
-	value = memVectorObject(semaphores, *(Num*)sem);
-	(*(Int*)value)++;
-	if (*(Int*)value < 1) {
-		/* Unblock a semaphore blocked thread. */
-		wscmScheduleSemaphoreBlocked(*(Num*)sem);
-	}
+	semIdx = pop();
+	sem = memVectorObject(semaphores, *(Num*)semIdx);
+	newCount = *(Int*)sem + 1;
+
+	/* New incremented counter object into r0 */
+	objNewInt(newCount);
+	memVectorSet(semaphores, *(Num*)semIdx, r0);
+
+	/* Unblock a semaphore's blocked thread. If after incrmenting the
+	   counter the semaphore is still blocking, then this means one
+	   of the blocked threads can be awakened. */
+	if (newCount < 1) wscmScheduleSemaphoreBlocked(*(Num*)semIdx);
+	/* Return the newly incremented counter value as well */
+
 	DB("<--%s\n", __func__);
 }
 
@@ -2394,10 +2436,10 @@ Int caughtSignals[MAX_SIGNAL_VALUE]={0};
    and is called periodically to reschedule a new thread.
 */
 void sysSchedule (void) {
- Int i=0;
+ Num i;
 	DB("-->%s", __func__);
 
-	for (; i < MAX_SIGNAL_VALUE; ++i)
+	for (i=0; i<MAX_SIGNAL_VALUE; ++i)
 		/* Spawn new signal handler thread.  Function exist in global signal-handler vector.*/
 		if (caughtSignals[i]) {
 			caughtSignals[i]=0;
@@ -2839,7 +2881,7 @@ void wscmCreateRepl (void) {
 }
 
 void wscmInitialize (void) {
- Int i;
+ Num i;
 	DB("::%s", __func__);
 
 	/* Register objects and pointer addresses with their
@@ -2909,7 +2951,6 @@ void wscmInitialize (void) {
 	wscmDefineSyscall (sysError, "error");
 	wscmDefineSyscall (sysQuit, "quit");
 	wscmDefineSyscall (sysFun, "fun");
-	wscmDefineSyscall (sysDumpEnv, "env");
 	wscmDefineSyscall (wscmDumpTGE, "tge");
 	wscmDefineSyscall (sysDebugger, "debugger");
 	wscmDefineSyscall (sysDumpThreads, "threads");
@@ -2991,6 +3032,8 @@ void wscmInitialize (void) {
 
 	/* For fun assign symbol 'characters the internal character vector. */
 	r0=characters; wscmDefine("characters");
+	r0=staticIntegers; wscmDefine("integers");
+	r0=symbols; wscmDefine("symbols");
 	wscmCreateRead();  wscmDefine("read");
 	wscmCreateRepl();  wscmDefine("repl2");
 	r0=semaphores;  wscmDefine("semaphores");
@@ -3008,7 +3051,7 @@ void wscmInitialize (void) {
 }
 
 void sysDumpCallStackCode (void) {
- Int i;
+ Num i;
  Obj o, l=NULL;
 
 	sysDumpEnv(r16);

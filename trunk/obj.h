@@ -20,11 +20,11 @@ extern Obj null, nullvec, nullstr, false, true, eof,
        snot, sadd, ssub, smul, sdiv, slogand, characters, staticIntegers,
        signalhandlers;
 
-extern int wscmDebug;
+extern Num wscmDebug;
 
-unsigned hashpjw (Str s, int len);
-int  objListLength (Obj o);
-int  objDoublyLinkedListLength (Obj o);
+Num hashpjw (Str s, Num len);
+Num objListLength (Obj o);
+Num objDoublyLinkedListLength (Obj o);
 void objListToVector (void);
 /* Object creators.  All new objects returned in r0.
 */
@@ -34,13 +34,13 @@ void objCopyInteger (void);
 void objNewReal     (Real x);
 void objCopyReal    (void);
 
-void objNewString  (Str str, int len);
+void objNewString  (Str str, Num len);
 void objCopyString  (void);
-void objNewSymbol  (Str str, int len);
+void objNewSymbol  (Str str, Num len);
 void objNewSyscall (Func f);
 void objCons12   (void); /* New pair using r1 and r2 */
 void objCons23   (void);
-void objNewVector  (int len);
+void objNewVector  (Num len);
 void objNewVector1 ();
 void objNewClosure1Env (void);
 //void objNewSocket (void);
