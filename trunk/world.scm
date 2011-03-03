@@ -918,15 +918,17 @@
 
 ; Screen redraw and signal handler
 (define handlerCount 0)
-(define (handleTerminalResize)
+(define (handleTerminalResize . forcedSize)
   ; TODO Temporary assertion
   (if (!= handlerCount 0) (WinChatDisplay "\r\nWARNING: handleTerminalResize is not reentrant"))
   (set! handlerCount 1)
-  (letrec ((newTermSize (terminal-size))
-           (tw (car newTermSize))
-           (th (cdr newTermSize)))
-    (WinConsoleDisplay "\r\nSIGWINCH: newTermSize " newTermSize)
+  (letrec ((newTermSize (if (null? forcedSize) (terminal-size) (car forcedSize)))
+           (tw #f)
+           (th #f))
     ((Terminal 'ResetTerminal) newTermSize)
+    (set! tw (Terminal 'Twidth))
+    (set! th (Terminal 'Theight))
+    (WinConsoleDisplay "\r\nSIGWINCH: newTermSize " (cons tw th))
     ((WinChat 'resize)          (- th 1) tw)
     ((myViewport 'move)                0 (- tw (myViewport 'Wwidth) 2))
     ((WinColumn 'move)                 1 (- tw 2) )
@@ -1329,6 +1331,8 @@
 ;(setButton #\2 '(thread (pong)))
 ;(setButton #\3 '(thread (spawnKitty)))
 
+(setButton #\1 '(handleTerminalResize))
+(setButton #\2 '(handleTerminalResize (cons 600 400)))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
