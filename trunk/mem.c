@@ -51,7 +51,7 @@ void memError (void);
 
 /* Byte size of a Linux virtual memory block.  Resolution of mmap. */
 const Num BLOCK_BYTE_SIZE         = 0x1000; //     4Kb 0x001000 2^12
-const Num HEAP_STATIC_BLOCK_COUNT =  0x008; //    32Kb 0x008000 2^15
+const Num HEAP_STATIC_BLOCK_COUNT =  0x010; //    64Kb 0x010000 2^16
 const Num HEAP_BLOCK_COUNT        =  0x400; // 4Mb     0x400000 2^22
 //const Num HEAP_INCREMENT_COUNT   = 0x040; //   256Kb 0x040000 2^18
 //const Num HEAP_DECREMENT_COUNT   = 0x010; //    64Kb 0x010000 2^16
@@ -648,7 +648,7 @@ void memObjectCopyToHeapNew (Obj *obj) {
 
 Func memPreGarbageCollect  = 0,
      memPostGarbageCollect = 0;
-char memGCFlag=0;
+Num memGCFlag=0;
 
 
 /* Internal garbage collection call.  Passed in for debuggin is the
@@ -877,7 +877,7 @@ DB("   collecting and compacting mutated old object references...");
 	}
 #endif
 
-	if (memGCFlag != 1) fprintf (stderr, "\n\aWARNING: objGCPost() memGCFlag==%d", memGCFlag);
+	if (memGCFlag != 1) fprintf (stderr, "\n\aWARNING: objGCPost() memGCFlag=="NUM, memGCFlag);
 	memGCFlag=0;
 
 #if VALIDATE_HEAP
@@ -953,7 +953,7 @@ void memDebugDumpHeapHeaders (FILE *stream) {
 
 void memDebugDumpObject (Obj o, FILE *stream) {
  Int i, fdState;
- char *s;
+ char* s;
  Obj obj;
 
 	fcntl (0, F_SETFL, (fdState=fcntl(0, F_GETFL, 0))&~O_NONBLOCK);
@@ -1168,7 +1168,7 @@ void memValidateHeapStructures (void) {
 
 
 
-char* memTypeString (Type t) {
+Chr* memTypeString (Type t) {
  char *s;
 	switch(t) {
 		case TBASEARRAY:   s="BASEARRAY"; break;
@@ -1200,12 +1200,14 @@ char* memTypeString (Type t) {
 		case TSHADOW:      s="SHADOW"; break;
 		default:           s="!!InvaliD!!";
 	}
-	return s;
+	return (Chr*)s;
 }
 
 
 /* Simple table insertion and lookup of a string
-   to a pointer value aka object. */
+   to a pointer value aka object. char* must be
+   the type due to how the preprocessor generates
+   symbols. */
 #define TABLEMAX 4096
 typedef struct {Obj obj;  char* str;} osPair;
 osPair osTable[TABLEMAX];

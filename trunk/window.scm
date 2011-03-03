@@ -432,10 +432,100 @@
  ;; Window_subclass
  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
- ; Instantiate a buffer object which inherits a window object.
+ ; Call to instantiate a buffer object which inherits a window object.
  (define (BufferNew Y0 X0 Wheight Wwidth COLOR)
    (((WindowNew Y0 X0 Wheight Wwidth COLOR) 'Buffer)) )
 
+ ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+ ;; Terminal keyboard and mouse reporting functions
+ ;; TODO clean this up.  Add hooks to calls in world.scm
+ ;;
+
+ ; Stack of functions accepting keyboard characters
+ (define keyDispatcherStack ())
+ ; Vector of fuctions accepting (action y x).  TODO only 128 windows supported
+ (define mouseDispatchVector (make-vector 128 #f))
+
+ ; Keyboard character handling
+ (define (keyDispatcherRegister fn) (set! keyDispatcherStack (cons fn keyDispatcherStack)))
+ (define (keyDispatcherUnRegister fn) (set! keyDispatcherStack (list-delete keyDispatcherStack fn)))
+ (define (keyDispatcher c) ;(WinChatDisplay "\r\n keyDispatcher  c=" c)
+   (if (pair? keyDispatcherStack)
+       ((car keyDispatcherStack) c)))
+ 
+ ; Mouse character string handling
+ (define (mouseDispatcherRegister win fn)
+   (vector-set! mouseDispatchVector (win 'id) fn))
+ (define (mouseDispatcherUnRegister win)
+   (mouseDispatcherRegister win #f))
+ (define (mouseDispatcher event y x)
+   (letrec ((win ((Terminal 'topWin) y x))
+            (id (if win (win 'id) #f))
+            (fn (if id (vector-ref mouseDispatchVector id) #f))) ;(WinChatDisplay "\r\n mouseDispatcher  event=" event " y=" y " x=" x " winid=" id "  fn=" fn)
+   (if fn (fn event (- y (win 'Y0)) (- x (win 'X0))))))
+ 
+ ; State machine to read and parse stdin.
+ 
+ ; An "\e" scanned
+ (define (keyScannerEsc)
+  (let ((c (read-char 500 stdin))) ; Timeout after half a second.  Will return #f.
+    (if (eq? c #\[)
+      (keyScannerEscBracket)
+    (if (eq? c CHAR-ESC)
+      (begin
+        (keyDispatcher CHAR-ESC)
+        (keyScannerEsc))
+    (if (not c) ; Timed out so accept escape char and start over
+        (keyDispatcher CHAR-ESC)
+    (begin ; Not a recognized escape sequence, so send escape and the [ character
+      (keyDispatcher CHAR-ESC)
+      (keyDispatcher c)))))))
+ 
+ ; An "\e[" scanned
+ (define (keyScannerEscBracket)
+   (let ((c (read-char #f stdin)))
+     (if (eq? c #\A) (keyDispatcher 'up)
+     (if (eq? c #\B) (keyDispatcher 'down)
+     (if (eq? c #\C) (keyDispatcher 'right)
+     (if (eq? c #\D) (keyDispatcher 'left)
+     (if (eq? c #\M) (keyScannerEscBracketM)
+     (begin ; Not an arrow key sequence, so send all the character to the key queue
+       (keyDispatcher CHAR-ESC)
+       (keyDispatcher #\[)
+       (keyDispatcher c)))))))))
+ 
+ ; An "\e[M" has been scanned
+ (define (keyScannerEscBracketM)
+  (letrec ((c (read-char #f stdin))
+           (action (if (eq? c #\ ) 'mouse0
+                   (if (eq? c #\!) 'mouse2
+                   (if (eq? c #\") 'mouse1
+                   (if (eq? c #\#) 'mouseup
+                   'mouse)))))
+           (x (- (read-char #f stdin) #\  1))
+           (y (- (read-char #f stdin) #\  1)))
+   (mouseDispatcher action y x)))
+ 
+ ; Default keyboard read queue.  Continuously read stdin and append to a FIFO
+ ; accessed via (getKey).  It is possible that another dispatcher has been
+ ; registered and captures characters instead.
+ (define getKeyQueue (QueueCreate))
+ (define (getKey) (QueueGet getKeyQueue))
+ (define (getKeyQueueAdd c) (QueueAdd getKeyQueue c)) ; List of characters and button symbols
+
+ (define (keyScannerAgentLoop)
+  (let ((c (read-char #f stdin)))
+    (if (eq? c CHAR-ESC)
+      (keyScannerEsc) ; Escape char so attempt to read an escape sequence
+      (keyDispatcher c)) ; Add new keyboard character to queue
+    (keyScannerAgentLoop))) ; rinse and repeat
+ ;;
+ ;; Terminal keyboard and mouse reporting
+ ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+ ; Initialize everything and return this object
+ (keyDispatcherRegister getKeyQueueAdd)
+ (thread (keyScannerAgentLoop))
  (display "\e[?1000h") ; Enable mouse reporting
  (ResetTerminal (terminal-size))
  self)

@@ -43,7 +43,7 @@ extern Obj r0,  r1,  r2,  r3,  r4,  r5,  r6,  r7,
            r10, r11, r12, r13, r14, r15, r16, r17,
            r18, r19, r1a, r1b, r1c, r1d, r1e, r1f;
 
-extern char memGCFlag; // Flag set if in the middle of a GC.
+extern Num memGCFlag; // Flag set if in the middle of a GC.
 
 
 Num memArrayLengthToObjectSize  (LengthType length);
@@ -103,12 +103,13 @@ void memDebugDumpAll (FILE *stream);
 void memValidateObject (Obj o);
 void memValidateHeapStructures (void);
 
-char* memTypeString        (Type t);
+Chr* memTypeString        (Type t);
 
 /* Mechanism to associate a pointer address with a string.  A macro is
-   provided to associate a pointer addresses and its string representation. */
+   provided to associate a pointer addresses and its string representation.
+   char* must be the type due to how the preprocessor generates symbols. */
 char* memObjString         (Obj obj);
-void  memObjStringRegister (Obj obj, char *str);
+void memObjStringRegister (Obj obj, char* str);
 #define memObjStringSet(o) memObjStringRegister(o, #o);
 
 
