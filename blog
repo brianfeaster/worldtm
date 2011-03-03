@@ -2774,3 +2774,23 @@ Mon Feb 28 23:38:34 EST 2011
 
 Enabling -Wconversion results in many warnings.  I currently have no methodology
 to handle system calls that return and accept both signed and unsigned ints.
+
+
+Tue Mar  1 21:28:26 EST 2011
+
+Conversion methodology is to use Num types (which are 64bit unsigned longs) for
+situations that do not warrant negative values.  This is most places in the
+code.  The only problem are the areas that call C libraries that return int
+or shorts.  These are annoying.  Many seem to have be converted to use size_t
+and ssize_t which are equivalent in my typdefs Num and Int (64bit unsigned long
+and signed long).  In cases where pointer arithmatic or library calls conflict,
+I cast to the appropriate types.
+
+I realized I made the IPC mechanism safer by filtering expressions that the Map
+and Avatar objects read from the IPC.  Only those commands it expects to read
+are evaluated.
+
+
+Wed Mar  2 21:42:51 EST 2011
+
+Moved keyboard and mouse handler code to the Terminal class.

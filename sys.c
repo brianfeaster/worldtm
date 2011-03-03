@@ -7,7 +7,7 @@
 #include "sys.h"
 #include <termios.h>
 
-const Num MaxSemaphoreCount=64;
+const Num MaxSemaphoreCount=1024;
 
 /* Concepts:
      (Operator operand operand operand ...)
@@ -1384,9 +1384,11 @@ void sysError (void) {
 
 void sysQuit (void) { exit(0); }
 
+extern Num garbageCollectionCount;
 /* This can do anything.  I change it mainly for debugging and prototyping. */
 void sysFun (void) {
-	fprintf (stderr, "Stacklength=[%d]", memStackLength(stack));
+	//fprintf (stderr, "Stacklength=[%d]", memStackLength(stack));
+	objNewInt((Int)garbageCollectionCount);
 }
 
 
@@ -1486,18 +1488,18 @@ void sysString (void) {
 
 void sysMakeString (void) {
  Num len;
- char fill=' ';
+ Chr fill=' ';
 	DB("-->%s", __func__);
 	if (wscmAssertArgumentCountRange(1, 2, __func__)) return;
 
 	/* Fill character if specified. */
-	if (2 == (Int)r1)  fill = *(char*)pop();
+	if (2 == (Num)r1) fill = *(Chr*)pop();
 
 	/* Create string of passed length. */
 	objNewString(NULL, len=*(Num*)pop());
 
 	/* Fill string if fill character specified. */
-	if (2 == (Int)r1)  while (len--) ((char*)r0)[len]=fill;
+	if (2 == (Num)r1)  while (len--) ((Chr*)r0)[len]=fill;
 
 	DB("<--%s", __func__);
 }
@@ -2339,20 +2341,25 @@ void sysDisassemble (void) {
 }
 
 void sysTrace (void) {
-	r0 = memVectorObject(code, 2);
+	r0=memVectorObject(code, 2);
 }
 
 void sysOpenSemaphore (void) {
  Num i=0;
 	if (wscmAssertArgumentCount(1, __func__)) return;
 	/* Look for next available semaphore. */
-	while (memVectorObject(semaphores, i) != null) i++;
-	assert(i<MaxSemaphoreCount);
-	/* Create new integer object from passed initial count value. */
-	objNewInt(*(Int*)pop());
-	memVectorSet(semaphores, i, r0);
-	/* Return the semaphore index. */
-	objNewInt((Int)i);
+	while (i<MaxSemaphoreCount && memVectorObject(semaphores, i) != null) i++;
+
+	if (i>= MaxSemaphoreCount) {
+		r0=null;
+		assert (i<MaxSemaphoreCount);
+	} else {
+		/* Create new integer object from passed initial count value. */
+		objNewInt(*(Int*)pop());
+		memVectorSet(semaphores, i, r0);
+		/* Return the semaphore index. */
+		objNewInt((Int)i);
+	}
 }
 
 void sysCloseSemaphore (void) {

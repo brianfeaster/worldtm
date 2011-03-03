@@ -39,10 +39,10 @@
      (ListAdd QueueList (cons f q))
      f))
 
- (define (delReaderQueue q) ; destroy an IPC queue reader returned from newReader
-   (QueueDestroy q)
-   (ListDelFn QueueList ; remove the first readerFunction matched
-              (lambda (o) (eq? q (car o)))))
+ (define (delReader f) ; destroy an IPC queue reader returned from newReader
+   (let ((readerPair (assq f (ListGet QueueList)))) ; Lookup pair with the reader function as key
+     (QueueDestroy (cdr readerPair)) ; Properly destroy the queue.
+     (ListDel QueueList readerPair)))
 
  ; Append e to each peer's outgoing message queue as well as my own.
  (define (qwrite e)

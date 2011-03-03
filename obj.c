@@ -94,8 +94,8 @@ void objListToVector (void) {
 */
 void objNewInt  (Int i) {
 /* Attempt at implementing static integers. */
-	if (-255l<=i && i<=256l) {
-		r0 = ((Obj*)staticIntegers)[i+255];
+	if (-1023l<=i && i<=1024l) {
+		r0 = ((Obj*)staticIntegers)[i+1023];
 		assert (*(Int*)r0 == i);
 	} else {
    	memNewArray(TINTEGER, sizeof(Int));
@@ -143,7 +143,7 @@ void objCopyString (void) {
 }
 
 void objNewSymbol (Str str, Num len) {
- static unsigned hash, i;
+ static Num hash, i;
 	i = hash = hashpjw(str, len) % 2029;
 	do {
 		r0 = memVectorObject(symbols, i);
@@ -166,8 +166,8 @@ void objNewSymbol (Str str, Num len) {
 }
 
 void objNewSymbolStatic (char *s) {
+ static Num hash, i;
  Num len = strlen(s);
- static unsigned hash, i;
 	i = hash = hashpjw((Str)s, len) % 2029;
 	do {
 		r0 = memVectorObject(symbols, i);
@@ -489,11 +489,11 @@ void objInitialize (Func scheduler) {
  	memVectorSet(characters, 256, eof);
 
 	/* Table of integer constants. */
-	memNewStaticVector(TVECTOR, 512);  staticIntegers = r0;
-	for (i=-255l; i<=256l; ++i) {
+	memNewStaticVector(TVECTOR, 2048);  staticIntegers = r0;
+	for (i=-1023l; i<=1024l; ++i) {
    	memNewStatic(TINTEGER, sizeof(Int));
 		*(Int*)r0 = i;
-		memVectorSet(staticIntegers, (Num)i+255, r0);
+		memVectorSet(staticIntegers, (Num)i+1023, r0);
 	}
 
 	DB("  --%s", __func_);

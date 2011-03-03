@@ -1,8 +1,7 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; The World Client
 ;;
-;;   Windows
-;;    Keyboard_mouse
+;;   Terminal_and_Windows
 ;;   Cells_object
 ;;   Column_object
 ;;   Field_object
@@ -36,11 +35,16 @@
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; Windows
+;; Terminal_and_Windows
 ;;
 
 ; Force only one instance of the Terminal object by assigning the object instance to its symbol.
 (define Terminal (Terminal))
+
+(define getKey (Terminal 'getKey))
+(define keyDispatcherRegister (Terminal 'keyDispatcherRegister))
+(define keyDispatcherUnRegister (Terminal 'keyDispatcherUnRegister))
+(define mouseDispatcherRegister (Terminal 'mouseDispatcherRegister))
 
 ; Chat window.
 (define WinChat ((Terminal 'BufferNew)
@@ -108,92 +112,6 @@
 (define WinPaletteGoto (WinPalette 'goto))
 ((WinPalette 'cursor-visible) #f)
 ((WinPalette 'toggle))
-
-
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; Keyboard_mouse
-;;
-(define keyDispatcherStack ())
-(define (keyDispatcherRegister fn) (set! keyDispatcherStack (cons fn keyDispatcherStack)))
-(define (keyDispatcherUnRegister fn) (set! keyDispatcherStack (list-delete keyDispatcherStack fn)))
-(define (keyDispatcher c)
-  ;(WinChatDisplay "\r\n keyDispatcher  c=" c)
-  (if (pair? keyDispatcherStack)
-      ((car keyDispatcherStack) c)))
-
-; Vector of fuctions accepting (action y x).  TODO only 128 windows supported
-(define mouseDispatchVector (make-vector 128 #f))
-
-(define (mouseDispatcherRegister win fn)
-  (vector-set! mouseDispatchVector (win 'id) fn))
-
-(define (mouseDispatcherUnRegister win)
-  (mouseDispatcherRegister win #f))
-
-(define (mouseDispatcher event y x)
-  (letrec ((win ((Terminal 'topWin) y x))
-           (id (if win (win 'id) #f))
-           (fn (if id (vector-ref mouseDispatchVector id) #f)))
-  ;(WinChatDisplay "\r\n mouseDispatcher  event=" event " y=" y " x=" x " winid=" id "  fn=" fn)
-  (if fn (fn event (- y (win 'Y0)) (- x (win 'X0))))))
-
-; This needs to be called in a separate thread
-(define (keyScannerAgentLoop)
- (let ((c (read-char #f stdin)))
-   (if (eq? c CHAR-ESC)
-     (keyScannerEsc) ; Escape char so attempt to read an escape sequence
-     (keyDispatcher c)) ; Add new keyboard character to queue
-   (keyScannerAgentLoop))) ; rinse and repeat
-
-; An "\e" scanned
-(define (keyScannerEsc)
- (let ((c (read-char 500 stdin))) ; Timeout after half a second.  Will return #f.
-   (if (eq? c #\[)
-     (keyScannerEscBracket)
-   (if (eq? c CHAR-ESC)
-     (begin
-       (keyDispatcher CHAR-ESC)
-       (keyScannerEsc))
-   (if (not c) ; Timed out so accept escape char and start over
-       (keyDispatcher CHAR-ESC)
-   (begin ; Not a recognized escape sequence, so send escape and the [ character
-     (keyDispatcher CHAR-ESC)
-     (keyDispatcher c)))))))
-
-; An "\e[" scanned
-(define (keyScannerEscBracket)
-  (let ((c (read-char #f stdin)))
-    (if (eq? c #\A) (keyDispatcher 'up)
-    (if (eq? c #\B) (keyDispatcher 'down)
-    (if (eq? c #\C) (keyDispatcher 'right)
-    (if (eq? c #\D) (keyDispatcher 'left)
-    (if (eq? c #\M) (keyScannerEscBracketM)
-    (begin ; Not an arrow key sequence, so send all the character to the key queue
-      (keyDispatcher CHAR-ESC)
-      (keyDispatcher #\[)
-      (keyDispatcher c)))))))))
-
-; An "\e[M" has been scanned
-(define (keyScannerEscBracketM)
- (letrec ((c (read-char #f stdin))
-          (action (if (eq? c #\ ) 'mouse0
-                  (if (eq? c #\!) 'mouse2
-                  (if (eq? c #\") 'mouse1
-                  (if (eq? c #\#) 'mouseup
-                  'mouse)))))
-          (x (- (read-char #f stdin) #\  1))
-          (y (- (read-char #f stdin) #\  1)))
-  (mouseDispatcher action y x)))
-
-; Base keyboard read queue.  Continuously read stdin and append to a FIFO.
-; Call getKey to read it.  It is possible that another dispatcher has been
-; registered and captures characters before this.
-; TODO move this to terminal class
-(define getKeyQueue (QueueCreate))
-(define (getKeyQueueAdd c) (QueueAdd getKeyQueue c)) ; List of characters and button symbols
-(define (getKey) (QueueGet getKeyQueue))
-(keyDispatcherRegister getKeyQueueAdd)
 
 
 
@@ -767,12 +685,13 @@
  (((Entity (random) (if ipc (ipc 'PrivatePort) 0) name z y x) 'inherit) (append (list ipc) childArgs) ; Parent and args to child
   (macro (ipc) ; Child
     (define (self msg) (eval msg))
+    (define alive #t)
     (define cell 19) ; TODO replace with a generalize item container
     (define dir 0)
     (define tz 0) ; Translation coordinates
     (define ty 0)
     (define tx 0)
-    (define ipcRead (if ipc ((ipc 'newReader)) #f))
+    (define ipcRead (if ipc ((ipc 'newReader)) #f)) ; This needs to be destroyed.
     (define ipcWrite (if ipc (ipc 'qwrite) #f))
     (define (look ndir . rloc) ; Look in a direction plus a relative (not rotational) zyx location
       (set! dir ndir)
@@ -806,11 +725,13 @@
       (if (= dir 9) (list (+ z  1 tz) (+ y    ty) (+ x    tx)))))))))))))
     (define ceiling z)
     (define (setCeiling z) (set! ceiling z))
-    (define (die) (ipcWrite `(die ,dna))) ; Announce that I'm leaving
+    (define (die)
+      (ipcWrite `(die ,dna)) ; Announce that I'm leaving
+      (set! alive #f))
     (define (jump z y x)
-     (vatar 'setLoc z y x)
-     (walkDetails))
-    (define walkSemaphore (open-semaphore 1))
+      (vatar 'setLoc z y x)
+      (walkDetails))
+    (define walkSemaphore (open-semaphore 1)) ; This needs to be destroyed
     (define (walkDetails)
       ; Update avatar locally in the field/canvas/viewport and via IPC
       (apply moveEntity self (gpsLook))
@@ -859,6 +780,7 @@
       (ipcWrite (list 'voice dna
                       (if (null? level) 10 (car level))
                       (apply string (display->strings talkInput)))))
+    ; Initially the IPC voice handler is empty
     (define IPCvoice list)
     (define (IPCvoiceRegister fn) (set! IPCvoice fn))
     (define (IPCforce fz fy fx dir mag)
@@ -894,14 +816,18 @@
             (or thisIsMe (mapViewportRender (entity 'y) (entity 'x)))))))))
     ; IPC message handler
     (if ipc (thread (let ~ ()
-      (let ((e (ipcRead)))
-        (if (pair? e) (begin
-          (if (eq? (car e) 'voice) (apply IPCvoice (cdr e))
-          (if (eq? (car e) 'force) (apply IPCforce (cdr e))
-          (if (eq? (car e) 'who)  (apply IPCwho (cdr e))
-          (if (eq? (car e) 'entity)(eval e)
-          (if (eq? (car e) 'die)   (apply IPCdie  (cdr e)))))))))
-        (~)))))
+      (if alive
+        (let ((e (ipcRead)))
+          (if (and alive (pair? e)) (begin
+            (if (eq? (car e) 'voice)  (apply IPCvoice (cdr e))
+            (if (eq? (car e) 'force)  (apply IPCforce (cdr e))
+            (if (eq? (car e) 'who)    (apply IPCwho   (cdr e))
+            (if (eq? (car e) 'entity) (eval e)
+            (if (eq? (car e) 'die)    (apply IPCdie   (cdr e)))))))))
+          (~))
+        (begin
+          ((ipc 'delReader) ipcRead)
+          (close-semaphore walkSemaphore))))))
     (ipcWrite '(who))
     self))) ; Avatar
 
@@ -1399,11 +1325,9 @@
 (setButton #\Q '(set! state 'done))
 (setButton #eof '(set! state 'done))
 (setButton CHAR-CTRL-C '((WinConsole 'toggle)))
-(setButton #\1 '(begin (set! state 'pacman) (pacman)))
-(setButton #\2 '(thread (pong)))
-(setButton #\3 '(thread (spawnKitty 1000)))
-;(setButton #\1 '((WinChat 'resize) (WinChat 'Wheight) (WinChat 'Wwidth)))
-;(setButton #\1 '((WinChat 'scrollUp)))
+;(setButton #\1 '(begin (set! state 'pacman) (pacman)))
+;(setButton #\2 '(thread (pong)))
+;(setButton #\3 '(thread (spawnKitty)))
 
 
 
@@ -1520,45 +1444,57 @@
 ;; Prototypes_and_fun_things
 ;;
 
+; Mess with creating new entities using new Avatar object
+; TODO Fold the spawnKitty function into this as a prototype autonomous entity
+(define (makeGhost)
+  (let ((a (Avatar ipc "Ghost" (avatar 'z) (avatar 'y) (avatar 'x))))
+    (entitiesAdd a)
+    (thread
+      (sleep 2000)
+      (moveEntity a (avatar 'z) (avatar 'y) (+ 1 (avatar 'x))))
+    a)) ; Move avatar to entrance of Lord British's castle near 108 86
+
 ;; Walking kitty soldier
 (define (spawnKitty . cycles)
- (set! cycles (if (null? cycles) 128 (car cycles))) ; Set max cycles
- (letrec ((kitty (Avatar #f "Kat" (avatar 'z) (avatar 'y) (avatar 'x)))
+ (set! cycles (if (null? cycles) 32 (car cycles))) ; Set max cycles
+ (letrec ((kitty (Avatar ipc "Kat" (avatar 'z) (avatar 'y) (avatar 'x)))
           (happyVector (vector 0 0 0 0 0 0 0 0))
-          (dist 0))
- ; Tell everyone who this kitteh is.
- (IpcWrite `(entity ,(kitty 'dna) 0 "kitty" ',((kitty 'gps))))
- (let ~ ((tic 0)) ; Main loop
-   ; Distance from parent avatar
-   (set! dist (distance ((kitty 'gps)) ((avatar 'gps))))
-   ; Neuron depletion.
-   (if (= (modulo tic 10) 0) (vector-map! (lambda (x) (/ x 2)) happyVector))
-   ; Walk kitty quasi-randomly.
-   ((kitty 'look) ; was walkDir
-       (letrec ((dir (kitty 'dir))
-                (dir1 (modulo (+ dir (random 3) -1) 8))
-                (dir2 (modulo (+ dir (random 3) -1) 8)))
-            (if (> (vector-ref happyVector dir1)
-                   (vector-ref happyVector dir2))
-                dir1 dir2)))
-   (apply (kitty 'setLoc) ((kitty 'gpsLook)))
-   ; Update neuron vector
-   (vector-set! happyVector (kitty 'dir)
-       (+ (let ((kd (distance ((kitty 'gps))
-                              ((avatar 'gps)))))
-            (if (< kd dist) 1
-            (if (= kd dist) -1 -2)))
-          (vector-ref happyVector (kitty 'dir))))
-   (IpcWrite `(move ,(kitty 'dna) ,@((kitty 'gps))))
-   (sleep 200)
-   (if (equal? ((kitty 'gps)) ((avatar 'gps))) ; If avatar and kitty meet...
-     (begin
-        (IpcWrite `(voice ,(kitty 'dna) 10 "Hiss!"))
-        (set! tic (+ cycles 30))))
+          (dist 0)
+          (dir 0)) ; Initially start walking right
+ (sleep 500)
+ (let ~ () ; Main loop
+   ; Walk kitty quasi-randomly.  Set the direction the
+   ; avatar will walk based on weighted list of directions
+   (set! dir
+     (letrec ((dir1 (modulo (+ dir (random 3) -1) 8))
+              (dir2 (modulo (+ dir (random 3) -1) 8)))
+          (if (> (vector-ref happyVector dir1)
+                 (vector-ref happyVector dir2))
+              dir1 dir2)))
+   ((kitty 'walk) dir)
+
+   ; Update neuron vector based on new distance from parent
+   (let ((newDist (distance ((kitty 'gps)) ((avatar 'gps)))))
+     (vector-set! happyVector dir
+         (+ (if (< newDist dist) 1
+              (if (= newDist dist) -1 -2))
+            (vector-ref happyVector dir)))
+     (set! dist newDist))
+
+   (sleep 500) ; pause
+
+   ; If avatar and kitty meet do something
+   (if (equal? ((kitty 'gps)) ((avatar 'gps))) ((kitty 'say) "Hiss!"))
+
+   ; Neuron depletion.  After a few iterations, halve each weight.
+   (if (= (modulo cycles 10) 0)
+     (vector-map! (lambda (x) (/ x 2)) happyVector))
+
    ; Kill entity or loop again
-   (if (> tic (+ cycles (random 30)))
-       (IpcWrite `(die ,(kitty 'dna)))
-       (~ (+ tic 1))))))
+   (set! cycles (- cycles 1))
+   (if (<= cycles 0)
+       ((kitty 'die))
+       (~)))))
 
 (define march (let ((walkForeverFlag #f)) (lambda ()
  (if walkForeverFlag
@@ -1792,15 +1728,6 @@
           (set! wall (+ 1 wall))))))
     (~ (modulo (+ wall 1) 4)))))))) ; pong
 
-; Mess with creating new entities using new Avatar oject
-(define (makeGhost)
-  (let ((a (Avatar ipc "Ghost" (avatar 'z) (avatar 'y) (avatar 'x))))
-    (entitiesAdd a)
-    (thread
-      (sleep 2000)
-      (moveEntity a (avatar 'z) (avatar 'y) (+ 1 (avatar 'x))))
-    a)) ; Move avatar to entrance of Lord British's castle near 108 86
-
 ; Load a map file and dump in the current map
 ;(define (p m) (mapUpdateColumns 3456 2752 32 (read (open-file m))))
 
@@ -1816,9 +1743,6 @@
 (define ipc (Ipc WinConsoleDisplay))
 (ipc '(set! Debug #f))
 (define IpcWrite (ipc 'qwrite))
-
-; Start keyboard and mouse reader agents
-(thread (keyScannerAgentLoop))
 
 ; Initialize map object
 (define myMap (Map 256 ipc))
