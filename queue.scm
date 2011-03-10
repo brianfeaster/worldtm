@@ -2,8 +2,7 @@
 ;; Queues and Lists
 ;;
 
-; A list is a vector containing a semaphore
-; and the header/list pair.
+; A list is a vector containing a semaphore and the header/list pair.
 ; #(SEM *-)--->(list . ())
 (define (ListCreate)
   (vector (open-semaphore 1) (list 'list)))

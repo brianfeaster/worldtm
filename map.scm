@@ -292,7 +292,7 @@
 ;;
 (define (who . dna)
  (IpcWrite
- `(entity ,DNA ,(avatar 'port) ,(avatar 'name) ',((avatar 'gps)))))
+ `(entity ,DNA ,(avatar 'port) ,(avatar 'name) ,((avatar 'gps)))))
 
 (define (entity dna . args)
  (let ((e (entitiesGet dna)))
@@ -400,7 +400,9 @@
      (display "\n\e[1;30mIPC::")
      (write e)
      (display "\e[0m")
-     (eval e)
+     (if (and (pair? e) (eq? (car e) 'entity))
+        (apply entity (cdr e))
+        (eval e))
      (~))))
 
 (repl) ; Start up a REPL loop for fun
