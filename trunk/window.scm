@@ -385,6 +385,8 @@
    (define Buffer (let ((parent self)) (lambda ()
      (define (self msg) (eval msg))
      (define Buffer (list "")) ; List of every line sent.  Append a new empty string.
+     ; Need to pare the string for newlines so a list of lines
+     ; can be assembled over time
      (define (parseString str)
        (let ~ ((i 0)
                (len (string-length str))
@@ -441,15 +443,18 @@
  ;; TODO clean this up.  Add hooks to calls in world.scm
  ;;
 
- ; Stack of functions accepting keyboard characters
+ ; Stack of functions, implemented as a list, accepting keyboard characters
  (define keyDispatcherStack ())
  ; Vector of fuctions accepting (action y x).  TODO only 128 windows supported
  (define mouseDispatchVector (make-vector 128 #f))
 
  ; Keyboard character handling
  (define (keyDispatcherRegister fn) (set! keyDispatcherStack (cons fn keyDispatcherStack)))
- (define (keyDispatcherUnRegister fn) (set! keyDispatcherStack (list-delete keyDispatcherStack fn)))
- (define (keyDispatcher c) ;(WinChatDisplay "\r\n keyDispatcher  c=" c)
+ (define (keyDispatcherUnRegister fn)
+   (if (not (eq? fn (car keyDispatcherStack)))
+     (display "WARNING: keyDispatcherUnRegister: not top dispatcher"))
+   (set! keyDispatcherStack (list-delete keyDispatcherStack fn)))
+ (define (keyDispatch c)
    (if (pair? keyDispatcherStack)
        ((car keyDispatcherStack) c)))
  
@@ -458,10 +463,10 @@
    (vector-set! mouseDispatchVector (win 'id) fn))
  (define (mouseDispatcherUnRegister win)
    (mouseDispatcherRegister win #f))
- (define (mouseDispatcher event y x)
+ (define (mouseDispatch event y x) ; Send the handler "'mouse0 2 3" for example.
    (letrec ((win ((Terminal 'topWin) y x))
             (id (if win (win 'id) #f))
-            (fn (if id (vector-ref mouseDispatchVector id) #f))) ;(WinChatDisplay "\r\n mouseDispatcher  event=" event " y=" y " x=" x " winid=" id "  fn=" fn)
+            (fn (if id (vector-ref mouseDispatchVector id) #f)))
    (if fn (fn event (- y (win 'Y0)) (- x (win 'X0))))))
  
  ; State machine to read and parse stdin.
@@ -473,26 +478,26 @@
       (keyScannerEscBracket)
     (if (eq? c CHAR-ESC)
       (begin
-        (keyDispatcher CHAR-ESC)
+        (keyDispatch CHAR-ESC)
         (keyScannerEsc))
     (if (not c) ; Timed out so accept escape char and start over
-        (keyDispatcher CHAR-ESC)
+        (keyDispatch CHAR-ESC)
     (begin ; Not a recognized escape sequence, so send escape and the [ character
-      (keyDispatcher CHAR-ESC)
-      (keyDispatcher c)))))))
+      (keyDispatch CHAR-ESC)
+      (keyDispatch c)))))))
  
  ; An "\e[" scanned
  (define (keyScannerEscBracket)
    (let ((c (read-char #f stdin)))
-     (if (eq? c #\A) (keyDispatcher 'up)
-     (if (eq? c #\B) (keyDispatcher 'down)
-     (if (eq? c #\C) (keyDispatcher 'right)
-     (if (eq? c #\D) (keyDispatcher 'left)
+     (if (eq? c #\A) (keyDispatch 'up)
+     (if (eq? c #\B) (keyDispatch 'down)
+     (if (eq? c #\C) (keyDispatch 'right)
+     (if (eq? c #\D) (keyDispatch 'left)
      (if (eq? c #\M) (keyScannerEscBracketM)
      (begin ; Not an arrow key sequence, so send all the character to the key queue
-       (keyDispatcher CHAR-ESC)
-       (keyDispatcher #\[)
-       (keyDispatcher c)))))))))
+       (keyDispatch CHAR-ESC)
+       (keyDispatch #\[)
+       (keyDispatch c)))))))))
  
  ; An "\e[M" has been scanned
  (define (keyScannerEscBracketM)
@@ -504,7 +509,7 @@
                    'mouse)))))
            (x (- (read-char #f stdin) #\  1))
            (y (- (read-char #f stdin) #\  1)))
-   (mouseDispatcher action y x)))
+   (mouseDispatch action y x)))
  
  ; Default keyboard read queue.  Continuously read stdin and append to a FIFO
  ; accessed via (getKey).  It is possible that another dispatcher has been
@@ -517,7 +522,7 @@
   (let ((c (read-char #f stdin)))
     (if (eq? c CHAR-ESC)
       (keyScannerEsc) ; Escape char so attempt to read an escape sequence
-      (keyDispatcher c)) ; Add new keyboard character to queue
+      (keyDispatch c)) ; Add new keyboard character to queue
     (keyScannerAgentLoop))) ; rinse and repeat
  ;;
  ;; Terminal keyboard and mouse reporting

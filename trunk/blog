@@ -2794,3 +2794,26 @@ are evaluated.
 Wed Mar  2 21:42:51 EST 2011
 
 Moved keyboard and mouse handler code to the Terminal class.
+
+
+Thu Mar  3 20:59:00 EST 2011
+
+Was sending expressions for evaluation through the IPC.  This meant when I sent
+an avatar's (z y x) coordinate, it had to be sent as a quoted list.  Since
+objects parse IPC expressions now, I can now send data as is.  In the case of
+"entity" messages, tha tmeans the expression
+(entity 1234567 7156 "NAME" (1 5000 5001)).
+
+
+Tue Mar  8 00:53:22 EST 2011
+
+Why not implement all classes in Wscheme as macros instead of lambdas?  More
+consistent?
+
+
+Wed Mar  9 15:16:36 EST 2011
+
+Which comes first, the map or the avatar?
+
+When creating other entities, they won't necessarily have a map object.  I'm
+debating whether I should have just avatars handle incoming IPC communication.
