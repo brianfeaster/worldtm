@@ -445,25 +445,21 @@
  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
  ;; Keyboard_and_mouse
  ;;
-
  ; Stack of queues, implemented as a list, accepting keyboard characters
  (define keyQueueStack ())
-
  ; Vector of fuctions accepting (action y x).  TODO only 128 windows supported
  (define mouseDispatchVector (make-vector 128 #f))
 
  ; Keyboard character handling
  (define (keyQueueStackRegister q)
    (set! keyQueueStack (cons q keyQueueStack)))
-
  (define (keyQueueStackUnRegister q)
    (if (not (eq? (car keyQueueStack) q))
      (display "WARNING: keyQueueStackUnRegister: not top queue"))
    (set! keyQueueStack (list-delete keyQueueStack q)))
-
  (define (keyDispatch c)
    (if (pair? keyQueueStack)
-       (QueueAdd (car keyQueueStack) c)))
+     (QueueAdd (car keyQueueStack) c)))
  
  ; Mouse character string handling
  (define (mouseDispatcherRegister win fn)
@@ -525,10 +521,6 @@
       (keyDispatch c)) ; Add new keyboard character to queue
     (keyScannerAgentLoop))) ; rinse and repeat
 
- ; Default keyboard read queue.  Continuously read stdin and append to a FIFO
- ; accessed via (getKey).  It is possible that another dispatcher has been
- ; registered and captures characters instead.
-
  (define (getKeyCreate)
    (define keyQueue (QueueCreate)) ; Needs to be deleted
    (keyQueueStackRegister keyQueue)
@@ -540,14 +532,16 @@
          (keyQueueStackUnRegister keyQueue)
          (QueueDestroy keyQueue)))))
 
- (define getKey (getKeyCreate))
+ ; The default keyboard read queue.  Continuously read stdin and append to
+ ; a queue accessed via (getKey).  It is possible that another queue has
+ ; been registered and receives stdin captured characters instead.
 
+ (define getKey (getKeyCreate))
  ;;
  ;; Keyboard_and_mouse
  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
  ; Initialize everything and return this object
- ;(keyDispatcherRegisterGetKey)
  (thread (keyScannerAgentLoop))
  (display "\e[?1000h") ; Enable mouse reporting
  (ResetTerminal (terminal-size))

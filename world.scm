@@ -30,6 +30,7 @@
 (define ActivityTime (time))
 (define MapBlockSize 32) ; Size of each map file cell in the World map.
 (define PortMapAgent #f)
+(define SHOWBUTTONS #f)
 (define EDIT #f)
 
 
@@ -820,6 +821,7 @@
     (define tz 0) ; Translation coordinates
     (define ty 0)
     (define tx 0)
+    (define DebugDumpMapInfo #f)
     (define ipcRead (if ipc ((ipc 'newReader)) #f)) ; This needs to be destroyed.
     (define ipcWrite (if ipc (ipc 'qwrite) #f))
     (define (look ndir . rloc) ; Look in a direction plus a relative (not rotational) zyx location
@@ -876,7 +878,8 @@
       (let ((oldCeiling ceiling))
         (setCeiling (- (apply (theMap 'fieldCeiling) (gps)) 1))
         (if (!= oldCeiling ceiling)
-          (thread ((theMap 'canvasReset) ceiling))))) ; walkDetails
+          (thread ((theMap 'canvasReset) ceiling)))) ; walkDetails
+      (if DebugDumpMapInfo ((theMap 'debugDumpInfo) y x)))
     (define (walk dir)
       (semaphore-down walkSemaphore)
         ; Consider cell I'm walking into.  If cell is entity push it.
@@ -941,6 +944,8 @@
             (if (>= (entity 'z) ((theMap 'canvasHeight) (entity 'y) (entity 'x))) (begin
               ((theMap 'canvasRender) 100 (entity 'y) (entity 'x))
               (or thisIsMe ((theMap 'viewportRender) (entity 'y) (entity 'x)))))))))
+    (define (debugDumpMapInfoToggle)
+      (set! DebugDumpMapInfo (not DebugDumpMapInfo )))
     ; MAIN
     (if ipc (thread (let ~ () ; IPC message handler
       (if alive
@@ -966,6 +971,7 @@
     (if (= x 0)
       `(Sprite 1 1 ,(vector (avatar 'glyph)))
     (if (= x 1)
+
       '(Sprite 3 2 #(#(0 15 #\  0 15 #\() #(0 15 #\) 0 15 #\ )  ; ()
                      #(0 15 #\- 0 15 #\[) #(0 15 #\] 0 15 #\-)  ;-[]-
                      #(0 15 #\_ 0 15 #\/) #(0 15 #\\ 0 15 #\_)));_/\_
@@ -1132,7 +1138,6 @@
  (define setcolor (box 'set-color))
  (define str "")
  (define myGetKey ((Terminal 'getKeyCreate)))
- ;((box 'cursor-visible) #f)
  (puts "+------------------+")
  (puts "|                  |")
  (puts "+------------------+")
@@ -1320,24 +1325,17 @@
        (set! ButtonsSymbols (cons (cons ch exp) ButtonsSymbols))))
    (vector-set! Buttons ch exp))) ; For now characters are also integer constants.
 
-(define ShowButtons #f)
-(define (showButtons) (set! ShowButtons (not ShowButtons)))
-
-; Consider the button value.  If data just return the expression.  Otherwise
+; Consider the expression associated with this button value.  If data just return the expression.  Otherwise
 ; assume a closure.  Consider the closure -> closure's code -> the code's pre-compiled
 ; expression and return it (hack).
 (define (getButton ch)
- (let ((val
-         (if (symbol? ch)
-          (let ((a (assq ch ButtonsSymbols)))
-            (if (pair? a) (cdr a) ()))
-          (vector-ref Buttons ch))))
-   (if (pair? val)  val
-   (if (procedure? val) (cons 'lambda (vector-ref (vector-ref (vector-ref Buttons ch) 0) 2)) ; Hack to get at the original expression the procedure was compiled into a closure from.
-   val))))
+  (if (symbol? ch)
+    (let ((a (assq ch ButtonsSymbols)))
+      (if (pair? a) (cdr a) ()))
+    (vector-ref Buttons ch)))
 
 (setButton 'down '(walk 6))
-(setButton #\j '(walk 6))
+(setButton #\j (lambda () (walk 6)))
 (setButton 'up '(walk 2))
 (setButton #\k '(walk 2))
 (setButton 'left '(walk 4))
@@ -1367,12 +1365,13 @@
   (WinChatDisplay "\r\nScroll mode set to:" MAPSCROLL)))
 (setButton #\M '((theMap 'toggleWindow)))
 (setButton #\t '(focusTalk))
-(setButton CHAR-CTRL-D '(ipc '(set! Debug (not Debug))))
+(setButton CHAR-CTRL-D '(begin
+                          (ipc '(set! Debug (not Debug)))
+                          ((avatar 'debugDumpMapInfoToggle))
+                          (set! SHOWBUTTONS (not SHOWBUTTONS))))
 (setButton CHAR-CTRL-E '(begin (set! EDIT (not EDIT)) (WinChatDisplay "\r\nEDIT " EDIT)))
 (setButton CHAR-CTRL-L '(begin ((theMap 'viewportReset) (avatar 'y) (avatar 'x))
                                ((WinChat 'repaint))))
-(setButton CHAR-CTRL-M '((theMap 'debugDumpInfo) (avatar 'y) (avatar 'x)))
-(setButton CHAR-CTRL-Q '(set! state 'done))
 (setButton #\d '(buttonSetCell (avatar 'cell)))
 (setButton #\g
    '(let ((o (apply mapBaseCell ((avatar 'gps)))))
@@ -1384,14 +1383,18 @@
 (setButton #\> '((theMap 'bigger)))
 (setButton #\z '((theMap 'circularize)))
 (setButton #\Z '((theMap 'circularize) #t))
-(setButton #\Q '(set! state 'done))
-(setButton #eof '(set! state 'done))
+(setButton CHAR-CTRL-@ '(shutdown))
+(setButton CHAR-CTRL-Q '(shutdown))
+(setButton #\Q         '(shutdown))
+(setButton #eof        '(shutdown))
 (setButton CHAR-CTRL-C '((WinConsole 'toggle)))
-;(setButton #\1 '(begin (set! state 'pacman) (pacman)))
-;(setButton #\2 '(thread (pong)))
-(if QUIETLOGIN (setButton #\3 '(thread (spawnKitty))))
-(setButton #\1 '(handleTerminalResize))
-(setButton #\2 '(handleTerminalResize (cons 600 400)))
+(if QUIETLOGIN
+   ;(setButton #\1 '(handleTerminalResize))
+   ;(setButton #\2 '(handleTerminalResize (cons 600 400)))
+   (setButton #\3 '(thread (spawnKitty)))
+   ;(setButton #\4 '(begin (set! state 'pacman) (pacman)))
+   ;(setButton #\5 '(thread (pong)))
+)
 
 
 
@@ -1463,27 +1466,16 @@
         (~)))
   (getKey 'destroy))
 
-(define (replCmd b)
- (define state 'cmd) ; state might be changed to 'done or 'talk.
- (let ((button (getButton b)))
-   (if ShowButtons (WinChatDisplay "\r\n" b " " button))
-   (if (pair? button) (eval button)
-    (if (procedure? button) (button)
-     (WinConsoleDisplay "\r\nButton " b " undefined " button))))
- state)
-
-; The various states (talk cmd pacman done)
-(define wrepl
- (let ((state 'cmd))
-  (lambda ()
-   (if (neq? state 'done) ; Exit if state is done.
-     (let ((b (getKey)))
-       (set! ActivityTime (time))
-       (if (eq? state 'cmd) (set! state (replCmd b))
-       (if (eq? state 'pacman) (set! state (replPacman b))
-       (begin (WinChatDisplay "\r\nUnknown REPL state " state)
-              (set! state 'cmd))))
-       (wrepl))))))
+; Keyboard command loop
+(define (keyboardLoop)
+ (letrec ((b (getKey))
+          (button (getButton b)))
+   (set! ActivityTime (time))
+   (if SHOWBUTTONS (WinConsoleDisplay "BUTTON(" b " " button ")"))
+   (if (procedure? button) (button)
+    (if (not (null? button)) (eval button)
+     (WinConsoleDisplay "\r\nButton " b " undefined")))
+   (keyboardLoop)))
 
 
 
@@ -1811,7 +1803,7 @@
    (or (eq? name "") (set! NAME name)))))
 
 ; Avatar creation  TODO does the private port make sense when there will be more than one entity/IPCreader?
-(define avatar (Avatar ipc NAME 1 3459 2711 theMap))
+(define avatar (Avatar ipc NAME 1 3460 2767 theMap))
 (set! DNA (avatar 'dna)) ; Copy my avatar's DNA value to the global variable
 
 ; Display some initial information
@@ -1843,7 +1835,6 @@
                                 ;" *Happy Birthday*"
                                 ;" *I thought you were in Hong Kong*"
                                 " *turns on a VT100*")))))
-
 (define (shutdown)
   (or QUIETLOGIN (sayByeBye))
   ((avatar 'die))
@@ -1851,6 +1842,4 @@
   (displayl "\e[" (Terminal 'Theight) "H\r\n\e[0m\e[?25h\e[?1000l")
   (quit))
 
-(wrepl)
-
-(shutdown)
+(keyboardLoop)
