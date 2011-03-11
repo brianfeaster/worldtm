@@ -2,6 +2,10 @@
 ;; Concerns
 ; redrawing while scrolling up conflict with 'toprow' variable.
 
+(or (procedure? QueueCreate) (begin
+  (display "ERROR: window.scm requires queue.scm.  Halting.\n")
+  (quit)))
+
 ; 256 color terminal escape sequence interface.
 (define colorTable
   (let ((tbl (make-vector 65536)))
@@ -66,7 +70,7 @@
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; Terminal of Windows Class v2
+;; Terminal of Windows, Keyboard and Mouse Class
 ;;
 (define (Terminal)
  (define (self msg) (eval msg))
@@ -439,24 +443,27 @@
    (((WindowNew Y0 X0 Wheight Wwidth COLOR) 'Buffer)) )
 
  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
- ;; Terminal keyboard and mouse reporting functions
- ;; TODO clean this up.  Add hooks to calls in world.scm
+ ;; Keyboard_and_mouse
  ;;
 
- ; Stack of functions, implemented as a list, accepting keyboard characters
- (define keyDispatcherStack ())
+ ; Stack of queues, implemented as a list, accepting keyboard characters
+ (define keyQueueStack ())
+
  ; Vector of fuctions accepting (action y x).  TODO only 128 windows supported
  (define mouseDispatchVector (make-vector 128 #f))
 
  ; Keyboard character handling
- (define (keyDispatcherRegister fn) (set! keyDispatcherStack (cons fn keyDispatcherStack)))
- (define (keyDispatcherUnRegister fn)
-   (if (not (eq? fn (car keyDispatcherStack)))
-     (display "WARNING: keyDispatcherUnRegister: not top dispatcher"))
-   (set! keyDispatcherStack (list-delete keyDispatcherStack fn)))
+ (define (keyQueueStackRegister q)
+   (set! keyQueueStack (cons q keyQueueStack)))
+
+ (define (keyQueueStackUnRegister q)
+   (if (not (eq? (car keyQueueStack) q))
+     (display "WARNING: keyQueueStackUnRegister: not top queue"))
+   (set! keyQueueStack (list-delete keyQueueStack q)))
+
  (define (keyDispatch c)
-   (if (pair? keyDispatcherStack)
-       ((car keyDispatcherStack) c)))
+   (if (pair? keyQueueStack)
+       (QueueAdd (car keyQueueStack) c)))
  
  ; Mouse character string handling
  (define (mouseDispatcherRegister win fn)
@@ -511,29 +518,40 @@
            (y (- (read-char #f stdin) #\  1)))
    (mouseDispatch action y x)))
  
- ; Default keyboard read queue.  Continuously read stdin and append to a FIFO
- ; accessed via (getKey).  It is possible that another dispatcher has been
- ; registered and captures characters instead.
- (define getKeyQueue (QueueCreate))
- (define (getKey) (QueueGet getKeyQueue))
- (define (getKeyQueueAdd c) (QueueAdd getKeyQueue c)) ; List of characters and button symbols
-
  (define (keyScannerAgentLoop)
   (let ((c (read-char #f stdin)))
     (if (eq? c CHAR-ESC)
       (keyScannerEsc) ; Escape char so attempt to read an escape sequence
       (keyDispatch c)) ; Add new keyboard character to queue
     (keyScannerAgentLoop))) ; rinse and repeat
+
+ ; Default keyboard read queue.  Continuously read stdin and append to a FIFO
+ ; accessed via (getKey).  It is possible that another dispatcher has been
+ ; registered and captures characters instead.
+
+ (define (getKeyCreate)
+   (define keyQueue (QueueCreate)) ; Needs to be deleted
+   (keyQueueStackRegister keyQueue)
+   ; Return a blocking key reader.  If passed a message, shutdown.
+   (lambda restargs
+     (if (null? restargs)
+       (QueueGet keyQueue)
+       (begin
+         (keyQueueStackUnRegister keyQueue)
+         (QueueDestroy keyQueue)))))
+
+ (define getKey (getKeyCreate))
+
  ;;
- ;; Terminal keyboard and mouse reporting
+ ;; Keyboard_and_mouse
  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
  ; Initialize everything and return this object
- (keyDispatcherRegister getKeyQueueAdd)
+ ;(keyDispatcherRegisterGetKey)
  (thread (keyScannerAgentLoop))
  (display "\e[?1000h") ; Enable mouse reporting
  (ResetTerminal (terminal-size))
  self)
 ;;
-;; Terminal of Windows Class
+;; Terminal of Windows, Keyboard and Mouse Class
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;

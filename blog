@@ -2817,3 +2817,27 @@ Which comes first, the map or the avatar?
 
 When creating other entities, they won't necessarily have a map object.  I'm
 debating whether I should have just avatars handle incoming IPC communication.
+
+
+Thu Mar 10 15:11:03 EST 2011
+
+The map agent, which is various functions in map.scm, needs to be refactored
+into an entity class.  This, along with pacman ghosts, pong balls, kitties and
+puppies, should be a good set of avatars to drive the development of the best
+entity base class.
+
+The boxInput no longer works with the current event driven keyboard methdology.
+(getKey) only works when there are no other key dispatchers as the getKey
+disptacher is on the bottom.
+
+My dispatch mechanism, which is a stack of keyboard event call back functions,
+breaks if the callback function, which is function called from the Terminal
+object keyboard reader loop, tries to create a new getKey function.  In my
+example, the boxInput function is called from the handler which is the same
+system thread as the Terminal keyboard reader.  It then creates a new handler
+then immediatley starts caling the new getKey function which calls the QueueGet
+which never returns since the keyboard won't be read and the queue added to.
+
+The solution, after perusing X11 tutorials on the web, is to register queues
+rather than call back functions.  This will prevent the "system" thread from
+ending up under the control of the uers's code.

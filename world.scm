@@ -46,8 +46,8 @@
 (define getKey (Terminal 'getKey))
 
 ; Keyboard handler registration
-(define keyDispatcherRegister (Terminal 'keyDispatcherRegister))
-(define keyDispatcherUnRegister (Terminal 'keyDispatcherUnRegister))
+(define keyQueueStackRegister (Terminal 'keyQueueStackRegister))
+(define keyQueueStackUnRegister (Terminal 'keyQueueStackUnRegister))
 
 ; Mouse handler registration
 (define mouseDispatcherRegister (Terminal 'mouseDispatcherRegister))
@@ -320,6 +320,7 @@
      (lambda (y x)
        (vector-vector-set! field (+ y fieldy) (+ x fieldx)
           (vector-vector-ref cellAry y x)))))
+  ; MAIN
   ; Initialize the field with a default column
   ;(WinChatDisplay "\r\nInitializing field...")
   (reset (columnMake 0 cellXX cellAIR)) ; Initialize the canvas with a bogus cell and height to speed up initializing
@@ -338,24 +339,21 @@
   (define size (field 'size))
   (define fieldCell (field 'firstRef))
   (define fieldTopHeight (field 'topHeight))
-  ; The canvas array
+  ; The canvas array.  An array of (cellGlyph . cellHeight)
   (define canvas (make-vector-vector size size #f))
-  ; Initialize the canvas which is a vector of pairs (cellGlyph . cellHeight)
-  ; walkDetails Genesis
-  (define (reset ceilingHeight . defaultGlyph)
+  (define (resetCanvasArray ceilingHeight . defaultGlyph)
     (set! defaultGlyph (if (null? defaultGlyph) #f (car defaultGlyph)))
     (loop2 0 size 0 size (lambda (y x)
-      ; Each canvas entry consists of a map cell and its height.
+      ; Each canvas entry consists of a map cell and its height
+      ; Create pair either from defaultGlyph or based on the first visible cell
       (vector-vector-set! canvas y x
         (if defaultGlyph
-          ; default pair
-          (cons defaultGlyph 0)
-          ; pair based on visible cell in field
-          (letrec ((t (fieldTopHeight ceilingHeight y x))
+          (cons defaultGlyph 0) ; Default
+          (letrec ((t (fieldTopHeight ceilingHeight y x)) ; First visible
                    (celli (fieldCell t y x)))
-            (cons (if (< CellMax celli)
-                      (((entityDB 'get) celli) 'glyph) ; An entity
-                      (cellGlyph (cellRef celli))) ; A cell
+            (cons (if (cellValidIndex? celli)
+                    (cellGlyph (cellRef celli)) ; A cell's glyph
+                    (((entityDB 'get) celli) 'glyph)) ; An entity's glyph
                   t)))))))
   (define (glyph y x)
     (car (vector-vector-ref canvas
@@ -386,9 +384,10 @@
                                  ((sprite 'glyphRef) (- y ey) (- x ex)))
                                (cellGlyph (cellRef celli)))))
      (heightSet y x z)))
+  ; MAIN
   ;(WinChatDisplay "\r\nInitializing canvas...")
   ; Initialize the canvas
-  (reset 10 (cellGlyph (cellRef cellxx)))
+  (resetCanvasArray 10 (cellGlyph (cellRef cellxx)))
   self) ; Canvas
 
 
@@ -462,6 +461,7 @@
            (recenterReset mapCenterY mapCenterX))
       (sleep 1000)
       (animationLoop))
+    ; MAIN
     ; Disable cursor in map window
     (cursor-visible #f)
     ;(WinChatDisplay "\r\nInitializing viewport...")
@@ -488,7 +488,7 @@
   ; Often used aliases
   (define ipcRead ((ipc 'newReader)))
   (define ipcWrite (ipc 'qwrite))
-  (define fieldCeiling (myField 'ceiling)) ; walkDetails
+  (define fieldCeiling (myField 'ceiling))
   (define fieldAdd (myField 'add))
   (define fieldDelete (myField 'delete))
   (define (ViewportDisplay . e) (for-each (lambda (x) (for-each (myViewport 'puts) (display->strings x))) e))
@@ -524,7 +524,7 @@
       (if (eqv? cellAIR c)
        (begin (ViewportSetColor 0 8)
               (ViewportPuts "()   "))
-       (begin (set! c (if (< CellMax c) ((((theMap 'myEntityDB) 'get) c) 'glyph)
+       (begin (set! c (if (< CellMax c) (((myEntityDB 'get) c) 'glyph)
                                         (cellGlyph (cellRef c)))) ; Dump the glyph
               (ViewportSetColor (glyph0bg c) (glyph0fg c))
               (ViewportPutc (glyph0ch c))
@@ -668,7 +668,7 @@
           0 (- (Terminal 'Twidth) (myViewport 'Wwidth) 2)
           (+ 1 (myViewport 'Wheight))
           (+ 2 (myViewport 'Wwidth)))
-     ((theMap 'circularize))
+     (circularize)
      ((Terminal 'unlock))
      (viewportReset (avatar 'y) (avatar 'x))
      (set! viewportResizeClickTime (+ 125 (utime))))))
@@ -685,7 +685,7 @@
           0 (- (Terminal 'Twidth) (myViewport 'Wwidth) -2)
           (+ -1 (myViewport 'Wheight))
           (+ -2 (myViewport 'Wwidth))))
-     ((theMap 'circularize))
+     (circularize)
      ((Terminal 'unlock))
      (viewportReset (avatar 'y) (avatar 'x))
      (set! viewportResizeClickTime (+ 125 (utime))))))
@@ -734,10 +734,10 @@
   (define viewportReset  (myViewport 'recenterReset))
   (define viewportRender (myViewport 'render))
   (define toggleWindow   (myViewport 'toggle))
-  (define canvasReset    (myCanvas 'reset))
+  (define canvasReset    (myCanvas 'resetCanvasArray))
   (define canvasHeight   (myCanvas 'height))
   (define canvasRender   (myCanvas 'render))
-  (define canvasGlyph    (myCanvas 'glyph)) ; Debugging
+  ; MAIN
   ;(WinChatDisplay "\r\nInitializing map...")
   (circularize)
   ; IPC message handler
@@ -785,9 +785,9 @@
              (begin ((entity 'setGlyph) a)
                     (if (= 1 ((entity 'sprite) 'glyphCount)) ; If the sprite is also a single glyph, update it
                         ((entity 'setSprite) (Sprite 1 1 (vector a)))))
-           (if (procedure? a) (begin
+           (if (and (pair? a) (eq? (car a) 'Sprite)) (begin
                  (mapDelEntitySprite dna (entity 'z) (entity 'y) (entity 'x)) ; Remove it first from the map
-                 ((entity 'setSprite) a)))))))) ; TODO BF sprite update mechanism stinks
+                 ((entity 'setSprite) (eval a))))))))) ; TODO BF sprite update mechanism stinks
        ; Create a new entity.  Massage the arguments (port name glyph (x y z))->(port name glyph x y z)
        (begin
          (set! entity (apply Entity dna (let ~ ((args args))
@@ -797,7 +797,8 @@
          (add entity)))
      ; Return the new or modified entity
      entity))
- self)
+ ; MAIN
+ self) ; EntityDB
 
 
 
@@ -868,9 +869,9 @@
       (letrec ((cellNum (apply (theMap 'baseCell) (gps)))
                (baseSym (cellSymbol (cellRef cellNum))))
         (if (and (<= 512 cellNum) (<= cellNum 612)) (WinChatDisplay "\r\n" (twoLetterDefinition baseSym))
-        (if (eq? baseSym 'sprite0) (setSprite 0)
-        (if (eq? baseSym 'sprite1) (setSprite 1)
-        (if (eq? baseSym 'sprite2) (setSprite 2))))))
+        (if (eq? baseSym 'sprite0) (createSprite 0)
+        (if (eq? baseSym 'sprite1) (createSprite 1)
+        (if (eq? baseSym 'sprite2) (createSprite 2))))))
       ; If ceiling changes, repaint canvas using new ceiling height
       (let ((oldCeiling ceiling))
         (setCeiling (- (apply (theMap 'fieldCeiling) (gps)) 1))
@@ -881,7 +882,7 @@
         ; Consider cell I'm walking into.  If cell is entity push it.
         ; Otherwise move to facing cell or on top of obstructing cell.
         (look dir)
-        (let ((nextCell (apply mapFirstCell (gpsLook))))
+        (let ((nextCell (apply (theMap 'fieldFirstCell) (gpsLook))))
           ; Case 1 push entity
           (if (< CellMax nextCell)
             (ipcWrite `(force ,@(gpsLook) ,dir 10))
@@ -900,7 +901,7 @@
     ; Fall down one cell if a non-entity and non-solid cell below me
     (define (fall)
       (look 8) ; Look down
-      (let ((nextCell (apply mapFirstCell (gpsLook))))
+      (let ((nextCell (apply (theMap 'fieldFirstCell) (gpsLook))))
         (if (= nextCell cellAIR) (walkDetails))))
     (define (say talkInput . level)
       (ipcWrite (list 'voice dna
@@ -960,22 +961,22 @@
     self))) ; Avatar
 
 
-(define (setSprite x)
+(define (createSprite x)
  (IpcWrite (list 'entity DNA
-  (if (= x 0)
-    `(Sprite 1 1 ,(vector (avatar 'glyph)))
-  (if (= x 1)
-    '(Sprite 3 2 #(#(0 15 #\  0 15 #\() #(0 15 #\) 0 15 #\ )  ; ()
-                   #(0 15 #\- 0 15 #\[) #(0 15 #\] 0 15 #\-)  ;-[]-
-                   #(0 15 #\_ 0 15 #\/) #(0 15 #\\ 0 15 #\_)));_/\_
-  (if (= x 2)
-    '(Sprite 7 1 #(#(0 15 #\| 0 15 #\|)
-                   #(0 15 #\| 0 15 #\|)
-                   #(0 15 #\| 0 15 #\|)
-                   #(0 15 #\| 0 15 #\|)
-                   #(0 15 #\| 0 15 #\|)
-                   #(0 15 #\| 0 15 #\|)
-                   #(0 15 #\| 0 15 #\|)))))))))
+    (if (= x 0)
+      `(Sprite 1 1 ,(vector (avatar 'glyph)))
+    (if (= x 1)
+      '(Sprite 3 2 #(#(0 15 #\  0 15 #\() #(0 15 #\) 0 15 #\ )  ; ()
+                     #(0 15 #\- 0 15 #\[) #(0 15 #\] 0 15 #\-)  ;-[]-
+                     #(0 15 #\_ 0 15 #\/) #(0 15 #\\ 0 15 #\_)));_/\_
+    (if (= x 2)
+      '(Sprite 7 1 #(#(0 15 #\| 0 15 #\|)
+                     #(0 15 #\| 0 15 #\|)
+                     #(0 15 #\| 0 15 #\|)
+                     #(0 15 #\| 0 15 #\|)
+                     #(0 15 #\| 0 15 #\|)
+                     #(0 15 #\| 0 15 #\|)
+                     #(0 15 #\| 0 15 #\|)))))))))
 
 
 
@@ -1130,13 +1131,14 @@
  (define putc (box 'putc))
  (define setcolor (box 'set-color))
  (define str "")
+ (define myGetKey ((Terminal 'getKeyCreate)))
  ;((box 'cursor-visible) #f)
  (puts "+------------------+")
  (puts "|                  |")
  (puts "+------------------+")
  ((box 'goto) 0 2) (puts title)
  ((box 'goto) 1 1)
- (let ~ ((c (getKey)))
+ (let ~ ((c (myGetKey)))
    (or (eq? c RETURN) (eq? c NEWLINE)
     (begin
      (if (or (eq? c 'left)
@@ -1151,7 +1153,8 @@
             (begin
               (putc c)
               (set! str (string str c)))))
-     (~ (getKey)))))
+     (~ (myGetKey)))))
+ (myGetKey 'destroy)
  ((box 'delete))
  str)
 
@@ -1237,9 +1240,11 @@
 
 (define (keyColorsAction c)
  (if (pair? (memv c (list CHAR-ESC TAB #\C #\c #\q #\Q)))
-    (avatarColorToggle)
+   #f ; Return done.  Everything else returns true signalling we want to keep reading the keyboard
  (if (pair? (memv c (list RETURN NEWLINE SPACE)))
-   (mouseColorsActionHandler 'mouse0 (car CursorYX) (cdr CursorYX))
+   (begin
+     (mouseColorsActionHandler 'mouse0 (car CursorYX) (cdr CursorYX))
+     #t)
  (let ((y (car CursorYX))
        (x (cdr CursorYX)))
    (if (eq? c #\j)
@@ -1258,7 +1263,8 @@
      ((WinPalette 'move)       (WinPalette 'Y0) (+ -1 (WinPalette 'X0)))
    (if (eq? c #\L)
      ((WinPalette 'move)       (WinPalette 'Y0) (+  1 (WinPalette 'X0)))))))))))
-   (updatePaletteCursor y x)))))
+   (updatePaletteCursor y x)
+   #t))))
 
 (define (mouseColorsActionHandler action wy wx) ; Was (mouseHandler)
  (if (eq? action 'mouse0)
@@ -1273,9 +1279,7 @@
        (WinPaletteColor (car lst) 0)
        (WinPaletteDisplay #\ )
        (~ (+ i 1) (cdr lst)))))))
-
    (updatePaletteCursor wy wx)
-
    (WinPaletteGoto 8 0) (WinPaletteColor 0 7)(WinPaletteDisplay "                                    ")
    (WinPaletteGoto 8 1) (WinPaletteDisplay clr)
    (WinPaletteGoto 8 5) (WinPaletteDisplay "#x" (number->string clr 16))
@@ -1291,12 +1295,12 @@
                         (glyph0bg glyph) clr (glyph0ch glyph)
                         (glyph1bg glyph) clr (glyph1ch glyph))))))))
 
-(define (avatarColorToggle)
+(define (avatarColor)
   ((WinPalette 'toggle))
-  (if (WinPalette 'ENABLED)
-    (keyDispatcherRegister keyColorsAction)
-    (keyDispatcherUnRegister keyColorsAction)))
-
+  (let ((getKey ((Terminal 'getKeyCreate))))
+    (let ~ () (if (keyColorsAction (getKey)) (~)))
+    (getKey 'destroy))
+  ((WinPalette 'toggle)))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -1349,7 +1353,7 @@
 (setButton #\A '(begin
   (set! VIEWPORTANIMATION (not VIEWPORTANIMATION))
   (WinChatDisplay "\r\nMap animation " VIEWPORTANIMATION)))
-(setButton #\C '(avatarColorToggle))
+(setButton #\C '(avatarColor))
 ;(setButton #\W '(rollcall))
 (setButton #\H '(winMapLeft))
 (setButton #\J '(winMapDown))
@@ -1390,6 +1394,7 @@
 (setButton #\2 '(handleTerminalResize (cons 600 400)))
 
 
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Typing_and_talking
 ;;
@@ -1406,16 +1411,16 @@
  (let ((talkInput ""))
   (lambda (b)
    (if (eq? b 'getBuffer) talkInput ; Return input buffer contents.
-   ; backspace
+   ; Handle backspace  TODO full keyboard editing
    (if (or (eq? b CHAR-CTRL-H)
            (eq? b CHAR-CTRL-_)
            (eq? b CHAR-CTRL-?))
-       (begin
-        (if (not (eq? "" talkInput))
+     (begin
+       (if (not (eq? "" talkInput))
          (begin ((WinInput 'backspace) #\ )
                 (set! talkInput (substring talkInput 0 (- (string-length talkInput) 1)))))
-        'talk)
-   ; Send Chatter
+       'talk)
+   ; Send accumulated buffer as a talk message
    (if (or (eq? b RETURN)
            (eq? b NEWLINE))
      (begin
@@ -1441,13 +1446,22 @@
    (if (or (eq? b CHAR-ESC) ; Escape char
            (eq? b CHAR-CTRL-I)) ; Tab char
      (begin (WinInputPuts "\r\n")
-            (unFocusTalk))
+            'done)
    ; Append new character to talk string buffer
    (if (and (>= b #\ )(<= b #\~))
-       (begin (WinInputPutc b)
-              (set! talkInput (string talkInput b))
-              'talk)
-   'talk))))))))
+     (begin (WinInputPutc b)
+            (set! talkInput (string talkInput b))
+            'talk)
+   'talk)))))))) ; replTalk
+
+; Activate event driven talk mechanism
+(define (focusTalk)
+ (define getKey ((Terminal 'getKeyCreate)))
+  (WinInputPuts (string ">" (replTalk 'getBuffer)))
+  (let ~ ()
+    (if (eq? 'talk (replTalk (getKey)))
+        (~)))
+  (getKey 'destroy))
 
 (define (replCmd b)
  (define state 'cmd) ; state might be changed to 'done or 'talk.
@@ -1470,13 +1484,6 @@
        (begin (WinChatDisplay "\r\nUnknown REPL state " state)
               (set! state 'cmd))))
        (wrepl))))))
-
-; Activate event driven talk mechanism
-(define (focusTalk)
-  (WinInputPuts (string ">" (replTalk 'getBuffer)))
-  (keyDispatcherRegister replTalk))
-
-(define (unFocusTalk) (keyDispatcherUnRegister replTalk))
 
 
 
@@ -1588,9 +1595,9 @@
    (if (string=? "load the jump program" talkInput) (tankTalk "I can't find the disk")
    (if (string=? "march" talkInput) (thread (march))
    (if (string=? "edit" talkInput) (begin (set! EDIT (not EDIT)) (tankTalk "Edit mode " EDIT))
-   (if (string=? "island" talkInput) (jump 1 4150 5602)
-   (if (string=? "scrabble" talkInput) (jump 1 3338 3244)
-   (if (string=? "britania" talkInput) (jump 1 3456 2751))))))))))
+   (if (string=? "island" talkInput) ((avatar 'jump) 1 4150 5602)
+   (if (string=? "scrabble" talkInput) ((avatar 'jump) 1 3338 3244)
+   (if (string=? "britania" talkInput) ((avatar 'jump) 1 3456 2751))))))))))
 
 ; Display the same string repeatedly with colors of increasing inensity.
 (define (fancyDisplay c s)
@@ -1789,8 +1796,8 @@
 
 (define myViewport (theMap 'myViewport))
 (define mapDelEntitySprite (theMap 'delEntitySprite)) ; EntityDB
-(define mapFirstCell       (theMap 'fieldFirstCell)) ; walk fall Pong
-(define mapBaseCell        (theMap 'baseCell)) ; walk grab pacman
+(define mapFirstCell       (theMap 'fieldFirstCell)) ; Pong
+(define mapBaseCell        (theMap 'baseCell)) ; grab pacman
 
 ; Register windows and action handlers for mouse events
 (mouseDispatcherRegister myViewport mouseWalkActionHandler)
@@ -1804,7 +1811,7 @@
    (or (eq? name "") (set! NAME name)))))
 
 ; Avatar creation  TODO does the private port make sense when there will be more than one entity/IPCreader?
-(define avatar (Avatar ipc NAME 1 3456 2751 theMap))
+(define avatar (Avatar ipc NAME 1 3459 2711 theMap))
 (set! DNA (avatar 'dna)) ; Copy my avatar's DNA value to the global variable
 
 ; Display some initial information
