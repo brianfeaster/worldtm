@@ -2842,3 +2842,19 @@ rather than call back functions.  This will prevent the "system" thread from
 ending up under the control of the uers's code.
 
 I need to do the same for mouse events.
+
+[ ] Reread http://www.ibm.com/developerworks/linux/library/l-posix3/index.html
+and see if these would replace the double semaphore implementation of
+queues.
+
+
+Fri Mar 11 16:36:14 EST 2011
+
+I've completed the refactoring of map and avatar code into two uber objects. I'd
+like now to be able to extend an entity or simplified avatar object to create
+autonomous avatars.  Since they'll need their own map data, I'll probably have
+to make changes to how avatar and map objects interact with one another.
+
+Before sleeping I considered each Avatar having its own field object which is
+then passed to a new map object's constructor.  This means that the Avatar
+object must handle cell and entity IPC messages.
