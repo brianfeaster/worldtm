@@ -25,8 +25,6 @@
 (define MAPSCROLL 'always) ; always edge never
 (define KITTEHBRAIN  #f)
 (define VOICEDELIMETER " ")
-(define NAME "Guest")
-(define DNA 0)
 (define ActivityTime (time))
 (define MapBlockSize 32) ; Size of each map file cell in the World map.
 (define PortMapAgent #f)
@@ -477,11 +475,11 @@
 ;;
 (define initialMapSize (min 25 (min (- (Terminal 'Theight) 1) (/ (Terminal 'Twidth) 2))))
 
-(define (Map fieldSize ipc)
+(define (Map myField ipc)
   (define (self msg) (eval msg))
+  (define fieldSize (myField 'size))
   ; The objects which make up a map object
   (define myEntityDB (EntityDB))
-  (define myField (Field fieldSize))
   (define myCanvas (Canvas myField myEntityDB))
   (define myViewport (Viewport 0   (- (Terminal 'Twidth) (* initialMapSize 2))
                                initialMapSize   (* 2 initialMapSize)  #x000f
@@ -506,12 +504,12 @@
          (number->string ay) " "
          (number->string ax) ")"
          " field("
-         (number->string (/ ay (myField 'size))) " " 
-         (number->string (/ ax (myField 'size))) ")("
-         (number->string (/ (modulo ay (myField 'size)) MapBlockSize)) " " 
-         (number->string (/ (modulo ax (myField 'size)) MapBlockSize)) ")("
-         (number->string (modulo ay (myField 'size))) " " 
-         (number->string (modulo ax (myField 'size))) ")"
+         (number->string (/ ay fieldSize)) " " 
+         (number->string (/ ax fieldSize)) ")("
+         (number->string (/ (modulo ay fieldSize) MapBlockSize)) " " 
+         (number->string (/ (modulo ax fieldSize) MapBlockSize)) ")("
+         (number->string (modulo ay fieldSize)) " " 
+         (number->string (modulo ax fieldSize)) ")"
          " block("
          (number->string (/ ay MapBlockSize)) " " 
          (number->string (/ ax MapBlockSize)) ")("
@@ -787,7 +785,7 @@
                     (if (= 1 ((entity 'sprite) 'glyphCount)) ; If the sprite is also a single glyph, update it
                         ((entity 'setSprite) (Sprite 1 1 (vector a)))))
            (if (and (pair? a) (eq? (car a) 'Sprite)) (begin
-                 (mapDelEntitySprite dna (entity 'z) (entity 'y) (entity 'x)) ; Remove it first from the map
+                 ((theMap 'delEntitySprite) dna (entity 'z) (entity 'y) (entity 'x)) ; Remove it first from the map
                  ((entity 'setSprite) (eval a))))))))) ; TODO BF sprite update mechanism stinks
        ; Create a new entity.  Massage the arguments (port name glyph (x y z))->(port name glyph x y z)
        (begin
@@ -808,12 +806,16 @@
 ;;
 ;; The user's avatar.  An extended entity object that includes positioning
 ;; and directional observation vectors
-
-(define (Avatar ipc name z y x . childArgs) ; Inherits Entity
+;;
+;; TODO does the private port make sense when there will be more than one entity/IPCreader?
+;;
+(define (Avatar name z y x ipc) ; Inherits Entity
  (((Entity (random) (if ipc (ipc 'PrivatePort) 0) name z y x) 'inherit)
-  (append (list ipc) childArgs) ; Parent and args to child
-  (macro (ipc theMap) ; Child
+  (list ipc) ; Args to child class
+  (macro (ipc) ; Child
     (define (self msg) (eval msg))
+    (define myField (Field 256))
+    (define theMap (Map myField ipc))
     (define entityDB (theMap 'myEntityDB))
     (define alive #t)
     (define cell 19) ; TODO replace with a generalize item container
@@ -934,13 +936,14 @@
        (walk dir)))
     (define (IPCwho . dnaRequestor) ; TODO handle explicit request from specified peer
       (ipcWrite
-        `(entity ,dna ,port ,name ,(gps))))
+        `(entity ,dna ,port ,name ,(gps)))
+      (ipcWrite `(entity ,dna ,glyph)))
     (define (IPCdie dnaIpc)
-     (let ((entity ((entityDB 'get) dna))
+     (let ((entity ((entityDB 'get) dnaIpc))
            (thisIsMe (= dna dnaIpc)))
       (if entity (begin ; Ignore unknown entities
             ; Remove from here
-            ((theMap 'delEntitySprite) dna (entity 'z) (entity 'y) (entity 'x)) ; Remove it first from the map
+            ((theMap 'delEntitySprite) dnaIpc (entity 'z) (entity 'y) (entity 'x)) ; Remove it first from the map
             (if (>= (entity 'z) ((theMap 'canvasHeight) (entity 'y) (entity 'x))) (begin
               ((theMap 'canvasRender) 100 (entity 'y) (entity 'x))
               (or thisIsMe ((theMap 'viewportRender) (entity 'y) (entity 'x)))))))))
@@ -956,7 +959,7 @@
             (if (eq? (car e) 'who)    (apply IPCwho   (cdr e))
             (if (eq? (car e) 'die)    (apply IPCdie   (cdr e))))))))
           (~))
-        (begin
+        (begin ; Shutdown the Avatar
           ((ipc 'delReader) ipcRead)
           (close-semaphore walkSemaphore))))))
     (((theMap 'myEntityDB) 'add) self) ; Register myself with the entity DB
@@ -967,7 +970,7 @@
 
 
 (define (createSprite x)
- (IpcWrite (list 'entity DNA
+ (IpcWrite (list 'entity (avatar 'dna)
     (if (= x 0)
       `(Sprite 1 1 ,(vector (avatar 'glyph)))
     (if (= x 1)
@@ -1271,7 +1274,8 @@
    (updatePaletteCursor y x)
    #t))))
 
-(define (mouseColorsActionHandler action wy wx) ; Was (mouseHandler)
+; A mouse event handler from the color palette window
+(define (mouseColorsActionHandler action wy wx)
  (if (eq? action 'mouse0)
  (letrec ((clr (/ ((WinPalette 'getColor) wy wx) 256)))
 
@@ -1295,7 +1299,7 @@
    (WinPaletteGoto 8 30) (WinPaletteColor #xf clr) (WinPaletteDisplay "**XX")
    ;(WinChatDisplay "\r\n" wy " " wx " New color=" clr)
    (let ((glyph (avatar 'glyph)))
-     (IpcWrite (list 'entity DNA
+     (IpcWrite (list 'entity (avatar 'dna)
                       (Glyph
                         (glyph0bg glyph) clr (glyph0ch glyph)
                         (glyph1bg glyph) clr (glyph1ch glyph))))))))
@@ -1374,7 +1378,7 @@
                                ((WinChat 'repaint))))
 (setButton #\d '(buttonSetCell (avatar 'cell)))
 (setButton #\g
-   '(let ((o (apply mapBaseCell ((avatar 'gps)))))
+   '(let ((o (apply (theMap 'baseCell) ((avatar 'gps)))))
      (WinChatDisplay "\r\nGrabbed " o)
      (buttonSetCell cellAIR)
      (avatar `(set! cell ,o))))
@@ -1465,17 +1469,6 @@
     (if (eq? 'talk (replTalk (getKey)))
         (~)))
   (getKey 'destroy))
-
-; Keyboard command loop
-(define (keyboardLoop)
- (letrec ((b (getKey))
-          (button (getButton b)))
-   (set! ActivityTime (time))
-   (if SHOWBUTTONS (WinConsoleDisplay "BUTTON(" b " " button ")"))
-   (if (procedure? button) (button)
-    (if (not (null? button)) (eval button)
-     (WinConsoleDisplay "\r\nButton " b " undefined")))
-   (keyboardLoop)))
 
 
 
@@ -1648,7 +1641,7 @@
   (filter-not
     (lambda (d)
       ((avatar 'look) d)
-      (cellSolid? (cellRef (apply mapBaseCell ((avatar 'gpsLook))))))
+      (cellSolid? (cellRef (apply (theMap 'baseCell) ((avatar 'gpsLook))))))
     l))
 
 ; Generate list of possible directions for a ghost given a direction
@@ -1758,7 +1751,7 @@
       (if (pair? l) (begin
         ((ball 'look) (car l))
         ; Is there something there?
-        (if (= cellAIR (apply mapFirstCell ((ball 'gpsLook))))
+        (if (= cellAIR (apply (theMap 'fieldFirstCell)((ball 'gpsLook))))
           (begin
             (apply moveEntity ball ((ball 'gpsLook)))
             (IpcWrite (list 'move (ball 'dna) (ball 'z) (ball 'y) (ball 'x)))
@@ -1778,43 +1771,30 @@
 (load "ultima4.cells")
 (load "scrabble.scm") ; TODO temporary
 
-; Create ipc object.  Pass in a debug message output port (can be empty lambda)
+; Create ipc object.  Pass in a serializer which prints to the console window.
 (define ipc (Ipc WinConsoleDisplay))
 (ipc '(set! Debug #f))
-(define IpcWrite (ipc 'qwrite)) ; TODO an often used call by the un-refactored code.  Won't need since the map and entity objects get an ipc object.
 
-; Initialize map object TODO this global object is being used in various functions stil need to continue refactoring map and avatar object.
-(define theMap (Map 256 ipc))
+; TODO an often used call by the un-refactored code
+(define IpcWrite (ipc 'qwrite))
 
+; Animated welcome marquee
+(or QUIETLOGIN (thread (welcome)))
+
+; Get username.  Create avatar object.
+(define avatar (if QUIETLOGIN "Administrator" (boxInput "Enter your name")))
+(if (eq? "" avatar) (set! avatar "Guest"))
+(set! avatar (Avatar avatar 1 3460 2767 ipc))
+
+; Consider the avatar's map object -- TODO still used in global functions
+(define theMap (avatar 'theMap))
+
+; TODO still used in handleTerminalResize winmapUp/Down/Left/Right mouseWalkActionHandler
 (define myViewport (theMap 'myViewport))
-(define mapDelEntitySprite (theMap 'delEntitySprite)) ; EntityDB
-(define mapFirstCell       (theMap 'fieldFirstCell)) ; Pong
-(define mapBaseCell        (theMap 'baseCell)) ; grab pacman
 
 ; Register windows and action handlers for mouse events
 (mouseDispatcherRegister myViewport mouseWalkActionHandler)
 (mouseDispatcherRegister WinPalette mouseColorsActionHandler)
-
-(or QUIETLOGIN (begin
- ; Welcome marquee
- (thread (welcome))
- ; Ask for name via text box
- (let ((name (boxInput "Enter your name")))
-   (or (eq? name "") (set! NAME name)))))
-
-; Avatar creation  TODO does the private port make sense when there will be more than one entity/IPCreader?
-(define avatar (Avatar ipc NAME 1 3460 2767 theMap))
-(set! DNA (avatar 'dna)) ; Copy my avatar's DNA value to the global variable
-
-; Display some initial information
-(or QUIETLOGIN (begin
- (fancyDisplay 5 "Welcome to World")
- (WinChatSetColor 0 3)
- (WinChatDisplay "\r\nSee http://code.google.com/p/worldtm")
- (WinChatSetColor 0 9)
- (WinChatDisplay "\r\nHit ? to toggle the help window")
- (WinChatSetColor 0 10)
- (WinChatDisplay (string "\r\nYour name is " (avatar 'name)))))
 
 ; Catch some signal so that normal shutdown can occur
 ; TODO buggy repeated calls to the same handler occurs with I/O signals
@@ -1825,21 +1805,36 @@
 ;(signal-set 13 (lambda () (say "signal 13 PIPE")  (shutdown)))
 (signal-set 15 (lambda () (say "signal 15 TERM")  (shutdown)))
 
-(or QUIETLOGIN
-  (saySystem (string (avatar 'name)
-               (vector-random #(" *emerges from the Interwebs*"
-                                " *CONNECT 2400*"
-                                " *CONNECT 14400/ARQ/V34/LAPM/V42BIS*"
-                                ;" *PUSH* *SQUIRT* *SPANK* *WAAAAAAAAA*"
-                                ;" *All Worldlians Want to Get Borned*"
-                                ;" *Happy Birthday*"
-                                ;" *I thought you were in Hong Kong*"
-                                " *turns on a VT100*")))))
+; Display welcome information an announce my presence
+(or QUIETLOGIN (begin
+ (fancyDisplay 13 (string "Welcome to World, " (avatar 'name)))
+ (WinChatSetColor 0 10) (WinChatDisplay "\r\nHit ? to toggle the help window")
+ (WinChatSetColor 0 6) (WinChatDisplay "\r\nSee http://code.google.com/p/worldtm")
+ (saySystem (string (avatar 'name)
+  (vector-random #(" *emerges from the Interwebs*"
+                   " *CONNECT 2400*"
+                   " *CONNECT 14400/ARQ/V34/LAPM/V42BIS*"
+                   ;" *PUSH* *SQUIRT* *SPANK* *WAAAAAAAAA*"
+                   ;" *All Worldlians Want to Get Borned*"
+                   ;" *Happy Birthday*"
+                   ;" *I thought you were in Hong Kong*"
+                   " *turns on a VT100*"))))))
+
+; Call this to quit world
 (define (shutdown)
   (or QUIETLOGIN (sayByeBye))
   ((avatar 'die))
   (sleep 1000) ; wait for ipc to flush
-  (displayl "\e[" (Terminal 'Theight) "H\r\n\e[0m\e[?25h\e[?1000l")
+  (displayl "\e[" (Terminal 'Theight) "H\r\n\e[0m\e[?25h\e[?1000lgc=" (fun) "\r\n")
   (quit))
 
-(keyboardLoop)
+; Keyboard command loop
+(let ~ () (letrec ((b (getKey))
+                   (button (getButton b)))
+  (set! ActivityTime (time))
+  (if SHOWBUTTONS (WinConsoleDisplay "BUTTON(" b " " button ")"))
+  ; Evaluate the button's command value
+  (if (procedure? button)  (button)
+  (if (not (null? button)) (eval button)
+    (WinConsoleDisplay "\r\nButton " b " undefined")))
+  (~)))
