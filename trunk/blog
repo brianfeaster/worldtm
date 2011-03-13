@@ -2883,3 +2883,6 @@ Another way would be to allow simpler map objects for simpler avatars.  So now
 the map object will be the only object the avatar communicates with.  Calls to
 the field or entity DB will be through the map object.  This seems cleaner but
 I'm not sure how I'll implement a simpler map object for autonomous entities.
+
+This is working better.  I can spawn a NOVIEWPORT avatar now, push it around
+and make it talk.  Milestone reached!
