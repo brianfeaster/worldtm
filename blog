@@ -2855,6 +2855,31 @@ like now to be able to extend an entity or simplified avatar object to create
 autonomous avatars.  Since they'll need their own map data, I'll probably have
 to make changes to how avatar and map objects interact with one another.
 
-Before sleeping I considered each Avatar having its own field object which is
-then passed to a new map object's constructor.  This means that the Avatar
-object must handle cell and entity IPC messages.
+Before sleeping lastnight, I considered each Avatar having its own field object
+which is then passed to a new map object's constructor.  This means that the
+Avatar object must handle cell and entity IPC messages.
+
+The map object will be externally controlled.  It won't listen to incoming IPC
+messages.
+
+Instantiating a avatar will crash sometimes due to an invalid entity.  Something
+to debug later.
+
+A simple entity should not require a canvas or viewport or even an EntityDB.  It
+only needs to be aware of its surroundings so it can navigate the map
+correctly.  So it should be able to keep track of cell and entity movements.
+It needs to be able to send/receive voices/sounds.  It should respond to force
+expressions from the IPC and the object itself should allow calls to its walk
+and talk functions.
+
+The avatar object makes a lot of calls into the Map object to mutate the field.
+These calls should be made directly so a map-less avatar can still function with
+just a field object and entityDB object.
+
+
+Sat Mar 12 19:37:52 EST 2011
+
+Another way would be to allow simpler map objects for simpler avatars.  So now
+the map object will be the only object the avatar communicates with.  Calls to
+the field or entity DB will be through the map object.  This seems cleaner but
+I'm not sure how I'll implement a simpler map object for autonomous entities.
