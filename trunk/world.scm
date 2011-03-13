@@ -7,8 +7,8 @@
 ;;   Field_object
 ;;   Canvas_object
 ;;   Viewport_object
-;;   Map_object
 ;;    Entity_DB
+;;   Map_object
 ;;    Avatar_object
 ;;   Window_functions_and_initialization
 ;;   Button_commands
@@ -252,17 +252,15 @@
 ;; Field_object
 ;;
 ;; Fields are arrays of columns.  Columns are quasi-compressed stacks of cells
-;; that consist of a start height and specified stack of cells.  #(3 1 1 2)
-;; would be cells (1 1 2) starting at z=4=(3+1). Cells below and above are
-;; assumed to be the lowest and higest specified cells in the vector.  Setting
-;; a cell outside the explicit stack range expands the actual vector and
+;; and/or entity DNA values (could be any object).  The actual content of the
+;; column is the start height-1 and actual stack of cells.  #(3 1 1 99887 1024)
+;; would be cells (1 1 99887 1024) starting at z=4=(3+1). Cells below and above
+;; are assumed to be the lowest and higest specified cells in the vector.
+;; Setting a cell outside the explicit stack range expands the actual vector and
 ;; adjusts the start-height value.
 (define (Field size) ; Field dimension is currently 256x256
   (define (self msg) (eval msg))
   (define field (make-vector-vector size size #f))
-  (define (reset defaultColumn)
-    (loop2 0 size 0 size (lambda (y x)
-      (vector-vector-set! field y x defaultColumn))))
   (define (column y x)
    (vector-vector-ref field (modulo y size) (modulo x size)))
   ; Query the first cell at this location.  Mainly used as the object to display.
@@ -319,6 +317,9 @@
      (lambda (y x)
        (vector-vector-set! field (+ y fieldy) (+ x fieldx)
           (vector-vector-ref cellAry y x)))))
+  (define (reset defaultColumn)
+    (loop2 0 size 0 size (lambda (y x)
+      (vector-vector-set! field y x defaultColumn))))
   ; MAIN
   ; Initialize the field with a default column
   ;(WinChatDisplay "\r\nInitializing field...")
@@ -332,12 +333,12 @@
 ;; A canvas entry is a vector-vector consisting of a glyph and it's Z
 ;; coordinate (the top most visible cell relative to the user usually).
 ;;
-(define (Canvas field entityDB)
+(define (Canvas aField anEntityDB)
   (define (self msg) (eval msg))
   ; Useful field values
-  (define size (field 'size))
-  (define fieldCell (field 'firstRef))
-  (define fieldTopHeight (field 'topHeight))
+  (define size (aField 'size))
+  (define fieldCell (aField 'firstRef))
+  (define fieldTopHeight (aField 'topHeight))
   ; The canvas array.  An array of (cellGlyph . cellHeight)
   (define canvas (make-vector-vector size size #f))
   (define (resetCanvasArray ceilingHeight . defaultGlyph)
@@ -352,7 +353,7 @@
                    (celli (fieldCell t y x)))
             (cons (if (cellValidIndex? celli)
                     (cellGlyph (cellRef celli)) ; A cell's glyph
-                    (((entityDB 'get) celli) 'glyph)) ; An entity's glyph
+                    (((anEntityDB 'get) celli) 'glyph)) ; An entity's glyph
                   t)))))))
   (define (glyph y x)
     (car (vector-vector-ref canvas
@@ -376,8 +377,8 @@
    (let ((z (fieldTopHeight top y x))) ; Get z of first cell starting at top
      (let ((celli (fieldCell z y x))) ; Field might contain an entity's dna
        (glyphSet y x (if (< CellMax celli)
-                               (letrec ((ent ((entityDB 'get) celli))
-                                        (sprite (ent 'sprite))
+                               (letrec ((ent ((anEntityDB 'get) celli))
+                                        (sprite (ent 'sprite)) ; TODO_1 ent is #f if I spawn another Avatar
                                         (ey (ent 'y))
                                         (ex (ent 'x)))
                                  ((sprite 'glyphRef) (- y ey) (- x ex)))
@@ -401,15 +402,15 @@
 ; Initial map window size is 25 or terminal width/height fit.
 (define (Viewport y x h w clr . childArgs)
  ((((Terminal 'WindowNew) y x h w clr) 'inherit) childArgs ; Parent and args to child
-  (macro (canvas) ; Child
+  (macro (aCanvas) ; Child
     (define (self msg) (eval msg))
-    (define canvasSize (canvas 'size))
-    (define canvasGlyph (canvas 'glyph))
-    (define my 0) ; Map location of viewport origin
+    (define canvasSize (aCanvas 'size))
+    (define canvasGlyph (aCanvas 'glyph))
+    (define my 0) ; Location of viewport origin in map coordinates
     (define mx 0) ;
     (define winHeight 0)
     (define winWidth 0)
-    (define mapCenterY (/ canvasSize 2)) ; Map location of viewport center
+    (define mapCenterY (/ canvasSize 2)) ; Location of viewport center in map coordinates
     (define mapCenterX (/ canvasSize 2)) ;
     (define NextDrawTime (utime))
     (define (plot glyph y x)
@@ -468,6 +469,58 @@
 
 
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Entity_DB
+;;
+;; List of entity/avatar objects
+;; TODO use hashtable
+;; TODO port to map.scm
+;;
+
+; Association list of entites to their DNA values.
+(define (EntityDB)
+ (define (self msg) (eval msg))
+ (define lst (ListCreate))
+ (define (add ent) (ListAdd lst ent)) ; -- Was entitiesAdd
+ (define (del ent) (ListDel lst ent))
+ (define (getAll) (ListGet lst)) ; Map.updateColumnsIPC
+ ; Lookup entity in database b scaning list for entity with the specified dna -- Was entitiesGet
+ (define (get dna)
+   (let ((e (let ~ ((lst (ListGet lst)))
+              (if (null? lst) #f
+              (if (eqv? dna ((car lst) 'dna)) (car lst)
+              (~ (cdr lst)))))))
+     e))
+ (define (set dna . args) ; IPC:Entity -- Was entitiesSet
+   (let ((entity (get dna)))
+     (if entity
+       ; Update only name and glyph if entity already exists
+       (each-for args
+         (lambda (a)
+           (if (integer? a) ((entity 'setPort) a)
+           (if (string? a)  ((entity 'setName) a)
+           (if (vector? a)
+             (begin ((entity 'setGlyph) a)
+                    (if (= 1 ; If the sprite is also a single glyph, update it as well
+                           ((entity 'sprite) 'glyphCount))
+                        ((entity 'setSprite) (Sprite 1 1 (vector a)))))
+           (if (and (pair? a)
+                    (eq? (car a) 'Sprite))
+             ((entity 'setSprite) (eval a))))))))
+       ; Create a new entity.  Massage the arguments (port name glyph (x y z))->(port name glyph x y z)
+       (begin
+         (set! entity (apply Entity dna (let ~ ((args args))
+                                          (if (pair? (car args))
+                                              (car args)
+                                              (cons (car args) (~ (cdr args)))))))
+         (add entity)))
+     ; Return the new or modified entity
+     entity))
+ ; MAIN
+ self) ; EntityDB
+
+
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Map_object
 ;;
@@ -475,30 +528,39 @@
 ;;
 (define initialMapSize (min 25 (min (- (Terminal 'Theight) 1) (/ (Terminal 'Twidth) 2))))
 
-(define (Map myField ipc)
+(define (Map ipc)
   (define (self msg) (eval msg))
-  (define fieldSize (myField 'size))
-  ; The objects which make up a map object
-  (define myEntityDB (EntityDB))
+  (define fieldSize 256)
+  ; Composition
+  (define myEntityDB (EntityDB)) ; TODO move this to Map then create EntityDB.add interface
+  (define myField (Field fieldSize))
   (define myCanvas (Canvas myField myEntityDB))
   (define myViewport (Viewport 0   (- (Terminal 'Twidth) (* initialMapSize 2))
                                initialMapSize   (* 2 initialMapSize)  #x000f
                                myCanvas))
-  ; Often used aliases
-  (define ipcRead ((ipc 'newReader)))
+  ; IPC aliases
+  ;(define ipcRead ((ipc 'newReader)))
   (define ipcWrite (ipc 'qwrite))
-  (define fieldCeiling (myField 'ceiling))
+  ; Entity DB aliases
+  (define entityDBAdd (myEntityDB 'add))
+  (define entityDBGet (myEntityDB 'get))
+  ; Field DB aliases
   (define fieldAdd (myField 'add))
   (define fieldDelete (myField 'delete))
+  ; Viewport/window aliases
   (define (ViewportDisplay . e) (for-each (lambda (x) (for-each (myViewport 'puts) (display->strings x))) e))
   (define ViewportPutc (myViewport 'putc))
   (define (ViewportPuts . l) (for-each (myViewport 'puts) l))
   (define ViewportSetColor (myViewport 'set-color))
-   ; Methods
-  (define (debugDumpInfo y x) ; Arguments specify the field column to dump
+  ; Members
+  (define DebugDumpFlag #f)
+  (define (debugDumpMapInfoToggle) (set! DebugDumpFlag (not DebugDumpFlag )))
+  (define (debugDumpInfo y x) ; Arguments specify the field column cells to dump
     ((myViewport 'set-color) 0 15)
     ((myViewport 'home))
-    (let ((az (avatar 'z)) (ay (avatar 'y)) (ax (avatar 'x)))
+    (let ((az (avatar 'z))
+          (ay (avatar 'y))
+          (ax (avatar 'x)))
       (ViewportDisplay "map("
          (number->string az) " "
          (number->string ay) " "
@@ -515,7 +577,7 @@
          (number->string (/ ax MapBlockSize)) ")("
          (number->string (modulo ay MapBlockSize)) " " 
          (number->string (modulo ax MapBlockSize)) ")"
-         " C=" (avatar 'ceiling)))
+         " C=" ceiling))
     ((myViewport 'goto) 0 0)
     (let ~ ((z 11))
      (ViewportPuts "\r\n")
@@ -553,13 +615,13 @@
   (define (delCell cell z y x)
     (fieldDelete z y x cell)
     (if (>= z (canvasHeight y x)) (begin
-      (canvasRender (avatar 'ceiling) y x)
+      (canvasRender ceiling y x)
       (viewportRender y x))))
   ; Add a cell to the field.  Update canvas if needed.
   (define (addCell cell z y x)
     (fieldAdd z y x cell)
     (if (>= z (canvasHeight y x)) (begin
-      (canvasRender (avatar 'ceiling) y x)
+      (canvasRender ceiling y x)
       (viewportRender y x))))
   (define (moveCell cell zo yo xo z y x)
     ; Old location removal
@@ -582,7 +644,7 @@
             ; Render old deleted location
             (if (>= zo (canvasHeight (+ m yo) (+ n xo)))
              (begin
-               (canvasRender (avatar 'ceiling) (+ m yo) (+ n xo))
+               (canvasRender ceiling (+ m yo) (+ n xo))
                (viewportRender (+ m yo) (+ n xo)))))))))) ; Don't render cell if viewport to be reset
   (define (moveEntitySprite dna zo yo xo z y x centerMap)
     (if (eq? MAPSCROLL 'never) (set! centerMap #f)) ; Global toggle to disable map scrolling
@@ -604,11 +666,11 @@
                       (n (cdr c)))
             ; Render old deleted location
             (if (>= zo (canvasHeight (+ m yo) (+ n xo))) (begin
-              (canvasRender (avatar 'ceiling) (+ m yo) (+ n xo))
+              (canvasRender ceiling (+ m yo) (+ n xo))
               (or centerMap (viewportRender (+ m yo) (+ n xo))))) ; Don't render cell if viewport to be reset
             ; Render new added location
             (if (>= z (canvasHeight (+ m y) (+ n x))) (begin
-              (canvasRender (avatar 'ceiling) (+ m y) (+ n x))
+              (canvasRender ceiling (+ m y) (+ n x))
               (or centerMap (viewportRender (+ m y) (+ n x)))))))))) ; Don't render cell if vewport to be reset
     (if centerMap (viewportReset y x)))
   ; Given a cell index or entity DNA value, move it in the field, canvas and viewport.
@@ -634,7 +696,26 @@
                              (< (- (/ (myViewport 'Wheight) 2) 2)
                                 (distance (list 0 y x)
                                           (list 0 (+ (myViewport 'my) (/ (myViewport 'winHeight) 2)) (+ (myViewport 'mx) (/ (myViewport 'winWidth) 2)))))))))))
-  ; Make Map window circular
+  (define ceiling 100)
+  (define (setCeiling z) (set! ceiling z))
+  (define (walkDetails entity)
+    ; Update avatar locally in the field/canvas/viewport and via IPC
+    (apply moveEntity entity  ((entity 'gpsLook)))
+    (ipcWrite (list 'move (entity 'dna) (entity 'z) (entity 'y) (entity 'x)))
+    ; Special case to handle cells that change the Avatar's sprite
+    (letrec ((cellNum (apply baseCell ((entity 'gps))))
+             (baseSym (cellSymbol (cellRef cellNum))))
+      (if (and (<= 512 cellNum) (<= cellNum 612)) (WinChatDisplay "\r\n" (twoLetterDefinition baseSym))
+      (if (eq? baseSym 'sprite0) (createSprite 0)
+      (if (eq? baseSym 'sprite1) (createSprite 1)
+      (if (eq? baseSym 'sprite2) (createSprite 2))))))
+    ; If ceiling changes, repaint canvas using new ceiling height
+    (let ((oldCeiling ceiling))
+      (setCeiling (- (apply (myField 'ceiling) ((entity 'gps))) 1))
+      (if (!= oldCeiling ceiling)
+        (thread ((myCanvas 'resetCanvasArray) ceiling)))) ; walkDetails
+    (if DebugDumpFlag (debugDumpInfo (entity 'y) (entity 'x))))
+  ; Make map window circular
   (define (circularize . val)
    (set! val (not (null? val))) ; Default to disabling circular corners of map.
    (let ~ ((y 0)(x 0))
@@ -652,7 +733,7 @@
                              (- (myViewport 'Wwidth) x 1) val)
             ))
       (~ y (+ x 1)))))))
-  ; Map resizing
+  ; Viewport/window resizing
   (define viewportResizeClickTime (utime)) ; Double click 1/16 sec.
   (define (bigger) ; was winMapBigger
     (if (< (myViewport 'Wheight) (Terminal 'Theight)) (begin
@@ -714,10 +795,11 @@
     (let ((entity ((myEntityDB 'get) dna)))
       (if entity
         (begin ; Modify entity attributes
+          (delEntitySprite dna (entity 'z) (entity 'y) (entity 'x)) ; Remove it first from the map
           (apply (myEntityDB 'set) dna args)
           (moveObject (entity 'dna) (entity 'z) (entity 'y) (entity 'x)
                                        (entity 'z) (entity 'y) (entity 'x) #f)
-          (canvasRender (avatar 'ceiling) (entity 'y) (entity 'x))
+          (canvasRender ceiling (entity 'y) (entity 'x))
           (viewportRender (entity 'y) (entity 'x)))
         (begin ; Create new entity with all args
           (set! entity (apply (myEntityDB 'set) dna args))
@@ -733,71 +815,12 @@
   (define viewportReset  (myViewport 'recenterReset))
   (define viewportRender (myViewport 'render))
   (define toggleWindow   (myViewport 'toggle))
-  (define canvasReset    (myCanvas 'resetCanvasArray))
   (define canvasHeight   (myCanvas 'height))
   (define canvasRender   (myCanvas 'render))
   ; MAIN
   ;(WinChatDisplay "\r\nInitializing map...")
   (circularize)
-  ; IPC message handler
-  (thread (let ~ ()
-    (let ((e (ipcRead)))
-      (if (pair? e) (begin
-        (if (eq? (car e) 'move)             (apply moveIPC (cdr e))
-        (if (eq? (car e) 'mapUpdateColumns) (apply updateColumnsIPC (cdr e))
-        (if (eq? (car e) 'mapSetCell)       (apply setCell (cdr e))
-        (if (eq? (car e) 'entity)           (apply IPCentity(cdr e))))))))
-      (~))))
   self) ; Map
-
-
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; Entity_DB
-;;
-;; List of (DNA . entityObject)
-;; TODO use hashtable
-;;
-
-; Association list of entites to their DNA values.
-(define (EntityDB)
- (define (self msg) (eval msg))
- (define lst (ListCreate))
- (define (add ent) (ListAdd lst ent)) ; Genesis:add avatar  entitiesSet -- Was entitiesAdd
- (define (del ent) (ListDel lst ent))
- (define (getAll) (ListGet lst))
- (define (get dna) ; Lookup entity in database -- Was entitiesGet
-   (let ((e (let ~ ((lst (ListGet lst)))
-              (if (null? lst) #f
-              (if (eqv? dna ((car lst) 'dna)) (car lst)
-              (~ (cdr lst)))))))
-     (if e e #f)))
- (define (set dna . args) ; IPC:Entity -- Was entitiesSet
-   (let ((entity (get dna)))
-     (if entity
-       ; Update only name and glyph if entity already exists
-       (each-for args
-         (lambda (a)
-           (if (integer? a)   ((entity 'setPort) a)
-           (if (string? a)    ((entity 'setName) a)
-           (if (vector? a)
-             (begin ((entity 'setGlyph) a)
-                    (if (= 1 ((entity 'sprite) 'glyphCount)) ; If the sprite is also a single glyph, update it
-                        ((entity 'setSprite) (Sprite 1 1 (vector a)))))
-           (if (and (pair? a) (eq? (car a) 'Sprite)) (begin
-                 ((theMap 'delEntitySprite) dna (entity 'z) (entity 'y) (entity 'x)) ; Remove it first from the map
-                 ((entity 'setSprite) (eval a))))))))) ; TODO BF sprite update mechanism stinks
-       ; Create a new entity.  Massage the arguments (port name glyph (x y z))->(port name glyph x y z)
-       (begin
-         (set! entity (apply Entity dna (let ~ ((args args))
-                                          (if (pair? (car args))
-                                              (car args)
-                                              (cons (car args) (~ (cdr args)))))))
-         (add entity)))
-     ; Return the new or modified entity
-     entity))
- ; MAIN
- self) ; EntityDB
 
 
 
@@ -814,16 +837,15 @@
   (list ipc) ; Args to child class
   (macro (ipc) ; Child
     (define (self msg) (eval msg))
-    (define myField (Field 256))
-    (define theMap (Map myField ipc))
-    (define entityDB (theMap 'myEntityDB))
+    ; Composition
+    (define myMap (Map ipc)) ; EntityDB walkDetails walk fall IPCdie debugDumpMapInfoToggle.  Directly by viewportReset
+    ; Members
     (define alive #t)
     (define cell 19) ; TODO replace with a generalize item container
     (define dir 0)
     (define tz 0) ; Translation coordinates
     (define ty 0)
     (define tx 0)
-    (define DebugDumpMapInfo #f)
     (define ipcRead (if ipc ((ipc 'newReader)) #f)) ; This needs to be destroyed.
     (define ipcWrite (if ipc (ipc 'qwrite) #f))
     (define (look ndir . rloc) ; Look in a direction plus a relative (not rotational) zyx location
@@ -856,58 +878,39 @@
       (if (= dir 7) (list (+ z    tz) (+ y  1 ty) (+ x  1 tx))
       (if (= dir 8) (list (+ z -1 tz) (+ y    ty) (+ x    tx))
       (if (= dir 9) (list (+ z  1 tz) (+ y    ty) (+ x    tx)))))))))))))
-    (define ceiling z)
-    (define (setCeiling z) (set! ceiling z))
     (define (die)
       (ipcWrite `(die ,dna)) ; Announce that I'm leaving
       (set! alive #f))
+    (define walkSemaphore (open-semaphore 1)) ; This needs to be destroyed
     (define (jump z y x)
       (setLoc z y x)
-      (walkDetails))
-    (define walkSemaphore (open-semaphore 1)) ; This needs to be destroyed
-    (define (walkDetails)
-      ; Update avatar locally in the field/canvas/viewport and via IPC
-      (apply (theMap 'moveEntity) self (gpsLook))
-      (ipcWrite (list 'move dna z y x))
-      ; Special case to handle cells that change the Avatar's sprite
-      (letrec ((cellNum (apply (theMap 'baseCell) (gps)))
-               (baseSym (cellSymbol (cellRef cellNum))))
-        (if (and (<= 512 cellNum) (<= cellNum 612)) (WinChatDisplay "\r\n" (twoLetterDefinition baseSym))
-        (if (eq? baseSym 'sprite0) (createSprite 0)
-        (if (eq? baseSym 'sprite1) (createSprite 1)
-        (if (eq? baseSym 'sprite2) (createSprite 2))))))
-      ; If ceiling changes, repaint canvas using new ceiling height
-      (let ((oldCeiling ceiling))
-        (setCeiling (- (apply (theMap 'fieldCeiling) (gps)) 1))
-        (if (!= oldCeiling ceiling)
-          (thread ((theMap 'canvasReset) ceiling)))) ; walkDetails
-      (if DebugDumpMapInfo ((theMap 'debugDumpInfo) y x)))
+      ((myMap 'walkDetails) self))
     (define (walk dir)
       (semaphore-down walkSemaphore)
         ; Consider cell I'm walking into.  If cell is entity push it.
         ; Otherwise move to facing cell or on top of obstructing cell.
         (look dir)
-        (let ((nextCell (apply (theMap 'fieldFirstCell) (gpsLook))))
+        (let ((nextCell (apply (myMap 'fieldFirstCell) (gpsLook))))
           ; Case 1 push entity
           (if (< CellMax nextCell)
             (ipcWrite `(force ,@(gpsLook) ,dir 10))
           ; Case 2 walk normally
-          (if (or EDIT (not (cellSolid? (cellRef nextCell)))) ; TODO this always true
-            (walkDetails)
+          (if (or EDIT (not (cellSolid? (cellRef nextCell))))
+            ((myMap 'walkDetails) self)
           ; Case 3 step up
           (begin
             (look dir 1) ; Peek at the cell above the one in front of me
-            (set! nextCell (apply (theMap 'baseCell) (gpsLook)))
+            (set! nextCell (apply (myMap 'baseCell) (gpsLook)))
             (or (cellSolid? (cellRef nextCell))
-              (walkDetails))))))
+              ((myMap 'walkDetails) self))))))
         ; Gravity
         (or EDIT (fall))
       (semaphore-up walkSemaphore)) ; walk
     ; Fall down one cell if a non-entity and non-solid cell below me
     (define (fall)
       (look 8) ; Look down
-      (let ((nextCell (apply (theMap 'fieldFirstCell) (gpsLook))))
-        (if (= nextCell cellAIR) (walkDetails))))
+      (let ((nextCell (apply (myMap 'fieldFirstCell) (gpsLook))))
+        (if (= nextCell cellAIR) ((myMap 'walkDetails) self))))
     (define (say talkInput . level)
       (ipcWrite (list 'voice dna
                       (if (null? level) 10 (car level))
@@ -923,7 +926,7 @@
            (WinChatSetColor 0 13) (WinChatDisplay "D")
            (WinChatSetColor 0 8) (WinChatDisplay VOICEDELIMETER)
            (WinChatSetColor 0 7) (WinChatDisplay text))
-         (letrec ((entity ((entityDB 'get) dna))
+         (letrec ((entity ((myMap 'entityDBGet) dna))
                   (glyph (entity 'glyph)))
            (WinChatSetColor (glyph0bg glyph) (glyph0fg glyph))
            (WinChatDisplay "\r\n" (if (null? entity) "???" (entity 'name)) VOICEDELIMETER)
@@ -939,16 +942,14 @@
         `(entity ,dna ,port ,name ,(gps)))
       (ipcWrite `(entity ,dna ,glyph)))
     (define (IPCdie dnaIpc)
-     (let ((entity ((entityDB 'get) dnaIpc))
+     (let ((entity ((myMap 'entityDBGet) dnaIpc))
            (thisIsMe (= dna dnaIpc)))
       (if entity (begin ; Ignore unknown entities
             ; Remove from here
-            ((theMap 'delEntitySprite) dnaIpc (entity 'z) (entity 'y) (entity 'x)) ; Remove it first from the map
-            (if (>= (entity 'z) ((theMap 'canvasHeight) (entity 'y) (entity 'x))) (begin
-              ((theMap 'canvasRender) 100 (entity 'y) (entity 'x))
-              (or thisIsMe ((theMap 'viewportRender) (entity 'y) (entity 'x)))))))))
-    (define (debugDumpMapInfoToggle)
-      (set! DebugDumpMapInfo (not DebugDumpMapInfo )))
+            ((myMap 'delEntitySprite) dnaIpc (entity 'z) (entity 'y) (entity 'x)) ; Remove it first from the map
+            (if (>= (entity 'z) ((myMap 'canvasHeight) (entity 'y) (entity 'x))) (begin
+              ((myMap 'canvasRender) 100 (entity 'y) (entity 'x))
+              (or thisIsMe ((myMap 'viewportRender) (entity 'y) (entity 'x)))))))))
     ; MAIN
     (if ipc (thread (let ~ () ; IPC message handler
       (if alive
@@ -957,14 +958,19 @@
             (if (eq? (car e) 'voice)  (apply IPCvoice (cdr e))
             (if (eq? (car e) 'force)  (apply IPCforce (cdr e))
             (if (eq? (car e) 'who)    (apply IPCwho   (cdr e))
-            (if (eq? (car e) 'die)    (apply IPCdie   (cdr e))))))))
+            (if (eq? (car e) 'die)    (apply IPCdie   (cdr e))
+            ; Map
+            (if (eq? (car e) 'move)             (apply (myMap 'moveIPC)          (cdr e))
+            (if (eq? (car e) 'mapUpdateColumns) (apply (myMap 'updateColumnsIPC) (cdr e))
+            (if (eq? (car e) 'mapSetCell)       (apply (myMap 'setCell)          (cdr e))
+            (if (eq? (car e) 'entity)           (apply (myMap 'IPCentity)        (cdr e))))))))))))
           (~))
         (begin ; Shutdown the Avatar
           ((ipc 'delReader) ipcRead)
           (close-semaphore walkSemaphore))))))
-    (((theMap 'myEntityDB) 'add) self) ; Register myself with the entity DB
-    ((theMap 'viewportReset) y x) ; Center viewport on my location
-    (thread (((theMap 'myViewport) 'animationLoop))) ; Start viewport animation loop
+    ((myMap 'entityDBAdd) self) ; Register myself with the entity DB
+    ((myMap 'viewportReset) y x) ; Center viewport on my location
+    (thread (((myMap 'myViewport) 'animationLoop))) ; Start viewport animation loop
     (ipcWrite '(who)) ; Ask the IPC for a rollcall
     self))) ; Avatar
 
@@ -1037,7 +1043,7 @@
     (set! th (Terminal 'Theight))
     (WinConsoleDisplay "\r\nSIGWINCH: newTermSize " (cons tw th))
     ((WinChat 'resize)          (- th 1) tw)
-    ((myViewport 'move)                0 (- tw (myViewport 'Wwidth) 2))
+    ((avatarViewport 'move)                0 (- tw (avatarViewport 'Wwidth) 2))
     ((WinInput 'resize)                1 tw)
     ((WinInput 'move)           (- th 1) 0))
   (set! handlerCount 0))
@@ -1177,10 +1183,10 @@
  ((WinHelpBorder 'toggle)))
 
 
-(define (winMapUp)   ((myViewport 'move) (+ -1 (myViewport 'Y0))      (myViewport 'X0)))
-(define (winMapDown) ((myViewport 'move) (+  1 (myViewport 'Y0))      (myViewport 'X0)))
-(define (winMapLeft) ((myViewport 'move)       (myViewport 'Y0) (+ -1 (myViewport 'X0))))
-(define (winMapRight)((myViewport 'move)       (myViewport 'Y0) (+  1 (myViewport 'X0))))
+(define (winMapUp)   ((avatarViewport 'move) (+ -1 (avatarViewport 'Y0))      (avatarViewport 'X0)))
+(define (winMapDown) ((avatarViewport 'move) (+  1 (avatarViewport 'Y0))      (avatarViewport 'X0)))
+(define (winMapLeft) ((avatarViewport 'move)       (avatarViewport 'Y0) (+ -1 (avatarViewport 'X0))))
+(define (winMapRight)((avatarViewport 'move)       (avatarViewport 'Y0) (+  1 (avatarViewport 'X0))))
 
 (define (walk d) ((avatar 'walk) d))
 
@@ -1221,8 +1227,8 @@
 
 (define (mouseWalkActionHandler action wy wx)
  (if (eq? action 'mouse0)
- (letrec ((mapy (+ (myViewport 'my) wy))
-          (mapx (+ (myViewport 'mx) (/ wx 2))))
+ (letrec ((mapy (+ (avatarViewport 'my) wy))
+          (mapx (+ (avatarViewport 'mx) (/ wx 2))))
    ;(WinConsoleDisplay "\r\n" wx " " wy mapy " " mapx)
    (let ~ ((l (lineWalks (avatar 'y) (avatar 'x) mapy mapx)))
      (if (pair? l) (begin
@@ -1367,26 +1373,26 @@
     (if (eq? MAPSCROLL 'edge) 'never
     'always)))
   (WinChatDisplay "\r\nScroll mode set to:" MAPSCROLL)))
-(setButton #\M '((theMap 'toggleWindow)))
+(setButton #\M '((avatarMap 'toggleWindow)))
 (setButton #\t '(focusTalk))
 (setButton CHAR-CTRL-D '(begin
                           (ipc '(set! Debug (not Debug)))
-                          ((avatar 'debugDumpMapInfoToggle))
+                          (((avatar 'myMap) 'debugDumpMapInfoToggle))
                           (set! SHOWBUTTONS (not SHOWBUTTONS))))
 (setButton CHAR-CTRL-E '(begin (set! EDIT (not EDIT)) (WinChatDisplay "\r\nEDIT " EDIT)))
-(setButton CHAR-CTRL-L '(begin ((theMap 'viewportReset) (avatar 'y) (avatar 'x))
+(setButton CHAR-CTRL-L '(begin ((avatarMap 'viewportReset) (avatar 'y) (avatar 'x))
                                ((WinChat 'repaint))))
 (setButton #\d '(buttonSetCell (avatar 'cell)))
 (setButton #\g
-   '(let ((o (apply (theMap 'baseCell) ((avatar 'gps)))))
+   '(let ((o (apply (avatarMap 'baseCell) ((avatar 'gps)))))
      (WinChatDisplay "\r\nGrabbed " o)
      (buttonSetCell cellAIR)
      (avatar `(set! cell ,o))))
 (setButton #\? '(help))
-(setButton #\< '((theMap 'smaller)))
-(setButton #\> '((theMap 'bigger)))
-(setButton #\z '((theMap 'circularize)))
-(setButton #\Z '((theMap 'circularize) #t))
+(setButton #\< '((avatarMap 'smaller)))
+(setButton #\> '((avatarMap 'bigger)))
+(setButton #\z '((avatarMap 'circularize)))
+(setButton #\Z '((avatarMap 'circularize) #t))
 (setButton CHAR-CTRL-@ '(shutdown))
 (setButton CHAR-CTRL-Q '(shutdown))
 (setButton #\Q         '(shutdown))
@@ -1641,7 +1647,7 @@
   (filter-not
     (lambda (d)
       ((avatar 'look) d)
-      (cellSolid? (cellRef (apply (theMap 'baseCell) ((avatar 'gpsLook))))))
+      (cellSolid? (cellRef (apply (avatarMap 'baseCell) ((avatar 'gpsLook))))))
     l))
 
 ; Generate list of possible directions for a ghost given a direction
@@ -1751,7 +1757,7 @@
       (if (pair? l) (begin
         ((ball 'look) (car l))
         ; Is there something there?
-        (if (= cellAIR (apply (theMap 'fieldFirstCell)((ball 'gpsLook))))
+        (if (= cellAIR (apply (avatarMap 'fieldFirstCell)((ball 'gpsLook))))
           (begin
             (apply moveEntity ball ((ball 'gpsLook)))
             (IpcWrite (list 'move (ball 'dna) (ball 'z) (ball 'y) (ball 'x)))
@@ -1786,14 +1792,14 @@
 (if (eq? "" avatar) (set! avatar "Guest"))
 (set! avatar (Avatar avatar 1 3460 2767 ipc))
 
-; Consider the avatar's map object -- TODO still used in global functions
-(define theMap (avatar 'theMap))
+; Consider the avatar's map object -- TODO still used by pacman pong button commands
+(define avatarMap (avatar 'myMap))
 
 ; TODO still used in handleTerminalResize winmapUp/Down/Left/Right mouseWalkActionHandler
-(define myViewport (theMap 'myViewport))
+(define avatarViewport (avatarMap 'myViewport))
 
 ; Register windows and action handlers for mouse events
-(mouseDispatcherRegister myViewport mouseWalkActionHandler)
+(mouseDispatcherRegister avatarViewport mouseWalkActionHandler)
 (mouseDispatcherRegister WinPalette mouseColorsActionHandler)
 
 ; Catch some signal so that normal shutdown can occur
@@ -1827,6 +1833,11 @@
   (sleep 1000) ; wait for ipc to flush
   (displayl "\e[" (Terminal 'Theight) "H\r\n\e[0m\e[?25h\e[?1000lgc=" (fun) "\r\n")
   (quit))
+
+; Spawn a second avatar.  Sort of works.
+; A simple entity should not require a canvas or viewport or even an EntityDB.
+; It only needs to be away of its surroundings and be able to hear sounds/voices.
+;(define kat (Kitteh "kat" 1 3460 2770 ipc)) ; See TODO_1 for crash
 
 ; Keyboard command loop
 (let ~ () (letrec ((b (getKey))
