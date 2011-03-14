@@ -316,10 +316,13 @@
    (loop2 0 blockSize 0 blockSize
      (lambda (y x)
        (vector-vector-set! field (+ y fieldy) (+ x fieldx)
-          (vector-vector-ref cellAry y x)))))
+          (vector-copy (vector-vector-ref cellAry y x))))))
   (define (reset defaultColumn)
     (loop2 0 size 0 size (lambda (y x)
       (vector-vector-set! field y x defaultColumn))))
+  (define (setField newField)
+    (set! field newField)
+    (WinChatDisplay "\r\nOK vector-length " (vector-length newField)))
   ; MAIN
   ; Initialize the field with a default column
   ;(WinChatDisplay "\r\nInitializing field...")
@@ -341,7 +344,7 @@
   (define fieldTopHeight (aField 'topHeight))
   ; The canvas array.  An array of (cellGlyph . cellHeight)
   (define canvas (make-vector-vector size size #f))
-  (define (resetCanvasArray ceilingHeight . defaultGlyph)
+  (define (resetArray ceilingHeight . defaultGlyph)
     (set! defaultGlyph (if (null? defaultGlyph) #f (car defaultGlyph)))
     (loop2 0 size 0 size (lambda (y x)
       ; Each canvas entry consists of a map cell and its height
@@ -387,7 +390,7 @@
   ; MAIN
   ;(WinChatDisplay "\r\nInitializing canvas...")
   ; Initialize the canvas
-  (resetCanvasArray 10 (cellGlyph (cellRef cellxx)))
+  (resetArray 10 (cellGlyph (cellRef cellxx)))
   self) ; Canvas
 
 
@@ -532,7 +535,7 @@
   (define (self msg) (eval msg))
   (define NOVIEWPORT (pair? (memq 'NOVIEWPORT args)))
   ; Composition
-  (define myEntityDB (EntityDB)) ; TODO move this to Map then create EntityDB.add interface
+  (define myEntityDB (EntityDB))
   (define myField (Field size))
   (define myCanvas (or NOVIEWPORT (Canvas myField myEntityDB)))
   (define myViewport (or NOVIEWPORT
@@ -553,8 +556,9 @@
   ; Canvas aliases
   (define canvasHeight   (or NOVIEWPORT (myCanvas 'height)))
   (define canvasRender   (or NOVIEWPORT (myCanvas 'render)))
+  (define canvasResetArray(or NOVIEWPORT (myCanvas 'resetArray)))
   ; Viewport/window aliases
-  (define viewportReset      (or NOVIEWPORT (myViewport 'recenterReset)))
+  (define viewportRecenterReset(or NOVIEWPORT (myViewport 'recenterReset)))
   (define viewportRender     (or NOVIEWPORT (myViewport 'render)))
   (define toggleWindow       (or NOVIEWPORT (myViewport 'toggle)))
   (define ViewportSetColor   (or NOVIEWPORT (myViewport 'set-color)))
@@ -562,11 +566,13 @@
   (define (ViewportPuts . l) (or NOVIEWPORT (for-each (myViewport 'puts) l)))
   (define (ViewportDisplay . e) (or NOVIEWPORT (for-each (lambda (x) (for-each (myViewport 'puts) (display->strings x))) e)))
   ; Members
-  (define (registerAvatar avatar)
+  (define avatar #f)
+  (define (registerAvatar myAvatar)
+    (set! avatar myAvatar)
     ((myEntityDB 'add) avatar)
     (or NOVIEWPORT
       (begin
-        (viewportReset (avatar 'y) (avatar 'x))
+        (viewportRecenterReset (avatar 'y) (avatar 'x))
         (startAnimationLoop))))
   (define DebugDumpFlag #f)
   (define (debugDumpMapInfoToggle) (set! DebugDumpFlag (not DebugDumpFlag )))
@@ -615,7 +621,7 @@
                   (ViewportPuts (number->string c 16)))
                 (ViewportPuts "   ") ))))
      (if (> z -6) (~ (- z 1))))) ; debugDumpInfo
-  ; Drop a cell on the map  *TODO this references nonexistant global function*
+  ; Drop a cell on the map
   (define (mapDropCell y x cell)
    (let ((z (+ 1 (fieldTopHeight 100 y x))))
     ((myField 'fieldSet!) z y x cell)
@@ -676,7 +682,7 @@
              (h (sprite 'height))
              (w (sprite 'width))
              (coordinates (sprite 'coordinates))) ; List of the sprites glyph coordinates
-      ; TODO can i combine the two loops?  What was my original thinking?
+      ; TODO can I combine the two loops?  What was my original thinking?
       ; Update field
       (each-for coordinates
         (lambda (c) (if c (let ((m (car c))
@@ -699,7 +705,7 @@
                   (canvasRender ceiling (+ m y) (+ n x))
                   (or centerMap (viewportRender (+ m y) (+ n x))))))))) ; Don't render cell if vewport to be reset
           ; If the map needs to be recentered, then this is when the viewport is finally updated.
-          (if centerMap (viewportReset y x))))))
+          (if centerMap (viewportRecenterReset y x))))))
   ; Given a cell index or entity DNA value, move it in the field, canvas and viewport.
   (define moveObject
     (let ((MAP-MOVE-CELL-SEMAPHORE (open-semaphore 1)))
@@ -718,7 +724,7 @@
                oz oy ox
                z y x
                (and (not NOVIEWPORT)
-                    (eq? entity avatar) ; Bool expr to determine if the map should be centered and redrawn
+                    (eq? (entity 'dna) (avatar 'dna)) ; Bool expr to determine if the map should be centered and redrawn
                     (or (eq? MAPSCROLL 'always)
                         (and (eq? MAPSCROLL 'edge)
                              (< (- (/ (myViewport 'Wheight) 2) 2)
@@ -728,7 +734,7 @@
   (define (setCeiling z) (set! ceiling z))
   (define (walkDetails entity)
     ; Update avatar locally in the field/canvas/viewport and via IPC
-    (apply moveEntity entity  ((entity 'gpsLook)))
+    (apply moveEntity entity ((entity 'gpsLook)))
     (ipcWrite (list 'move (entity 'dna) (entity 'z) (entity 'y) (entity 'x)))
     ; Special case to handle cells that change the Avatar's sprite
     (letrec ((cellNum (apply baseCell ((entity 'gps))))
@@ -743,7 +749,7 @@
           (let ((oldCeiling ceiling))
             (setCeiling (- (apply (myField 'ceiling) ((entity 'gps))) 1))
             (if (!= oldCeiling ceiling)
-              (thread ((myCanvas 'resetCanvasArray) ceiling))))
+              (thread (canvasResetArray ceiling))))
           (if DebugDumpFlag (debugDumpInfo (entity 'y) (entity 'x))))))
   ; Make map window circular
   (define (circularize . val)
@@ -783,7 +789,7 @@
           (+ 2 (myViewport 'Wwidth)))
      (circularize)
      ((Terminal 'unlock))
-     (viewportReset (avatar 'y) (avatar 'x))
+     (viewportRecenterReset (avatar 'y) (avatar 'x))
      (set! viewportResizeClickTime (+ 125 (utime)))))))
   (define (smaller)
    (or NOVIEWPORT 
@@ -801,12 +807,11 @@
           (+ -2 (myViewport 'Wwidth))))
      (circularize)
      ((Terminal 'unlock))
-     (viewportReset (avatar 'y) (avatar 'x))
+     (viewportRecenterReset (avatar 'y) (avatar 'x))
      (set! viewportResizeClickTime (+ 125 (utime)))))))
   ; Start viewport animation loop
   (define (startAnimationLoop)
-    (or NOVIEWPORT 
-          (thread ((myViewport 'animationLoop)))))
+    (or NOVIEWPORT (thread ((myViewport 'animationLoop)))))
   (define (dieIPC dna)
      (let ((entity (entityDBGet dna))
            (thisIsMe (= dna (avatar 'dna))))
@@ -857,7 +862,7 @@
           (moveObject (entity 'dna) (entity 'z) (entity 'y) (entity 'x)
                                        (entity 'z) (entity 'y) (entity 'x) #f)))
       (if (= dna 17749) (set! PortMapAgent (entity 'port))))) ; The map agent's DNA number
-  (define (moveIPC dna z y x)
+  (define (moveIPC dna z y x) ; TODO_1 this is causing rendering issues with autonomous avatars
    (or (= dna (avatar 'dna)) ; Skip if this is me since map rendering is handled during movement handling
        (let ((entity ((myEntityDB 'get) dna)))
          (if entity (moveEntity entity z y x)))))
@@ -883,7 +888,7 @@
     (define (self msg) (eval msg))
     (define fieldSize 128)
     ; Composition
-    (define myMap (apply Map ipc fieldSize args)) ; EntityDB walkDetails walk fall debugDumpMapInfoToggle.  Directly by viewportReset
+    (define myMap (apply Map ipc fieldSize args))
     ; Members
     (define alive #t)
     (define cell 19) ; TODO replace with a generalize item container
@@ -986,8 +991,11 @@
       (ipcWrite
         `(entity ,dna ,port ,name ,(gps)))
       (ipcWrite `(entity ,dna ,glyph)))
+    ; TODO debugging
+    (define setField ((myMap 'myField) 'setField))
+    (define (getField) ((myMap 'myField) 'field))
     ; MAIN
-    ((myMap 'registerAvatar) self) ; Register myself with the entity DB which also starts up viewport rendering
+    ((myMap 'registerAvatar) self) ; Register myself with the entity DB and start up viewport rendering
     (if ipc (thread (let ~ () ; IPC message handler
       (if alive
         (let ((e (ipcRead)))
@@ -1414,7 +1422,8 @@
                           (((avatar 'myMap) 'debugDumpMapInfoToggle))
                           (set! SHOWBUTTONS (not SHOWBUTTONS))))
 (setButton CHAR-CTRL-E '(begin (set! EDIT (not EDIT)) (WinChatDisplay "\r\nEDIT " EDIT)))
-(setButton CHAR-CTRL-L '(begin ((avatarMap 'viewportReset) (avatar 'y) (avatar 'x))
+(setButton CHAR-CTRL-L '(begin ((avatarMap 'canvasResetArray) (avatarMap 'ceiling))
+                               ((avatarMap 'viewportRecenterReset) (avatar 'y) (avatar 'x))
                                ((WinChat 'repaint))))
 (setButton #\d '(buttonSetCell (avatar 'cell)))
 (setButton #\g
@@ -1871,10 +1880,10 @@
 ; Spawn a second avatar.  Sort of works.
 ; A simple entity should not require a canvas or viewport or even an EntityDB.
 ; It only needs to be away of its surroundings and be able to hear sounds/voices.
-(define kat (Avatar "kat" 1 3460 2770 ipc 'NOVIEWPORT)) ; See TODO_1 for crash
-(define kat (Avatar "kat" 1 3460 2770 ipc 'NOVIEWPORT)) ; See TODO_1 for crash
-(define kat (Avatar "kat" 1 3460 2770 ipc 'NOVIEWPORT)) ; See TODO_1 for crash
-(define kat (Avatar "kat" 1 3460 2770 ipc 'NOVIEWPORT)) ; See TODO_1 for crash
+;(define kat (Avatar "kat" 1 3460 2770 ipc 'NOVIEWPORT)) ; See TODO_1 for crash
+(define kat1 (Avatar "kat1" 1 3460 2770 ipc 'NOVIEWPORT)) ; See TODO_1 for crash
+(define kat2 (Avatar "kat2" 1 3460 2773 ipc 'NOVIEWPORT)) ; See TODO_1 for crash
+(define kat3 (Avatar "kat3" 1 3460 2775 ipc 'NOVIEWPORT)) ; See TODO_1 for crash
 
 ; Keyboard command loop
 (let ~ () (letrec ((b (getKey))

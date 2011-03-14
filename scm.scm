@@ -396,6 +396,11 @@
           (~ (cdr l) (cons (car l) r))))
      l))
 
+(define (vector-copy vec)
+ (let ((newvec (make-vector (vector-length vec))))
+   (vector-set-vector! newvec 0 vec 0)
+   newvec))
+
 (define (vector-reverse vec)
  (letrec ((len (vector-length vec))
           (v (make-vector len)))

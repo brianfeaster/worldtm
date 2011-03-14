@@ -2886,3 +2886,11 @@ I'm not sure how I'll implement a simpler map object for autonomous entities.
 
 This is working better.  I can spawn a NOVIEWPORT avatar now, push it around
 and make it talk.  Milestone reached!
+
+
+Mon Mar 14 18:40:53 EDT 2011
+
+The reason I'm seeing ghost glyphs when walking around is because the IPC is
+receiving a field block which is being shared by all the entity Map objects.
+When receiving the field block, Field.updateColumnsIPC should make a copy of
+each column before updating the field array.
