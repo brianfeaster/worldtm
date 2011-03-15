@@ -887,6 +887,7 @@
   (cons ipc args) ; Args to child class
   (macro (ipc . args) ; Child
     (define (self msg) (eval msg))
+    (define NOVIEWPORT (pair? (memq 'NOVIEWPORT args)))
     (define fieldSize 128)
     ; Composition
     (define myMap (apply Map ipc fieldSize args))
@@ -935,6 +936,7 @@
                       (if (null? level) 10 (car level))
                       (apply string (display->strings talkInput)))))
     (define (IPCvoice dna level text)
+     (or NOVIEWPORT
       (if (= dna 0)
          (begin
            (WinChatDisplay "\r\n")
@@ -950,8 +952,8 @@
            (WinChatSetColor (glyph0bg glyph) (glyph0fg glyph))
            (WinChatDisplay "\r\n" (if (null? entity) "???" (entity 'name)) VOICEDELIMETER)
            (WinChatSetColor (glyph1bg glyph) (glyph1fg glyph))
-           (WinChatDisplay text)))
-       (if (and (!= dna (avatar 'dna)) (eqv? text "unatco"))
+           (WinChatDisplay text))))
+       (if (and (!= dna (self 'dna)) (eqv? text "unatco"))
            (say "no Savage")))
     (define (IPCforce fz fy fx dir mag)
      (if (and (= fz z) (= fy y) (= fx x))
@@ -1838,9 +1840,9 @@
   (displayl "\e[" (Terminal 'Theight) "H\r\n\e[0m\e[?25h\e[?1000lgc=" (fun) "\r\n")
   (quit))
 
-; Spawn a second avatar
-(define kat  (Avatar "kat1" 1 3460 2770 ipc 'NOVIEWPORT))
-;(define kat2 (Avatar "kat3" 1 3460 2775 ipc 'NOVIEWPORT))
+; Spawn a second avatar.  Your free kitteh.
+(define kat
+  (Avatar (string "katO'" (avatar 'name)) 1 (+ (random 10) 3458) (+ (random 10) 2764) ipc 'NOVIEWPORT))
 
 ; Keyboard command loop
 (let ~ () (letrec ((b (getKey))
