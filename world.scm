@@ -381,7 +381,7 @@
      (let ((celli (fieldCell z y x))) ; Field might contain an entity's dna
        (glyphSet y x (if (< CellMax celli)
                                (letrec ((ent ((anEntityDB 'get) celli))
-                                        (sprite (ent 'sprite)) ; TODO_1 ent is #f if I spawn another Avatar
+                                        (sprite (ent 'sprite))
                                         (ey (ent 'y))
                                         (ex (ent 'x)))
                                  ((sprite 'glyphRef) (- y ey) (- x ex)))
@@ -484,17 +484,17 @@
 (define (EntityDB)
  (define (self msg) (eval msg))
  (define lst (ListCreate))
- (define (add ent) (ListAdd lst ent)) ; -- Was entitiesAdd
+ (define (add ent) (ListAdd lst ent))
  (define (del ent) (ListDel lst ent))
  (define (getAll) (ListGet lst)) ; Map.updateColumnsIPC
- ; Lookup entity in database b scaning list for entity with the specified dna -- Was entitiesGet
+ ; Lookup entity in database b scaning list for entity with the specified dna
  (define (get dna)
    (let ((e (let ~ ((lst (ListGet lst)))
               (if (null? lst) #f
               (if (eqv? dna ((car lst) 'dna)) (car lst)
               (~ (cdr lst)))))))
      e))
- (define (set dna . args) ; IPC:Entity -- Was entitiesSet
+ (define (set dna . args)
    (let ((entity (get dna)))
      (if entity
        ; Update only name and glyph if entity already exists
@@ -815,13 +815,15 @@
   (define (dieIPC dna)
      (let ((entity (entityDBGet dna))
            (thisIsMe (= dna (avatar 'dna))))
-      (if entity (begin ; Ignore unknown entities
+      (if entity
+        (begin ; Ignore unknown entities
             ; Remove from here
             (delEntitySprite dna (entity 'z) (entity 'y) (entity 'x)) ; Remove it first from the map
             (or NOVIEWPORT ; TODO doesn't delEntitySprite rerender the map so the following block is redundant?
               (if (>= (entity 'z) (canvasHeight (entity 'y) (entity 'x))) (begin
                 (canvasRender 100 (entity 'y) (entity 'x))
-                (or thisIsMe (viewportRender (entity 'y) (entity 'x))))))))))
+                (or thisIsMe (viewportRender (entity 'y) (entity 'x))))))
+            ((myEntityDB 'del) entity)))))
   ; The 2d vector of columns will most likely come from a map agent.
   ; The map block coordinate and map block size is also passed.
   (define (updateColumnsIPC by bx blockSize cellAry) ; Called from map agent via IPC
@@ -835,9 +837,8 @@
         (lambda (e) (let ((y (e 'y))
                           (x (e 'x)))
           (if (and (<= by y) (< y (+ by blockSize))
-                   (<= bx x) (< x (+ bx blockSize))) (begin
-            ;(WinChatDisplay "\r\n" (e 'name) ((e 'gps)))
-            (moveObject (e 'dna)  (e 'z) (e 'y) (e 'x)  (e 'z) (e 'y) (e 'x)  #f)))))
+                   (<= bx x) (< x (+ bx blockSize)))
+            (moveObject (e 'dna)  (e 'z) (e 'y) (e 'x)  (e 'z) (e 'y) (e 'x)  #f))))
         ((myEntityDB 'getAll)))
       ; Render map block
       (or NOVIEWPORT
@@ -862,7 +863,7 @@
           (moveObject (entity 'dna) (entity 'z) (entity 'y) (entity 'x)
                                        (entity 'z) (entity 'y) (entity 'x) #f)))
       (if (= dna 17749) (set! PortMapAgent (entity 'port))))) ; The map agent's DNA number
-  (define (moveIPC dna z y x) ; TODO_1 this is causing rendering issues with autonomous avatars
+  (define (moveIPC dna z y x)
    (or (= dna (avatar 'dna)) ; Skip if this is me since map rendering is handled during movement handling
        (let ((entity ((myEntityDB 'get) dna)))
          (if entity (moveEntity entity z y x)))))
@@ -891,50 +892,18 @@
     (define myMap (apply Map ipc fieldSize args))
     ; Members
     (define alive #t)
+    (define stop #t) ; Used by action macros
     (define cell 19) ; TODO replace with a generalize item container
-    (define dir 0)
-    (define tz 0) ; Translation coordinates
-    (define ty 0)
-    (define tx 0)
     (define ipcRead (if ipc ((ipc 'newReader)) #f)) ; This needs to be destroyed.
     (define ipcWrite (if ipc (ipc 'qwrite) #f))
-    (define (look ndir . rloc) ; Look in a direction plus a relative (not rotational) zyx location
-      (set! dir ndir)
-      (if (pair? rloc)
-        (begin
-          (set! tz (car rloc))
-          (set! rloc (cdr rloc)))
-        (set! tz 0))
-      (if (pair? rloc)
-        (begin
-          (set! ty (car rloc))
-          (set! rloc (cdr rloc)))
-        (set! ty 0))
-      (if (pair? rloc)
-        (set! tx (car rloc))
-        (set! tx 0)))
-    (define (gpsLook . rloc) ; Return location avatar is looking at
-      (if (pair? rloc) (begin
-        (set! tz (car rloc))
-        (set! ty (cadr rloc))
-        (set! tx (caddr rloc))))
-      (if (= dir 0) (list (+ z    tz) (+ y    ty) (+ x  1 tx))
-      (if (= dir 1) (list (+ z    tz) (+ y -1 ty) (+ x  1 tx))
-      (if (= dir 2) (list (+ z    tz) (+ y -1 ty) (+ x    tx))
-      (if (= dir 3) (list (+ z    tz) (+ y -1 ty) (+ x -1 tx))
-      (if (= dir 4) (list (+ z    tz) (+ y    ty) (+ x -1 tx))
-      (if (= dir 5) (list (+ z    tz) (+ y  1 ty) (+ x -1 tx))
-      (if (= dir 6) (list (+ z    tz) (+ y  1 ty) (+ x    tx))
-      (if (= dir 7) (list (+ z    tz) (+ y  1 ty) (+ x  1 tx))
-      (if (= dir 8) (list (+ z -1 tz) (+ y    ty) (+ x    tx))
-      (if (= dir 9) (list (+ z  1 tz) (+ y    ty) (+ x    tx)))))))))))))
     (define (die)
       (ipcWrite `(die ,dna)) ; Announce that I'm leaving
+      (set! stop #t)
       (set! alive #f))
-    (define walkSemaphore (open-semaphore 1)) ; This needs to be destroyed
     (define (jump z y x)
       (setLoc z y x)
       ((myMap 'walkDetails) self))
+    (define walkSemaphore (open-semaphore 1)) ; This needs to be destroyed
     (define (walk dir)
       (semaphore-down walkSemaphore)
         ; Consider cell I'm walking into.  If cell is entity push it.
@@ -1345,7 +1314,6 @@
    (WinPaletteGoto 8 20) (WinPaletteColor clr 0) (WinPaletteDisplay "**XX")
    (WinPaletteGoto 8 25) (WinPaletteColor clr #xf) (WinPaletteDisplay "**XX")
    (WinPaletteGoto 8 30) (WinPaletteColor #xf clr) (WinPaletteDisplay "**XX")
-   ;(WinChatDisplay "\r\n" wy " " wx " New color=" clr)
    (let ((glyph (avatar 'glyph)))
      (IpcWrite (list 'entity (avatar 'dna)
                       (Glyph
@@ -1441,13 +1409,14 @@
 (setButton #\Q         '(shutdown))
 (setButton #eof        '(shutdown))
 (setButton CHAR-CTRL-C '((WinConsole 'toggle)))
-(if QUIETLOGIN
+(if QUIETLOGIN (begin
    ;(setButton #\1 '(handleTerminalResize))
    ;(setButton #\2 '(handleTerminalResize (cons 600 400)))
    (setButton #\3 '(thread (spawnKitty)))
    ;(setButton #\4 '(begin (set! state 'pacman) (pacman)))
-   ;(setButton #\5 '(thread (pong)))
-)
+   (setButton #\5 '(pong))
+   (setButton #\6 '(WinChatDisplay "\r\n" ((avatarMap 'column) (avatar 'y) (+(avatar 'x)1))))
+))
 
 
 
@@ -1467,7 +1436,7 @@
  (let ((talkInput ""))
   (lambda (b)
    (if (eq? b 'getBuffer) talkInput ; Return input buffer contents.
-   ; Handle backspace  TODO full keyboard editing
+   ; Handle backspace  TODO full cooked keyboard with editing
    (if (or (eq? b CHAR-CTRL-H)
            (eq? b CHAR-CTRL-_)
            (eq? b CHAR-CTRL-?))
@@ -1525,74 +1494,98 @@
 ;; Prototypes_and_fun_things
 ;;
 
-; Mess with creating new entities using new Avatar object
-; TODO Fold the spawnKitty function into this as a prototype autonomous entity
-(define (makeGhost)
-  (let ((a (Avatar ipc "Ghost" (avatar 'z) (avatar 'y) (avatar 'x))))
-    ((entityDB 'add) a)
-    (thread
-      (sleep 2000)
-      (moveEntity a (avatar 'z) (avatar 'y) (+ 1 (avatar 'x))))
-    a)) ; Move avatar to entrance of Lord British's castle near 108 86
+; The first Avatar macro
+; Usage:: (avatar '(march)) Start/stop the thread
+(define march (macro ()
+ (if stop
+   (begin
+    (WinChatSetColor 0 10) (tankTalk "\r\n*The journey begins*")
+    (set! stop #f)
+    (thread (let ~ ()
+      (for-each
+        (lambda (x) (and stop (unthread)) (walk x) (sleep 400))
+        '(0 0 0 0 2 2 2 2 4 4 4 4 6 6 6 6))
+      (sleep 500)
+      (~))))
+   (begin
+     (WinChatSetColor 0 10) (WinChatDisplay "\r\n*Thus ends the journey*")
+     (set! stop #t)))))
 
-;; Walking kitty soldier
-(define (spawnKitty . cycles)
+; Originally a "walking kitty soldier"
+; Usage:: (avatar '(walkAround 100)) Start/stop the thread
+(define walkAround (macro cycles
  (set! cycles (if (null? cycles) 32 (car cycles))) ; Set max cycles
- (letrec ((kitty (Avatar ipc "Kat" (avatar 'z) (avatar 'y) (avatar 'x)))
-          (happyVector (vector 0 0 0 0 0 0 0 0))
+ (if stop
+   (letrec ((happyVector (vector 0 0 0 0 0 0 0 0))
           (dist 0)
           (dir 0)) ; Initially start walking right
- (sleep 500)
- (let ~ () ; Main loop
-   ; Walk kitty quasi-randomly.  Set the direction the
-   ; avatar will walk based on weighted list of directions
-   (set! dir
-     (letrec ((dir1 (modulo (+ dir (random 3) -1) 8))
-              (dir2 (modulo (+ dir (random 3) -1) 8)))
-          (if (> (vector-ref happyVector dir1)
-                 (vector-ref happyVector dir2))
-              dir1 dir2)))
-   ((kitty 'walk) dir)
+     (WinChatSetColor 0 10) (tankTalk "\r\n*The aimlessness begins*")
+     (set! stop #f)
+     (thread (let ~ () ; Main loop
+       ; Walk kitty quasi-randomly.  Set the direction the
+       ; avatar will walk based on weighted list of directions
+       (set! dir
+         (letrec ((dir1 (modulo (+ dir (random 3) -1) 8))
+                  (dir2 (modulo (+ dir (random 3) -1) 8)))
+              (if (> (vector-ref happyVector dir1)
+                     (vector-ref happyVector dir2))
+                  dir1 dir2)))
+       (walk dir)
+       ; Update neuron vector based on new distance from parent
+       (let ((newDist (distance (gps) ((avatar 'gps)))))
+         (vector-set! happyVector dir
+             (+ (if (< newDist dist) 1
+                  (if (= newDist dist) -1 -2))
+                (vector-ref happyVector dir)))
+         (set! dist newDist))
+       (sleep 300) ; pause
+       ; If avatar and kitty meet do something
+       ;(if (equal? (gps) ((avatar 'gps))) (say "Hiss!"))
+       ; Neuron depletion.  After a few iterations, halve each weight.
+       (if (= (modulo cycles 10) 0)
+         (vector-map! (lambda (x) (/ x 2)) happyVector))
+       ; Kill entity or loop again
+       (set! cycles (- cycles 1))
+       (if (and (not stop) (< 0 cycles)) (~)))))
+   (begin
+     (WinChatSetColor 0 10) (WinChatDisplay "\r\n*Thus ends the aimlessness*")
+     (set! stop #t)))))
 
-   ; Update neuron vector based on new distance from parent
-   (let ((newDist (distance ((kitty 'gps)) ((avatar 'gps)))))
-     (vector-set! happyVector dir
-         (+ (if (< newDist dist) 1
-              (if (= newDist dist) -1 -2))
-            (vector-ref happyVector dir)))
-     (set! dist newDist))
 
-   (sleep 500) ; pause
+(define pongPower #f)
 
-   ; If avatar and kitty meet do something
-   (if (equal? ((kitty 'gps)) ((avatar 'gps))) ((kitty 'say) "Hiss!"))
+(define pongActionMacro (macro ()
+  (let ((oy (* (/ (avatar 'y) MapBlockSize) MapBlockSize)) ; Origin of this map block
+        (ox (* (/ (avatar 'x) MapBlockSize) MapBlockSize))
+        (m 0) ; Map location ball is walking to
+        (n 0))
+   (set! pongPower #t)
+   (WinChatDisplay "\rnPong starts " dna " " name)
+   (let ~ ((wall 0)) (if pongPower (begin
+     (if (= wall 0) (begin (set! m (random MapBlockSize)) (set! n (- MapBlockSize 1)))
+      (if (= wall 1) (begin (set! m 0)                     (set! n (random MapBlockSize)))
+       (if (= wall 2) (begin (set! m (random MapBlockSize)) (set! n 0))
+        (if (= wall 3) (begin (set! m (- MapBlockSize 1))    (set! n (random MapBlockSize)))))))
+     (let ~ ((l (lineWalks y x (+ oy m) (+ ox n))))
+       (if (pair? l) (begin
+         (look (car l))
+         ; Is there something there?
+         (if (= cellAIR (apply (myMap 'fieldFirstCell) (gpsLook)))
+           (begin
+             ((myMap 'walkDetails) self)
+             (sleep 100)
+             (if pongPower (~ (cdr l))))
+           (set! wall (+ 1 wall))))))
+     (~ (modulo (+ wall 1) 4)))))
+   (WinChatDisplay "\r\nPong ends " dna " " name)
+   (die)))) ; pong
 
-   ; Neuron depletion.  After a few iterations, halve each weight.
-   (if (= (modulo cycles 10) 0)
-     (vector-map! (lambda (x) (/ x 2)) happyVector))
-
-   ; Kill entity or loop again
-   (set! cycles (- cycles 1))
-   (if (<= cycles 0)
-       ((kitty 'die))
-       (~)))))
-
-(define march (let ((walkForeverFlag #f)) (lambda ()
- (if walkForeverFlag
-  (begin
-   (set! walkForeverFlag #f)
-   (WinChatSetColor 0 10)
-   (tankTalk "\r\nThus ends the journey"))
-  (begin
-   (WinChatSetColor 0 10)
-   (tankTalk "\r\nThe journey begins")
-   (set! walkForeverFlag #t)
-   (thread (let ~ ()
-     (for-each
-       (lambda (x) (or walkForeverFlag (unthread)) (walk x) (sleep 400))
-       '(0 0 0 0 2 2 2 2 4 4 4 4 6 6 6 6))
-     (sleep 500)
-     (~))))))))
+(define (pong)
+ (if pongPower
+   (set! pongPower #f)
+   (thread
+     ((Avatar "()PongBall" (avatar 'z) (avatar 'y) (+ (avatar 'x) 1) ipc 'NOVIEWPORT)
+      '(pongActionMacro)))))
 
 
 ; Tank agent - The first interactive user agent.
@@ -1627,11 +1620,12 @@
  (if tankIsListening (begin
    (if (string=? "who" talkInput) (IpcWrite '(say "I'm here!")))
    (if (string=? "load the jump program" talkInput) (tankTalk "I can't find the disk")
-   (if (string=? "march" talkInput) (thread (march))
+   (if (string=? "march" talkInput) (avatar '(march))
+   (if (string=? "walk around" talkInput) (avatar '(walkAround))
    (if (string=? "edit" talkInput) (begin (set! EDIT (not EDIT)) (tankTalk "Edit mode " EDIT))
    (if (string=? "island" talkInput) ((avatar 'jump) 1 4150 5602)
    (if (string=? "scrabble" talkInput) ((avatar 'jump) 1 3338 3244)
-   (if (string=? "britania" talkInput) ((avatar 'jump) 1 3456 2751))))))))))
+   (if (string=? "britania" talkInput) ((avatar 'jump) 1 3456 2751)))))))))))
 
 ; Display the same string repeatedly with colors of increasing inensity.
 (define (fancyDisplay c s)
@@ -1643,26 +1637,7 @@
    (list 232 233 234 235 236 237 238 239 240 241 242 243 244 245 246 247 248 249 250 251 252 253 254 254 c))
  "")
 
-(define (chooseCell)
- (define WinCells ((Terminal 'WindowNew) 5 20 2 36 #x07))
- (define (WinCellsDisplay . e) (for-each (lambda (x) (for-each (WinCells 'puts) (display->strings x))) e))
- (define WinCellsSetColor  (WinCells 'set-color))
- (define WinCellsPutc  (WinCells 'putc))
- (sleep 1000)
- (loop 100 (lambda (k)
-   ((WinCells 'home))
-   (loop 10 (lambda (i)
-     (let ((c (cellGlyph (cellRef (+ i k)))))
-       (WinCellsSetColor (glyph0bg c) (glyph0fg c)) (WinCellsPutc (glyph0ch c))
-       (WinCellsSetColor (glyph1bg c) (glyph1fg c)) (WinCellsPutc (glyph1ch c))
-       (WinCellsSetColor 0 15)                      (WinCellsPutc (if (= i 4) #\[ (if (= i 5) #\] #\ ))))))
-   (WinCellsSetColor 0 15)
-   (WinCellsDisplay "\r\n" (cellSymbol (cellRef k)))
-   (sleep 500)))
- ((WinCells 'delete)))
-
 ; Pacman
-
 (define pacmanOn #f)
 (define desiredDir 'ghost)
 
@@ -1776,38 +1751,24 @@
         (lineIncrements ax ay 2 3)))))) ; 2
 
 
-(rem define pong
- (let ((power #f)
-       (ball (Avatar #f "()" 0 0 0))
-       (oy 0) ; Origin of this map block
-       (ox 0)
-       (m 0)
-       (n 0))
- (lambda ()
-  (set! power (not power))
-  (WinChatDisplay "\r\nPong " (if power "enabled.  Press 2 to disable." "disabled"))
-  ((ball 'setLoc) (avatar 'z) (avatar 'y) (avatar 'x))
-  (set! oy (* (/ (avatar 'y) MapBlockSize) MapBlockSize)) ; Origin of this map block
-  (set! ox (* (/ (avatar 'x) MapBlockSize) MapBlockSize))
-  (IpcWrite `(entity ,(ball 'dna) ,(ball 'port) ,(ball 'name) ',((ball 'gps))))
-  (sleep 500)
-  (let ~ ((wall 0)) (if power (begin
-    (if (= wall 0) (begin (set! m (random MapBlockSize)) (set! n (- MapBlockSize 1)))
-    (if (= wall 1) (begin (set! m 0)                     (set! n (random MapBlockSize)))
-    (if (= wall 2) (begin (set! m (random MapBlockSize)) (set! n 0))
-    (if (= wall 3) (begin (set! m (- MapBlockSize 1))    (set! n (random MapBlockSize)))))))
-    (let ~ ((l (lineWalks (ball 'y) (ball 'x) (+ oy m) (+ ox n))))
-      (if (pair? l) (begin
-        ((ball 'look) (car l))
-        ; Is there something there?
-        (if (= cellAIR (apply (avatarMap 'fieldFirstCell)((ball 'gpsLook))))
-          (begin
-            (apply moveEntity ball ((ball 'gpsLook)))
-            (IpcWrite (list 'move (ball 'dna) (ball 'z) (ball 'y) (ball 'x)))
-            (sleep 100)
-            (if power (~ (cdr l))))
-          (set! wall (+ 1 wall))))))
-    (~ (modulo (+ wall 1) 4)))))))) ; pong
+
+;(define (chooseCell)
+; (define WinCells ((Terminal 'WindowNew) 5 20 2 36 #x07))
+; (define (WinCellsDisplay . e) (for-each (lambda (x) (for-each (WinCells 'puts) (display->strings x))) e))
+; (define WinCellsSetColor  (WinCells 'set-color))
+; (define WinCellsPutc  (WinCells 'putc))
+; (sleep 1000)
+; (loop 100 (lambda (k)
+;   ((WinCells 'home))
+;   (loop 10 (lambda (i)
+;     (let ((c (cellGlyph (cellRef (+ i k)))))
+;       (WinCellsSetColor (glyph0bg c) (glyph0fg c)) (WinCellsPutc (glyph0ch c))
+;       (WinCellsSetColor (glyph1bg c) (glyph1fg c)) (WinCellsPutc (glyph1ch c))
+;       (WinCellsSetColor 0 15)                      (WinCellsPutc (if (= i 4) #\[ (if (= i 5) #\] #\ ))))))
+;   (WinCellsSetColor 0 15)
+;   (WinCellsDisplay "\r\n" (cellSymbol (cellRef k)))
+;   (sleep 500)))
+; ((WinCells 'delete)))
 
 ; Load a map file and dump in the current map
 ;(define (p m) (mapUpdateColumns 3456 2752 32 (read (open-file m))))
@@ -1835,7 +1796,7 @@
 (if (eq? "" avatar) (set! avatar "Guest"))
 (set! avatar (Avatar avatar 1 3460 2767 ipc))
 
-; Consider the avatar's map object -- TODO still used by pacman pong button commands
+; Consider the avatar's map object
 (define avatarMap (avatar 'myMap))
 
 ; TODO still used in handleTerminalResize winmapUp/Down/Left/Right mouseWalkActionHandler
@@ -1877,13 +1838,9 @@
   (displayl "\e[" (Terminal 'Theight) "H\r\n\e[0m\e[?25h\e[?1000lgc=" (fun) "\r\n")
   (quit))
 
-; Spawn a second avatar.  Sort of works.
-; A simple entity should not require a canvas or viewport or even an EntityDB.
-; It only needs to be away of its surroundings and be able to hear sounds/voices.
-;(define kat (Avatar "kat" 1 3460 2770 ipc 'NOVIEWPORT)) ; See TODO_1 for crash
-(define kat1 (Avatar "kat1" 1 3460 2770 ipc 'NOVIEWPORT)) ; See TODO_1 for crash
-(define kat2 (Avatar "kat2" 1 3460 2773 ipc 'NOVIEWPORT)) ; See TODO_1 for crash
-(define kat3 (Avatar "kat3" 1 3460 2775 ipc 'NOVIEWPORT)) ; See TODO_1 for crash
+; Spawn a second avatar
+(define kat  (Avatar "kat1" 1 3460 2770 ipc 'NOVIEWPORT))
+;(define kat2 (Avatar "kat3" 1 3460 2775 ipc 'NOVIEWPORT))
 
 ; Keyboard command loop
 (let ~ () (letrec ((b (getKey))

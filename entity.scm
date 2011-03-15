@@ -54,6 +54,10 @@
  (define oz z)
  (define oy y)
  (define ox x)
+ (define dir 0) ; Look direction
+ (define tz 0) ; Look relative coordinates
+ (define ty 0)
+ (define tx 0)
  (define (setPort port0)     (set! port port0))
  (define (setName name0)     (set! name name0))
  (define (setGlyph glyph0)   (set! glyph glyph0))
@@ -61,5 +65,35 @@
                              (set! z z0) (set! y y0) (set! x x0))
  (define (setSprite sprite0) (set! sprite sprite0))
  (define (setColor color0)   (set! color color0))
- (define (gps) (list z y x))
+ (define (gps) (list z y x)) ; Return avatar's current location
+ (define (look ndir . rloc) ; Look in a direction plus a relative (not rotational) zyx location
+   (set! dir ndir)
+   (if (pair? rloc)
+     (begin
+       (set! tz (car rloc))
+       (set! rloc (cdr rloc)))
+     (set! tz 0))
+   (if (pair? rloc)
+     (begin
+       (set! ty (car rloc))
+       (set! rloc (cdr rloc)))
+     (set! ty 0))
+   (if (pair? rloc)
+     (set! tx (car rloc))
+     (set! tx 0)))
+ (define (gpsLook . rloc) ; Return location avatar is looking at
+   (if (pair? rloc) (begin
+     (set! tz (car rloc))
+     (set! ty (cadr rloc))
+     (set! tx (caddr rloc))))
+   (if (= dir 0) (list (+ z    tz) (+ y    ty) (+ x  1 tx))
+   (if (= dir 1) (list (+ z    tz) (+ y -1 ty) (+ x  1 tx))
+   (if (= dir 2) (list (+ z    tz) (+ y -1 ty) (+ x    tx))
+   (if (= dir 3) (list (+ z    tz) (+ y -1 ty) (+ x -1 tx))
+   (if (= dir 4) (list (+ z    tz) (+ y    ty) (+ x -1 tx))
+   (if (= dir 5) (list (+ z    tz) (+ y  1 ty) (+ x -1 tx))
+   (if (= dir 6) (list (+ z    tz) (+ y  1 ty) (+ x    tx))
+   (if (= dir 7) (list (+ z    tz) (+ y  1 ty) (+ x  1 tx))
+   (if (= dir 8) (list (+ z -1 tz) (+ y    ty) (+ x    tx))
+   (if (= dir 9) (list (+ z  1 tz) (+ y    ty) (+ x    tx)))))))))))))
  self)

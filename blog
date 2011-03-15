@@ -2894,3 +2894,12 @@ The reason I'm seeing ghost glyphs when walking around is because the IPC is
 receiving a field block which is being shared by all the entity Map objects.
 When receiving the field block, Field.updateColumnsIPC should make a copy of
 each column before updating the field array.
+
+I'm able to pass an expression to an Avatar which calls a macro which calls
+walk.  (define m (macro () (walk 0)))   (kat '(m))  (avatar '(m))
+This causes both the kat and user's avatar to walk right.  I plan on
+implementing a pacman ghost and pong ball algorithm this way.
+
+Reimplementing the pong and other fake hacked entities is straightforward.
+Pacman ghosts are next.  After that fixing avatar movement when a non-trivial
+sized sprite is specified.
