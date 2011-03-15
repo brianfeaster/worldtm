@@ -108,7 +108,7 @@
 ;;   the field coordinates.          +--+--+    +--+--+
 ;;
 (define MapBlockSize  32) ; Each field block is a 32x32 array of columns
-(define MapBlockCount 4)       ; A field is made up of 2x2 field blocks
+(define MapBlockCount 3)       ; A field is made up of 2x2 field blocks
 (define MapRangeSize (* MapBlockCount MapBlockSize)) ; For now resulting blocok range size is 96x96
 (define MapBoundsSize MapBlockSize) ; Distance from the edge the valid range is
 
