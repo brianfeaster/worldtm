@@ -117,7 +117,11 @@
 (define (seek-current port offset) (seek port offset 1))
 (define (seek-end port offset) (seek port offset 2))
 
+(define (char->integer i) (+ 0 i)) ; TODO Hack that works currently
 (define (integer->char i) (vector-ref characters i))
+
+(define (char-upcase c) (if (and (<= 97 (+ 0 c)) (<= (+ 0 c) 122)) (integer->char (- (+ 0 c) 32)) c))
+(define (char-downcase c) (if (and (<= 65 (+ 0 c)) (<= (+ 0 c) 90)) (integer->char (+ (+ 0 c) 32)) c))
 
 (define CHAR-CTRL-@   (integer->char #x00))
 (define CHAR-CTRL-A   (integer->char #x01))
@@ -240,6 +244,26 @@
              (substring str (+ i 1) len))
    (~ (+ i 1)))))))
 
+(define (string-downcase s)
+ (letrec ((len (string-length s))
+          (newStr (make-string len)))
+   (let ~ ((i (- len 1)))
+    (if (<= 0 i)
+      (begin
+        (string-set! newStr i (char-downcase (string-ref s i)))
+        (~ (- i 1)))))
+   newStr))
+    
+(define (string-upcase s)
+ (letrec ((len (string-length s))
+          (newStr (make-string len)))
+   (let ~ ((i (- len 1)))
+    (if (<= 0 i)
+      (begin
+        (string-set! newStr i (char-upcase (string-ref s i)))
+        (~ (- i 1)))))
+   newStr))
+    
 (define (make-vector-vector y x a)
  (let ((v (make-vector y ())))
   (let ~ ((i 0))
