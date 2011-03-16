@@ -2903,3 +2903,18 @@ implementing a pacman ghost and pong ball algorithm this way.
 Reimplementing the pong and other fake hacked entities is straightforward.
 Pacman ghosts are next.  After that fixing avatar movement when a non-trivial
 sized sprite is specified.
+
+
+Tue Mar 15 16:02:34 EDT 2011
+
+I've yet to implement whisper and yell.  That's next.
+
+The voice handler is a native method in within the Avatar object.  This will be
+a good candidate for an abstract method for implementing a framework for an
+even more generic base abstract Avatar class.
+
+When screaming, characters should be seen in uppercase and whispering all
+lowercase when both typing and "hearing" the text from other.  I originally did
+this to prevent people from always yelling.  Whispering is in all lowercase as
+well as within parenthesis (for the same reasons).
+

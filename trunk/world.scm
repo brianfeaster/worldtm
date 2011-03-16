@@ -487,13 +487,14 @@
  (define (add ent) (ListAdd lst ent))
  (define (del ent) (ListDel lst ent))
  (define (getAll) (ListGet lst)) ; Map.updateColumnsIPC
- ; Lookup entity in database b scaning list for entity with the specified dna
- (define (get dna)
-   (let ((e (let ~ ((lst (ListGet lst)))
-              (if (null? lst) #f
-              (if (eqv? dna ((car lst) 'dna)) (car lst)
-              (~ (cdr lst)))))))
-     e))
+ ; Lookup entity in database by scaning list for entity with the specified dna
+ ; Return entity object or #f
+ ; TODO implement hash.
+ (define (get dnaIpc)
+   (let ~ ((lst (ListGet lst))) ; (car lst) is an entity object
+     (if (null? lst) #f
+     (if (eqv? dnaIpc ((car lst) 'dna)) (car lst)
+     (~ (cdr lst))))))
  (define (set dna . args)
    (let ((entity (get dna)))
      (if entity
@@ -894,6 +895,7 @@
     ; Members
     (define alive #t)
     (define stop #t) ; Used by action macros
+    (define speakLevel 20) ; Whisper=2  Talk=20 Scream=500 
     (define cell 19) ; TODO replace with a generalize item container
     (define ipcRead (if ipc ((ipc 'newReader)) #f)) ; This needs to be destroyed.
     (define ipcWrite (if ipc (ipc 'qwrite) #f))
@@ -931,13 +933,15 @@
       (look 8) ; Look down
       (let ((nextCell (apply (myMap 'fieldFirstCell) (gpsLook))))
         (if (= nextCell cellAIR) ((myMap 'walkDetails) self))))
-    (define (say talkInput . level)
+    (define (setSpeakLevel level)
+      (set! speakLevel level))
+    (define (speak talkInput . level)
       (ipcWrite (list 'voice dna
-                      (if (null? level) 10 (car level))
+                      (if (null? level) speakLevel (car level))
                       (apply string (display->strings talkInput)))))
     (define (IPCvoice dna level text)
      (or NOVIEWPORT
-      (if (= dna 0)
+       (if (= dna 0) ; System messages
          (begin
            (WinChatDisplay "\r\n")
            (WinChatSetColor 0 9) (WinChatDisplay "W")
@@ -947,14 +951,19 @@
            (WinChatSetColor 0 13) (WinChatDisplay "D")
            (WinChatSetColor 0 8) (WinChatDisplay VOICEDELIMETER)
            (WinChatSetColor 0 7) (WinChatDisplay text))
-         (letrec ((entity ((myMap 'entityDBGet) dna))
-                  (glyph (entity 'glyph)))
-           (WinChatSetColor (glyph0bg glyph) (glyph0fg glyph))
-           (WinChatDisplay "\r\n" (if (null? entity) "???" (entity 'name)) VOICEDELIMETER)
-           (WinChatSetColor (glyph1bg glyph) (glyph1fg glyph))
-           (WinChatDisplay text))))
+         (let ((entity ((myMap 'entityDBGet) dna)))
+           (if entity
+             (if (< (distance ((entity 'gps)) ((avatar 'gps))) level)
+               (let ((glyph (entity 'glyph)))
+                 (WinChatSetColor (glyph0bg glyph) (glyph0fg glyph))
+                 (WinChatDisplay "\r\n" (if (null? entity) "???" (entity 'name)) VOICEDELIMETER)
+                 (WinChatSetColor (glyph1bg glyph) (glyph1fg glyph))
+                 (WinChatDisplay text)))
+             (begin
+               (WinChatSetColor 0 7)
+               (WinChatDisplay "\r\n???" VOICEDELIMETER text)))))
        (if (and (!= dna (self 'dna)) (eqv? text "unatco"))
-           (say "no Savage")))
+           (speak "no Savage"))))
     (define (IPCforce fz fy fx dir mag)
      (if (and (= fz z) (= fy y) (= fx x))
        (walk dir)))
@@ -1386,7 +1395,9 @@
     'always)))
   (WinChatDisplay "\r\nScroll mode set to:" MAPSCROLL)))
 (setButton #\M '((avatarMap 'toggleWindow)))
-(setButton #\t '(focusTalk))
+(setButton #\s '(begin ((avatar 'setSpeakLevel) 500) (focusTalk 'scream)))
+(setButton #\t '(begin ((avatar 'setSpeakLevel) 20) (focusTalk 'talk)))
+(setButton #\w '(begin ((avatar 'setSpeakLevel) 2) (focusTalk 'whisper)))
 (setButton CHAR-CTRL-D '(begin
                           (ipc '(set! Debug (not Debug)))
                           (((avatar 'myMap) 'debugDumpMapInfoToggle))
@@ -1425,69 +1436,90 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Typing_and_talking
 ;;
-(define (say talkInput . level)
-  (apply (avatar 'say) talkInput level))
+(define (say phrase . level)
+  (apply (avatar 'speak) phrase level))
 
-(define (saySystem talkInput)
- (IpcWrite (list 'voice 0 10 talkInput)))
+(define (saySystem phrase)
+ (IpcWrite (list 'voice 0 0 phrase)))
 
-(define (sayByeBye)
-  (saySystem (string (avatar 'name) " exits")))
-
+; Usage:: (replTalk 'getBuffer)
+;         (replTalk '{talk|whisper|scream} {character})
+;  Returns: 'more
+;           'sent
+;           'done
+;           
+; TODO full cooked keyboard with editing
 (define replTalk
  (let ((talkInput ""))
-  (lambda (b)
-   (if (eq? b 'getBuffer) talkInput ; Return input buffer contents.
-   ; Handle backspace  TODO full cooked keyboard with editing
-   (if (or (eq? b CHAR-CTRL-H)
-           (eq? b CHAR-CTRL-_)
-           (eq? b CHAR-CTRL-?))
-     (begin
-       (if (not (eq? "" talkInput))
-         (begin ((WinInput 'backspace) #\ )
-                (set! talkInput (substring talkInput 0 (- (string-length talkInput) 1)))))
-       'talk)
-   ; Send accumulated buffer as a talk message
-   (if (or (eq? b RETURN)
-           (eq? b NEWLINE))
-     (begin
-       ; Toggle help window if certain phrase entered
-       (if (string=? "?" talkInput) (help))
-       ; Send talk chatter to IPC or evaluate expression
-       (if (and (not (eq? "" talkInput))
-                (eq? #\: (string-ref talkInput 0)))
-           (begin (WinChatDisplay "\r\n")
-                  (WinChatDisplay talkInput)
-                  (WinChatDisplay "=>")
-                  (WinChatDisplay
-                    (call/cc (lambda (c) ; Return here if an error occurs
-                       (vector-set! ERRORS (tid) c)
-                       (eval (read-string (cdr-string talkInput)))))))
-           (say talkInput))
-       ; Perform actions based on talk phrases.
-       (tankTheOperator talkInput)
-       (WinInputPuts "\r\n>")
-       (set! talkInput "")
-       'talk)
-   ; Quit chat mode.
-   (if (or (eq? b CHAR-ESC) ; Escape char
-           (eq? b CHAR-CTRL-I)) ; Tab char
-     (begin (WinInputPuts "\r\n")
-            'done)
-   ; Append new character to talk string buffer
-   (if (and (>= b #\ )(<= b #\~))
-     (begin (WinInputPutc b)
-            (set! talkInput (string talkInput b))
-            'talk)
-   'talk)))))))) ; replTalk
+  (lambda (cmd . c) ; cmd can be one of 'talk 'whisper 'scream or 'getBuffer
+   (if (eq? cmd 'getBuffer) talkInput ; Return input buffer contents.
+   (begin
+     (set! c (car c)) ; Rest args chr better be a list with one character
+     ; Handle backspace
+     (if (or (eq? c CHAR-CTRL-H)
+             (eq? c CHAR-CTRL-_)
+             (eq? c CHAR-CTRL-?))
+       (begin
+         (if (not (eq? "" talkInput))
+           (begin (if (eq? cmd 'whisper)
+                    (begin (WinInputPutc #\ )
+                           ((WinInput 'back))
+                           ((WinInput 'backspace) #\)))
+                    ((WinInput 'backspace) #\ ))
+                  (set! talkInput (substring talkInput 0 (- (string-length talkInput) 1)))))
+         'more)
+     ; Send accumulated buffer as a talk message
+     (if (or (eq? c RETURN)
+             (eq? c NEWLINE))
+       (begin
+         ; Toggle help window if certain phrase entered
+         ; Send talk chatter to IPC or evaluate expression
+         (if (and (not (eq? "" talkInput))
+                  (eq? #\: (string-ref talkInput 0)))
+             (begin (WinChatDisplay "\r\n")
+                    (WinChatDisplay talkInput)
+                    (WinChatDisplay "=>")
+                    (WinChatDisplay
+                      (call/cc (lambda (c) ; Return here if an error occurs
+                         (vector-set! ERRORS (tid) c)
+                         (eval (read-string (cdr-string talkInput)))))))
+             (if (eq? cmd 'whisper) ((avatar 'speak) (string "(" (string-downcase talkInput) ")"))
+               (if (eq? cmd 'scream)  ((avatar 'speak) (string-upcase talkInput))
+                 ((avatar 'speak) talkInput))))
+         ; Perform actions based on talk phrases.
+         (tankTheOperator talkInput)
+         (set! talkInput "")
+         (WinInputPuts "\r\n")
+         'sent)
+     ; Quit chat mode.
+     (if (or (eq? c CHAR-ESC) ; Escape char
+             (eq? c CHAR-CTRL-I)) ; Tab char
+       (begin (WinInputPuts "\r\n")
+              'done)
+     ; Append new character to talk string buffer
+     (if (and (>= c #\ )(<= c #\~))
+       (begin (WinInputPutc c)
+              (if (eq? cmd 'whisper) (begin (WinInputPutc #\))
+                                            ((WinInput 'back))))
+              (set! talkInput (string talkInput c))
+              'more)
+     ; else
+     'more))))))))) ; replTalk
 
 ; Activate event driven talk mechanism
-(define (focusTalk)
+; type is one of 'whisper 'talk 'scream
+(define (focusTalk type)
  (define getKey ((Terminal 'getKeyCreate)))
-  (WinInputPuts (string ">" (replTalk 'getBuffer)))
   (let ~ ()
-    (if (eq? 'talk (replTalk (getKey)))
-        (~)))
+    (WinInputPuts 
+      (if (eq? type 'scream) (string "}}" (replTalk 'getBuffer))
+      (if (eq? type 'whisper)(string "(" (replTalk 'getBuffer) ")")
+                             (string ">" (replTalk 'getBuffer)))))
+    (if (eq? type 'whisper) ((WinInput 'back)))
+    (let ~~ ()
+      (let ((ret (replTalk type (getKey))))
+        (if (eq? ret 'more) (~~)
+        (if (eq? ret 'sent) (~))))))
   (getKey 'destroy))
 
 
@@ -1592,35 +1624,35 @@
 
 ; Tank agent - The first interactive user agent.
 (define (tankTalk str)
- (thread
-  (sleep 700)
-  (WinChatSetColor 0 15) (WinChatDisplay "\r\nTank ")
-  (WinChatSetColor 0 7)  (WinChatDisplay str)))
+  (thread
+    (sleep 500)
+    (WinChatSetColor 0 15) (WinChatDisplay "\r\nTank ")
+    (WinChatSetColor 0 7)  (WinChatDisplay str)))
 
-(define tankHangupTime 0)
-(define tankIsListening #f)
+(define tankHangupTime #f)
 
 (define (tankStartListening)
-  (set! tankHangupTime (+ 10 (time)))
-  (tankTalk "Operator")
-  (if (not tankIsListening)
-    (thread (let ~ ()
-      (set! tankIsListening #t)
-      (sleep 12000)
-      (if (< (time) tankHangupTime)
-        (~)
-        (begin
-          (tankTalk "*CLICK*")
-          (set! tankIsListening #f)))))))
+ (or tankHangupTime
+   (begin
+     (tankTalk "Operator...")
+     (thread (let ~ ()  ; tankHangupTime will be set right after this thread is started
+       (sleep 12000)
+       (if (< (time) tankHangupTime)
+         (~)
+         (begin
+           (tankTalk "*CLICK*")
+           (set! tankHangupTime #f)))))))
+  (set! tankHangupTime (+ 10 (time))))
 
 (define (tankTheOperator talkInput)
+ (if (string=? "?" talkInput) (help))
  (if (string=? talkInput "tank")
    (tankStartListening)
    (let ((strLen (string-length talkInput)))
     (if (and (> strLen 11) (string=? "my name is " (substring talkInput 0 11)))
       (thread (changeName (substring talkInput 11 strLen))))))
- (if tankIsListening (begin
-   (if (string=? "who" talkInput) (IpcWrite '(say "I'm here!")))
+ (if tankHangupTime
+   (if (string=? "who" talkInput) (IpcWrite '(say "I'm here!"))
    (if (string=? "load the jump program" talkInput) (tankTalk "I can't find the disk")
    (if (string=? "march" talkInput) (avatar '(march))
    (if (string=? "walk around" talkInput) (avatar '(walkAround))
@@ -1717,41 +1749,41 @@
     (sleep 100)
     (~))))))))
 
-; Given a vector on the cartesian plane in quadrant 1 between slope
-; 0 and 1, return list of Bresenham Y increments which walk the line
-; along X.  y must be <= x.
-(define (lineIncrements y x stepDir incDir)
-  (letrec ((yy (+ y y))  (yy-xx (- yy (+ x x))))
-    (let ~ ((i x)  (e (- yy x)))
-      (if (= i 0) ()
-      (if (< 0 e) (cons incDir  (~ (- i 1) (+ e yy-xx)))
-                  (cons stepDir (~ (- i 1) (+ e yy))))))))
 
 ; \2|1/  Return list of avatar movements
 ;_3\|/0_ required to walk from one point
 ; 4/|\7  another.
 ; /5|6\
-(define (lineWalks y0 x0 y1 x1)
- (letrec ((y (- y1 y0))
-          (x (- x1 x0))
-          (ay (abs y))
-          (ax (abs x)))
-  (if (< ay ax)
-    (if (< 0 x) ; linear X axis movement
-      (if (< 0 y)
-        (lineIncrements ay ax 0 7)      ; 7
-        (lineIncrements ay ax 0 1))     ; 0
-      (if (< 0 y)
-        (lineIncrements ay ax 4 5)      ; 4
-        (lineIncrements ay ax 4 3)))    ; 3
-    (if (< 0 y) ; linear Y axis movement
-      (if (< 0 x)
-        (lineIncrements ax ay 6 7)      ; 6
-        (lineIncrements ax ay 6 5))     ; 5
-      (if (< 0 x)
-        (lineIncrements ax ay 2 1)      ; 1
-        (lineIncrements ax ay 2 3)))))) ; 2
-
+(define lineWalks
+  ; Given a vector on the cartesian plane in quadrant 1 between slope
+  ; 0 and 1, return list of Bresenham Y increments which walk the line
+  ; along X.  y must be <= x.
+  (let ((lineIncrements (lambda (y x stepDir incDir)
+   (letrec ((yy (+ y y))  (yy-xx (- yy (+ x x))))
+     (let ~ ((i x)  (e (- yy x)))
+       (if (= i 0) ()
+       (if (< 0 e) (cons incDir  (~ (- i 1) (+ e yy-xx)))
+                   (cons stepDir (~ (- i 1) (+ e yy))))))))))
+ (lambda (y0 x0 y1 x1)
+   (letrec ((y (- y1 y0))
+            (x (- x1 x0))
+            (ay (abs y))
+            (ax (abs x)))
+    (if (< ay ax)
+      (if (< 0 x) ; linear X axis movement
+        (if (< 0 y)
+          (lineIncrements ay ax 0 7)      ; 7
+          (lineIncrements ay ax 0 1))     ; 0
+        (if (< 0 y)
+          (lineIncrements ay ax 4 5)      ; 4
+          (lineIncrements ay ax 4 3)))    ; 3
+      (if (< 0 y) ; linear Y axis movement
+        (if (< 0 x)
+          (lineIncrements ax ay 6 7)      ; 6
+          (lineIncrements ax ay 6 5))     ; 5
+        (if (< 0 x)
+          (lineIncrements ax ay 2 1)        ; 1
+          (lineIncrements ax ay 2 3)))))))) ; 2
 
 
 ;(define (chooseCell)
@@ -1834,8 +1866,9 @@
 
 ; Call this to quit world
 (define (shutdown)
-  (or QUIETLOGIN (sayByeBye))
+  (or QUIETLOGIN (saySystem (string (avatar 'name) " exits")))
   ((avatar 'die))
+  ((kat 'die))
   (sleep 1000) ; wait for ipc to flush
   (displayl "\e[" (Terminal 'Theight) "H\r\n\e[0m\e[?25h\e[?1000lgc=" (fun) "\r\n")
   (quit))

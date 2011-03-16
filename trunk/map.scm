@@ -33,10 +33,6 @@
 (define ipcReader ((ipc 'newReader)))
 (define IpcWrite (ipc 'qwrite))
 
-(define (makeCounter i)
- (lambda ()
-   (set! i (+ i 1))
-   i))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -46,7 +42,6 @@
 
 (define (Avatar dna port name z y x) ((Entity dna port name z y x) '(let ()
   (define self (lambda (msg) (eval msg)))
-  (define counter (makeCounter 0))
   ; Map block origin AKA the upper left hand corner of the map blocks sent to the peer
   (define mapBlockY 0)
   (define mapBlockX 0)
@@ -200,7 +195,7 @@
     (let ((fp (open-file fn)))
       (if fp
         (begin
-          (displayl "\r\nReading existing map block " fn)
+          (displayl "  Reading existing map block " fn)
           (let ((v (read fp)))
             (close fp)
             (set! CurrentMapBlockName fn)
@@ -208,7 +203,7 @@
             v))
         (let ((v (make-vector-vector MapBlockSize MapBlockSize #f))
               (ultVec (getUltima4ULT by bx)))
-          (displayl "\r\nGenerating map block " fn)
+          (displayl "  Generating map block " fn)
           (loop2 0 MapBlockSize 0 MapBlockSize
             (if ultVec
               (lambda (y x) (vector-vector-set! v y x (ultMapColumn (U4MapCell by bx) ultVec y x)))
@@ -227,7 +222,7 @@
   (loop2 by (+ by MapBlockCount)
          bx (+ bx MapBlockCount)
     (lambda (y x)
-      (displayl "\r\nSending block " (list y x) " to " (e 'name) ":" (e 'port) ":" ((e 'counter))) ; DEBUG
+      (displayl "\r\nSending initial block " (list y x) " to " (e 'name) ":" (e 'port)) ; DEBUG
       ((ipc 'private) (e 'port) ; Send the block to the peer
          `(mapUpdateColumns ,(* y MapBlockSize) ,(* x MapBlockSize) ,MapBlockSize ,(getMapBlock y x #t)))))
   ((ipc 'private) (e 'port) '(IpcWrite '(who))))) ; Force the peer to request roll call from everyone
@@ -278,10 +273,9 @@
 
    (loop2 ry (+ ry MapBlockCount) rx (+ rx MapBlockCount) (lambda (by bx)
      (if (notInRange by bx (e 'mapBlockY) (e 'mapBlockX)) (begin
-       (displayl "\r\nSending block " (list by bx) " to " (e 'name) ":" (e 'port) ":" ((e 'counter))) ; DEBUG
+       (displayl "\r\nSending block " (list by bx) " to " (e 'name) ":" (e 'port)) ; DEBUG
        ((ipc 'private) (e 'port) ; Send updated block to peer
-         `(mapUpdateColumns ,(* by MapBlockSize) ,(* bx MapBlockSize) ,MapBlockSize ,(getMapBlock by bx #t)))
-       (displayl "\r\nDone sending block " (list by bx) " to " (e 'name) ":" (e 'port) ":" ((e 'counter))))))) ; DEBUG
+         `(mapUpdateColumns ,(* by MapBlockSize) ,(* bx MapBlockSize) ,MapBlockSize ,(getMapBlock by bx #t)))))))
 
    ((e 'setMapBlockLoc) ry rx)))
 
