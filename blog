@@ -2916,5 +2916,24 @@ even more generic base abstract Avatar class.
 When screaming, characters should be seen in uppercase and whispering all
 lowercase when both typing and "hearing" the text from other.  I originally did
 this to prevent people from always yelling.  Whispering is in all lowercase as
-well as within parenthesis (for the same reasons).
+well, within parenthesis for the same reason.
 
+Pacman ghosts want to climb the walls and on top of each other.  I will add a
+toggle to this "step up" behavior in the Avatar class.
+
+
+Fri Mar 18 02:00:08 EDT 2011
+
+Implemtned the aif primitive.  It's similar to cond's => special form.  Usage is
+(if predicate function) where function is applied to the value of predicate if
+it's true.  Otherwise false is returned.  I did this so that compiling cond
+internally would just be a matter of transforming the cond expression in to
+an equivalent block of ifs and aifs and then compiled.
+
+(cond ((p1 e1)             (if p1 (begin e1)
+       (p2 => e2)           (aif p2 e2
+       (p3 e3 f3)            (if p3 (begin e3 f3) ; AIF DOESN'T SUPPORT AN ELSE CLAUSE 
+       (else e4 f4 ...)))     (begin e4 f4 ...))))
+
+Looks like aif needs to handle an else clause.  I might as well just implement
+cond with the => special form and not implement aif at all. 

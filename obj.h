@@ -10,7 +10,7 @@ extern Obj null, nullvec, nullstr, false, true, eof,
        sopenblocked, sreadblocked, swriteblocked,
        saccepting, sconnecting, sopen, sclosed,
        sdefine, slambda, smacro, squote, sunquote, squasiquote, sunquotesplicing,
-       sbegin, sif, sor, sand, ssetb,
+       sbegin, sif, saif, scond, selse, sor, sand, ssetb,
        svectorref, svectorvectorref, svectorvectorsetb, svectorsetb,
        svectorlength,
        scons, scar, scdr, ssetcarb, ssetcdrb,
@@ -45,6 +45,8 @@ void objNewVector1 ();
 void objNewClosure1Env (void);
 //void objNewSocket (void);
 void objNewPort (void);
+
+Num objIsPair (Obj o);
 
 void objDump (Obj a, FILE *stream);
 

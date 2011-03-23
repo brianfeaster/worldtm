@@ -30,7 +30,8 @@
 (define PortMapAgent #f)
 (define SHOWBUTTONS #f)
 (define EDIT #f)
-
+(define WhisperTalkThreshold 4)
+(define TalkScreamThreshold  64)
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -549,14 +550,14 @@
   ; Entity DB aliases
   (define entityDBGet (myEntityDB 'get))
   ; Field DB aliases
-  (define column         (myField 'column))
-  (define fieldFirstCell (myField 'firstRef))
-  (define baseCell       (myField 'baseRef))
-  (define fieldAdd       (myField 'add))
-  (define fieldDelete    (myField 'delete))
+  (define column      (myField 'column))
+  (define firstCell   (myField 'firstRef))
+  (define baseCell    (myField 'baseRef))
+  (define fieldAdd    (myField 'add))
+  (define fieldDelete (myField 'delete))
   ; Canvas aliases
-  (define canvasHeight   (or NOVIEWPORT (myCanvas 'height)))
-  (define canvasRender   (or NOVIEWPORT (myCanvas 'render)))
+  (define canvasHeight    (or NOVIEWPORT (myCanvas 'height)))
+  (define canvasRender    (or NOVIEWPORT (myCanvas 'render)))
   (define canvasResetArray(or NOVIEWPORT (myCanvas 'resetArray)))
   ; Viewport/window aliases
   (define viewportRecenterReset(or NOVIEWPORT (myViewport 'recenterReset)))
@@ -603,7 +604,7 @@
     ((myViewport 'goto) 0 0)
     (let ~ ((z 11))
      (ViewportPuts "\r\n")
-     (let ((c (fieldFirstCell z y x)))
+     (let ((c (firstCell z y x)))
       (if (eqv? cellAIR c)
        (begin (ViewportSetColor 0 8)
               (ViewportPuts "()   "))
@@ -896,6 +897,7 @@
     (define alive #t)
     (define stop #t) ; Used by action macros
     (define speakLevel 20) ; Whisper=2  Talk=20 Scream=500 
+    (define climb #f)
     (define cell 19) ; TODO replace with a generalize item container
     (define ipcRead (if ipc ((ipc 'newReader)) #f)) ; This needs to be destroyed.
     (define ipcWrite (if ipc (ipc 'qwrite) #f))
@@ -912,7 +914,7 @@
         ; Consider cell I'm walking into.  If cell is entity push it.
         ; Otherwise move to facing cell or on top of obstructing cell.
         (look dir)
-        (let ((nextCell (apply (myMap 'fieldFirstCell) (gpsLook))))
+        (let ((nextCell (apply (myMap 'firstCell) (gpsLook))))
           ; Case 1 push entity
           (if (< CellMax nextCell)
             (ipcWrite `(force ,@(gpsLook) ,dir 10))
@@ -920,18 +922,18 @@
           (if (or EDIT (not (cellSolid? (cellRef nextCell))))
             ((myMap 'walkDetails) self)
           ; Case 3 step up
-          (begin
+          (if climb (begin
             (look dir 1) ; Peek at the cell above the one in front of me
             (set! nextCell (apply (myMap 'baseCell) (gpsLook)))
             (or (cellSolid? (cellRef nextCell))
-              ((myMap 'walkDetails) self))))))
+              ((myMap 'walkDetails) self)))))))
         ; Gravity
         (or EDIT (fall))
       (semaphore-up walkSemaphore)) ; walk
     ; Fall down one cell if a non-entity and non-solid cell below me
     (define (fall)
       (look 8) ; Look down
-      (let ((nextCell (apply (myMap 'fieldFirstCell) (gpsLook))))
+      (let ((nextCell (apply (myMap 'firstCell) (gpsLook))))
         (if (= nextCell cellAIR) ((myMap 'walkDetails) self))))
     (define (setSpeakLevel level)
       (set! speakLevel level))
@@ -951,12 +953,17 @@
            (WinChatSetColor 0 13) (WinChatDisplay "D")
            (WinChatSetColor 0 8) (WinChatDisplay VOICEDELIMETER)
            (WinChatSetColor 0 7) (WinChatDisplay text))
-         (let ((entity ((myMap 'entityDBGet) dna)))
+         (letrec ((entity ((myMap 'entityDBGet) dna))
+                  (dist (if entity (distance ((entity 'gps)) ((avatar 'gps))))))
            (if entity
-             (if (< (distance ((entity 'gps)) ((avatar 'gps))) level)
-               (let ((glyph (entity 'glyph)))
+             (if (< dist level) ; Hear only things within the distance level
+               (let ((glyph (entity 'glyph))
+                     (name (entity 'name)))
+                 (if (<= level WhisperTalkThreshold) (set! name (string "(" name ")"))
+                  (if (<= TalkScreamThreshold level) (set! name (string "{" name "}"))))
+                 ; Color of the name and text based on the entity's glyph
                  (WinChatSetColor (glyph0bg glyph) (glyph0fg glyph))
-                 (WinChatDisplay "\r\n" (if (null? entity) "???" (entity 'name)) VOICEDELIMETER)
+                 (WinChatDisplay "\r\n" name VOICEDELIMETER)
                  (WinChatSetColor (glyph1bg glyph) (glyph1fg glyph))
                  (WinChatDisplay text)))
              (begin
@@ -1395,9 +1402,9 @@
     'always)))
   (WinChatDisplay "\r\nScroll mode set to:" MAPSCROLL)))
 (setButton #\M '((avatarMap 'toggleWindow)))
-(setButton #\s '(begin ((avatar 'setSpeakLevel) 500) (focusTalk 'scream)))
-(setButton #\t '(begin ((avatar 'setSpeakLevel) 20) (focusTalk 'talk)))
-(setButton #\w '(begin ((avatar 'setSpeakLevel) 2) (focusTalk 'whisper)))
+(setButton #\s '(focusTalk 'scream))
+(setButton #\t '(focusTalk 'talk))
+(setButton #\w '(focusTalk 'whisper))
 (setButton CHAR-CTRL-D '(begin
                           (ipc '(set! Debug (not Debug)))
                           (((avatar 'myMap) 'debugDumpMapInfoToggle))
@@ -1426,7 +1433,7 @@
    ;(setButton #\1 '(handleTerminalResize))
    ;(setButton #\2 '(handleTerminalResize (cons 600 400)))
    (setButton #\3 '(thread (spawnKitty)))
-   ;(setButton #\4 '(begin (set! state 'pacman) (pacman)))
+   (setButton #\4 '(ghosts))
    (setButton #\5 '(pong))
    (setButton #\6 '(WinChatDisplay "\r\n" ((avatarMap 'column) (avatar 'y) (+(avatar 'x)1))))
 ))
@@ -1507,9 +1514,11 @@
      'more))))))))) ; replTalk
 
 ; Activate event driven talk mechanism
-; type is one of 'whisper 'talk 'scream
+;   type is one of 'whisper 'talk 'scream
 (define (focusTalk type)
  (define getKey ((Terminal 'getKeyCreate)))
+ ;((avatar 'setSpeakLevel) (if (eq? type 'whisper) 2 (if (eq? type 'scream) 500 20)))
+ ((avatar 'setSpeakLevel) (cond ((eq? type 'whisper) 2) ((eq? type 'scream) 500) (else 20)))
   (let ~ ()
     (WinInputPuts 
       (if (eq? type 'scream) (string "}}" (replTalk 'getBuffer))
@@ -1527,6 +1536,41 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Prototypes_and_fun_things
 ;;
+
+; \2|1/  Return list of avatar movements
+;_3\|/0_ required to walk from one (y x)
+; 4/|\7  map location to another.
+; /5|6\
+(define lineWalks
+  ; Given a vector on the cartesian plane in quadrant 1 between slope
+  ; 0 and 1, return list of Bresenham X or Y,X increments which walk
+  ; the line along X.  y must be <= x.
+  (let ((lineIncrements (lambda (y x stepDir incDir)
+   (letrec ((yy (+ y y))  (yy-xx (- yy (+ x x))))
+     (let ~ ((i x)  (e (- yy x)))
+       (if (= i 0) ()
+       (if (< 0 e) (cons incDir  (~ (- i 1) (+ e yy-xx)))
+                   (cons stepDir (~ (- i 1) (+ e yy))))))))))
+ (lambda (y0 x0 y1 x1)
+   (letrec ((y (- y1 y0))
+            (x (- x1 x0))
+            (ay (abs y))
+            (ax (abs x)))
+    (if (< ay ax)
+      (if (< 0 x) ; Walk X and increment Y
+        (if (< 0 y)
+          (lineIncrements ay ax 0 7)      ; 7
+          (lineIncrements ay ax 0 1))     ; 0
+        (if (< 0 y)
+          (lineIncrements ay ax 4 5)      ; 4
+          (lineIncrements ay ax 4 3)))    ; 3
+      (if (< 0 y) ; Walk Y and increment X
+        (if (< 0 x)
+          (lineIncrements ax ay 6 7)      ; 6
+          (lineIncrements ax ay 6 5))     ; 5
+        (if (< 0 x)
+          (lineIncrements ax ay 2 1)        ; 1
+          (lineIncrements ax ay 2 3)))))))) ; 2
 
 ; The first Avatar macro
 ; Usage:: (avatar '(march)) Start/stop the thread
@@ -1583,7 +1627,7 @@
        (if (and (not stop) (< 0 cycles)) (~)))))
    (begin
      (WinChatSetColor 0 10) (WinChatDisplay "\r\n*Thus ends the aimlessness*")
-     (set! stop #t)))))
+     (set! stop #t))))) ; walkAround
 
 
 (define pongPower #f)
@@ -1604,7 +1648,7 @@
        (if (pair? l) (begin
          (look (car l))
          ; Is there something there?
-         (if (= cellAIR (apply (myMap 'fieldFirstCell) (gpsLook)))
+         (if (= cellAIR (apply (myMap 'firstCell) (gpsLook)))
            (begin
              ((myMap 'walkDetails) self)
              (sleep 100)
@@ -1651,15 +1695,24 @@
    (let ((strLen (string-length talkInput)))
     (if (and (> strLen 11) (string=? "my name is " (substring talkInput 0 11)))
       (thread (changeName (substring talkInput 11 strLen))))))
- (if tankHangupTime
-   (if (string=? "who" talkInput) (IpcWrite '(say "I'm here!"))
-   (if (string=? "load the jump program" talkInput) (tankTalk "I can't find the disk")
-   (if (string=? "march" talkInput) (avatar '(march))
-   (if (string=? "walk around" talkInput) (avatar '(walkAround))
-   (if (string=? "edit" talkInput) (begin (set! EDIT (not EDIT)) (tankTalk "Edit mode " EDIT))
-   (if (string=? "island" talkInput) ((avatar 'jump) 1 4150 5602)
-   (if (string=? "scrabble" talkInput) ((avatar 'jump) 1 3338 3244)
-   (if (string=? "britania" talkInput) ((avatar 'jump) 1 3456 2751)))))))))))
+ (if tankHangupTime (cond
+   ((string=? "who" talkInput) (IpcWrite '(say "I'm here!")))
+   ((string=? "load the jump program" talkInput) (tankTalk "I can't find the disk"))
+   ((string=? "sex" talkInput) (tankTalk (satc)))
+   ((string=? "march" talkInput) (avatar '(march)))
+   ((string=? "walk around" talkInput) (avatar '(walkAround)))
+   ((string=? "edit" talkInput) (begin (set! EDIT (not EDIT)) (tankTalk "Edit mode " EDIT)))
+   ((string=? "island" talkInput) ((avatar 'jump) 1 4150 5602))
+   ((string=? "scrabble" talkInput) ((avatar 'jump) 1 3338 3244))
+   ((string=? "britania" talkInput) ((avatar 'jump) 1 3456 2751)))))
+
+(define (satc)
+ (let ((lst ()))
+  (loop 6 (lambda (season)
+     (loop (vector-ref #(12 18 18 18 8 20) season)
+      (lambda (episode)
+       (set! lst (cons (list 's (+ season 1) 'e (+ episode 1)) lst))))))
+  (vector-random (list->vector lst))))
 
 ; Display the same string repeatedly with colors of increasing inensity.
 (define (fancyDisplay c s)
@@ -1672,8 +1725,66 @@
  "")
 
 ; Pacman
-(define pacmanOn #f)
+(define ghostsOn #f)
 (define desiredDir 'ghost)
+
+; Create or destroy the four ghosts
+(define ghosts
+ (let ((g1 #f) (g2 #f) (g3 #f) (g4 #f))
+ (lambda ()
+  (WinChatDisplay "(ghosts)")
+  (if g1
+    (begin
+      ((g1 'die)) ((g2 'die)) ((g3 'die)) ((g4 'die))
+      (set! g1 #f) (set! g2 #f) (set! g3 #f) (set! g4 #f)
+      )
+    (begin
+      (let ((y (avatar 'y)) (x (avatar 'x)))
+        (set! g1 (or ghostsOn (Avatar "G1" 0 (- y 1) (- x 1) ipc 'NOVIEWPORT)))
+        (set! g2 (or ghostsOn (Avatar "G2" 0 (- y 1) (+ x 1) ipc 'NOVIEWPORT)))
+        (set! g3 (or ghostsOn (Avatar "G3" 0 (+ y 1) (- x 1) ipc 'NOVIEWPORT)))
+        (set! g4 (or ghostsOn (Avatar "G4" 0 (+ y 1) (+ x 1) ipc 'NOVIEWPORT)))
+      )
+      (g1 '(ghostMacro))
+      (g2 '(ghostMacro))
+      (g3 '(ghostMacro))
+      (g4 '(ghostMacro))
+)))))
+
+; Given a direction, return a list of possible directions (same direction, left or right)
+; after filtering out non-obstructed directions
+(define (pacmanFilterDirections ent l)
+  (filter-not
+    (lambda (d)
+      ((ent 'look) d)
+      (let ((cell (apply ((ent 'myMap) 'firstCell) ((ent 'gpsLook)))))
+        (or (not (cellValidIndex? cell)) (cellSolid? (cellRef cell)))))
+    l))
+
+; Generate list of possible directions for a ghost given a direction
+; for now that's just left, the direction specified and right.
+(define (pacmanNewGhostDirections ent dir)
+  (pacmanFilterDirections ent (list (modulo (- dir 2) 8) dir (modulo (+ dir 2) 8))))
+
+; Generate list with desired and/or current pacman directions
+(define (pacmanNewPacmanDirections end dir)
+  (pacmanFilterDirections end (list desiredDir dir)))
+
+(define ghostMacro (macro ()
+ (set! stop #f)
+ (WinChatDisplay "Lookout pacman!")
+ (thread (let ~ ((dir dir)) ; Use this local symbol and not the Avatar class'.
+   (if stop
+     (WinChatDisplay "The gosts give up")
+     (begin
+        (set! dir ; Pick a new direction after every movement
+          (let ((v (list->vector (pacmanNewGhostDirections self dir))))
+            (if (eq? #() v)
+              (modulo (+ dir 4) 8) ; The new directions are all invalid so reverse direction
+              (vector-random v)))); choose random new dir
+        (walk dir)
+        (sleep 200)
+        (~ dir)))))))
 
 ; Handle pacman controls and adjust state for the pacman thread
 (define (replPacman b) ; button
@@ -1693,29 +1804,9 @@
  (if (eq? b #\g)    (set! desiredDir 'ghost)))))))))))
  newState) ; want to stay in the pacman state
 
-; Given a direction, return a list of possible directions (same direction, left or right)
-; after filtering out non-obstructed directions
-(define (pacmanFilterDirections l)
-  (filter-not
-    (lambda (d)
-      ((avatar 'look) d)
-      (cellSolid? (cellRef (apply (avatarMap 'baseCell) ((avatar 'gpsLook))))))
-    l))
-
-; Generate list of possible directions for a ghost given a direction
-(define (pacmanNewGhostDirections dir)
-  (pacmanFilterDirections
-    (list (modulo (- dir 2) 8) ; Start with three direction: left current right
-                  dir
-                  (modulo (+ dir 2) 8))))
-
-; Generate list with desired and/or current pacman directions
-(define (pacmanNewPacmanDirections dir)
-  (pacmanFilterDirections (list desiredDir dir)))
-
-; Pacman thread
-(define pacman (let ((dir 0)) (lambda ()
-  (if pacmanOn
+(rem
+ (let ((dir 0)) (lambda ()
+  (if ghostsOn
     (begin
       (WinChatSetColor 0 1)
       (WinChatDisplay "\r\nYour pacman game is over."))
@@ -1726,8 +1817,8 @@
       (WinChatDisplay "\r\n q.......quit")
       (WinChatDisplay "\r\n g.......act like a ghost")
       (WinChatDisplay "\r\n arrows..move pacman")))
-  (set! pacmanOn (not pacmanOn)) ; Call again to disable
-  (thread (let ~ () (if pacmanOn (begin
+  (set! ghostsOn (not ghostsOn)) ; Call again to disable
+  (thread (let ~ () (if ghostsOn (begin
     (semaphore-down walkSemaphore)
     (if (eq? desiredDir 'ghost)
       ; Ghost logic
@@ -1750,42 +1841,7 @@
     (~))))))))
 
 
-; \2|1/  Return list of avatar movements
-;_3\|/0_ required to walk from one point
-; 4/|\7  another.
-; /5|6\
-(define lineWalks
-  ; Given a vector on the cartesian plane in quadrant 1 between slope
-  ; 0 and 1, return list of Bresenham Y increments which walk the line
-  ; along X.  y must be <= x.
-  (let ((lineIncrements (lambda (y x stepDir incDir)
-   (letrec ((yy (+ y y))  (yy-xx (- yy (+ x x))))
-     (let ~ ((i x)  (e (- yy x)))
-       (if (= i 0) ()
-       (if (< 0 e) (cons incDir  (~ (- i 1) (+ e yy-xx)))
-                   (cons stepDir (~ (- i 1) (+ e yy))))))))))
- (lambda (y0 x0 y1 x1)
-   (letrec ((y (- y1 y0))
-            (x (- x1 x0))
-            (ay (abs y))
-            (ax (abs x)))
-    (if (< ay ax)
-      (if (< 0 x) ; linear X axis movement
-        (if (< 0 y)
-          (lineIncrements ay ax 0 7)      ; 7
-          (lineIncrements ay ax 0 1))     ; 0
-        (if (< 0 y)
-          (lineIncrements ay ax 4 5)      ; 4
-          (lineIncrements ay ax 4 3)))    ; 3
-      (if (< 0 y) ; linear Y axis movement
-        (if (< 0 x)
-          (lineIncrements ax ay 6 7)      ; 6
-          (lineIncrements ax ay 6 5))     ; 5
-        (if (< 0 x)
-          (lineIncrements ax ay 2 1)        ; 1
-          (lineIncrements ax ay 2 3)))))))) ; 2
-
-
+; Prototype to display all cells in a window
 ;(define (chooseCell)
 ; (define WinCells ((Terminal 'WindowNew) 5 20 2 36 #x07))
 ; (define (WinCellsDisplay . e) (for-each (lambda (x) (for-each (WinCells 'puts) (display->strings x))) e))
@@ -1829,6 +1885,8 @@
 (define avatar (if QUIETLOGIN "Administrator" (boxInput "Enter your name")))
 (if (eq? "" avatar) (set! avatar "Guest"))
 (set! avatar (Avatar avatar 1 3460 2767 ipc))
+;(set! avatar (Avatar avatar 1 3438 2735 ipc)) ; Pacman arena
+(avatar '(set! climb #t))
 
 ; Consider the avatar's map object
 (define avatarMap (avatar 'myMap))
