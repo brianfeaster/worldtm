@@ -1346,6 +1346,7 @@
   ((WinPalette 'toggle)))
 
 
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Buttons
 ;;
@@ -1437,6 +1438,15 @@
    (setButton #\5 '(pong))
    (setButton #\6 '(WinChatDisplay "\r\n" ((avatarMap 'column) (avatar 'y) (+(avatar 'x)1))))
 ))
+
+; Perform button's action
+(define (button b)
+ (let ((expr (getButton b)))
+  (if SHOWBUTTONS (WinConsoleDisplay "BUTTON(" b " " expr ")"))
+  ; Evaluate the button's command value
+  (cond ((procedure? expr)  (expr))
+        ((not (null? expr)) (eval expr))
+        (else (WinConsoleDisplay "\r\nButton " b " undefined")))))
 
 
 
@@ -1936,12 +1946,7 @@
   (Avatar (string "katO'" (avatar 'name)) 1 (+ (random 10) 3458) (+ (random 10) 2764) ipc 'NOVIEWPORT))
 
 ; Keyboard command loop
-(let ~ () (letrec ((b (getKey))
-                   (button (getButton b)))
+(let ~ () (let ((b (getKey)))
   (set! ActivityTime (time))
-  (if SHOWBUTTONS (WinConsoleDisplay "BUTTON(" b " " button ")"))
-  ; Evaluate the button's command value
-  (if (procedure? button)  (button)
-  (if (not (null? button)) (eval button)
-    (WinConsoleDisplay "\r\nButton " b " undefined")))
+  (button b)
   (~)))
