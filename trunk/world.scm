@@ -1440,13 +1440,14 @@
 ))
 
 ; Perform button's action
-(define (button b)
- (let ((expr (getButton b)))
-  (if SHOWBUTTONS (WinConsoleDisplay "BUTTON(" b " " expr ")"))
-  ; Evaluate the button's command value
-  (cond ((procedure? expr)  (expr))
-        ((not (null? expr)) (eval expr))
-        (else (WinConsoleDisplay "\r\nButton " b " undefined")))))
+(define (button . buttonList)
+ (each-for buttonList (lambda (b)
+  (let ((expr (getButton b)))
+    (if SHOWBUTTONS (WinConsoleDisplay "BUTTON(" b " " expr ")"))
+    ; Evaluate the button's command value
+    (cond ((procedure? expr)  (expr))
+          ((not (null? expr)) (eval expr))
+          (else (WinConsoleDisplay "\r\nButton " b " undefined")))))))
 
 
 
@@ -1713,8 +1714,9 @@
    ((string=? "walk around" talkInput) (avatar '(walkAround)))
    ((string=? "edit" talkInput) (begin (set! EDIT (not EDIT)) (tankTalk "Edit mode " EDIT)))
    ((string=? "island" talkInput) ((avatar 'jump) 1 4150 5602))
-   ((string=? "scrabble" talkInput) ((avatar 'jump) 1 3338 3244))
-   ((string=? "britania" talkInput) ((avatar 'jump) 1 3456 2751)))))
+   ((string=? "theoffice" talkInput) ((avatar 'jump) 1 3869 1053))
+   ((string=? "scrabble" talkInput)  ((avatar 'jump) 1 3338 3244))
+   ((string=? "britania" talkInput)  ((avatar 'jump) 1 3456 2751)))))
 
 (define (satc)
  (let ((lst ()))
