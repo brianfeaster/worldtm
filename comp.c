@@ -330,6 +330,18 @@ void compLambdaBody (Num flags) {
 			/* Since empty formals function, just set env to closure's env. */
 			asm(LDI160); asm(1l);
 		}
+		opcodeStart = memStackLength(asmstack);
+		asmAsm (
+			BEQI1, 0, ADDR, "expectedNoArgs",
+			MVI0, expr, /* Add expression to stack */
+			PUSH0,
+			ADDI1, 1l,
+			MVI0, "Too many arguments to function",
+			SYSI, sysError, /* Error correction */
+			LABEL, "expectedNoArgs",
+			NOP,
+			END);
+		asmCompileAsmstack(opcodeStart);
 	} else {
 		/* Emit code that extends the environment.  Pops the top most arguments
 		   into a list for the 'rest' formal parameter  (lambda (a b . rest)...).
