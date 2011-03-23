@@ -81,11 +81,7 @@
    (if (pair? rloc)
      (set! tx (car rloc))
      (set! tx 0)))
- (define (gpsLook . rloc) ; Return location avatar is looking at
-   (if (pair? rloc) (begin
-     (set! tz (car rloc))
-     (set! ty (cadr rloc))
-     (set! tx (caddr rloc))))
+ (define (gpsLook) ; Return location avatar is looking at which is a direction and relative translation
    (if (= dir 0) (list (+ z    tz) (+ y    ty) (+ x  1 tx))
    (if (= dir 1) (list (+ z    tz) (+ y -1 ty) (+ x  1 tx))
    (if (= dir 2) (list (+ z    tz) (+ y -1 ty) (+ x    tx))

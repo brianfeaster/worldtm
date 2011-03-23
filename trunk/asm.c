@@ -11,20 +11,20 @@ void asmAsm (Obj o,...) {
  va_list ap;
 	va_start(ap, o);
 	obj = o;
-	DB (TAB0 "::" STR, __func__); 
+	DB (INDENT0 "::" STR, __func__); 
 	while (obj!=END) {
-		DB(TAB1 INT4":"OBJ, memStackLength(asmstack), obj);
+		DB(INDENT1 INT4":"OBJ, memStackLength(asmstack), obj);
 		memStackPush(asmstack, obj);
 		obj=va_arg(ap, Obj);
 	}
 	va_end(ap);
-	DB (TAB1 "--" STR, __func__); 
+	DB (INDENT1 "--" STR, __func__); 
 }
 
 
 void asmCompileAsmstack (Num opcodeStart) {
  Num j, i, opcodeEnd, opcodeWrite, labelCount=0, addrCount=0;
-	DB(TAB0"::%s", __func__);
+	DB(INDENT0"::%s", __func__);
 	memStackPush(stack, r0);
 	memStackPush(stack, r1);
 	memStackPush(stack, r2);
@@ -68,13 +68,13 @@ void asmCompileAsmstack (Num opcodeStart) {
 	for (i=opcodeWrite; i<opcodeEnd; i++) {
 		r0 = memVectorObject(asmstack, i);
 		if (r0 == LABEL) {
-			DB(TAB1 HEX4" label "OBJ" %s", opcodeWrite, r0, memVectorObject(asmstack, i+1));
+			DB(INDENT1 HEX4" label "OBJ" %s", opcodeWrite, r0, memVectorObject(asmstack, i+1));
 			/* Store label value. */
 			memVectorSet(r2, labelCount++, memVectorObject(asmstack, ++i));
 			/* Store opcode address. */
 			memVectorSet(r2, labelCount++, (Obj)opcodeWrite);
 		} else if (r0 == ADDR) {
-			DB(TAB1 HEX4" addr "OBJ, opcodeWrite, r0);
+			DB(INDENT1 HEX4" addr "OBJ, opcodeWrite, r0);
 			/* Store label value. */
 			memVectorSet(r3, addrCount++, memVectorObject(asmstack, ++i));
 			/* Store opcode address. */
@@ -83,7 +83,7 @@ void asmCompileAsmstack (Num opcodeStart) {
 			   just increment the opcodeWrite address without mutating the value. */
 			memVectorSet(asmstack, opcodeWrite++, (Obj)0);
 		} else {
-			//DB(TAB1 "%x opcode %08x", opcodeWrite, r0);
+			//DB(INDENT1 "%x opcode %08x", opcodeWrite, r0);
 			memVectorSet(asmstack, opcodeWrite++, r0);
 		}
 	}
@@ -114,7 +114,7 @@ void asmCompileAsmstack (Num opcodeStart) {
 	r2 = memStackPop(stack);
 	r1 = memStackPop(stack);
 	r0 = memStackPop(stack);
-	DB(TAB1"--%s", __func__);
+	DB(INDENT1"--%s", __func__);
 }
 
 

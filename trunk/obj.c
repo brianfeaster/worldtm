@@ -17,7 +17,7 @@ Obj null, nullvec, nullstr, false, true, eof,
     sopenblocked, sreadblocked, swriteblocked,
     saccepting, sconnecting, sopen, sclosed,
     sdefine, slambda, smacro, squote, sunquote, squasiquote, sbegin, sunquotesplicing,
-    sif, sor, sand, ssetb,
+    sif, saif, scond, selse, sor, sand, ssetb,
     svectorref, svectorvectorref, svectorvectorsetb, svectorsetb, svectorlength,
     scons, scar, scdr, ssetcarb, ssetcdrb,
     sprocedurep, snullp,
@@ -60,7 +60,7 @@ void tree_copy (void) { /* COPIES TREE ACC INTO ACC */
 
 Num objListLength (Obj o) {
  Num i=0;
-	while (memObjectType(o) == TPAIR) {
+	while (objIsPair(o)) {
 		o = cdr(o);
 		i++;
 	}
@@ -260,6 +260,9 @@ void new_continuation(void) {
 
 #endif
 
+Num objIsPair (Obj o) {
+	return memObjectType(o) == TPAIR;
+}
 
 void objDumpR (Obj o, FILE *stream, Num islist) {
  Num i;
@@ -312,7 +315,7 @@ void objDumpR (Obj o, FILE *stream, Num islist) {
 			if (!islist) fwrite ("(", 1, 1, stream);
 			objDumpR(car(o), stream, 0);
 
-			if (TPAIR == memObjectType(cdr(o))) {
+			if (objIsPair(cdr(o))) {
 				fwrite (" ", 1, 1, stream);
 				objDumpR(cdr(o), stream, 1);
 			} else {
@@ -423,6 +426,9 @@ void objInitialize (Func scheduler) {
 	objNewSymbolStatic("unquote-splicing"); sunquotesplicing = r0;
 	objNewSymbolStatic("begin");        sbegin = r0;
 	objNewSymbolStatic("if");           sif = r0;
+	objNewSymbolStatic("=>");           saif = r0;
+	objNewSymbolStatic("cond");         scond = r0;
+	objNewSymbolStatic("else");         selse = r0;
 	objNewSymbolStatic("or");           sor = r0;
 	objNewSymbolStatic("and");          sand = r0;
 	objNewSymbolStatic("set!");         ssetb = r0;

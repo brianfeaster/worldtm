@@ -4,6 +4,7 @@
 
 #include <stdio.h>
 #include <unistd.h>
+#include <assert.h>
 #include "obj.h"
 #include "comp.h"
 
@@ -144,7 +145,7 @@ void compDefine (Num flags) {
 	expr = cdr(expr); /* Skip 'define symbol. */
 
 	/* If the expression is of the form ((...) body) transform. */
-	if (memObjectType(car(expr)) == TPAIR) {
+	if (objIsPair(car(expr))) {
 		compTransformDefineFunction();
 		expr = r0;
 	}
@@ -154,7 +155,7 @@ void compDefine (Num flags) {
 		wscmTGEBind();
 		/* Emit code to set the binding's value. */
 		expr = cdr(expr);
-		if (TPAIR == memObjectType(expr)) {
+		if (objIsPair(expr)) {
 			push(r0); /* Save binding. */
 			expr = car(expr); /* Consider definition expression and compile. */
 			compExpression((Num)flags & ~TAILCALL);
@@ -223,10 +224,10 @@ void compTransformInternalDefinitions(void) {
 	DB("-->%s", __func__);
 
 	/* Save lambda body. */
-	while (memObjectType(car(expr)) == TPAIR && sdefine == caar(expr)) {
+	while (objIsPair(car(expr)) && sdefine == caar(expr)) {
 			push(cdr(expr));
 			expr = cdar(expr); // Consider next expression and skip 'define.
-			if (memObjectType(car(expr)) == TPAIR) {
+			if (objIsPair(car(expr))) {
 				compTransformDefineFunction(); // Returns (fn (lambda formals body))
 			} else {
 				r0=expr;
@@ -422,7 +423,7 @@ void compLambdaBody (Num flags) {
 		DB("   Empty function body.");
 	} else {
 		/* Transform internal definitions, if any, and body into equivalent
-		   expanded letrec and body, ie:(((lambda (f) (set! f ...) body)()...)).*/
+		   expanded letrec and body, ie:(((lambda (f) (set! f ...) body) () () ...)).*/
 		compTransformInternalDefinitions();
 		while (cdr(expr) != null) {
 			DB("   Lambda non-tail optimization");
@@ -473,7 +474,7 @@ void wscmNormalizeFormals(void) {
 	r3=0; /* Keep track of non-dotted formal count. */
 
 	/* Push formals onto stack. */
-	while (memObjectType(r0) == TPAIR) {
+	while (objIsPair(r0)) {
 		r3++;
 		push(car(r0));
 		r0=cdr(r0);
@@ -730,7 +731,7 @@ void compCons (Num flags) {
 */
 Int parseUnary (void) {
 	r0 = cdr(expr);
-	if (memObjectType(r0) != TPAIR) return -1;
+	if (!objIsPair(r0)) return -1;
 	r1 = car(r0);
 	if (cdr(r0) != null) return -1;
 	return 0;
@@ -771,7 +772,7 @@ ret:
 
 void compCdr (Num flags) {
 	DB("-->%s", __func__);
-	if (memObjectType(cdr(expr)) != TPAIR) {
+	if (!objIsPair(cdr(expr))) {
 		r0 = "ERROR: cdr illegal operand count: ";
 		CompError = 1;
 		goto ret;
@@ -837,7 +838,7 @@ ret:
 
 void compProcedureP (Num flags) {
 	DB("-->%s", __func__);
-	if (memObjectType(cdr(expr)) != TPAIR) {
+	if (!objIsPair(cdr(expr))) {
 		write (1, "ERROR: null? illegal operand count: ", 36);
 		wscmWrite (expr, stdout);
 	}
@@ -852,7 +853,7 @@ void compProcedureP (Num flags) {
 
 void compNullP (Num flags) {
 	DB("-->compNullP");
-	if (memObjectType(cdr(expr)) != TPAIR) {
+	if (!objIsPair(cdr(expr))) {
 		write (1, "ERROR: null? illegal operand count: ", 36);
 		wscmWrite (expr, stdout);
 	}
@@ -867,7 +868,7 @@ void compNullP (Num flags) {
 
 void compPairP (Num flags) {
 	DB("-->compPairP");
-	if (memObjectType(cdr(expr)) != TPAIR) {
+	if (!objIsPair(cdr(expr))) {
 		write (1, "ERROR: pair? illegal operand count: ", 36);
 		wscmWrite (expr, stdout);
 		return;
@@ -889,7 +890,7 @@ void compPairP (Num flags) {
 void compVectorP (Num flags) {
  Num opcodeStart;
 	DB("-->%s", __func__);
-	if (memObjectType(cdr(expr)) != TPAIR) {
+	if (!objIsPair(cdr(expr))) {
 		write (1, "ERROR: vector? illegal operand count: ", 38);
 		wscmWrite (expr, stdout);
 		return;
@@ -915,7 +916,7 @@ void compVectorP (Num flags) {
 void compStringP (Num flags) {
  Num opcodeStart;
 	DB("-->%s", __func__);
-	if (memObjectType(cdr(expr)) != TPAIR) {
+	if (!objIsPair(cdr(expr))) {
 		write (1, "ERROR: string? illegal operand count: ", 38);
 		wscmWrite (expr, stdout);
 		return;
@@ -941,7 +942,7 @@ void compStringP (Num flags) {
 void compIntegerP (Num flags) {
  Num opcodeStart;
 	DB("-->%s", __func__);
-	if (memObjectType(cdr(expr)) != TPAIR) {
+	if (!objIsPair(cdr(expr))) {
 		write (1, "ERROR: integer? illegal operand count: ", 38);
 		wscmWrite (expr, stdout);
 		return;
@@ -967,7 +968,7 @@ void compIntegerP (Num flags) {
 void compSymbolP (Num flags) {
  Num opcodeStart;
 	DB("-->%s", __func__);
-	if (memObjectType(cdr(expr)) != TPAIR) {
+	if (!objIsPair(cdr(expr))) {
 		write (1, "ERROR: symbol? illegal operand count: ", 38);
 		wscmWrite (expr, stdout);
 		return;
@@ -991,7 +992,7 @@ void compSymbolP (Num flags) {
 
 void compPortP (Num flags) {
 	DB("-->%s", __func__);
-	if (memObjectType(cdr(expr)) != TPAIR) {
+	if (!objIsPair(cdr(expr))) {
 		write (1, "ERROR: vector? illegal operand count: ", 38);
 		wscmWrite (expr, stdout);
 		return;
@@ -1012,7 +1013,7 @@ void compPortP (Num flags) {
 void compEOFObjectP (Num flags) {
  Num opcodeStart;
 	DB("-->%s", __func__);
-	if (memObjectType(cdr(expr)) != TPAIR) {
+	if (!objIsPair(cdr(expr))) {
 		printf ("ERROR: eof-object? illegal operand count: ");
 		wscmWrite (expr, stdout);
 		return;
@@ -1069,6 +1070,72 @@ void compQuote (void) {
 }
 
 
+void compAsmTailCall () {
+	/* Keep track of this opcode position for the compiling of the
+	   labels and branches. */
+ Num opcodeStart = memStackLength(asmstack);
+	DB("::%s", __func__);
+	asmAsm (
+		BRTI0,  TSYSCALL, ADDR, "syscall",
+		BRTI0,  TCLOSURE, ADDR, "code",
+		/* Illegal operator section.  For now just dump the arguments.
+		*/
+		SYSI, sysIllegalOperator,
+		RET, /* Since tail call, return. */
+		/*  Reference the syscall address then make the system call.
+		*/
+		LABEL, "syscall",
+		LDI00, 0l,
+		SYS0,
+		RET, /* Since a tail call, return. */
+		/* Closure operator section.  Load jump address into r2.  R1 is
+		   argument count and r0 is the closure (which is needed as it
+		   holds the lexical environment).
+		*/
+		LABEL, "code",
+		LDI20, 0l,
+		J2,
+		END
+	);
+	asmCompileAsmstack(opcodeStart);
+	DB("  --%s", __func__);
+}
+
+void compAsmNonTailCall () {
+	/* Keep track of this opcode position for the compiling of the
+	   labels and branches. */
+ Num opcodeStart = memStackLength(asmstack);
+	DB("::%s", __func__);
+	asmAsm (
+		BRTI0,  TSYSCALL, ADDR, "syscall",
+		BRTI0,  TCLOSURE, ADDR, "closure",
+		/* Illegal operator section.  For now just dump the arguments. */
+		SYSI, sysIllegalOperator,
+		BRA,  ADDR, "end",
+		/* Syscall operator section.  Reference the syscall address, set the
+	   	operand count then make the system call.
+		*/
+	LABEL, "syscall",
+		LDI00, 0l,
+		SYS0,
+		BRA,  ADDR, "end",
+		/* Closure operator section.
+		*/
+	LABEL, "closure",
+		LDI20, 0l, /* load r2 with code and jump. */
+		JAL2,
+		/* End of block.
+		 */
+	LABEL, "end",
+		POP15, /* Restores previous environment, ip and code registers. */
+		POP1E,
+		POP1D,
+		END
+	);
+	asmCompileAsmstack(opcodeStart);
+	DB("  --%s", __func__);
+}
+
 
 /* Compiles expressions of the form (if test consequent alternate).
 */
@@ -1076,7 +1143,7 @@ void compIf (Num flags) {
  Num falseBraAddr, trueContAddr;
 	DB("-->%s", __func__);
 	expr = cdr(expr); /* Skip 'if symbol. */
-	push (cddr(expr)); /* Push alternate expressions list.  Could be NULL. */
+	push (cddr(expr)); /* Push alternate expressions list.  Will be NULL or a list containing the alternate expression. */
 	push (cadr(expr));  /* Push consequent expressions. */
 
 	/* Compile 'test' expression. */
@@ -1120,6 +1187,145 @@ void compIf (Num flags) {
 	DB("<--%s", __func__);
 }
 
+/* Compiles expression of the form (if testExpr (consequentExpr {value of testExpr}) alternateExpr)
+*/
+void compAIf (Num flags) {
+ Num falseBraAddr, trueContAddr;
+	DB("-->%s", __func__);
+	expr = cdr(expr); /* Skip 'aif symbol. */
+	push (cddr(expr)); /* Push alternate expressions list.  Will be NULL or a list containing the alternate expression. */
+	push (cadr(expr));  /* Push consequent expressions. */
+
+	/* Compile 'test' expression. */
+	DB("   compiling test");
+	expr = car(expr);
+	compExpression(flags & ~TAILCALL);
+
+	/* The "branch on type" opcode.  Its immediate branch address field
+	   is kept track of and will be set with the proper offset below.  */
+	asm(BRTI0); asm(TFALSE); asm(0l);
+	falseBraAddr = memStackLength(asmstack);
+
+	/* Save execution state, possibly, since the following is the equivalent
+	   of compCombination */
+	if (!((Num)flags & TAILCALL)) {
+		asmAsm (
+			PUSH1D,
+			PUSH1E,
+			PUSH15,
+			END
+		);
+	}
+
+	DB("   compiling consequent");
+	asm(PUSH0); /* Push result of test expression on the stack.  Becomes argument to consequent. */
+	expr = pop(); /* Compile consequent. */
+	compExpression(flags & ~TAILCALL);
+
+	asm(MVI1); asm(1l); /* Set the argument count to 1.  Argument already on the stack. */
+	
+	if ((Num)flags & TAILCALL) compAsmTailCall();
+	else compAsmNonTailCall();
+
+	asm(BRA); asm(0l);
+	trueContAddr = memStackLength(asmstack);
+
+	/* Fill in the "branch on false" field. */
+	DB("   setting branch on false:%03x brt TFALSE %02x", falseBraAddr, (8*(trueContAddr-falseBraAddr)));
+	memVectorSet(asmstack, falseBraAddr, (Obj)(8*(trueContAddr-falseBraAddr)));
+
+	/* Compile alternate.  Might not be specified in expression so just return (). */
+	DB("   compiling alternate");
+	expr = pop();
+	if (expr == null) {
+		//asm(MVI0); asm(null);
+	}
+	else {
+		expr = car(expr); /* Consider alternate expression. */
+		compExpression(flags);
+	}
+
+	/* Fill in the "branch after true block" field. */
+	DB("   setting branch after true:%03x bra %02x", trueContAddr, (8*(memStackLength(asmstack)-trueContAddr)));
+	memVectorSet(asmstack, trueContAddr,
+	                (Obj)(8 * (memStackLength(asmstack) - trueContAddr) ));
+	DB("<--%s", __func__);
+}
+
+/* Transforms then compiles the cond special form
+   (cond <clause> ...)
+     clause := (<test>    <expr> ...)
+               (<test> => <expr>)
+               (<test>)
+               (else      <expr> ...)
+*/
+void compCond (Num flags) {
+ Num clauses=0;
+	DB("-->%s", __func__);
+	expr = cdr(expr); /* Skip symbol 'cond */
+
+	/* Push clauses, checking for non-lists and verifying the else clause is last */
+	while (objIsPair(expr)) { /* Over all clauses  expr = (<clause> ....) */
+		r5 = car(expr); /* Consider next clause  r5 = <clause>  */
+		if (!objIsPair(r5)) { /* Error if clause is not a list */
+			fprintf (stderr, "\nWARNING: compCond: Malformed cond clause ");
+			wscmWrite(r5, stderr);
+		} else {
+			DB("Pushing clause");
+			DBE wscmWrite(r5, stderr);
+			clauses++;
+			push(r5);
+			expr = cdr(expr); /* Consider next clause for this loop */
+			if (selse == car(r5)) {
+				/* Else clause matched, so stop pushing clauses and give warning if more clauses follow */
+				if (expr != null) {
+					fprintf (stderr, "\nWARNING: compCond: cond's else clause followed by more clauses ");
+					wscmWrite(expr, stderr);
+				}
+				expr = null;
+			}
+		}
+	}
+
+	/* Pop clauses building the if/or/begin tree bottom-up into r0 */
+	DB (" Creating nested if/or/begin expression");
+	r0 = null;
+	while (clauses--) {
+		r5 = pop(); /* Consider clause r5 = <clause> = (r4 . r3) */
+		r4 = car(r5); /* First expr */
+		r3 = cdr(r5) ; /* Rest expr */
+		if (selse == r4) {
+			assert(null == r0); /* This better be the first clause popped or not at all */
+			r1=sbegin; r2=r3; objCons12();          /* (begin <expr> ...) */
+		} else if (!objIsPair(r3)) {
+			r1=r0;  r2=null; objCons12();           /* (translated) */
+			r1=r4;  r2=r0; objCons12();             /* (<test> (translated)) */
+			r1=sor; r2=r0; objCons12();             /* (or <test> (translated)) */
+		} else if (saif == car(r3)) {
+			r3 = cdr(r3); /* Consider (r4 => . r3 */
+			r1=r0;  r2=null; objCons12();           /* (translated) */
+			if (objIsPair(cdr(r3))) { /* Give warning if else clause followed by more clauses */
+				fprintf (stderr, "\nWARNING: compCond: cond's => expr not a single expression ");
+				wscmWrite(r5, stderr);
+			}
+			r1=car(r3); r2=r0; objCons12();         /* (<expr> translated) */
+			r1=r4;  r2=r0; objCons12();             /* (<test> <expr> translated) */
+			r1=saif; r2=r0; objCons12();            /* (if <test> <expr> translated) */
+		} else {
+			r1=r0;  r2=null; objCons12(); push(r0); /* (translated) */
+			r1=sbegin; r2=r3; objCons12();          /* (begin <expr> ...) */
+			r1=r0; r2=pop(); objCons12();           /* ((begin <expr> ...) translated) */
+			r1=r4;  r2=r0; objCons12();             /* (<test> (begin <expr> ...) translated) */
+			r1=sif; r2=r0; objCons12();             /* (if <test> (begin <expr> ...) translated) */
+		}
+	}
+	DB ("compCond translated ");
+	DBE wscmWrite(r0, stdout);
+	expr = r0;
+	compExpression(flags & ~TAILCALL);
+	DB("<--%s", __func__);
+}
+
 /* Compiles expressions of the form (or exp ...) into:
 		exp
 		branch if not false to end
@@ -1134,10 +1340,10 @@ void compOr (Num flags) {
 		asm (MVI0); asm(false);
 	} else {
 		opcodeStart = memStackLength(asmstack);
-		while (memObjectType(expr) == TPAIR) {
+		while (objIsPair(expr)) {
 			push (cdr(expr)); /* Push rest. */
 			/* Is this the last expression?  If so it's tail optimized. */
-			if (memObjectType(cdr(expr)) != TPAIR) {
+			if (!objIsPair(cdr(expr))) {
 				expr = car(expr); /* Consider next expression. */
 				compExpression(flags);
 			} else {
@@ -1170,10 +1376,10 @@ void compAnd (Num flags) {
 		asm (MVI0); asm(true);
 	} else {
 		opcodeStart = memStackLength(asmstack);
-		while (memObjectType(expr) == TPAIR) {
+		while (objIsPair(expr)) {
 			push (cdr(expr)); /* Push rest. */
 			/* Is this the last expression?  If so it's tail optimized. */
-			if (memObjectType(cdr(expr)) != TPAIR) {
+			if (!objIsPair(cdr(expr))) {
 				expr = car(expr); /* Consider next expression. */
 				compExpression(flags);
 			} else {
@@ -1355,7 +1561,7 @@ void compTransformLetrec (void) {
 	DB("-->%s", __func__);
 	expr=cdr(expr); /* Skip letrec. */
 
-   if (memObjectType(car(expr)) != TPAIR) {
+   if (!objIsPair(car(expr))) {
 		fprintf (stderr, "letrec malformed: ");
 		wscmWrite(expr, stderr);
 	}
@@ -1408,13 +1614,13 @@ void compLetrec (Num flags) {
 void compTransformQuasiquote (int depth) {
  int isUnquote, isQuasiquote;
 	DB("-->%s", __func__);
-	if (memObjectType(expr) == TPAIR) { /* Is this (unquote ...) */
+	if (objIsPair(expr)) { /* Is this (unquote ...) */
 		isUnquote    = (car(expr)==sunquote);
 		isQuasiquote = (car(expr)==squasiquote);
 		if (isUnquote && depth==0) {
 			/* (unquote atom) => atom */
 			r0 = cadr(expr);
-		} else if (TPAIR == memObjectType(car(expr))
+		} else if (objIsPair(car(expr))
 		           && caar(expr) == sunquotesplicing
 		           && depth==0) {
 			/* ((unquote-splicing template) . b) */
@@ -1462,7 +1668,7 @@ void compQuasiquote (Num flags) {
 */
 void compSyntaxRulesHelper (void) {
 	DB("   -->wscmSyntaxRulesHelper");
-	if (TPAIR == memObjectType(expr)) {
+	if (objIsPair(expr)) {
 		/* R2 contains the expression to be transformed.  */
 		DB("   Considering:");
 		DBE wscmWrite(expr, stderr);
@@ -1537,7 +1743,7 @@ void compAdd (Num flags) {
 	push(expr); /* Save parameter list. */
 	/* Constant folding:  Scan parameter list for constants and asm a single
 	   opcode that stores their sum. */
-	while (TPAIR == memObjectType(expr)) {
+	while (objIsPair(expr)) {
 		if (TINTEGER == memObjectType(car(expr)))
 			sum+=*(Int*)car(expr);
 		expr=cdr(expr);
@@ -1552,7 +1758,7 @@ DB("   compAdd constant folding:%d", sum);
 	);
 	expr=pop(); /* Restore parameter list. */
 	/* Scan parameter list for non-constant expressions to compile. */
-	while (TPAIR == memObjectType(expr)) {
+	while (objIsPair(expr)) {
 		if (TINTEGER != memObjectType(car(expr))) {
 			asm(PUSH1); /* Save accumulating sum. */
 			push(expr);                /* Save parameter list */
@@ -1568,72 +1774,6 @@ DB("   compAdd constant folding:%d", sum);
 	DB("<--%s", __func__);
 }
 
-
-void compAsmTailCall () {
-	/* Keep track of this opcode position for the compiling of the
-	   labels and branches. */
- Num opcodeStart = memStackLength(asmstack);
-	DB("::%s", __func__);
-	asmAsm (
-		BRTI0,  TSYSCALL, ADDR, "syscall",
-		BRTI0,  TCLOSURE, ADDR, "code",
-		/* Illegal operator section.  For now just dump the arguments.
-		*/
-		SYSI, sysIllegalOperator,
-		RET, /* Since tail call, return. */
-		/*  Reference the syscall address then make the system call.
-		*/
-		LABEL, "syscall",
-		LDI00, 0l,
-		SYS0,
-		RET, /* Since a tail call, return. */
-		/* Closure operator section.  Load jump address into r2.  R1 is
-		   argument count and r0 is the closure (which is needed as it
-		   holds the lexical environment).
-		*/
-		LABEL, "code",
-		LDI20, 0l,
-		J2,
-		END
-	);
-	asmCompileAsmstack(opcodeStart);
-	DB("  --%s", __func__);
-}
-
-void compAsmNonTailCall () {
-	/* Keep track of this opcode position for the compiling of the
-	   labels and branches. */
- Num opcodeStart = memStackLength(asmstack);
-	DB("::%s", __func__);
-	asmAsm (
-		BRTI0,  TSYSCALL, ADDR, "syscall",
-		BRTI0,  TCLOSURE, ADDR, "closure",
-		/* Illegal operator section.  For now just dump the arguments. */
-		SYSI, sysIllegalOperator,
-		BRA,  ADDR, "end",
-		/* Syscall operator section.  Reference the syscall address, set the
-	   	operand count then make the system call.
-		*/
-	LABEL, "syscall",
-		LDI00, 0l,
-		SYS0,
-		BRA,  ADDR, "end",
-		/* Closure operator section.
-		*/
-	LABEL, "closure",
-		LDI20, 0l, /* load r2 with code and jump. */
-		JAL2,
-		/* End of block.
-		 */
-	LABEL, "end",
-		POP15, /* Restores previous environment, ip and code registers. */
-		POP1E,
-		POP1D,
-		END
-	);
-	asmCompileAsmstack(opcodeStart);
-	DB("  --%s", __func__);
-}
 
 void compCombination (Num flags) {
  Int operandCount=0;
@@ -1665,7 +1805,7 @@ void compCombination (Num flags) {
 
 	/* Compile operand expressions. */
 	expr = cdr(expr);
-	while (TPAIR==memObjectType(expr)) {
+	while (objIsPair(expr)) {
 		operandCount++;
 		push(cdr(expr));
 		expr = car(expr);
@@ -1719,7 +1859,7 @@ void compApply (Num flags) {
 	/* Compile operand expressions the last of which hopefully evaluates to a list of args.
 	   The resulting arguments will be pushed onto the stack and passed to the function.  */
 	expr = cdr(expr);
-	while (memObjectType(expr) == TPAIR) {
+	while (objIsPair(expr)) {
 		push (cdr(expr)); /* Push rest */
 		expr = car(expr); /* Consider expression  */
 		compExpression(flags & ~TAILCALL);
@@ -1859,6 +1999,8 @@ Num compExpression (Num flags) {
 			else if (sbegin     == car(expr)) compBegin(flags);
 			else if (squote     == car(expr)) compQuote();
 			else if (sif        == car(expr)) compIf(flags);
+			else if (saif       == car(expr)) compAIf(flags);
+			else if (scond      == car(expr)) compCond(flags);
 			else if (sor        == car(expr)) compOr(flags);
 			else if (sand       == car(expr)) compAnd(flags);
 			else if (sthread    == car(expr)) compThread();

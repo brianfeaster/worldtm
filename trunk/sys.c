@@ -216,7 +216,7 @@ Int wscmWriteR (Obj a, Num islist, FILE *stream, Int max) {
 		case TPAIR:
 			if (!islist) count += fprintf(stream, "(");
 			count += wscmWriteR(car(a), 0, stream, max-count);
-			if (TPAIR == memObjectType(cdr(a))) {
+			if (objIsPair(cdr(a))) {
 				count += fprintf(stream, " ");
 				count += wscmWriteR(cdr(a), 1, stream, max-count);
 			} else {
@@ -316,7 +316,7 @@ void wscmDisplayR (Obj a, Num islist, FILE *stream) {
 		case TPAIR:
 			if (!islist) fprintf(stream, "(");
 			wscmDisplayR(car(a), 0, stream);
-			if (TPAIR == memObjectType(cdr(a))) {
+			if (objIsPair(cdr(a))) {
 				fprintf(stream, " ");
 				wscmDisplayR(cdr(a), 1, stream);
 			} else {
@@ -398,7 +398,7 @@ void sysDumpEnv (Obj env) {
 	while (env!=tge) {
 		formals = memVectorObject(env, 1);
 		fprintf (stderr, "\n----ENV "OBJ"------------------------------------", env);
-		for (i=2; memObjectType(formals) == TPAIR; i++) {
+		for (i=2; objIsPair(formals); i++) {
 			fprintf (stderr, "\n"OBJ" ", memVectorObject(env, i));
 			ret=wscmWrite (car(formals), stderr);
 			fprintf(stderr, "                "+((ret<17)?ret-1:15));
@@ -469,7 +469,7 @@ Int wscmEnvFind (void) {
 		DBE wscmWrite(cdr(env), stderr);
 		/* Start at 2 since local environment values start at offset 2. */
 		offset=2;
-		for (r0=cdr(env); memObjectType(r0) == TPAIR; r0=cdr(r0)) {
+		for (r0=cdr(env); objIsPair(r0); r0=cdr(r0)) {
 			DB("        looking at:");
 			DBE wscmWrite(car(r0), stderr);
 			if (car(r0) == r1) { /* Pseudo env ( ^ a b c), so just check car */
@@ -504,7 +504,7 @@ void wscmEnvGet (void) {
 		/* Start at 2 since local environment values start at offset 2. */
 		offset=2;
 		r0=memVectorObject(env, 1);
-		while (memObjectType(r0) == TPAIR) {
+		while (objIsPair(r0)) {
 			if (car(r0) == r1) {
 				r0 = memVectorObject(env, offset); /* Found in a local env. */
 				goto ret;
@@ -803,7 +803,7 @@ void wscmRecv (void) {
 			if (r0 != false) {
 				memVectorSet(r1, 4, false); /* Clear push-back character. */
 			} else {
-				DB("SYS    before ret="INT" *buffer="HEX02" errno="INT" %s", ret, *buffer, errno, strerror(errno));
+				DB("SYS    before           *buffer="HEX02" errno="INT" %s", *buffer, errno, strerror(errno));
 				ret = read(*(int*)r1, buffer, 1);
 				DB("SYS    after  ret="INT" *buffer="HEX02" errno="INT" %s", ret, *buffer, errno, strerror(errno));
 				if (ret == 1) r0=memVectorObject(characters, *buffer);
@@ -881,7 +881,7 @@ void wscmRecvBlock (void) {
    port object.
 */
 void wscmSend (void) {
- Num len;
+ Num len=0;
  Int ret;
 	DB("-->%s : ", __func__);
 	//DB("   r1 "); DBE wscmWrite(r1, stderr);
