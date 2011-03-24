@@ -23,26 +23,37 @@
                (begin (display "ERROR: Ipc: exceeded maximum port")
                       (quit))
                (~)))))))
- (define PeerList (ListCreate))
- (define QueueList (ListCreate)) ; List of pairs (readerFunction . msgQueue)
 
  ;--- Peer structure ----------------------------------------------------------
- ; A peer is a  #(socket  message-queue  message-queue-semaphore)
+ ; A peer is a  #(socket QueueObject)
+ (define PeerList (ListCreate))
+
  (define (peerCreate s) (vector s (QueueCreate)))
+
  (define (peerSocket p) (vector-ref p 0))
  (define (peerQueue p) (vector-ref p 1))
 
- ;--- Reader Queues -----------------------------------------------------------
- (define (newReader) ; return a new IPC queue reader but stored as a (readerFunction . msgQueue)
-   (letrec ((q (QueueCreate))
-            (f (lambda () (QueueGet q))))
-     (ListAdd QueueList (cons f q))
-     f))
+ ;--- Reader structure --------------------------------------------------------
+ ; A reader is a  (readerFunction QueueObject)
+ (define ReaderList (ListCreate))
 
- (define (delReader f) ; destroy an IPC queue reader returned from newReader
-   (let ((readerPair (assq f (ListGet QueueList)))) ; Lookup pair with the reader function as key
-     (QueueDestroy (cdr readerPair)) ; Properly destroy the queue.
-     (ListDel QueueList readerPair)))
+ (define (readerCreate)
+   (let ((q (QueueCreate)))
+     (cons (lambda () (QueueGet q)) q)))
+
+ (define (readerFunction r) (car r))
+ (define (readerQueue r) (cdr r))
+
+ ;--- Reader Queues -----------------------------------------------------------
+ (define (newReader) ; Return a new IPC queue reader function
+   (let ((newReader (readerCreate)))
+     (ListAdd ReaderList newReader)
+     (readerFunction newReader)))
+
+ (define (delReader f) ; Destroy an IPC queue reader given its reader function
+   (let ((readerPair (assq f (ListGet ReaderList)))) ; Lookup pair with the reader function as key
+     (QueueDestroy (readerQueue readerPair)) ; Properly destroy the queue.
+     (ListDel ReaderList readerPair)))
 
  ; Append e to each peer's outgoing message queue as well as my own.
  (define (qwrite e)
@@ -52,8 +63,8 @@
 
  (define (msgQueuesAdd e)
    (Display e)
-   (map (lambda (q) (QueueAdd (cdr q) e))
-        (ListGet QueueList)))
+   (map (lambda (q) (QueueAdd (readerQueue q) e))
+        (ListGet ReaderList)))
 
  ;--- Socket communication ----------------------------------------------------
 

@@ -2937,3 +2937,13 @@ an equivalent block of ifs and aifs and then compiled.
 
 Looks like aif needs to handle an else clause.  I might as well just implement
 cond with the => special form and not implement aif at all. 
+
+
+Wed Mar 23 23:44:43 EDT 2011
+
+Cond is implemented as a combination if/aif/or/begin tree.
+
+Currently stuck on how to implement an avatar/process shutdown.  I want to be
+able to selectivly kill avatars but also shutdown the entire process such that
+all avatars elegantly report themselves as well as update the user's map
+nicely.

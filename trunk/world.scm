@@ -20,6 +20,7 @@
 (load "ipc.scm")
 (load "window.scm")
 (load "entity.scm")
+(define SHUTDOWN #f) ; Signals to avatar's that the process is going to shutdown
 (define QUIETLOGIN (and (< 2 (vector-length argv)) (eqv? "silent" (vector-ref argv 2))))
 (define VIEWPORTANIMATION #t)
 (define MAPSCROLL 'always) ; always edge never
@@ -205,9 +206,9 @@
 
 (define (columnRef column z)
  (vector-ref column (let ((i (- z (columnHeightBottom column)))) ; normalize z coordinate
-                      (if (<= i 1) 1 ; default bottom cell
-                      (if (<= (vector-length column) i) (- (vector-length column) 1) ; default top cell
-                      i)))))
+                      (cond ((<= i 1) 1) ; default bottom cell
+                            ((<= (vector-length column) i) (- (vector-length column) 1)) ; default top cell
+                            (else i)))))
 
 ; Extend column below based on existing column. #(3  4 5 6) -> #(1  4 4 4 5 6)
 (define (columnExtendBelow c bot)
@@ -230,15 +231,14 @@
 ; Returns column (or new column) with object set at specified height.
 (define (columnSet c h o)
   (let ((i (- h (columnHeightBottom c)))) ; Column height -> vector index
-    (if (<= i 1)
-      (begin
-        (set! c (columnExtendBelow c (- h 2)))
-        (vector-set! c 2 o))
-    (if (>= i (- (vector-length c) 1))
-      (begin
-        (set! c (columnExtendAbove c (+ h 2)))
-        (vector-set! c i o))
-    (vector-set! c i o)))
+    (cond ((<= i 1)
+            (set! c (columnExtendBelow c (- h 2)))
+            (vector-set! c 2 o))
+          ((>= i (- (vector-length c) 1))
+            (set! c (columnExtendAbove c (+ h 2)))
+            (vector-set! c i o))
+          (else
+            (vector-set! c i o)))
     c))
 
 (define (containsVisibleCell? l)
@@ -289,9 +289,9 @@
    (letrec ((col (column y x))
             (top (topHeight 100 y x))) ; top most visible cell in column
    (let ~ ((i (+ z 1)))
-     (if (containsVisibleCell? (columnRef col i)) i
-     (if (<= top i) 100
-     (~ (+ i 1)))))))
+     (cond ((containsVisibleCell? (columnRef col i))  i)
+           ((<= top i) 100)
+           (else (~ (+ i 1)))))))
   ; Replace all cells at this Z location with a single cell.
   (define (fieldSet! z y x c)
    (letrec ((fy (modulo y size))
@@ -493,25 +493,26 @@
  ; TODO implement hash.
  (define (get dnaIpc)
    (let ~ ((lst (ListGet lst))) ; (car lst) is an entity object
-     (if (null? lst) #f
-     (if (eqv? dnaIpc ((car lst) 'dna)) (car lst)
-     (~ (cdr lst))))))
+     (cond ((null? lst) #f)
+           ((eqv? dnaIpc ((car lst) 'dna)) (car lst))
+           (else (~ (cdr lst))))))
  (define (set dna . args)
    (let ((entity (get dna)))
      (if entity
        ; Update only name and glyph if entity already exists
        (each-for args
          (lambda (a)
-           (if (integer? a) ((entity 'setPort) a)
-           (if (string? a)  ((entity 'setName) a)
-           (if (vector? a)
-             (begin ((entity 'setGlyph) a)
-                    (if (= 1 ; If the sprite is also a single glyph, update it as well
-                           ((entity 'sprite) 'glyphCount))
-                        ((entity 'setSprite) (Sprite 1 1 (vector a)))))
-           (if (and (pair? a)
-                    (eq? (car a) 'Sprite))
-             ((entity 'setSprite) (eval a))))))))
+           (cond ((integer? a)
+                   ((entity 'setPort) a))
+                 ((string? a)
+                   ((entity 'setName) a))
+                 ((vector? a)
+                   ((entity 'setGlyph) a)
+                   ; If the sprite is also a single glyph, update it as well
+                   (if (= 1 ((entity 'sprite) 'glyphCount))
+                       ((entity 'setSprite) (Sprite 1 1 (vector a)))))
+                 ((and (pair? a) (eq? (car a) 'Sprite))
+                   ((entity 'setSprite) (eval a))))))
        ; Create a new entity.  Massage the arguments (port name glyph (x y z))->(port name glyph x y z)
        (begin
          (set! entity (apply Entity dna (let ~ ((args args))
@@ -741,10 +742,10 @@
     ; Special case to handle cells that change the Avatar's sprite
     (letrec ((cellNum (apply baseCell ((entity 'gps))))
              (baseSym (cellSymbol (cellRef cellNum))))
-      (if (and (<= 512 cellNum) (<= cellNum 612)) (WinChatDisplay "\r\n" (twoLetterDefinition baseSym))
-      (if (eq? baseSym 'sprite0) (createSprite 0)
-      (if (eq? baseSym 'sprite1) (createSprite 1)
-      (if (eq? baseSym 'sprite2) (createSprite 2))))))
+      (cond ((and (<= 512 cellNum) (<= cellNum 612)) (WinChatDisplay "\r\n" (twoLetterDefinition baseSym)))
+            ((eq? baseSym 'sprite0) (createSprite 0))
+            ((eq? baseSym 'sprite1) (createSprite 1))
+            ((eq? baseSym 'sprite2) (createSprite 2))))
     ; If ceiling changes, repaint canvas using new ceiling height
     (or NOVIEWPORT 
         (begin
@@ -814,13 +815,13 @@
   ; Start viewport animation loop
   (define (startAnimationLoop)
     (or NOVIEWPORT (thread ((myViewport 'animationLoop)))))
-  (define (dieIPC dna)
-     (let ((entity (entityDBGet dna))
-           (thisIsMe (= dna (avatar 'dna))))
+  (define (dieIPC dnaIPC)
+     (let ((entity (entityDBGet dnaIPC))
+           (thisIsMe (= (avatar 'dna) dnaIPC)))
       (if entity
         (begin ; Ignore unknown entities
             ; Remove from here
-            (delEntitySprite dna (entity 'z) (entity 'y) (entity 'x)) ; Remove it first from the map
+            (delEntitySprite dnaIPC (entity 'z) (entity 'y) (entity 'x)) ; Remove it first from the map
             (or NOVIEWPORT ; TODO doesn't delEntitySprite rerender the map so the following block is redundant?
               (if (>= (entity 'z) (canvasHeight (entity 'y) (entity 'x))) (begin
                 (canvasRender 100 (entity 'y) (entity 'x))
@@ -901,10 +902,12 @@
     (define cell 19) ; TODO replace with a generalize item container
     (define ipcRead (if ipc ((ipc 'newReader)) #f)) ; This needs to be destroyed.
     (define ipcWrite (if ipc (ipc 'qwrite) #f))
+    ; Kill this avatar and IPC thread after announcing death
     (define (die)
-      (ipcWrite `(die ,dna)) ; Announce that I'm leaving
-      (set! stop #t)
-      (set! alive #f))
+      (set! stop #t) ; Halt any currently running macro
+      (or QUIETLOGIN (saySystem name " exits"))
+      (ipcWrite `(die ,dna)) ; Announce that I'm leaving to other avatars
+      (set! alive #f)) ; This will stop the thread from reading the IPC
     (define (jump z y x)
       (setLoc z y x)
       ((myMap 'walkDetails) self))
@@ -915,18 +918,18 @@
         ; Otherwise move to facing cell or on top of obstructing cell.
         (look dir)
         (let ((nextCell (apply (myMap 'firstCell) (gpsLook))))
-          ; Case 1 push entity
-          (if (< CellMax nextCell)
-            (ipcWrite `(force ,@(gpsLook) ,dir 10))
-          ; Case 2 walk normally
-          (if (or EDIT (not (cellSolid? (cellRef nextCell))))
-            ((myMap 'walkDetails) self)
-          ; Case 3 step up
-          (if climb (begin
-            (look dir 1) ; Peek at the cell above the one in front of me
-            (set! nextCell (apply (myMap 'baseCell) (gpsLook)))
-            (or (cellSolid? (cellRef nextCell))
-              ((myMap 'walkDetails) self)))))))
+          (cond ((< CellMax nextCell)
+                  ; Case 1 push entity
+                  (ipcWrite `(force ,@(gpsLook) ,dir 10)))
+                ((or EDIT (not (cellSolid? (cellRef nextCell))))
+                  ; Case 2 walk normally
+                  ((myMap 'walkDetails) self))
+                (climb
+                  ; Case 3 step up
+                  (look dir 1) ; Peek at the cell above the one in front of me
+                  (set! nextCell (apply (myMap 'baseCell) (gpsLook)))
+                  (or (cellSolid? (cellRef nextCell))
+                      ((myMap 'walkDetails) self)))))
         ; Gravity
         (or EDIT (fall))
       (semaphore-up walkSemaphore)) ; walk
@@ -972,8 +975,7 @@
        (if (and (!= dna (self 'dna)) (eqv? text "unatco"))
            (speak "no Savage"))))
     (define (IPCforce fz fy fx dir mag)
-     (if (and (= fz z) (= fy y) (= fx x))
-       (walk dir)))
+     (and (= fz z) (= fy y) (= fx x) (walk dir)))
     (define (IPCwho . dnaRequestor) ; TODO handle explicit request from specified peer
       (ipcWrite
         `(entity ,dna ,port ,name ,(gps)))
@@ -983,23 +985,29 @@
     (define (getField) ((myMap 'myField) 'field))
     ; MAIN
     ((myMap 'registerAvatar) self) ; Register myself with the entity DB and start up viewport rendering
-    (if ipc (thread (let ~ () ; IPC message handler
-      (if alive
-        (let ((e (ipcRead)))
-          (if (and alive (pair? e)) (begin
-            (if (eq? (car e) 'voice)  (apply IPCvoice (cdr e))
-            (if (eq? (car e) 'force)  (apply IPCforce (cdr e))
-            (if (eq? (car e) 'who)    (apply IPCwho   (cdr e))
-            ; Map
-            (if (eq? (car e) 'die)              (apply (myMap 'dieIPC)           (cdr e))
-            (if (eq? (car e) 'move)             (apply (myMap 'moveIPC)          (cdr e))
-            (if (eq? (car e) 'mapUpdateColumns) (apply (myMap 'updateColumnsIPC) (cdr e))
-            (if (eq? (car e) 'mapSetCell)       (apply (myMap 'setCell)          (cdr e))
-            (if (eq? (car e) 'entity)           (apply (myMap 'IPCentity)        (cdr e))))))))))))
-          (~))
-        (begin ; Shutdown the Avatar
-          ((ipc 'delReader) ipcRead)
-          (close-semaphore walkSemaphore))))))
+    ; The soul of this avatar.  For now an IPC message handler which loops
+    ; as long as local 'alive is #t and global 'SHUTDOWN is false
+    (if ipc (thread (let ~ ()
+      (let ((e (ipcRead)))
+        (if (or alive SHUTDOWN)
+          (begin
+            (if (pair? e)
+              (let ((a (car e))
+                    (d (cdr e)))
+                (cond ((eq? a 'voice)  (apply IPCvoice d))
+                      ((eq? a 'force)  (apply IPCforce d))
+                      ((eq? a 'who)    (apply IPCwho   d))
+                ; Map
+                      ((eq? a 'die)              (apply (myMap 'dieIPC)           d))
+                      ((eq? a 'move)             (apply (myMap 'moveIPC)          d))
+                      ((eq? a 'mapUpdateColumns) (apply (myMap 'updateColumnsIPC) d))
+                      ((eq? a 'mapSetCell)       (apply (myMap 'setCell)          d))
+                      ((eq? a 'entity)           (apply (myMap 'IPCentity)        d)))))
+            (and SHUTDOWN alive (die)) ; If shutdown signaled quasi-kill myself but continue to handle msgs
+            (~))
+          (begin ; Shutdown avatar
+            ((ipc 'delReader) ipcRead)
+            (close-semaphore walkSemaphore)))))))
     (ipcWrite '(who)) ; Ask the IPC for a rollcall
     self))) ; Avatar
 
@@ -1457,8 +1465,8 @@
 (define (say phrase . level)
   (apply (avatar 'speak) phrase level))
 
-(define (saySystem phrase)
- (IpcWrite (list 'voice 0 0 phrase)))
+(define (saySystem . strs)
+ (IpcWrite (list 'voice 0 0 (apply string strs))))
 
 ; Usage:: (replTalk 'getBuffer)
 ;         (replTalk '{talk|whisper|scream} {character})
@@ -1924,7 +1932,7 @@
  (fancyDisplay 13 (string "Welcome to World, " (avatar 'name)))
  (WinChatSetColor 0 10) (WinChatDisplay "\r\nHit ? to toggle the help window")
  (WinChatSetColor 0 6) (WinChatDisplay "\r\nSee http://code.google.com/p/worldtm")
- (saySystem (string (avatar 'name)
+ (saySystem (avatar 'name)
   (vector-random #(" *emerges from the Interwebs*"
                    " *CONNECT 2400*"
                    " *CONNECT 14400/ARQ/V34/LAPM/V42BIS*"
@@ -1932,20 +1940,18 @@
                    ;" *All Worldlians Want to Get Borned*"
                    ;" *Happy Birthday*"
                    ;" *I thought you were in Hong Kong*"
-                   " *turns on a VT100*"))))))
+                   " *turns on a VT100*")))))
 
 ; Call this to quit world
 (define (shutdown)
-  (or QUIETLOGIN (saySystem (string (avatar 'name) " exits")))
-  ((avatar 'die))
-  ((kat 'die))
-  (sleep 1000) ; wait for ipc to flush
+  (set! SHUTDOWN #t)
+  ((avatar 'die)) ; Force an IPC message so avatar's IPC reader thread calls die method
+  (sleep 400)
   (displayl "\e[" (Terminal 'Theight) "H\r\n\e[0m\e[?25h\e[?1000lgc=" (fun) "\r\n")
   (quit))
 
 ; Spawn a second avatar.  Your free kitteh.
-(define kat
-  (Avatar (string "katO'" (avatar 'name)) 1 (+ (random 10) 3458) (+ (random 10) 2764) ipc 'NOVIEWPORT))
+(define kat (Avatar (string "katO'" (avatar 'name)) 1 (+ (random 10) 3458) (+ (random 10) 2764) ipc 'NOVIEWPORT))
 
 ; Keyboard command loop
 (let ~ () (let ((b (getKey)))
