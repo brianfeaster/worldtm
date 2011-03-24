@@ -1209,6 +1209,26 @@
  ((box 'delete))
  str)
 
+(define (boxBool title)
+ (define box
+  ((Terminal 'WindowNew)
+    (- (/ (Terminal 'Theight) 2) 2)  (- (/ (Terminal 'Twidth) 2) 10)
+    3  20
+    #x3407))
+ (define puts (box 'puts))
+ (define setcolor (box 'set-color))
+ (define ret #f)
+ (define myGetKey ((Terminal 'getKeyCreate)))
+ (puts "+------------------+")
+ (puts "|                  |")
+ (puts "+------------------+")
+ ((box 'goto) 0 2) (puts title)
+ (setcolor #x34 #x0f)
+ ((box 'goto) 1 5) (puts "Yes    No")
+ (set! ret (pair? (memq (myGetKey) '(#\Y #\y))))
+ (myGetKey 'destroy)
+ ((box 'delete))
+ ret)
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -1536,7 +1556,6 @@
 ;   type is one of 'whisper 'talk 'scream
 (define (focusTalk type)
  (define getKey ((Terminal 'getKeyCreate)))
- ;((avatar 'setSpeakLevel) (if (eq? type 'whisper) 2 (if (eq? type 'scream) 500 20)))
  ((avatar 'setSpeakLevel) (cond ((eq? type 'whisper) 2) ((eq? type 'scream) 500) (else 20)))
   (let ~ ()
     (WinInputPuts 
@@ -1726,6 +1745,7 @@
    ((string=? "scrabble" talkInput)  ((avatar 'jump) 1 3338 3244))
    ((string=? "britania" talkInput)  ((avatar 'jump) 1 3456 2751)))))
 
+; Sex and the City episode recommender
 (define (satc)
  (let ((lst ()))
   (loop 6 (lambda (season)
@@ -1944,11 +1964,12 @@
 
 ; Call this to quit world
 (define (shutdown)
-  (set! SHUTDOWN #t)
-  ((avatar 'die)) ; Force an IPC message so avatar's IPC reader thread calls die method
-  (sleep 400)
-  (displayl "\e[" (Terminal 'Theight) "H\r\n\e[0m\e[?25h\e[?1000lgc=" (fun) "\r\n")
-  (quit))
+  (if (or QUIETLOGIN (boxBool "Quit?")) (begin
+    (set! SHUTDOWN #t)
+    ((avatar 'die)) ; Force an IPC message so avatar's IPC reader thread calls die method
+    (sleep 400)
+    (displayl "\e[" (Terminal 'Theight) "H\r\n\e[0m\e[?25h\e[?1000lgc=" (fun) "\r\n")
+    (quit))))
 
 ; Spawn a second avatar.  Your free kitteh.
 (define kat (Avatar (string "katO'" (avatar 'name)) 1 (+ (random 10) 3458) (+ (random 10) 2764) ipc 'NOVIEWPORT))
