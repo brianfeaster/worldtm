@@ -2895,7 +2895,7 @@ receiving a field block which is being shared by all the entity Map objects.
 When receiving the field block, Field.updateColumnsIPC should make a copy of
 each column before updating the field array.
 
-I'm able to pass an expression to an Avatar which calls a macro which calls
+I'm able to pass an expression to an avatar which calls a macro which calls
 walk.  (define m (macro () (walk 0)))   (kat '(m))  (avatar '(m))
 This causes both the kat and user's avatar to walk right.  I plan on
 implementing a pacman ghost and pong ball algorithm this way.
@@ -2924,9 +2924,9 @@ toggle to this "step up" behavior in the Avatar class.
 
 Fri Mar 18 02:00:08 EDT 2011
 
-Implemtned the aif primitive.  It's similar to cond's => special form.  Usage is
-(if predicate function) where function is applied to the value of predicate if
-it's true.  Otherwise false is returned.  I did this so that compiling cond
+Implemented the aif primitive.  It's similar to cond's => special form.  Usage
+is (if predicate function) where function is applied to the value of predicate
+if it's true.  Otherwise false is returned.  I did this so that compiling cond
 internally would just be a matter of transforming the cond expression in to
 an equivalent block of ifs and aifs and then compiled.
 
@@ -2941,9 +2941,35 @@ cond with the => special form and not implement aif at all.
 
 Wed Mar 23 23:44:43 EDT 2011
 
-Cond is implemented as a combination if/aif/or/begin tree.
+Cond is implemented as a combination if/aif/or/begin tree.  Aif can be used
+with the symbol =>.  It is like if except if the test is true, it is passed
+to the true clause which must be a function of one argument.  Other wise
+the false clause is evaluated normally.  (=> 42 list 99) evaluates to (42).
 
 Currently stuck on how to implement an avatar/process shutdown.  I want to be
 able to selectivly kill avatars but also shutdown the entire process such that
 all avatars elegantly report themselves as well as update the user's map
-nicely.
+nicely.  Two cases:
+
+One: Explicit and forced shutdown of an avatar ((kat 'die)).  This will
+send out an IPC message and set the local bool 'alive' to false.  The IPC reader
+thread will then clean up local objects and terminate.
+
+Two: Set global variable SHUTDOWN to true.  This triggers each avatar IPC thread
+to send an IPC message but it continues to read the IPC and act on messages.  It
+is expected that the World Scheme process will terminate soon so there is no
+need for threads to release resources.  The user's avatar object also has enough
+time to receive the 'die' messages from its threads to update the map before
+halting.
+
+
+Thu Mar 24 18:43:13 EDT 2011
+
+I'm always running into trouble with the avatar's base class member var 'dir'.
+It's supposed to represent the direction the avatar is facing but it's also
+used for motion including falling and climbing.  So after moving, the avatar is
+always facing down.
+
+I think I'll differentiate between where an avatar is facing and looking.  Look
+and face methods will mutate dirLook dirFace.
+

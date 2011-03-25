@@ -534,7 +534,7 @@
 ;;
 (define initialMapSize (min 25 (min (- (Terminal 'Theight) 1) (/ (Terminal 'Twidth) 2))))
 
-(define (Map ipc size . args)
+(define (Map ipc avatar size . args)
   (define (self msg) (eval msg))
   (define NOVIEWPORT (pair? (memq 'NOVIEWPORT args)))
   ; Composition
@@ -569,14 +569,6 @@
   (define (ViewportPuts . l) (or NOVIEWPORT (for-each (myViewport 'puts) l)))
   (define (ViewportDisplay . e) (or NOVIEWPORT (for-each (lambda (x) (for-each (myViewport 'puts) (display->strings x))) e)))
   ; Members
-  (define avatar #f)
-  (define (registerAvatar myAvatar)
-    (set! avatar myAvatar)
-    ((myEntityDB 'add) avatar)
-    (or NOVIEWPORT
-      (begin
-        (viewportRecenterReset (avatar 'y) (avatar 'x))
-        (startAnimationLoop))))
   (define DebugDumpFlag #f)
   (define (debugDumpMapInfoToggle) (set! DebugDumpFlag (not DebugDumpFlag )))
   (define (debugDumpInfo y x) ; Arguments specify the field column cells to dump
@@ -737,7 +729,7 @@
   (define (setCeiling z) (set! ceiling z))
   (define (walkDetails entity)
     ; Update avatar locally in the field/canvas/viewport and via IPC
-    (apply moveEntity entity ((entity 'gpsLook)))
+    (apply moveEntity entity ((entity 'gpsFace)))
     (ipcWrite (list 'move (entity 'dna) (entity 'z) (entity 'y) (entity 'x)))
     ; Special case to handle cells that change the Avatar's sprite
     (letrec ((cellNum (apply baseCell ((entity 'gps))))
@@ -872,7 +864,12 @@
          (if entity (moveEntity entity z y x)))))
   ; MAIN
   ;(WinChatDisplay "\r\nInitializing map...")
-  (circularize)
+  ((myEntityDB 'add) avatar)
+  (or NOVIEWPORT
+    (begin
+      (circularize)
+      (viewportRecenterReset (avatar 'y) (avatar 'x))
+      (startAnimationLoop)))
   self) ; Map
 
 
@@ -893,7 +890,7 @@
     (define NOVIEWPORT (pair? (memq 'NOVIEWPORT args)))
     (define fieldSize 128)
     ; Composition
-    (define myMap (apply Map ipc fieldSize args))
+    (define myMap (apply Map ipc self fieldSize args))
     ; Members
     (define alive #t)
     (define stop #t) ; Used by action macros
@@ -910,40 +907,44 @@
       (set! alive #f)) ; This will stop the thread from reading the IPC
     (define (jump z y x)
       (setLoc z y x)
-      ((myMap 'walkDetails) self))
+      (mapWalkDetails self))
     (define walkSemaphore (open-semaphore 1)) ; This needs to be destroyed
+    (define mapWalkDetails (myMap 'walkDetails))
     (define (walk dir)
       (semaphore-down walkSemaphore)
         ; Consider cell I'm walking into.  If cell is entity push it.
         ; Otherwise move to facing cell or on top of obstructing cell.
-        (look dir)
-        (let ((nextCell (apply (myMap 'firstCell) (gpsLook))))
+        (look dir) ; Look where I want to walk
+        (face dir) ; Face where I want to walk.  Used for actual motion.
+        (let ((nextCell (apply (myMap 'firstCell) (gpsFace))))
           (cond ((< CellMax nextCell)
                   ; Case 1 push entity
-                  (ipcWrite `(force ,@(gpsLook) ,dir 10)))
+                  (ipcWrite `(force ,@(gpsFace) ,dir 10)))
                 ((or EDIT (not (cellSolid? (cellRef nextCell))))
                   ; Case 2 walk normally
-                  ((myMap 'walkDetails) self))
+                  (mapWalkDetails self))
                 (climb
                   ; Case 3 step up
-                  (look dir 1) ; Peek at the cell above the one in front of me
-                  (set! nextCell (apply (myMap 'baseCell) (gpsLook)))
+                  (face dir 1) ; Peek at the cell above the one in front of me
+                  (set! nextCell (apply (myMap 'baseCell) (gpsFace)))
                   (or (cellSolid? (cellRef nextCell))
-                      ((myMap 'walkDetails) self)))))
+                      (mapWalkDetails self)))))
         ; Gravity
         (or EDIT (fall))
       (semaphore-up walkSemaphore)) ; walk
     ; Fall down one cell if a non-entity and non-solid cell below me
     (define (fall)
-      (look 8) ; Look down
-      (let ((nextCell (apply (myMap 'firstCell) (gpsLook))))
-        (if (= nextCell cellAIR) ((myMap 'walkDetails) self))))
+      (face 8) ; Look down
+      (let ((nextCell (apply (myMap 'firstCell) (gpsFace))))
+        (if (= nextCell cellAIR) (mapWalkDetails self))))
     (define (setSpeakLevel level)
       (set! speakLevel level))
     (define (speak talkInput . level)
       (ipcWrite (list 'voice dna
                       (if (null? level) speakLevel (car level))
                       (apply string (display->strings talkInput)))))
+    (define (lookHere) (apply (avatarMap 'baseCell) ((avatar 'gps))))
+    (define (lookAt) (apply (avatarMap 'baseCell) ((avatar 'gpsLook))))
     (define (IPCvoice dna level text)
      (or NOVIEWPORT
        (if (= dna 0) ; System messages
@@ -984,25 +985,21 @@
     (define setField ((myMap 'myField) 'setField))
     (define (getField) ((myMap 'myField) 'field))
     ; MAIN
-    ((myMap 'registerAvatar) self) ; Register myself with the entity DB and start up viewport rendering
     ; The soul of this avatar.  For now an IPC message handler which loops
     ; as long as local 'alive is #t and global 'SHUTDOWN is false
     (if ipc (thread (let ~ ()
       (let ((e (ipcRead)))
         (if (or alive SHUTDOWN)
           (begin
-            (if (pair? e)
-              (let ((a (car e))
-                    (d (cdr e)))
-                (cond ((eq? a 'voice)  (apply IPCvoice d))
-                      ((eq? a 'force)  (apply IPCforce d))
-                      ((eq? a 'who)    (apply IPCwho   d))
-                ; Map
-                      ((eq? a 'die)              (apply (myMap 'dieIPC)           d))
-                      ((eq? a 'move)             (apply (myMap 'moveIPC)          d))
-                      ((eq? a 'mapUpdateColumns) (apply (myMap 'updateColumnsIPC) d))
-                      ((eq? a 'mapSetCell)       (apply (myMap 'setCell)          d))
-                      ((eq? a 'entity)           (apply (myMap 'IPCentity)        d)))))
+            (if (pair? e) (let ((a (car e)) (d (cdr e)))
+              (cond ((eq? a 'voice) (apply IPCvoice d)) ; Avatar messages
+                    ((eq? a 'force) (apply IPCforce d))
+                    ((eq? a 'who) (apply IPCwho d))
+                    ((eq? a 'die) (apply (myMap 'dieIPC) d)) ; Map messages
+                    ((eq? a 'move) (apply (myMap 'moveIPC) d))
+                    ((eq? a 'mapUpdateColumns) (apply (myMap 'updateColumnsIPC) d))
+                    ((eq? a 'mapSetCell) (apply (myMap 'setCell) d))
+                    ((eq? a 'entity) (apply (myMap 'IPCentity) d)))))
             (and SHUTDOWN alive (die)) ; If shutdown signaled quasi-kill myself but continue to handle msgs
             (~))
           (begin ; Shutdown avatar
@@ -1214,7 +1211,7 @@
   ((Terminal 'WindowNew)
     (- (/ (Terminal 'Theight) 2) 2)  (- (/ (Terminal 'Twidth) 2) 10)
     3  20
-    #x3407))
+    #x34b3))
  (define puts (box 'puts))
  (define setcolor (box 'set-color))
  (define ret #f)
@@ -1273,8 +1270,9 @@
 
 (define (buttonSetCell cell)
  (if PortMapAgent
-   ; Send to map agent. If map agent doesn't respond
-   ; then ignore it just send to everyone.
+   ; Send to map agent. If map agent doesn't respond then
+   ; ignore it just send to everyone.  Map agent eventually
+   ; send a mapSetCell message to all other avatars.
    (or ((ipc 'private) PortMapAgent `(setCellAgent ,(avatar 'z) ,(avatar 'y) ,(avatar 'x) ,cell))
      (begin
        (set! PortMapAgent #f) ; No response so unset the port and recurse
@@ -1459,7 +1457,8 @@
 (setButton #eof        '(shutdown))
 (setButton CHAR-CTRL-C '((WinConsole 'toggle)))
 (if QUIETLOGIN (begin
-   ;(setButton #\1 '(handleTerminalResize))
+   (setButton #\1 '(WinChatDisplay "\r\n" (cellSymbol (cellRef ((avatar 'lookHere))))
+                                      " " (cellSymbol (cellRef ((avatar 'lookAt))))))
    ;(setButton #\2 '(handleTerminalResize (cons 600 400)))
    (setButton #\3 '(thread (spawnKitty)))
    (setButton #\4 '(ghosts))
@@ -1684,11 +1683,11 @@
         (if (= wall 3) (begin (set! m (- MapBlockSize 1))    (set! n (random MapBlockSize)))))))
      (let ~ ((l (lineWalks y x (+ oy m) (+ ox n))))
        (if (pair? l) (begin
-         (look (car l))
+         (face (car l))
          ; Is there something there?
-         (if (= cellAIR (apply (myMap 'firstCell) (gpsLook)))
+         (if (= cellAIR (apply (myMap 'firstCell) (gpsFace)))
            (begin
-             ((myMap 'walkDetails) self)
+             (mapWalkDetails self)
              (sleep 100)
              (if pongPower (~ (cdr l))))
            (set! wall (+ 1 wall))))))
@@ -1903,6 +1902,27 @@
 ; Load a map file and dump in the current map
 ;(define (p m) (mapUpdateColumns 3456 2752 32 (read (open-file m))))
 
+(define fillgrid (macro ()
+ (cond ((begin (look 2) (!= (lookAt) cell))
+        (walk 2)
+        (buttonSetCell cell)
+        (sleep 200)
+        (fillgrid))
+       ((begin (look 4) (!= (lookAt) cell))
+        (walk 4)
+        (buttonSetCell cell)
+        (sleep 200)
+        (fillgrid))
+       ((begin (look 6) (!= (lookAt) cell))
+        (walk 6)
+        (buttonSetCell cell)
+        (sleep 200)
+        (fillgrid))
+       ((begin (look 0) (!= (lookAt) cell))
+        (walk 0)
+        (buttonSetCell cell)
+        (sleep 200)
+        (fillgrid)))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
