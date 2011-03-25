@@ -1891,7 +1891,7 @@
 ; Get username.  Create avatar object.
 (define avatar (if QUIETLOGIN "Administrator" (boxInput "Enter your name")))
 (if (eq? "" avatar) (set! avatar "Guest"))
-(set! avatar (Avatar avatar 1 3460 2767 ipc))
+(set! avatar (Avatar avatar 1 3464 2767 ipc))
 ;(set! avatar (Avatar avatar 1 3438 2735 ipc)) ; Pacman arena
 (avatar '(set! climb #t))
 
@@ -1907,12 +1907,12 @@
 
 ; Catch some signal so that normal shutdown can occur
 ; TODO buggy repeated calls to the same handler occurs with I/O signals
-(signal-set 1 (lambda () (say "signal 1 HUP")  (shutdown)))
-(signal-set 2 (lambda () (say "signal 2 INT")  (shutdown)))
-(signal-set 3 (lambda () (say "signal 3 QUIT")  (shutdown)))
-(signal-set 6 (lambda () (say "signal 6 ABRT")  (shutdown)))
-;(signal-set 13 (lambda () (say "signal 13 PIPE")  (shutdown)))
-(signal-set 15 (lambda () (say "signal 15 TERM")  (shutdown)))
+(signal-set 1 (lambda () (say "signal 1 HUP")  (shutdown 'now)))
+(signal-set 2 (lambda () (say "signal 2 INT")  (shutdown 'now)))
+(signal-set 3 (lambda () (say "signal 3 QUIT")  (shutdown 'now)))
+(signal-set 6 (lambda () (say "signal 6 ABRT")  (shutdown 'now)))
+;(signal-set 13 (lambda () (say "signal 13 PIPE")  (shutdown 'now)))
+(signal-set 15 (lambda () (say "signal 15 TERM")  (shutdown 'now)))
 
 ; Display welcome information an announce my presence
 (or QUIETLOGIN (begin
@@ -1930,8 +1930,8 @@
                    " *turns on a VT100*")))))
 
 ; Call this to quit world
-(define (shutdown)
-  (if (or QUIETLOGIN (boxBool "Quit?")) (begin
+(define (shutdown . now)
+  (if (or (pair? now) QUIETLOGIN (boxBool "Quit?")) (begin
     (set! SHUTDOWN #t)
     ((avatar 'die)) ; Force an IPC message so avatar's IPC reader thread calls die method
     (sleep 400)
