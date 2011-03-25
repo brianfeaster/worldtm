@@ -2985,3 +2985,9 @@ I implemented an Avatar macro to fill an area:
 
 [ ] Is the Entity avatar/sprite IPC mechanism and storage model clean between
 world and map sessions?
+
+
+Fri Mar 25 17:41:09 EDT 2011
+
+[x] If a signal occurs which would halt the process, does it get stuck calling
+boxBool?  Yes.  Added a switch to force shutdown to exit without asking.
