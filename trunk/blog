@@ -2973,3 +2973,15 @@ always facing down.
 I think I'll differentiate between where an avatar is facing and looking.  Look
 and face methods will mutate dirLook dirFace.
 
+In either case, I don't feel the current methodology is very clean.
+I implemented an Avatar macro to fill an area:
+
+ (cond ((begin (look 2) (!= (lookAt) cell))
+        (walk 2)
+        (buttonSetCell cell)
+        (sleep 200)
+        (fillgrid)) ...
+
+
+[ ] Is the Entity avatar/sprite IPC mechanism and storage model clean between
+world and map sessions?

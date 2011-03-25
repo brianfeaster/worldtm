@@ -40,7 +40,10 @@
 ;;
 (load "entity.scm")
 
-(define (Avatar dna port name z y x) ((Entity dna port name z y x) '(let ()
+; Extend the Entity class with a new one just for this Map module
+(define EntityBase Entity)
+
+(define (Entity dna port name z y x) ((EntityBase dna port name z y x) '(let ()
   (define self (lambda (msg) (eval msg)))
   ; Map block origin AKA the upper left hand corner of the map blocks sent to the peer
   (define mapBlockY 0)
@@ -51,39 +54,13 @@
   (define (glyph) ((sprite 'glyphRef) 0 0))
   self)))
 
-; Association list of entites to their DNA values.
-(define EntityDB ())
-
-(define (entitiesAdd entity)
- (set! EntityDB (cons (cons (entity 'dna) entity) EntityDB)))
-
-; Lookup entity in database.
-(define (entitiesGet dna)
-  (let ((entity (assv dna EntityDB)))
-    (if (null? entity) #f (cdr entity))))
-
-(define (entitiesSet dna . args)
-  (let ((entity (entitiesGet dna)))
-    (if entity
-      (for-each ; Update only name and glyph if entity already exists
-        (lambda (a)
-          (if (integer? a) ((entity 'setPort) a)
-          (if (string? a)  ((entity 'setName) a)
-          (if (vector? a)  ((entity 'setGlyph) a)))))
-        args)
-      (begin
-        ; Create a new entity.  Massage the arguments (port name glyph (x y z))->(port name glyph x y z)
-        (set! entity (apply Avatar dna (let ~ ((args args))
-                                         (if (pair? (car args)) (car args)
-                                             (cons (car args) (~ (cdr args)))))))
-        (entitiesAdd entity)))
-    ; Return the new or modified entity
-    entity))
+; Entity database
+(define eDB (EntityDB))
 
 ; Create the map agent
-(define avatar (Avatar DNA (ipc 'PrivatePort) MYNAME  0 0 0))
-(entitiesAdd avatar)
-(entitiesAdd (Entity 0 0 "System" 0 0 0))
+(define avatar (Entity DNA (ipc 'PrivatePort) MYNAME  0 0 0))
+((eDB 'add) avatar)
+((eDB 'add) (Entity 0 0 "System" 0 0 0)) ; Entity 0 needs to exist.  This is the system message entity number.
 
 
 
@@ -289,25 +266,25 @@
  `(entity ,DNA ,(avatar 'port) ,(avatar 'name) ,((avatar 'gps)))))
 
 (define (entity dna . args)
- (let ((e (entitiesGet dna)))
+ (let ((e ((eDB 'get) dna)))
   (if e
     (begin
-      (apply entitiesSet dna args)
-      (displayl "\n\e[31m" (e 'name) " updated\e[0m"))
+      (apply (eDB 'set) dna args)
+      (displayl "\e[31m Updated " (e 'name) args "\e[0m"))
     (begin
-      (set! e (apply entitiesSet dna args))
-      (displayl "\n\e[31m" (e 'port) (e 'name) (e 'glyph) (list (e 'z) (e 'y) (e 'x)) " registerd\e[0m")
+      (set! e (apply (eDB 'set) dna args))
+      (displayl "\e[31m Registered " (e 'name) " " args " \e[0m")
       (sendInitialBlocks e)))))
 
 (define (voice dna level text)
- (let ((e (entitiesGet dna)))
-   (displayl "\n\e[1;34m" (e 'name) " says:"text "\e[0m")
+ (let ((e ((eDB 'get) dna)))
+   (displayl "\e[1;34m " (e 'name) " \"" text "\"\e[0m")
    (display (string (e 'name) "\t" text "\n") log)))
 
 (define (move dna . loc)
- (letrec ((e (entitiesGet dna)))
+ (letrec ((e ((eDB 'get) dna)))
    (apply (e 'setLoc) loc) ; Update entity's location
-   (displayl "\n\e[32m" (e 'name) " moves to " ((e 'gps))) ; DEBUG
+   (displayl "\e[32m " (e 'name) " " ((e 'gps)))
    (or (entityWithinBounds e) (sendNewBlocks e))))
 
 (define die list)
@@ -391,7 +368,7 @@
     (or (eq? s '*) (displayl "\nIPC-REPL-ERROR::" s)))
  (let ~ () 
   (let ((e (ipcReader)))
-     (display "\n\e[1;30mIPC::")
+     (display "\n\e[1;30m")
      (write e)
      (display "\e[0m")
      (if (and (pair? e) (eq? (car e) 'entity))

@@ -16,10 +16,11 @@
 ;;   Typing_and_talking
 ;;    Prototypes_and_fun_things
 ;;   Genesis
-;;
+
 (load "ipc.scm")
 (load "window.scm")
-(load "entity.scm")
+(load "entity.scm") ; Glyph Sprite Entity EntityDb objects
+
 (define SHUTDOWN #f) ; Signals to avatar's that the process is going to shutdown
 (define QUIETLOGIN (and (< 2 (vector-length argv)) (eqv? "silent" (vector-ref argv 2))))
 (define VIEWPORTANIMATION #t)
@@ -470,60 +471,6 @@
     (cursor-visible #f)
     ;(WinChatDisplay "\r\nInitializing viewport...")
     self))) ; Viewport
-
-
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; Entity_DB
-;;
-;; List of entity/avatar objects
-;; TODO use hashtable
-;; TODO port to map.scm
-;;
-
-; Association list of entites to their DNA values.
-(define (EntityDB)
- (define (self msg) (eval msg))
- (define lst (ListCreate))
- (define (add ent) (ListAdd lst ent))
- (define (del ent) (ListDel lst ent))
- (define (getAll) (ListGet lst)) ; Map.updateColumnsIPC
- ; Lookup entity in database by scaning list for entity with the specified dna
- ; Return entity object or #f
- ; TODO implement hash.
- (define (get dnaIpc)
-   (let ~ ((lst (ListGet lst))) ; (car lst) is an entity object
-     (cond ((null? lst) #f)
-           ((eqv? dnaIpc ((car lst) 'dna)) (car lst))
-           (else (~ (cdr lst))))))
- (define (set dna . args)
-   (let ((entity (get dna)))
-     (if entity
-       ; Update only name and glyph if entity already exists
-       (each-for args
-         (lambda (a)
-           (cond ((integer? a)
-                   ((entity 'setPort) a))
-                 ((string? a)
-                   ((entity 'setName) a))
-                 ((vector? a)
-                   ((entity 'setGlyph) a)
-                   ; If the sprite is also a single glyph, update it as well
-                   (if (= 1 ((entity 'sprite) 'glyphCount))
-                       ((entity 'setSprite) (Sprite 1 1 (vector a)))))
-                 ((and (pair? a) (eq? (car a) 'Sprite))
-                   ((entity 'setSprite) (eval a))))))
-       ; Create a new entity.  Massage the arguments (port name glyph (x y z))->(port name glyph x y z)
-       (begin
-         (set! entity (apply Entity dna (let ~ ((args args))
-                                          (if (pair? (car args))
-                                              (car args)
-                                              (cons (car args) (~ (cdr args)))))))
-         (add entity)))
-     ; Return the new or modified entity
-     entity))
- ; MAIN
- self) ; EntityDB
 
 
 
