@@ -1265,7 +1265,7 @@ void wscmScheduleBlocked (void) {
 			/* Skip semaphore blocked threads. */
 			r5 = cdr(r5);
 		} else {
-			fprintf (stderr, "ERROR; wscmScheduleBlocked: unknown thread state.");
+			fprintf (stderr, "ERROR: wscmScheduleBlocked: unknown thread state.");
 			r5 = cdr(r5);
 		}
 	}
@@ -2340,10 +2340,6 @@ void sysDisassemble (void) {
 	vmDebugDumpCode(r0, stderr);
 }
 
-void sysTrace (void) {
-	r0=memVectorObject(code, 2);
-}
-
 void sysOpenSemaphore (void) {
  Num i=0;
 	if (wscmAssertArgumentCount(1, __func__)) return;
@@ -2935,15 +2931,11 @@ void wscmInitialize (void) {
 	memVectorSet(sleeping, 1, sleeping);
 	memVectorSet(sleeping, 2, sleeping);
 
-	/* Create empty sleeping threads doubly linked list. */
+	/* Create empty semaphore/IO blocked threads doubly linked list. */
 	objNewVector(3);  blocked=r0;
 	memVectorSet(blocked, 0, sblocked);
 	memVectorSet(blocked, 1, blocked);
 	memVectorSet(blocked, 2, blocked);
-
-	/* Create blocked on descriptor vector table.  For now a list later a vector
-	   relying on asynchronous interrupts to identify ready descriptor. */
-	//objNewVector(1024);  blocked=r0;
 
 	/* Create semaphore counters. */
 	i=MaxSemaphoreCount;
@@ -3012,7 +3004,6 @@ void wscmInitialize (void) {
 	wscmDefineSyscall (sysDebugDumpAll, "dump-heap");
 	wscmDefineSyscall (memGarbageCollect, "garbage-collect");
 	wscmDefineSyscall (sysDisassemble, "disassemble");
-	wscmDefineSyscall (sysTrace, "trace");
 	wscmDefineSyscall (sysOpenSemaphore, "open-semaphore");
 	wscmDefineSyscall (sysCloseSemaphore, "close-semaphore");
 	wscmDefineSyscall (sysSemaphoreDown, "semaphore-down");

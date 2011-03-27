@@ -78,7 +78,7 @@
 ; #( *  SEM  *-)------------------------->( e . () )
 ;    `-----------------------------------^
 (define (QueueGet q)
-  (semaphore-down (vector-ref q 2)) ; Try to decrement the message counter semaphore
+  (semaphore-down (vector-ref q 2)) ; Try to decrement the message counter semaphore.  Returns when a char is available
   (semaphore-down (vector-ref q 1)) ; Critical section
   (if (eq? (vector-ref q 0) (vector-ref q 3))
     (begin

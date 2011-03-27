@@ -2991,3 +2991,11 @@ Fri Mar 25 17:41:09 EDT 2011
 
 [x] If a signal occurs which would halt the process, does it get stuck calling
 boxBool?  Yes.  Added a switch to force shutdown to exit without asking.
+
+I'm unable to implement a simple box that waits for either a moues or keypress.
+The terminal getKey function is blocking.
+
+[ ] read-char should handle (read-char) (read-char stdin) (read-char 500)
+
+Terminal object Window list should be a vector and the window ID should be the
+vector offset, not list length.

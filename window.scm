@@ -74,13 +74,15 @@
 ;;
 (define (Terminal)
  (define (self msg) (eval msg))
+ (define MAXWINDOWCOUNT 128)
  (define TCOLOR #f)
  (define TCURSOR-VISIBLE #t)
  (define Theight 0)
  (define Twidth  0)
  (define GY -1) ; Global cursor positions.
  (define GX -1)
- (define WINDOWS ()) ; List of window objects.
+ (define WindowVec (make-vector MAXWINDOWCOUNT #f)) ; Vector of window objects by ID
+ (define WindowList ()) ; List of window objects in display order
  (define TerminalSemaphore (open-semaphore 1))
  (define PublicSemaphore (open-semaphore 1))
  ; 2D table of visible window objects.  #f represents no window which is never drawn on.  Considering
@@ -97,7 +99,8 @@
    (and (>= y 0) (>= x 0) (< y Theight) (< x Twidth)))
 
  (define (topWin y x)
-   (vector-vector-ref WindowMask y x))
+   (and (InsideTerminal? y x)
+        (vector-vector-ref WindowMask y x)))
 
  (define (gputc char color y x)
    (semaphore-down TerminalSemaphore)
@@ -133,11 +136,12 @@
 
  (define (TopmostWindowDiscover gy gx)
  ; Return first window object in window list that is visible at this location.
-   (let ~ ((w WINDOWS))
-     (if (null? w) #f
-     (if (((car w) 'InsideWindow?) gy gx) (car w)
+   (let ~ ((w WindowList))
+     (if (null? w) #f ; No windows are visible at this location
+     (if (((car w) 'InsideWindow?) gy gx) (car w) ; A window is visible at this location
      (~ (cdr w))))))
 
+ ; Reset the terminal window mask and adjust the window's visible count
  (define (WindowMaskReset y0 x0 y1 x1)
   (loop2 y0 (+ y1 1) x0 (+ x1 1) (lambda (gy gx)
      (if (InsideTerminal? gy gx)
@@ -149,7 +153,7 @@
           (if (not (eq? prevwin topwin))             ; Previous window here
              (begin
                ((prevwin 'visibleCountAdd) -1)
-               (and topwin ((topwin 'visibleCountAdd) 1))))
+               (if topwin ((topwin 'visibleCountAdd) 1))))
           (if topwin ((topwin 'visibleCountAdd) 1))) ; No previous window here
         (if topwin
           ((topwin 'globalRefresh) gy gx) ; Redraw glyph of this window at its global position.
@@ -167,7 +171,15 @@
  (define (WindowNew Y0 X0 Wheight Wwidth COLOR)
    (define (self msg) (eval msg))
    (define (inherit args macro) (apply macro args))
-   (define id (+ 1 (length WINDOWS)))
+   (define id
+     (let ~ ((i 1))
+       (cond ((= i MAXWINDOWCOUNT)
+              (display "ERROR: WindowNew: MAXWINDOWCOUNT exceeded")
+              #f)
+             ((vector-ref WindowVec i)
+              (~ (+ i 1)))
+             (else (vector-set! WindowVec i self)
+                   i))))
    (define Y1 (+ Y0 Wheight))
    (define X1 (+ X0 Wwidth))
    (define TY 0)
@@ -380,11 +392,8 @@
        (set! topRow 0)
        (semaphore-up WindowSemaphore)))
    (define (delete)
-    (set! WINDOWS
-      (let ~ ((l WINDOWS))
-        (if (null? l) ()
-        (if (eq? (car l) self) (cdr l)
-        (cons (car l) (~ (cdr l)))))))
+    (vector-set! WindowVec id #f)
+    (set! WindowList (list-delete WindowList self))
     (close-semaphore WindowSemaphore)
     (WindowMaskReset Y0 X0 Y1 X1))
 
@@ -436,85 +445,92 @@
    ; When a window is instantiated, insert this new window object
    ; on top of the global window object list and initialize the
    ; window area.
-   (set! WINDOWS (cons self WINDOWS)) ; TODO this needs a semaphore.
-   (WindowMaskReset Y0 X0 Y1 X1)
-   self)
+   (if id
+    (begin
+      (set! WindowList (cons self WindowList)) ; TODO this needs a semaphore.
+      (WindowMaskReset Y0 X0 Y1 X1)
+      self)
+    #f))
  ;;
  ;; Window_subclass
  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
  ; Call to instantiate a buffer object which inherits a window object.
  (define (BufferNew Y0 X0 Wheight Wwidth COLOR)
-   (((WindowNew Y0 X0 Wheight Wwidth COLOR) 'Buffer)) )
+   (let ((win (WindowNew Y0 X0 Wheight Wwidth COLOR)))
+     (if win ((win 'Buffer)) #f )))
 
  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
  ;; Keyboard_and_mouse
  ;;
  ; Stack of queues, implemented as a list, accepting keyboard characters
  (define keyQueueStack ())
- ; Vector of fuctions accepting (action y x).  TODO only 128 windows supported
- (define mouseDispatchVector (make-vector 128 #f))
 
- ; Keyboard character handling
+ ; Vector of event (action y x) queues.  TODO only 128 windows supported
+ (define mouseQueueVector (make-vector MAXWINDOWCOUNT #f))
+
+ ;; Keyboard character handling
  (define (keyQueueStackRegister q)
    (set! keyQueueStack (cons q keyQueueStack)))
+
  (define (keyQueueStackUnRegister q)
-   (if (not (eq? (car keyQueueStack) q))
-     (display "WARNING: keyQueueStackUnRegister: not top queue"))
+   (or (eq? (car keyQueueStack) q) (display "WARNING: keyQueueStackUnRegister: not top queue"))
    (set! keyQueueStack (list-delete keyQueueStack q)))
+
  (define (keyDispatch c)
    (if (pair? keyQueueStack)
      (QueueAdd (car keyQueueStack) c)))
  
- ; Mouse character string handling
- (define (mouseDispatcherRegister win fn)
-   (vector-set! mouseDispatchVector (win 'id) fn))
- (define (mouseDispatcherUnRegister win)
-   (mouseDispatcherRegister win #f))
+ ;; Mouse character string handling
+ (define (mouseQueueRegister win q) ; Was mouseDispatcherRegister 
+   (vector-set! mouseQueueVector (win 'id) q))
+
+ (define (mouseQueueUnRegister win) ; Was mouseDispatcherUnRegister
+   (mouseQueueRegister win #f))
+
  (define (mouseDispatch event y x) ; Send the handler "'mouse0 2 3" for example.
    (letrec ((win ((Terminal 'topWin) y x))
             (id (if win (win 'id) #f))
-            (fn (if id (vector-ref mouseDispatchVector id) #f)))
-   (if fn (fn event (- y (win 'Y0)) (- x (win 'X0))))))
+            (q (if id (vector-ref mouseQueueVector id) #f)))
+     ;(or win (WinChatDisplay "\r\n" (list event y x)))
+     (if q  (begin
+              (QueueAdd q (list event (- y (win 'Y0)) (- x (win 'X0))))))))
  
  ; State machine to read and parse stdin.
  
  ; An "\e" scanned
  (define (keyScannerEsc)
-  (let ((c (read-char 500 stdin))) ; Timeout after half a second.  Will return #f.
-    (if (eq? c #\[)
-      (keyScannerEscBracket)
-    (if (eq? c CHAR-ESC)
-      (begin
-        (keyDispatch CHAR-ESC)
-        (keyScannerEsc))
-    (if (not c) ; Timed out so accept escape char and start over
-        (keyDispatch CHAR-ESC)
-    (begin ; Not a recognized escape sequence, so send escape and the [ character
-      (keyDispatch CHAR-ESC)
-      (keyDispatch c)))))))
+  (let ((c (read-char 500 stdin))) ; Return character stdin or #f after 500ms
+    (cond ((eq? c #\[) (keyScannerEscBracket))
+          ((eq? c CHAR-ESC) (keyDispatch CHAR-ESC)
+                            (keyScannerEsc))
+          ; Timed out so accept escape char and start over
+          ((not c) (keyDispatch CHAR-ESC))
+          ; Not a recognized escape sequence, so send escape and the [ character
+          (else (keyDispatch CHAR-ESC)
+                (keyDispatch c)))))
  
  ; An "\e[" scanned
  (define (keyScannerEscBracket)
    (let ((c (read-char #f stdin)))
-     (if (eq? c #\A) (keyDispatch 'up)
-     (if (eq? c #\B) (keyDispatch 'down)
-     (if (eq? c #\C) (keyDispatch 'right)
-     (if (eq? c #\D) (keyDispatch 'left)
-     (if (eq? c #\M) (keyScannerEscBracketM)
-     (begin ; Not an arrow key sequence, so send all the character to the key queue
-       (keyDispatch CHAR-ESC)
-       (keyDispatch #\[)
-       (keyDispatch c)))))))))
+     (cond ((eq? c #\A) (keyDispatch 'up))
+           ((eq? c #\B) (keyDispatch 'down))
+           ((eq? c #\C) (keyDispatch 'right))
+           ((eq? c #\D) (keyDispatch 'left))
+           ((eq? c #\M) (keyScannerEscBracketM))
+           ; Not an arrow key sequence, so send all the character to the key queue
+           (else (keyDispatch CHAR-ESC)
+                 (keyDispatch #\[)
+                 (keyDispatch c)))))
  
  ; An "\e[M" has been scanned
  (define (keyScannerEscBracketM)
   (letrec ((c (read-char #f stdin))
-           (action (if (eq? c #\ ) 'mouse0
-                   (if (eq? c #\!) 'mouse2
-                   (if (eq? c #\") 'mouse1
-                   (if (eq? c #\#) 'mouseup
-                   'mouse)))))
+           (action (cond ((eq? c #\ ) 'mouse0)
+                         ((eq? c #\!) 'mouse2)
+                         ((eq? c #\") 'mouse1)
+                         ((eq? c #\#) 'mouseup)
+                         (else 'mouse)))
            (x (- (read-char #f stdin) #\  1))
            (y (- (read-char #f stdin) #\  1)))
    (mouseDispatch action y x)))
@@ -529,13 +545,15 @@
  (define (getKeyCreate)
    (define keyQueue (QueueCreate)) ; Needs to be deleted
    (keyQueueStackRegister keyQueue)
-   ; Return a blocking key reader.  If passed a message, shutdown.
+   ; Return a blocking key reader.  If passed an integer, timeout.  Anything else, shutdown.
    (lambda restargs
      (if (null? restargs)
        (QueueGet keyQueue)
-       (begin
-         (keyQueueStackUnRegister keyQueue)
-         (QueueDestroy keyQueue)))))
+       (if (integer? (car restargs))
+         (QueueGet keyQueue timeout) ; TODO add timeout capabilities to this or rethink semaphore implementations.
+         (begin
+           (keyQueueStackUnRegister keyQueue)
+           (QueueDestroy keyQueue))))))
 
  ; The default keyboard read queue.  Continuously read stdin and append to
  ; a queue accessed via (getKey).  It is possible that another queue has
