@@ -52,8 +52,8 @@
 (define keyQueueStackUnRegister (Terminal 'keyQueueStackUnRegister))
 
 ; Mouse handler registration
-(define mouseDispatcherRegister (Terminal 'mouseDispatcherRegister))
-(define mouseDispatcherUnRegister (Terminal 'mouseDispatcherUnRegister))
+(define mouseQueueRegister (Terminal 'mouseQueueRegister)) ; Was mouseDispatcherRegister
+(define mouseQueueUnRegister (Terminal 'mouseQueueUnRegister)) ; Was mouseDispatcherUnRegister 
 
 ; Chat window.
 (define WinChat ((Terminal 'BufferNew)
@@ -840,15 +840,16 @@
     (define myMap (apply Map ipc self fieldSize args))
     ; Members
     (define alive #t)
-    (define stop #t) ; Used by action macros
+    (define Stop #t) ; Used by action macros
     (define speakLevel 20) ; Whisper=2  Talk=20 Scream=500 
     (define climb #f)
     (define cell 19) ; TODO replace with a generalize item container
     (define ipcRead (if ipc ((ipc 'newReader)) #f)) ; This needs to be destroyed.
     (define ipcWrite (if ipc (ipc 'qwrite) #f))
+    (define (stop) (set! Stop #t))
     ; Kill this avatar and IPC thread after announcing death
     (define (die)
-      (set! stop #t) ; Halt any currently running macro
+      (stop) ; Halt any currently running macro
       (or QUIETLOGIN (saySystem name " exits"))
       (ipcWrite `(die ,dna)) ; Announce that I'm leaving to other avatars
       (set! alive #f)) ; This will stop the thread from reading the IPC
@@ -1153,25 +1154,58 @@
  ((box 'delete))
  str)
 
+
+
 (define (boxBool title)
+ (define eventQueue (QueueCreate))
  (define box
   ((Terminal 'WindowNew)
     (- (/ (Terminal 'Theight) 2) 2)  (- (/ (Terminal 'Twidth) 2) 10)
     3  20
-    #x34b3))
+    #x010b))
  (define puts (box 'puts))
  (define setcolor (box 'set-color))
  (define ret #f)
- (define myGetKey ((Terminal 'getKeyCreate)))
+ (mouseQueueRegister box eventQueue)
+ (keyQueueStackRegister eventQueue)
+
  (puts "+------------------+")
  (puts "|                  |")
  (puts "+------------------+")
  ((box 'goto) 0 2) (puts title)
- (setcolor #x34 #x0f)
- ((box 'goto) 1 5) (puts "Yes    No")
- (set! ret (pair? (memq (myGetKey) '(#\Y #\y))))
- (myGetKey 'destroy)
+ (setcolor #x01 #x0f)
+ ((box 'goto) 1 5) (puts "yes    no")
+
+ (set! ret
+   (let ~ ((e (QueueGet eventQueue)) ; mouse event
+         (s ())) ; click state
+     (if (pair? e)
+       (if (and (eq? (car e) 'mouse0)
+                (= (cadr e) 1) (pair? (memv (caddr e) '(5 6 7)))) ; yes area
+           (begin (setcolor #x03 #x0f) ((box 'goto) 1 5) (puts "YES")
+                  (setcolor #x01 #x0f) ((box 'goto) 1 12) (puts "no")
+                  (~ (QueueGet eventQueue) 'yes))
+       (if (and (eq? s 'yes) ; mouse is in down yes state
+                (eq? (car e) 'mouseup)
+                (and (= (cadr e) 1) (pair? (memv (caddr e) '(5 6 7))))) ; yes area
+           #t ; return YES
+       (if (and (eq? (car e) 'mouse0)
+                (= (cadr e) 1) (pair? (memv (caddr e) '(12 13)))) ; no area
+           (begin (setcolor #x01 #x0f) ((box 'goto) 1 5) (puts "yes")
+                  (setcolor #x03 #x0f) ((box 'goto) 1 12) (puts "NO")
+                  (~ (QueueGet eventQueue) 'no))
+       (if (and (eq? s 'no) ; mouse is in down no state
+                (eq? (car e) 'mouseup)
+                (and (= (cadr e) 1) (pair? (memv (caddr e) '(12 13))))) ; no area
+           #f ; return YES
+       (begin (setcolor #x01 #x0f) ((box 'goto) 1 5) (puts "yes    no")
+              (~ (QueueGet eventQueue) ()))))))
+    (pair? (memq e '(#\Y #\y)))))) ; Pressed a key
+
+ (keyQueueStackUnRegister eventQueue)
+ (mouseQueueUnRegister box)
  ((box 'delete))
+ (QueueDestroy eventQueue)
  ret)
 
 
@@ -1227,21 +1261,33 @@
    ; Send to everyone
    (IpcWrite `(mapSetCell ,(avatar 'z) ,(avatar 'y) ,(avatar 'x) ,cell))))
 
-(define (mouseWalkActionHandler action wy wx)
- (if (eq? action 'mouse0)
- (letrec ((mapy (+ (avatarViewport 'my) wy))
-          (mapx (+ (avatarViewport 'mx) (/ wx 2))))
-   ;(WinConsoleDisplay "\r\n" wx " " wy mapy " " mapx)
-   (let ~ ((l (lineWalks (avatar 'y) (avatar 'x) mapy mapx)))
-     (if (pair? l) (begin
-       (walk (car l))
-       (~ (cdr l))))))))
 
+(define (mouseWalkActionHandlerLoop)
+  (define queue (QueueCreate))
+  (mouseQueueRegister avatarViewport queue)
+  (thread (let ~ ((e (QueueGet queue)))
+    (let ((action (car e))
+          (wy (cadr e))
+          (wx (caddr e)))
+      (if (eq? action 'mouse0)
+        (letrec ((mapy (+ (avatarViewport 'my) wy))
+                 (mapx (+ (avatarViewport 'mx) (/ wx 2))))
+          (let ~ ((l (lineWalks (avatar 'y) (avatar 'x) mapy mapx)))
+            (if (pair? l) (begin
+              (walk (car l))
+              (~ (cdr l)))))))
+      (~ (QueueGet queue))))))
 
-; Avatar color chooser.
+;;;;;;;;;;;;;;;;;;;;;;;;
+; Avatar_color_chooser
+(define eventQueue (QueueCreate))
 (define LastColors (make-list 32 0))
 (define CursorYX (cons 0 0))
 
+(mouseQueueRegister WinPalette eventQueue)
+
+; Called by the keyboard and mouse handler to
+; update the cursor in the palette window.
 (define (updatePaletteCursor y x)
   (let ((oy (car CursorYX))
         (ox (cdr CursorYX)))
@@ -1252,7 +1298,6 @@
     (WinPaletteGoto y x)
     (WinPaletteDisplay #\X))
     (set! CursorYX (cons y x)))
-
 
 (define (keyColorsAction c)
  (if (pair? (memv c (list CHAR-ESC TAB #\C #\c #\q #\Q)))
@@ -1286,7 +1331,6 @@
 (define (mouseColorsActionHandler action wy wx)
  (if (eq? action 'mouse0)
  (letrec ((clr (/ ((WinPalette 'getColor) wy wx) 256)))
-
    ; Update and render the last selected color bars
    (if (not (and (< 19 wx) (< wy 2))) (begin
      (set! LastColors (cdr (append LastColors (list clr))))
@@ -1313,10 +1357,19 @@
 
 (define (avatarColor)
   ((WinPalette 'toggle))
-  (let ((getKey ((Terminal 'getKeyCreate))))
-    (let ~ () (if (keyColorsAction (getKey)) (~)))
-    (getKey 'destroy))
+  (keyQueueStackRegister eventQueue)
+  (let ~ ()
+    (let ((e (QueueGet eventQueue)))
+      (if (pair? e)
+        (begin
+           (apply mouseColorsActionHandler e)
+           (~))
+        (if (keyColorsAction e)
+            (~)))))
+  (keyQueueStackUnRegister eventQueue)
   ((WinPalette 'toggle)))
+; Avatar_color_chooser
+;;;;;;;;;;;;;;;;;;;;;;;;
 
 
 
@@ -1403,6 +1456,7 @@
 (setButton #\Q         '(shutdown))
 (setButton #eof        '(shutdown))
 (setButton CHAR-CTRL-C '((WinConsole 'toggle)))
+(setButton #\  '(begin (avatar '(stop)) (kat '(stop))))
 (if QUIETLOGIN (begin
    (setButton #\1 '(WinChatDisplay "\r\n" (cellSymbol (cellRef ((avatar 'lookHere))))
                                       " " (cellSymbol (cellRef ((avatar 'lookAt))))))
@@ -1501,7 +1555,7 @@
 ; Activate event driven talk mechanism
 ;   type is one of 'whisper 'talk 'scream
 (define (focusTalk type)
- (define getKey ((Terminal 'getKeyCreate)))
+ (define getc ((Terminal 'getKeyCreate)))
  ((avatar 'setSpeakLevel) (cond ((eq? type 'whisper) 2) ((eq? type 'scream) 500) (else 20)))
   (let ~ ()
     (WinInputPuts 
@@ -1510,10 +1564,10 @@
                              (string ">" (replTalk 'getBuffer)))))
     (if (eq? type 'whisper) ((WinInput 'back)))
     (let ~~ ()
-      (let ((ret (replTalk type (getKey))))
+      (let ((ret (replTalk type (getc))))
         (if (eq? ret 'more) (~~)
         (if (eq? ret 'sent) (~))))))
-  (getKey 'destroy))
+  (getc 'destroy))
 
 
 
@@ -1559,30 +1613,30 @@
 ; The first Avatar macro
 ; Usage:: (avatar '(march)) Start/stop the thread
 (define march (macro ()
- (if stop
+ (if Stop
    (begin
     (WinChatSetColor 0 10) (tankTalk "\r\n*The journey begins*")
-    (set! stop #f)
+    (set! Stop #f)
     (thread (let ~ ()
       (for-each
-        (lambda (x) (and stop (unthread)) (walk x) (sleep 400))
+        (lambda (x) (and Stop (unthread)) (walk x) (sleep 400))
         '(0 0 0 0 2 2 2 2 4 4 4 4 6 6 6 6))
       (sleep 500)
       (~))))
    (begin
      (WinChatSetColor 0 10) (WinChatDisplay "\r\n*Thus ends the journey*")
-     (set! stop #t)))))
+     (set! Stop #t)))))
 
 ; Originally a "walking kitty soldier"
 ; Usage:: (avatar '(walkAround 100)) Start/stop the thread
 (define walkAround (macro cycles
  (set! cycles (if (null? cycles) 32 (car cycles))) ; Set max cycles
- (if stop
+ (if Stop
    (letrec ((happyVector (vector 0 0 0 0 0 0 0 0))
           (dist 0)
           (dir 0)) ; Initially start walking right
      (WinChatSetColor 0 10) (tankTalk "\r\n*The aimlessness begins*")
-     (set! stop #f)
+     (set! Stop #f)
      (thread (let ~ () ; Main loop
        ; Walk kitty quasi-randomly.  Set the direction the
        ; avatar will walk based on weighted list of directions
@@ -1608,10 +1662,10 @@
          (vector-map! (lambda (x) (/ x 2)) happyVector))
        ; Kill entity or loop again
        (set! cycles (- cycles 1))
-       (if (and (not stop) (< 0 cycles)) (~)))))
+       (if (and (not Stop) (< 0 cycles)) (~)))))
    (begin
      (WinChatSetColor 0 10) (WinChatDisplay "\r\n*Thus ends the aimlessness*")
-     (set! stop #t))))) ; walkAround
+     (set! Stop #t))))) ; walkAround
 
 
 (define pongPower #f)
@@ -1757,10 +1811,10 @@
   (pacmanFilterDirections end (list desiredDir dir)))
 
 (define ghostMacro (macro ()
- (set! stop #f)
+ (set! Stop #f)
  (WinChatDisplay "Lookout pacman!")
  (thread (let ~ ((dir dir)) ; Use this local symbol and not the Avatar class'.
-   (if stop
+   (if Stop
      (WinChatDisplay "The gosts give up")
      (begin
         (set! dir ; Pick a new direction after every movement
@@ -1849,6 +1903,16 @@
 ; Load a map file and dump in the current map
 ;(define (p m) (mapUpdateColumns 3456 2752 32 (read (open-file m))))
 
+(define walkgrid (macro () (thread
+ (set! Stop #f)
+ (let ~ ()
+  (or Stop
+   (cond ((begin (say 2) (look 2) (!= (lookAt) cell)) (walk 2) (sleep 200) (~))
+         ((begin (say 4) (look 4) (!= (lookAt) cell)) (walk 4) (sleep 200) (~))
+         ((begin (say 6) (look 6) (!= (lookAt) cell)) (walk 6) (sleep 200) (~))
+         ((begin (say 0) (look 0) (!= (lookAt) cell)) (walk 0) (sleep 200) (~))
+         (else (speak "not sure what to do now"))))))))
+
 (define fillgrid (macro ()
  (cond ((begin (look 2) (!= (lookAt) cell))
         (walk 2)
@@ -1898,12 +1962,11 @@
 ; Consider the avatar's map object
 (define avatarMap (avatar 'myMap))
 
-; TODO still used in handleTerminalResize winmapUp/Down/Left/Right mouseWalkActionHandler
+; TODO still used in handleTerminalResize winmapUp/Down/Left/Right mouseWalkActionHandlerLoop
 (define avatarViewport (avatarMap 'myViewport))
 
-; Register windows and action handlers for mouse events
-(mouseDispatcherRegister avatarViewport mouseWalkActionHandler)
-(mouseDispatcherRegister WinPalette mouseColorsActionHandler)
+; Start map mouse action handler
+(mouseWalkActionHandlerLoop)
 
 ; Catch some signal so that normal shutdown can occur
 ; TODO buggy repeated calls to the same handler occurs with I/O signals

@@ -41,8 +41,7 @@
 (load "entity.scm")
 
 ; Extend the Entity class with a new one just for this Map module
-(define EntityBase Entity)
-
+(define EntityBase Entity) ; First rename it
 (define (Entity dna port name z y x) ((EntityBase dna port name z y x) '(let ()
   (define self (lambda (msg) (eval msg)))
   ; Map block origin AKA the upper left hand corner of the map blocks sent to the peer
@@ -54,13 +53,66 @@
   (define (glyph) ((sprite 'glyphRef) 0 0))
   self)))
 
-; Entity database
-(define eDB (EntityDB))
+; My entity database
+(define myEntityDB (EntityDB))
 
 ; Create the map agent
-(define avatar (Entity DNA (ipc 'PrivatePort) MYNAME  0 0 0))
-((eDB 'add) avatar)
-((eDB 'add) (Entity 0 0 "System" 0 0 0)) ; Entity 0 needs to exist.  This is the system message entity number.
+(define avatarMapAgent (Entity DNA (ipc 'PrivatePort) MYNAME  0 0 0))
+((myEntityDB 'add) avatarMapAgent)
+((myEntityDB 'add) (Entity 0 0 "System" 0 0 0)) ; Entity 0 needs to exist.  This is the system message entity number.
+
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Column_object
+;; All functions, except columnSet used by IPC::setCellAgent , are local to this block
+
+; Height of first default implicit bottom object
+(define (columnHeightBottom c)
+  (vector-ref c 0))
+
+; Height of first default implicit top object
+(define (columnHeightTop c)
+  (+ (vector-ref c 0)
+     (vector-length c)))
+
+(define (columnRef column z)
+ (vector-ref column (let ((i (- z (columnHeightBottom column)))) ; normalize z coordinate
+                      (if (<= i 1) 1 ; default bottom cell
+                      (if (<= (vector-length column) i) (- (vector-length column) 1) ; default top cell
+                      i)))))
+
+; Extend column below based on existing column. #(3  4 5 6) -> #(1  4 4 4 5 6)
+(define (columnExtendBelow c bot)
+ (let ((k (make-vector (- (columnHeightTop c) bot)             ; vector size
+                       (columnRef c (columnHeightBottom c))))) ; default object
+   ; Set bottom height
+   (vector-set! k 0 bot)
+   ; Copy old column here.
+   (vector-set-vector! k (- (columnHeightBottom c) bot -1) c 1)
+   k))
+
+; Extend column above based on existing column. #(3  4 5 6) -> #(3  4 5 6 6 6)
+(define (columnExtendAbove c top)
+ (let ((k (make-vector (- top (columnHeightBottom c))       ; vector size
+                       (columnRef c (columnHeightTop c))))) ; default object
+   ; Copy old column here including bottom height
+   (vector-set-vector! k 0 c 0)
+   k))
+
+; Returns column (or new column) with object set at specified height.
+(define (columnSet c h o)
+  (let ((i (- h (columnHeightBottom c)))) ; Column height -> vector index
+    (if (<= i 1)
+      (begin
+        (set! c (columnExtendBelow c (- h 2)))
+        (vector-set! c 2 o))
+    (if (>= i (- (vector-length c) 1))
+      (begin
+        (set! c (columnExtendAbove c (+ h 2)))
+        (vector-set! c i o))
+    (vector-set! c i o)))
+    c))
 
 
 
@@ -199,7 +251,7 @@
   (loop2 by (+ by MapBlockCount)
          bx (+ bx MapBlockCount)
     (lambda (y x)
-      (displayl "\r\nSending initial block " (list y x) " to " (e 'name) ":" (e 'port)) ; DEBUG
+      (displayl "\r\n\e[0mSending initial block " (list y x) " to " (e 'name) ":" (e 'port)) ; DEBUG
       ((ipc 'private) (e 'port) ; Send the block to the peer
          `(mapUpdateColumns ,(* y MapBlockSize) ,(* x MapBlockSize) ,MapBlockSize ,(getMapBlock y x #t)))))
   ((ipc 'private) (e 'port) '(IpcWrite '(who))))) ; Force the peer to request roll call from everyone
@@ -250,7 +302,7 @@
 
    (loop2 ry (+ ry MapBlockCount) rx (+ rx MapBlockCount) (lambda (by bx)
      (if (notInRange by bx (e 'mapBlockY) (e 'mapBlockX)) (begin
-       (displayl "\r\nSending block " (list by bx) " to " (e 'name) ":" (e 'port)) ; DEBUG
+       (displayl "\r\n\e[0mSending block " (list by bx) " to " (e 'name) ":" (e 'port)) ; DEBUG
        ((ipc 'private) (e 'port) ; Send updated block to peer
          `(mapUpdateColumns ,(* by MapBlockSize) ,(* bx MapBlockSize) ,MapBlockSize ,(getMapBlock by bx #t)))))))
 
@@ -263,26 +315,26 @@
 ;;
 (define (who . dna)
  (IpcWrite
- `(entity ,DNA ,(avatar 'port) ,(avatar 'name) ,((avatar 'gps)))))
+ `(entity ,DNA ,(avatarMapAgent 'port) ,(avatarMapAgent 'name) ,((avatarMapAgent 'gps)))))
 
 (define (entity dna . args)
- (let ((e ((eDB 'get) dna)))
+ (let ((e ((myEntityDB 'get) dna)))
   (if e
     (begin
-      (apply (eDB 'set) dna args)
-      (displayl "\e[31m Updated " (e 'name) args "\e[0m"))
+      (apply (myEntityDB 'set) dna args)
+      (displayl "\e[0;31m Updated " (e 'name) args "\e[0m"))
     (begin
-      (set! e (apply (eDB 'set) dna args))
-      (displayl "\e[31m Registered " (e 'name) " " args " \e[0m")
+      (set! e (apply (myEntityDB 'set) dna args))
+      (displayl "\e[31;1m Registered " (e 'name) " " args " \e[0m")
       (sendInitialBlocks e)))))
 
 (define (voice dna level text)
- (let ((e ((eDB 'get) dna)))
+ (let ((e ((myEntityDB 'get) dna)))
    (displayl "\e[1;34m " (e 'name) " \"" text "\"\e[0m")
    (display (string (e 'name) "\t" text "\n") log)))
 
 (define (move dna . loc)
- (letrec ((e ((eDB 'get) dna)))
+ (letrec ((e ((myEntityDB 'get) dna)))
    (apply (e 'setLoc) loc) ; Update entity's location
    (displayl "\e[32m " (e 'name) " " ((e 'gps)))
    (or (entityWithinBounds e) (sendNewBlocks e))))
@@ -290,55 +342,6 @@
 (define die list)
 
 (define force list)
-
-;-----------------------------------------------------------
-
-; Height of first default implicit bottom object
-(define (columnHeightBottom c)
-  (vector-ref c 0))
-
-; Height of first default implicit top object
-(define (columnHeightTop c)
-  (+ (vector-ref c 0)
-     (vector-length c)))
-
-(define (columnRef column z)
- (vector-ref column (let ((i (- z (columnHeightBottom column)))) ; normalize z coordinate
-                      (if (<= i 1) 1 ; default bottom cell
-                      (if (<= (vector-length column) i) (- (vector-length column) 1) ; default top cell
-                      i)))))
-
-; Extend column below based on existing column. #(3  4 5 6) -> #(1  4 4 4 5 6)
-(define (columnExtendBelow c bot)
- (let ((k (make-vector (- (columnHeightTop c) bot)             ; vector size
-                       (columnRef c (columnHeightBottom c))))) ; default object
-   ; Set bottom height
-   (vector-set! k 0 bot)
-   ; Copy old column here.
-   (vector-set-vector! k (- (columnHeightBottom c) bot -1) c 1)
-   k))
-
-; Extend column above based on existing column. #(3  4 5 6) -> #(3  4 5 6 6 6)
-(define (columnExtendAbove c top)
- (let ((k (make-vector (- top (columnHeightBottom c))       ; vector size
-                       (columnRef c (columnHeightTop c))))) ; default object
-   ; Copy old column here including bottom height
-   (vector-set-vector! k 0 c 0)
-   k))
-
-; Returns column (or new column) with object set at specified height.
-(define (columnSet c h o)
-  (let ((i (- h (columnHeightBottom c)))) ; Column height -> vector index
-    (if (<= i 1)
-      (begin
-        (set! c (columnExtendBelow c (- h 2)))
-        (vector-set! c 2 o))
-    (if (>= i (- (vector-length c) 1))
-      (begin
-        (set! c (columnExtendAbove c (+ h 2)))
-        (vector-set! c i o))
-    (vector-set! c i o)))
-    c))
 
 (define (mapSetCell . x) ())
 
@@ -351,6 +354,7 @@
     (vector-vector-set! block by bx (columnSet column z cell))
     (saveMapBlock (/ y MapBlockSize) (/ x MapBlockSize) block)
     (IpcWrite `(mapSetCell ,z ,y ,x ,cell))))
+
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
