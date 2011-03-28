@@ -2997,5 +2997,19 @@ The terminal getKey function is blocking.
 
 [ ] read-char should handle (read-char) (read-char stdin) (read-char 500)
 
-Terminal object Window list should be a vector and the window ID should be the
-vector offset, not list length.
+[x] Terminal object Window list should be a vector and the window ID should be
+the vector offset, not list length.
+
+
+Sat Mar 26 23:17:10 EDT 2011
+
+Both keyboard and mouse interface are simply Queues.  This way the same queue
+can be registered for both the window mouse vector event handler and keyboard
+eventstack handler.
+
+
+Sun Mar 27 19:57:38 EDT 2011
+
+The map server needs to be rewritten.  It's a hacked entity and map manager.  It
+doesn't handle more than one entity per port very well as it continuously sends
+map data to each entity as they move.

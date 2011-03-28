@@ -517,6 +517,7 @@
   (define (ViewportDisplay . e) (or NOVIEWPORT (for-each (lambda (x) (for-each (myViewport 'puts) (display->strings x))) e)))
   ; Members
   (define DebugDumpFlag #f)
+  (define circularize #t)
   (define (debugDumpMapInfoToggle) (set! DebugDumpFlag (not DebugDumpFlag )))
   (define (debugDumpInfo y x) ; Arguments specify the field column cells to dump
     ((myViewport 'set-color) 0 15)
@@ -563,6 +564,7 @@
                   (ViewportPuts (number->string c 16)))
                 (ViewportPuts "   ") ))))
      (if (> z -6) (~ (- z 1))))) ; debugDumpInfo
+  (define (circularizeToggle) (set! circularize (not circularize)))
   ; Drop a cell on the map
   (define (mapDropCell y x cell)
    (let ((z (+ 1 (fieldTopHeight 100 y x))))
@@ -694,10 +696,11 @@
               (thread (canvasResetArray ceiling))))
           (if DebugDumpFlag (debugDumpInfo (entity 'y) (entity 'x))))))
   ; Make map window circular
-  (define (circularize . val)
+  (define (maskCorners . val)
    (or NOVIEWPORT
-     (begin
-     (set! val (not (null? val))) ; Default to disabling circular corners of map.
+    (begin
+     (set! val (not (if (pair? val) (car val) circularize)))
+     ;(set! val (not (null? val))) ; Default to disabling circular corners of map.
      (let ~ ((y 0)(x 0))
       (if (< y (/ (myViewport 'Wheight) 2))
       (if (= x (/ (myViewport 'Wwidth) 2)) (~ (+ y 1) 0)
@@ -729,7 +732,7 @@
           0 (- (Terminal 'Twidth) (myViewport 'Wwidth) 2)
           (+ 1 (myViewport 'Wheight))
           (+ 2 (myViewport 'Wwidth)))
-     (circularize)
+     (maskCorners)
      ((Terminal 'unlock))
      (viewportRecenterReset (avatar 'y) (avatar 'x))
      (set! viewportResizeClickTime (+ 125 (utime)))))))
@@ -739,7 +742,7 @@
      ((Terminal 'lock))
      ((myViewport 'home))
      (if (< (utime) viewportResizeClickTime)
-       ((myViewport 'moveresize) ; Full resize
+       ((myViewport 'moveresize) ; Shrink by 10
           0 (- (Terminal 'Twidth) (myViewport 'Wwidth) -10)
           (+ -5 (myViewport 'Wheight))
           (+ -10 (myViewport 'Wwidth)))
@@ -747,7 +750,7 @@
           0 (- (Terminal 'Twidth) (myViewport 'Wwidth) -2)
           (+ -1 (myViewport 'Wheight))
           (+ -2 (myViewport 'Wwidth))))
-     (circularize)
+     (maskCorners)
      ((Terminal 'unlock))
      (viewportRecenterReset (avatar 'y) (avatar 'x))
      (set! viewportResizeClickTime (+ 125 (utime)))))))
@@ -814,7 +817,7 @@
   ((myEntityDB 'add) avatar)
   (or NOVIEWPORT
     (begin
-      (circularize)
+      (maskCorners)
       (viewportRecenterReset (avatar 'y) (avatar 'x))
       (startAnimationLoop)))
   self) ; Map
@@ -1432,11 +1435,7 @@
 (setButton #\s '(focusTalk 'scream))
 (setButton #\t '(focusTalk 'talk))
 (setButton #\w '(focusTalk 'whisper))
-(setButton CHAR-CTRL-D '(begin
-                          (ipc '(set! Debug (not Debug)))
-                          (((avatar 'myMap) 'debugDumpMapInfoToggle))
-                          (set! SHOWBUTTONS (not SHOWBUTTONS))))
-(setButton CHAR-CTRL-E '(begin (set! EDIT (not EDIT)) (WinChatDisplay "\r\nEDIT " EDIT)))
+
 (setButton CHAR-CTRL-L '(begin ((avatarMap 'canvasResetArray) (avatarMap 'ceiling))
                                ((avatarMap 'viewportRecenterReset) (avatar 'y) (avatar 'x))
                                ((WinChat 'repaint))))
@@ -1449,8 +1448,6 @@
 (setButton #\? '(help))
 (setButton #\< '((avatarMap 'smaller)))
 (setButton #\> '((avatarMap 'bigger)))
-(setButton #\z '((avatarMap 'circularize)))
-(setButton #\Z '((avatarMap 'circularize) #t))
 (setButton CHAR-CTRL-@ '(shutdown))
 (setButton CHAR-CTRL-Q '(shutdown))
 (setButton #\Q         '(shutdown))
@@ -1458,13 +1455,22 @@
 (setButton CHAR-CTRL-C '((WinConsole 'toggle)))
 (setButton #\  '(begin (avatar '(stop)) (kat '(stop))))
 (if QUIETLOGIN (begin
+   (setButton CHAR-CTRL-E '(begin
+      (set! VIEWPORTANIMATION (not VIEWPORTANIMATION))
+      (ipc '(set! Debug (not Debug)))
+      (set! SHOWBUTTONS (not SHOWBUTTONS))
+      (set! EDIT (not EDIT))
+      ((avatarMap 'debugDumpMapInfoToggle))
+      ((avatarMap 'circularizeToggle))
+      ((avatarMap 'bigger))
+      (WinChatDisplay "\r\nEDIT " EDIT)))
    (setButton #\1 '(WinChatDisplay "\r\n" (cellSymbol (cellRef ((avatar 'lookHere))))
                                       " " (cellSymbol (cellRef ((avatar 'lookAt))))))
    ;(setButton #\2 '(handleTerminalResize (cons 600 400)))
    (setButton #\3 '(thread (spawnKitty)))
    (setButton #\4 '(ghosts))
    (setButton #\5 '(pong))
-   (setButton #\6 '(WinChatDisplay "\r\n" ((avatarMap 'column) (avatar 'y) (+(avatar 'x)1))))
+   (setButton #\6 '(WinChatDisplay "\r\n" ((avatar 'lookAt)) ((avatarMap 'column) (avatar 'y) (+(avatar 'x)1))))
 ))
 
 ; Perform button's action
@@ -1528,7 +1534,7 @@
                     (WinChatDisplay
                       (call/cc (lambda (c) ; Return here if an error occurs
                          (vector-set! ERRORS (tid) c)
-                         (eval (read-string (cdr-string talkInput)))))))
+                         (avatar (read-string (cdr-string talkInput))))))) ; Eval expression in Avatar's environment
              (if (eq? cmd 'whisper) ((avatar 'speak) (string "(" (string-downcase talkInput) ")"))
                (if (eq? cmd 'scream)  ((avatar 'speak) (string-upcase talkInput))
                  ((avatar 'speak) talkInput))))
@@ -1705,11 +1711,11 @@
 
 
 ; Tank agent - The first interactive user agent.
-(define (tankTalk str)
+(define (tankTalk . l)
   (thread
     (sleep 500)
     (WinChatSetColor 0 15) (WinChatDisplay "\r\nTank ")
-    (WinChatSetColor 0 7)  (WinChatDisplay str)))
+    (WinChatSetColor 0 7) (apply WinChatDisplay l)))
 
 (define tankHangupTime #f)
 
@@ -1733,26 +1739,40 @@
    (let ((strLen (string-length talkInput)))
     (if (and (> strLen 11) (string=? "my name is " (substring talkInput 0 11)))
       (thread (changeName (substring talkInput 11 strLen))))))
- (if tankHangupTime (cond
-   ((string=? "who" talkInput) (IpcWrite '(say "I'm here!")))
-   ((string=? "load the jump program" talkInput) (tankTalk "I can't find the disk"))
-   ((string=? "sex" talkInput) (tankTalk (satc)))
-   ((string=? "march" talkInput) (avatar '(march)))
-   ((string=? "walk around" talkInput) (avatar '(walkAround)))
-   ((string=? "edit" talkInput) (begin (set! EDIT (not EDIT)) (tankTalk "Edit mode " EDIT)))
-   ((string=? "island" talkInput) ((avatar 'jump) 1 4150 5602))
-   ((string=? "theoffice" talkInput) ((avatar 'jump) 1 3869 1053))
-   ((string=? "scrabble" talkInput)  ((avatar 'jump) 1 3338 3244))
-   ((string=? "britania" talkInput)  ((avatar 'jump) 1 3456 2751)))))
+ (if tankHangupTime
+  (letrec ((words (strtok talkInput #\ ))
+           (w1 (car words) ""))
+   (cond
+    ;((string=? "who" talkInput) (IpcWrite '(say "I'm here!")))
+    ((string=? "load the jump program" talkInput) (tankTalk "I can't find the disk"))
+    ((eqv? w1 "sex") (apply satc (cdr words)))
+    ((string=? "march" talkInput) (avatar '(march)))
+    ((string=? "walk around" talkInput) (avatar '(walkAround)))
+    ((string=? "edit" talkInput) (begin (set! EDIT (not EDIT)) (tankTalk "Edit mode " EDIT)))
+    ((string=? "island" talkInput) ((avatar 'jump) 1 4150 5602))
+    ((string=? "theoffice" talkInput) ((avatar 'jump) 1 3869 1053))
+    ((string=? "scrabble" talkInput)  ((avatar 'jump) 1 3338 3244))
+    ((string=? "britania" talkInput)  ((avatar 'jump) 1 3456 2751))))))
 
 ; Sex and the City episode recommender
-(define (satc)
- (let ((lst ()))
-  (loop 6 (lambda (season)
-     (loop (vector-ref #(12 18 18 18 8 20) season)
-      (lambda (episode)
-       (set! lst (cons (list 's (+ season 1) 'e (+ episode 1)) lst))))))
-  (vector-random (list->vector lst))))
+(define SexEpisodes ())
+(load "satc.scm") ; defines SexEpisodes
+
+(define (satc . args)
+ (let ((index #f))
+  (if (null? args)
+    (set! index (random (vector-length SexEpisodes)))
+    (let ((s (- (read-string (car args)) 1)) ; Normalize season and episode number WRT 0
+          (e (- (read-string (cadr args)) 1)))
+      (cond ((or (< s 0) (< 5 s))
+             (tankTalk "Only seasons 1 through 6 exist"))
+            ((or (< e 0) (<= (vector-ref #(12 18 18 18 8 20) s) e))
+             (tankTalk "Season " (+ s 1) " has only " (vector-ref #(12 18 18 18 8 20) s) " episodes"))
+            (else
+             (set! index (+ e (vector-ref #(0 12 30 48 66 74) s)))))))
+  (if index (let ((d (vector-ref SexEpisodes index)))
+    (tankTalk (caddr d) " -- Season " (car d) " episode " (cadr d))
+    (tankTalk (car (cdddr d)))))))
 
 ; Display the same string repeatedly with colors of increasing inensity.
 (define (fancyDisplay c s)
@@ -1813,7 +1833,7 @@
 (define ghostMacro (macro ()
  (set! Stop #f)
  (WinChatDisplay "Lookout pacman!")
- (thread (let ~ ((dir dir)) ; Use this local symbol and not the Avatar class'.
+ (thread (let ~ ((dir dirLook)) ; Use this local symbol and not the Avatar class'.
    (if Stop
      (WinChatDisplay "The gosts give up")
      (begin
