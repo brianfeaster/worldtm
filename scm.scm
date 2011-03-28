@@ -241,7 +241,7 @@
    (if (= i len) (cons str ())
    (if (eq? (string-ref str i) delimeter)
        (cons (substring str 0 i)
-             (substring str (+ i 1) len))
+             (strtok (substring str (+ i 1) len) delimeter))
    (~ (+ i 1)))))))
 
 (define (string-downcase s)
