@@ -1,1 +1,0 @@
-(load "adt.scm")
