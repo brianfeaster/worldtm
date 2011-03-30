@@ -144,6 +144,9 @@ void compDefine (Num flags) {
 	DB("-->compDefine");
 	expr = cdr(expr); /* Skip 'define symbol. */
 
+	push(env);
+	env = tge;
+
 	/* If the expression is of the form ((...) body) transform. */
 	if (objIsPair(car(expr))) {
 		compTransformDefineFunction();
@@ -167,7 +170,12 @@ void compDefine (Num flags) {
 	} else  {
 		write (2, "ERROR: compDefine(): Not a symbol:", 34); wscmWrite(r1, stderr);
 	}
+
+	env = pop();
+
 	DB("<--compDefine");
+ret:
+	return;
 }
 
 
@@ -327,19 +335,21 @@ void compLambdaBody (Num flags) {
 		if (flags & MACRO) {
 			/* Leave environment as is.  Dynamic binding. */
 		} else {
-			/* Since empty formals function, just set env to closure's env. */
-			asm(LDI160); asm(1l);
+			/* Since empty formals function, just set env to closure's env
+			   or TGE if this is a top level definition (which will always
+			   be a lambda and never a macro) */
+			if (env==tge) asm(MV1617);
+			else { asm(LDI160); asm(1l); }
 		}
 		opcodeStart = memStackLength(asmstack);
 		asmAsm (
 			BEQI1, 0, ADDR, "expectedNoArgs",
-			MVI0, expr, /* Add expression to stack */
+			MVI0, expr, /* Error situation.  Add expression to stack */
 			PUSH0,
 			ADDI1, 1l,
 			MVI0, "Too many arguments to function",
 			SYSI, sysError, /* Error correction */
 			LABEL, "expectedNoArgs",
-			NOP,
 			END);
 		asmCompileAsmstack(opcodeStart);
 	} else {
@@ -348,11 +358,16 @@ void compLambdaBody (Num flags) {
 		   R3 contains the non-dotted formal parameter length (via the Normalize
 		   function above). */
 		opcodeStart = memStackLength(asmstack);
+
+		/* Temporarily save lexical environment, from closure in r0 or tge, to r5.
+		   The stored environment might be null in which case keep track of
+		   the current/dynamic environment instead of the stored lexical.  Use
+		   TGE when a top level definition.  See also the similar situation in this
+		   if blocks true clause with the empty formals case. */
+		if (env==tge) asm(MV517);
+		else { asm(LDI50); asm(1l); }
+
 		asmAsm (
-			/* Temporarily save lexical environment, from closure in r0, to r5.
-			   The stored environment might be null in which case keep track of
-			   the current/dynamic environment instead of the stored lexical. */
-			LDI50, 1l,
 			BNEI5, null, ADDR, "keepLexicalEnvironment",
 			MV516,
 		LABEL, "keepLexicalEnvironment",
@@ -510,8 +525,7 @@ void compLambda (Num flags) {
 	DB("-->%s", __func__);
 	expr = cdr(expr); /* Skip 'lambda. */
 
-	/* Save env. */
-	push(env);
+	push(env); /* Save env. */
 
 	/* Extend pseudo environment only if the formals list is not empty to
 	   mimic the runtime optimized environment chain.   A pseudo environment
@@ -525,8 +539,7 @@ void compLambda (Num flags) {
 	/* Create closures code block in r0. */
 	compLambdaBody(flags);
 
-	/* Restore env. */
-	env = pop();
+	env = pop(); /* Restore env. */
 
 	/* Generate code that generates a closure.  Closure returned in r0 created
 	   from r1 (code) and r16 (current environment). */

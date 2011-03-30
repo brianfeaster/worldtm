@@ -104,6 +104,8 @@
  (set! p (if (null? p) stdout (car p))) ; Default port is STDIN.
  (for-each (lambda (s) (send s p))
            (write->strings x)))
+
+(define (hex i) (number->string i 16))
 ;;
 ;; Serializing
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -502,11 +504,11 @@
 ; The read eval print loop.
 (define (repl)
   (display (cons "MSG:" (call/cc (lambda (c) (vector-set! ERRORS (tid) c) WELCOME-MESSAGE))))
-  (let ~ ()
+  (let repl~ ()
     (display "\nwscm>")
     (let ((ret (read stdin)))
       (display (eval ret))
-      (if (not (eof-object? ret)) (~)))))
+      (if (not (eof-object? ret)) (repl~)))))
 
 (define gc garbage-collect)
 

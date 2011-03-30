@@ -3,6 +3,7 @@
 ;;   IPC
 ;;   Avatar_and_entities
 ;;   Map_blocks
+;;   Map_Block_Nodes_And_DB
 ;;   Incomming_IPC_messages
 ;;   Start_everything
 ;;
@@ -28,7 +29,7 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; IPC
 ;;
-(load "ipc.scm")
+(load "ipc.scm") ; Includes adt.scm
 (define ipc (Ipc #f)) ; Instead of #f can pass in a serializer for debug messages
 (define ipcReader ((ipc 'newReader)))
 (define IpcWrite (ipc 'qwrite))
@@ -42,6 +43,7 @@
 
 ; Extend the Entity class with a new one just for this Map module
 (define EntityBase Entity) ; First rename it
+
 (define (Entity dna port name z y x) ((EntityBase dna port name z y x) '(let ()
   (define self (lambda (msg) (eval msg)))
   ; Map block origin AKA the upper left hand corner of the map blocks sent to the peer
@@ -65,7 +67,7 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Column_object
-;; All functions, except columnSet used by IPC::setCellAgent , are local to this block
+;; All functions, except columnSet, used by IPC::setCellAgent , are local to this block
 
 ; Height of first default implicit bottom object
 (define (columnHeightBottom c)
@@ -134,7 +136,7 @@
 (define MapBlockSize  32) ; Each field block is a 32x32 array of columns
 (define MapBlockCount 3)       ; A field is made up of 2x2 field blocks
 (define MapRangeSize (* MapBlockCount MapBlockSize)) ; For now resulting blocok range size is 96x96
-(define MapBoundsSize MapBlockSize) ; Distance from the edge the valid range is
+(define MapBoundsSize (/ MapBlockSize 1)) ; Distance from the edge the valid range is
 
 ; The Ultima4 map file is 8x8 blocks of 32x32 cells
 ; so create a simpler 256x256 array of cell numbers.
@@ -182,11 +184,12 @@
   (if (and (= by 90)  (= bx 136))(ultMapVector "cove.ult")
   (if (and (= by 92)  (= bx 128))(conMapVector "shrine.con")
   (if (and (= by 106) (= bx 82)) (ultMapVector "britain.ult")
+  (if (and (= by 108) (= bx 83)) (conMapVector "shrine.con") ; for fun
   (if (and (= by 107) (= bx 86)) (ultMapVector "lcb1.ult")
   (if (and (= by 107) (= bx 87)) (ultMapVector "lcb2.ult")
   (if (and (= by 128) (= bx 22)) (ultMapVector "skara.ult")
   (if (and (= by 145) (= bx 98)) (ultMapVector "paws.ult")
-  #f)))))))))
+  #f))))))))))
 
 (define doubleHeightCells (list cellBRICKC cellCOLUMN))
 
@@ -202,58 +205,87 @@
   (let ((fp (open-new-file fileName)))
     (if (port? fp) fp (begin
       (displayl "\r\nCan't open " fileName ".  Trying again...")
-      (sleep 10)
+      (sleep 100)
       (tryToOpenFile fileName)))))
 
-(define (saveMapBlock by bx block)
- (letrec ((fn (string "mapU4-" (number->string by 16) "-" (number->string bx 16))))
-    (displayl "\r\nSaving map block " (list by bx) fn)
-   (let ((fp (tryToOpenFile fn)))
-     (write block fp)
-     (close fp))))
 
-(define CurrentMapBlockName "")
-(define CurrentMapBlock #())
 
-(define (getMapBlock by bx shouldSave)
- (let ((fn (string "mapU4-" (number->string by 16) "-" (number->string bx 16))))
-  (if (string=? fn CurrentMapBlockName)
-    (begin
-      (displayl "\r\nUsing cached map block " fn)
-      CurrentMapBlock) ; Return currently cached map block
-    (let ((fp (open-file fn)))
-      (if fp
-        (begin
-          (displayl "  Reading existing map block " fn)
-          (let ((v (read fp)))
-            (close fp)
-            (set! CurrentMapBlockName fn)
-            (set! CurrentMapBlock v)
-            v))
-        (let ((v (make-vector-vector MapBlockSize MapBlockSize #f))
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Map_Block_Nodes_And_DB
+;;
+;; Doubly linked list of map block nodes #((by . bx) block dirty access)
+;;
+(define MapNodeDB (BListCreate))
+(define (MapNodeCreate by bx block) (vector (cons by bx) block #f 0))
+(define (MapNodeLoc n) (vector-ref n 0)) ; Location pair
+(define (MapNodeBlock n) (vector-ref n 1)) ; Map block array
+(define (MapNodeDirty n) (vector-ref n 2)) ; Dirty flag requires write to disk
+(define (MapNodeDirtySet n v) (vector-set! n 2 v))
+(define (MapNodeAccess n) (vector-ref n 3)) ; Time since last access (second resolution)
+(define (MapNodeAccessSet n t) (vector-set! n 3 t))
+
+(define (getMapNode by bx shouldSave)
+ (displayl "\r\n::getMapBlock ")
+ (letrec ((loc (cons by bx))
+          (node (BListFindNode ; Load from DB
+                    MapNodeDB
+                    (lambda (n) (equal? (MapNodeLoc n) loc)))))
+  (if node
+    ; Cache hit
+    (displayl "cache " (list (hex (car loc)) (hex (cdr loc))))
+    ; Cache miss...load or generate
+    (letrec ((fname (string "mapU4-" (hex by) "-" (hex bx)))
+             (fp (open-file fname 'silent))
+             (block (and fp (read fp))))
+      (if (and block (vector? block) (= MapBlockSize (vector-length block)))
+        (begin (displayl "load " fname)
+               (set! node (MapNodeCreate by bx block)))
+        (let ((block (make-vector-vector MapBlockSize MapBlockSize #f))
               (ultVec (getUltima4ULT by bx)))
-          (displayl "  Generating map block " fn)
+          (set! node (MapNodeCreate by bx block))
+          (displayl "generate " (list (hex (car loc)) (hex (cdr loc))) " " fname)
           (loop2 0 MapBlockSize 0 MapBlockSize
             (if ultVec
-              (lambda (y x) (vector-vector-set! v y x (ultMapColumn (U4MapCell by bx) ultVec y x)))
-              (lambda (y x) (vector-vector-set! v y x (U4MapColumn by bx)))))
-          (if shouldSave (saveMapBlock by bx v))
-          (set! CurrentMapBlockName fn)
-          (set! CurrentMapBlock v)
-          v))))))
+              (lambda (y x) (vector-vector-set! block y x (ultMapColumn (U4MapCell by bx) ultVec y x)))
+              (lambda (y x) (vector-vector-set! block y x (U4MapColumn by bx)))))
+          (MapNodeDirtySet node #t)))
+      (if (port? fp) (close fp))
+      (BListAddFront MapNodeDB node))) ; Save to DB
+  (MapNodeAccessSet node (time)) ; Reset access time
+  node))
+
+(define (saveMapBlock node)
+ (letrec ((loc (MapNodeLoc node))
+          (fn (string "mapU4-" (hex (car loc)) "-" (hex (cdr loc)))))
+   (displayl "\r\n\e[1;33m::saveMapBlock " fn)
+   (let ((fp (tryToOpenFile fn)))
+     (write (MapNodeBlock node) fp)
+     (MapNodeDirtySet node #f)
+     (close fp))))
+
+; Scans in reverse for the first dirty map block node and saves it.
+(define (dirtyMapBlockWriterLoop delay)
+  (sleep delay)
+  (cond ((BListReverseFindNode MapNodeDB MapNodeDirty) => saveMapBlock))
+  (dirtyMapBlockWriterLoop delay))
+;;
+;; Map_Block_Nodes_And_DB
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+
 
 (define (sendInitialBlocks e)
   (letrec ((ey (e 'y)) ; Entity's position
            (ex (e 'x))
-           (by (/ (- ey (/ MapRangeSize 2)) MapBlockSize)) ; A new block range origin
-           (bx (/ (- ex (/ MapRangeSize 2)) MapBlockSize)))
+           (by (- (/ ey MapBlockSize) 1)) ; A new block range origin.  (* 3 32)
+           (bx (- (/ ex MapBlockSize) 1)))
+ (displayl "\r\n\e[0mSending initial block " (e 'name) ":" (e 'port)) ; DEBUG
   ((e 'setMapBlockLoc) by bx) ; Update the entity's block range origin
   (loop2 by (+ by MapBlockCount)
          bx (+ bx MapBlockCount)
     (lambda (y x)
-      (displayl "\r\n\e[0mSending initial block " (list y x) " to " (e 'name) ":" (e 'port)) ; DEBUG
       ((ipc 'private) (e 'port) ; Send the block to the peer
-         `(mapUpdateColumns ,(* y MapBlockSize) ,(* x MapBlockSize) ,MapBlockSize ,(getMapBlock y x #t)))))
+         `(mapUpdateColumns ,(e 'dna) ,(* y MapBlockSize) ,(* x MapBlockSize) ,MapBlockSize ,(MapNodeBlock (getMapNode y x #t))))))
   ((ipc 'private) (e 'port) '(IpcWrite '(who))))) ; Force the peer to request roll call from everyone
 
 ; Determine if the coordinate is above or below the inner field block area.
@@ -302,9 +334,9 @@
 
    (loop2 ry (+ ry MapBlockCount) rx (+ rx MapBlockCount) (lambda (by bx)
      (if (notInRange by bx (e 'mapBlockY) (e 'mapBlockX)) (begin
-       (displayl "\r\n\e[0mSending block " (list by bx) " to " (e 'name) ":" (e 'port)) ; DEBUG
+       (displayl "\r\n\e[0mSending block " (list (hex by) (hex bx)) " to " (e 'name) ":" (e 'port)) ; DEBUG
        ((ipc 'private) (e 'port) ; Send updated block to peer
-         `(mapUpdateColumns ,(* by MapBlockSize) ,(* bx MapBlockSize) ,MapBlockSize ,(getMapBlock by bx #t)))))))
+         `(mapUpdateColumns ,(e 'dna) ,(* by MapBlockSize) ,(* bx MapBlockSize) ,MapBlockSize ,(MapNodeBlock (getMapNode by bx #t))))))))
 
    ((e 'setMapBlockLoc) ry rx)))
 
@@ -323,21 +355,34 @@
     (begin
       (apply (myEntityDB 'set) dna args)
       (displayl "\e[0;31m Updated " (e 'name) args "\e[0m"))
-    (begin
+    (begin ; Occurs the first time the entity connects
       (set! e (apply (myEntityDB 'set) dna args))
       (displayl "\e[31;1m Registered " (e 'name) " " args " \e[0m")
       (sendInitialBlocks e)))))
+
+(define (move dna . loc)
+ (letrec ((e ((myEntityDB 'get) dna)))
+   (apply (e 'setLoc) loc) ; Update entity's location
+   (displayl "\e[32m " (e 'name)
+             " " (map hex ((e 'gps)))
+             " " (map (lambda (i) (hex (/ i MapBlockSize))) ((e 'gps))))
+   (or (entityWithinBounds e) (sendNewBlocks e))))
 
 (define (voice dna level text)
  (let ((e ((myEntityDB 'get) dna)))
    (displayl "\e[1;34m " (e 'name) " \"" text "\"\e[0m")
    (display (string (e 'name) "\t" text "\n") log)))
 
-(define (move dna . loc)
- (letrec ((e ((myEntityDB 'get) dna)))
-   (apply (e 'setLoc) loc) ; Update entity's location
-   (displayl "\e[32m " (e 'name) " " ((e 'gps)))
-   (or (entityWithinBounds e) (sendNewBlocks e))))
+(define (setCellAgent z y x cell)
+  (displayl "\n\e[1;31mSet cell " cell " at " (list z y x)) ; DEBUG
+  (letrec ((node (getMapNode (/ y MapBlockSize) (/ x MapBlockSize) #f))
+           (block (MapNodeBlock node))
+           (by (modulo y MapBlockSize))
+           (bx (modulo x MapBlockSize))
+           (column (vector-vector-ref block by bx)))
+    (vector-vector-set! block by bx (columnSet column z cell))
+    (MapNodeDirtySet node #t)
+    (IpcWrite `(mapSetCell ,z ,y ,x ,cell))))
 
 (define die list)
 
@@ -345,15 +390,12 @@
 
 (define (mapSetCell . x) ())
 
-(define (setCellAgent z y x cell)
-  (displayl "\n\e[1;31mSet cell " cell " at " (list z y x)) ; DEBUG
-  (letrec ((block (getMapBlock (/ y MapBlockSize) (/ x MapBlockSize) #f))
-           (by (modulo y MapBlockSize))
-           (bx (modulo x MapBlockSize))
-           (column (vector-vector-ref block by bx)))
-    (vector-vector-set! block by bx (columnSet column z cell))
-    (saveMapBlock (/ y MapBlockSize) (/ x MapBlockSize) block)
-    (IpcWrite `(mapSetCell ,z ,y ,x ,cell))))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Utilities
+;;
+(define (say s) (IpcWrite (list 'voice DNA #xffff s)))
 
 
 
@@ -365,7 +407,8 @@
 
 (IpcWrite '(who)) ; Force everyone, including this map agent, to identify themselves
 
-(define (say s) (IpcWrite (list 'voice DNA 10 s)))
+; Start the dirty map writer thread
+(thread (dirtyMapBlockWriterLoop 5000))
 
 (thread 
  (let ((s (call/cc (lambda (c) (vector-set! ERRORS (tid) c) '*))))

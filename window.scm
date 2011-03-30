@@ -3,7 +3,7 @@
 ; redrawing while scrolling up conflict with 'toprow' variable.
 
 (or (procedure? QueueCreate) (begin
-  (display "ERROR: window.scm requires queue.scm.  Halting.\n")
+  (display "ERROR: window.scm requires adt.scm.  Halting.\n")
   (quit)))
 
 ; 256 color terminal escape sequence interface.
