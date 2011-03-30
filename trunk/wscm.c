@@ -53,10 +53,13 @@ void wscmStringReadEvalPrintLoop (void) {
 	/* Must disable stdio blocking since wscheme implements its own blocknig I/O */
 	fcntl (0, F_SETFL, fcntl(0, F_GETFL, 0)|O_NONBLOCK);
 	yy_scan_string ((Str)
-"(let ~ ((FILE:SCM.SCM (open-file \"scm.scm\")))\
-    (if (eof-object? (eval (read FILE:SCM.SCM)))\
-        (send \"\r\nbye.\r\n\" stdout)\
-        (~ FILE:SCM.SCM)))");
+"(let ((FILE:SCM.SCM (open-file \"scm.scm\")))\
+  (let wscm~ ((a (read FILE:SCM.SCM))\
+          (b (read FILE:SCM.SCM)))\
+    (cond ((eof-object? a) )\
+          ((eof-object? b) (eval a))\
+          (else (eval a) (wscm~ b (read FILE:SCM.SCM)))))\
+  (send \"\r\nbye.\r\n\" stdout))");
 	yyparse();
 	expr=r0; compCompile();
 	wscmNewThread();

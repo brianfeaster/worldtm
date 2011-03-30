@@ -148,14 +148,14 @@
  ; Return entity object or #f
  ; TODO implement hash.
  (define (get dnaIpc)
-   (let ~ ((lst (ListGet lst))) ; (car lst) is an entity object
+   (let ~ ((lst (getAll))) ; (car lst) is an entity object
      (cond ((null? lst) #f)
            ((eqv? dnaIpc ((car lst) 'dna)) (car lst))
            (else (~ (cdr lst))))))
  (define (set dna . args)
    (let ((entity (get dna)))
      (if entity
-       ; Update only name and glyph if entity already exists
+       ; Update name, glyph, port and sprite if entity already exists
        (each-for args
          (lambda (a)
            (cond ((integer? a)

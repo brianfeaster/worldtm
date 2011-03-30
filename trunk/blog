@@ -3013,3 +3013,38 @@ Sun Mar 27 19:57:38 EDT 2011
 The map server needs to be rewritten.  It's a hacked entity and map manager.  It
 doesn't handle more than one entity per port very well as it continuously sends
 map data to each entity as they move.
+
+[x] Refactor map agent.
+
+
+Mon Mar 28 16:02:19 EDT 2011
+
+World Scheme needs to be more strict with the use of define.  It's a binding
+command, not just set!, with its own semantics for creating new variables in
+TGE and new blocks.
+
+[/] When compiling define, compDefine() will assign to the env register the tge
+register.  This forces all explicit defines to be top level defines.  I should
+also add an error check.
+
+After the map agent is refactored and caching maps for avatars more efficiently,
+the IRC agent should be able to connect and spawn avatars for every visible user
+in the channel.  This should be interesting.
+
+
+Tue Mar 29 21:29:03 EDT 2011
+
+[ ] The entity instance in the map module should keep track of the actual map
+data for each entity.  Each map block should also be accessed through a primary
+cache, before the map files, that all entities will access map data through.
+This will be one of the main functions of the map agent: to cache file map data.
+
+[ ] The other thing to do is for the clients to convert the cell numbers into actual
+cells.  Faster rendering?
+
+[x] The map agent and same-process avatars still do not differentiate who the
+mapUpdateColumns is for.  Each avatar instance will honor the message resulting
+in invalid field blocks.
+
+[ ] Map updating and rendering does not honor the field boundaries.  Field
+boundary conditions need to be added to the rendering pipeline.

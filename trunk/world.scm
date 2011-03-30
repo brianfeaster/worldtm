@@ -16,6 +16,7 @@
 ;;   Typing_and_talking
 ;;    Prototypes_and_fun_things
 ;;   Genesis
+;;
 
 (load "ipc.scm")
 (load "window.scm")
@@ -78,7 +79,7 @@
 (define (WinConsoleDisplay . l)
   (for-each
     (lambda (x)
-     (if (not (and (pair? x) (eq? (car x) 'mapUpdateColumns)))
+     (if (not (and (pair? x) (eq? (car x) 'mapUpdateColumns))) ; Ignore mapUpdateColumns IPC message as it is very long.  That's what she said.
          (for-each WinConsolePuts (display->strings x))))
     l))
 (define (WinConsoleWrite . e) (for-each (lambda (x) (for-each WinConsolePuts (write->strings x))) e))
@@ -526,21 +527,21 @@
           (ay (avatar 'y))
           (ax (avatar 'x)))
       (ViewportDisplay "map("
-         (number->string az) " "
-         (number->string ay) " "
-         (number->string ax) ")"
+         (hex az) " "
+         (hex ay) " "
+         (hex ax) ")"
          " field("
-         (number->string (/ ay size)) " " 
-         (number->string (/ ax size)) ")("
-         (number->string (/ (modulo ay size) MapBlockSize)) " " 
-         (number->string (/ (modulo ax size) MapBlockSize)) ")("
-         (number->string (modulo ay size)) " " 
-         (number->string (modulo ax size)) ")"
+         (hex (/ ay size)) " " 
+         (hex (/ ax size)) ")("
+         (hex (/ (modulo ay size) MapBlockSize)) " " 
+         (hex (/ (modulo ax size) MapBlockSize)) ")("
+         (hex (modulo ay size)) " " 
+         (hex (modulo ax size)) ")"
          " block("
-         (number->string (/ ay MapBlockSize)) " " 
-         (number->string (/ ax MapBlockSize)) ")("
-         (number->string (modulo ay MapBlockSize)) " " 
-         (number->string (modulo ax MapBlockSize)) ")"
+         (hex (/ ay MapBlockSize)) " " 
+         (hex (/ ax MapBlockSize)) ")("
+         (hex (modulo ay MapBlockSize)) " " 
+         (hex (modulo ax MapBlockSize)) ")"
          " C=" ceiling))
     ((myViewport 'goto) 0 0)
     (let ~ ((z 11))
@@ -561,7 +562,7 @@
                 (begin
                   (if (< c 256) (ViewportPuts "0"))
                   (if (< c 16) (ViewportPuts "0"))
-                  (ViewportPuts (number->string c 16)))
+                  (ViewportPuts (hex c)))
                 (ViewportPuts "   ") ))))
      (if (> z -6) (~ (- z 1))))) ; debugDumpInfo
   (define (circularizeToggle) (set! circularize (not circularize)))
@@ -771,9 +772,10 @@
             ((myEntityDB 'del) entity)))))
   ; The 2d vector of columns will most likely come from a map agent.
   ; The map block coordinate and map block size is also passed.
-  (define (updateColumnsIPC by bx blockSize cellAry) ; Called from map agent via IPC
+  (define (updateColumnsIPC dna by bx blockSize cellAry) ; Called from map agent via IPC
     (let ((fieldy (modulo by size))
           (fieldx (modulo bx size)))
+    (if (= dna (avatar 'dna)) (begin ; Map agent has sent it to just me
       ; Update the field block
       ((myField 'updateColumns) fieldy fieldx blockSize cellAry)
       ; The field has just been updated with new columns so all entities
@@ -789,7 +791,7 @@
       (or NOVIEWPORT
         (loop2 fieldy (+ fieldy blockSize)
                fieldx (+ fieldx blockSize)
-               (lambda (y x) (canvasRender 100 y x))))))
+               (lambda (y x) (canvasRender 100 y x))))))))
     ; Update one or more of an entity's attribute: dna port name glyph z y x
   (define (IPCentity dna . args)
     (let ((entity ((myEntityDB 'get) dna)))
@@ -798,7 +800,7 @@
           (delEntitySprite dna (entity 'z) (entity 'y) (entity 'x)) ; Remove it first from the map
           (apply (myEntityDB 'set) dna args)
           (moveObject (entity 'dna) (entity 'z) (entity 'y) (entity 'x)
-                                       (entity 'z) (entity 'y) (entity 'x) #f)
+                                    (entity 'z) (entity 'y) (entity 'x) #f)
           (or NOVIEWPORT
             (begin
               (canvasRender ceiling (entity 'y) (entity 'x))
@@ -1452,9 +1454,9 @@
 (setButton CHAR-CTRL-Q '(shutdown))
 (setButton #\Q         '(shutdown))
 (setButton #eof        '(shutdown))
-(setButton CHAR-CTRL-C '((WinConsole 'toggle)))
 (setButton #\  '(begin (avatar '(stop)) (kat '(stop))))
 (if QUIETLOGIN (begin
+   (setButton CHAR-CTRL-C '((WinConsole 'toggle)))
    (setButton CHAR-CTRL-E '(begin
       (set! VIEWPORTANIMATION (not VIEWPORTANIMATION))
       (ipc '(set! Debug (not Debug)))
@@ -1771,8 +1773,7 @@
             (else
              (set! index (+ e (vector-ref #(0 12 30 48 66 74) s)))))))
   (if index (let ((d (vector-ref SexEpisodes index)))
-    (tankTalk (caddr d) " -- Season " (car d) " episode " (cadr d))
-    (tankTalk (car (cdddr d)))))))
+    (tankTalk  "(s " (car d) " e " (cadr d) ") " (caddr d) "\r\n" (car (cdddr d)))))))
 
 ; Display the same string repeatedly with colors of increasing inensity.
 (define (fancyDisplay c s)
@@ -2017,12 +2018,13 @@
   (if (or (pair? now) QUIETLOGIN (boxBool "Quit?")) (begin
     (set! SHUTDOWN #t)
     ((avatar 'die)) ; Force an IPC message so avatar's IPC reader thread calls die method
-    (sleep 400)
+    (sleep 1000)
     (displayl "\e[" (Terminal 'Theight) "H\r\n\e[0m\e[?25h\e[?1000lgc=" (fun) "\r\n")
     (quit))))
 
 ; Spawn a second avatar.  Your free kitteh.
 (define kat (Avatar (string "katO'" (avatar 'name)) 1 (+ (random 10) 3458) (+ (random 10) 2764) ipc 'NOVIEWPORT))
+(setButton #\1 '(Avatar "kat" 1 (avatar 'y) (avatar 'x) ipc 'NOVIEWPORT))
 
 ; Keyboard command loop
 (let ~ () (let ((b (getKey)))

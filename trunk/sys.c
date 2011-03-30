@@ -373,6 +373,9 @@ void wscmDisplay (Obj a, FILE *stream) {
 	wscmDisplayR (a, 0, stream);
 }
 
+void wscmDumpEnv (void) {
+	sysDumpEnv(env);
+}
 
 void wscmDumpTGE (void) {
  Obj o;
@@ -1963,7 +1966,7 @@ void sysOpenStream (void) {
 /* Create a file object used for file I/O.
 	For now all files are opened for reading and writing.
 */
-void sysOpen (int oflag, mode_t mode) {
+void sysOpen (int oflag, mode_t mode, Num silent) {
  Chr name[160]={0};
  Num i, filenameLen;
 	DB("::%s", __func__);
@@ -1973,7 +1976,8 @@ void sysOpen (int oflag, mode_t mode) {
 	r2=pop();
 	filenameLen = memObjectLength(r2);
 
-	/* Make sure string is terminated and replace all / with ! */
+	/* TODO Currently filter out directory paths.  Make sure
+	   string is terminated and replace all '/' with '!' */
 	assert(0<filenameLen  && filenameLen<160);
 	memcpy(name, r2, filenameLen);
 	name[filenameLen]=0;
@@ -1986,7 +1990,7 @@ void sysOpen (int oflag, mode_t mode) {
 	r1 = (Obj)(Int)open((char*)name, oflag, mode);
 
 	if ((Int)r1==-1) {
-		fprintf (stderr, "ERROR: sysOpen() Unable to open local file '%s' errno %d %s.", name, errno, strerror(errno));
+		if (!silent) fprintf (stderr, "ERROR: sysOpen() Unable to open local file '%s' errno %d %s.", name, errno, strerror(errno));
 		r0 = false;
 	} else {
 		objNewInt(oflag);  r3=r0;
@@ -1998,11 +2002,19 @@ void sysOpen (int oflag, mode_t mode) {
 }
 
 void sysOpenFile (void) {
-	sysOpen(O_RDWR, S_IRUSR|S_IWUSR);
+ Num silent=0;
+	if (1<r1) {
+		while (1<r1) {
+			r0=pop();
+			r1--;
+		}
+		silent=1;
+	}
+	sysOpen(O_RDWR, S_IRUSR|S_IWUSR, silent);
 }
 
 void sysOpenNewFile (void) {
-	sysOpen(O_CREAT|O_TRUNC|O_RDWR, S_IRUSR|S_IWUSR);
+	sysOpen(O_CREAT|O_TRUNC|O_RDWR, S_IRUSR|S_IWUSR, 0);
 }
 
 void sysClose(void) {
@@ -2336,8 +2348,12 @@ void sysDebugDumpAll (void) {
 
 void sysDisassemble (void) {
 	r0=pop();
-	if (memObjectType(r0) == TCLOSURE) r0=car(r0);
+	if (memObjectType(r0) == TCLOSURE) {
+		sysDumpEnv(cdr(r0));
+		r0=car(r0);
+	}
 	vmDebugDumpCode(r0, stderr);
+
 }
 
 void sysOpenSemaphore (void) {
@@ -2962,6 +2978,7 @@ void wscmInitialize (void) {
 	wscmDefineSyscall (sysError, "error");
 	wscmDefineSyscall (sysQuit, "quit");
 	wscmDefineSyscall (sysFun, "fun");
+	wscmDefineSyscall (wscmDumpEnv, "env");
 	wscmDefineSyscall (wscmDumpTGE, "tge");
 	wscmDefineSyscall (sysDebugger, "debugger");
 	wscmDefineSyscall (sysDumpThreads, "threads");
