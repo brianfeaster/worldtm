@@ -192,7 +192,7 @@ Num memIsObjectShadow (Obj o) { return memObjectType(o) == TSHADOW; }
    in bytes) based on an array's 'length'.
 */
 Num memArrayLengthToObjectSize  (LengthType length) {
-	return DescSize + (length + DescSize-1) & -DescSize;
+	return DescSize + ((length + DescSize-1) & -DescSize);
 }
 
 /* Compute object size based on vector's 'length'.

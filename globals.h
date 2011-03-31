@@ -136,7 +136,6 @@ typedef void (*Func2) (Obj a, Obj b);
    in C land.
 */
 static const Num TAILCALL = 0x00010000;
-static const Num MACRO    = 0x00020000;
 /*
 static const Num R8 =       0x00000100;
 static const Num R7 =       0x00000080;

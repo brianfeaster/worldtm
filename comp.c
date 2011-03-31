@@ -8,6 +8,9 @@
 #include "obj.h"
 #include "comp.h"
 
+/* TODO This compiler module is not reentrant.
+*/
+
 void sysCompile (void);
 Num wscmWrite (Obj a, FILE *stream);
 Int  wscmEnvFind (void);
@@ -25,7 +28,7 @@ void sysIllegalOperator (void);
 void sysCreateContinuation (void);
 void sysDumpCallStackCode (void);
 
-/* Has compiler encountered an error?
+/* Has compiler encountered an error flag?
 */
 Num CompError;
 
@@ -69,43 +72,35 @@ void compVariableReference (Num flags) {
 	DBE wscmWrite(expr, stderr);
 	r1 = expr;
 
-	if (flags & MACRO) {
-		/* Dynamic binding requires runtime lookup */
-		asmAsm(
-			MVI1, r1,
-			SYSI, wscmEnvGet,
-			END);
-	} else {
-		/* Scan local environments.  Returned is a 16 bit number, the high 8 bits
-		   is the environment chain depth, the low 8 bits the binding offset. The
-		   offset will be 2 or greater if a variable is found in any environment
-		   excluding the global environment. */
-		ret = wscmEnvFind();
-		if (ret) {
-		DB("   found in a local environment %02x", ret);
-			/* Emit code that traverses the environment chain and references the
-			   proper binding. */
-			if ((ret>>8) == 0) {
-				asm(LDI016); asm(ret & 0xff);
-			} else {
-				asm(LDI016); asm(0l);
-				for (depth=1; depth < (ret>>8); depth++) {
-					asm(LDI00); asm(0l);
-				}
-				asm(LDI00); asm(ret & 0xff); /* Mask the offset value. */
-			}
+	/* Scan local environments.  Returned is a 16 bit number, the high 8 bits
+	   is the environment chain depth, the low 8 bits the binding offset. The
+	   offset will be 2 or greater if a variable is found in any environment
+	   excluding the global environment. */
+	ret = wscmEnvFind();
+	if (ret) {
+	DB("   found in a local environment %02x", ret);
+		/* Emit code that traverses the environment chain and references the
+		   proper binding. */
+		if ((ret>>8) == 0) {
+			asm(LDI016); asm(ret & 0xff);
 		} else {
-			/* Scan tge... */
-			wscmTGEFind();
-			if (r0 == null) {
-				DB("   can't find in TGE...maybe at runtime");
-				asm(MVI1); asm(expr);
-				asm(SYSI); asm(sysTGELookup);
-			} else {
-				DB("   found in TGE");
-				asm(MVI0); asm(r0);
+			asm(LDI016); asm(0l);
+			for (depth=1; depth < (ret>>8); depth++) {
 				asm(LDI00); asm(0l);
 			}
+			asm(LDI00); asm(ret & 0xff); /* Mask the offset value. */
+		}
+	} else {
+		/* Scan tge... */
+		wscmTGEFind();
+		if (r0 == null) {
+			DB("   can't find in TGE...maybe at runtime");
+			asm(MVI1); asm(expr);
+			asm(SYSI); asm(sysTGELookup);
+		} else {
+			DB("   found in TGE");
+			asm(MVI0); asm(r0);
+			asm(LDI00); asm(0l);
 		}
 	}
 
@@ -160,7 +155,7 @@ void compDefine (Num flags) {
 		expr = cdr(expr);
 		if (objIsPair(expr)) {
 			push(r0); /* Save binding. */
-			expr = car(expr); /* Consider definition expression and compile. */
+			expr = car(expr); /* Consider this definition's expression and compile. */
 			compExpression((Num)flags & ~TAILCALL);
 			asm(MVI1); asm(pop()); /* Load r1 with saved binding. */
 			asm(STI01); asm(0l);    /* Set binding's value. */
@@ -174,7 +169,6 @@ void compDefine (Num flags) {
 	env = pop();
 
 	DB("<--compDefine");
-ret:
 	return;
 }
 
@@ -332,15 +326,13 @@ void compLambdaBody (Num flags) {
 	   statically compiled?  r2 is assumed to hold the environment to be
 	   extended, r1 the argument count, r3 the formal arguments. */
 	if (null == car(expr)) {
-		if (flags & MACRO) {
-			/* Leave environment as is.  Dynamic binding. */
-		} else {
-			/* Since empty formals function, just set env to closure's env
-			   or TGE if this is a top level definition (which will always
-			   be a lambda and never a macro) */
-			if (env==tge) asm(MV1617);
-			else { asm(LDI160); asm(1l); }
-		}
+		/* Since a lambda with empty formals list, emit code which doesn't extend
+		   the environment but instead sets env to the containing closure's env
+		   or TGE if this is a top level definition (which will always be for 'lambda
+		   and not 'macro) */
+		if (env==tge) asm(MV1617);
+		else { asm(LDI160); asm(1l); }
+
 		opcodeStart = memStackLength(asmstack);
 		asmAsm (
 			BEQI1, 0, ADDR, "expectedNoArgs",
@@ -364,7 +356,7 @@ void compLambdaBody (Num flags) {
 		   the current/dynamic environment instead of the stored lexical.  Use
 		   TGE when a top level definition.  See also the similar situation in this
 		   if blocks true clause with the empty formals case. */
-		if (env==tge) asm(MV517);
+		if (car(env)==tge) asm(MV517);
 		else { asm(LDI50); asm(1l); }
 
 		asmAsm (
@@ -532,7 +524,7 @@ void compLambda (Num flags) {
 	   is just the pair (parent-environment . formals-list)*/
 	if (car(expr) != null) {
 		r0=car(expr);
-		wscmNormalizeFormals(); /* Get normalized list in r0, length in r3, dotted-formal bool in r4. */
+		wscmNormalizeFormals(); /* Create normalized list in r0, length in r3, dotted-formal bool in r4. */
 		r1=env;  r2=r0;  objCons12();  env=r0;
 	}
 

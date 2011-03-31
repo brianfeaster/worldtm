@@ -23,7 +23,7 @@
 (load "entity.scm") ; Glyph Sprite Entity EntityDb objects
 
 (define SHUTDOWN #f) ; Signals to avatar's that the process is going to shutdown
-(define QUIETLOGIN (and (< 2 (vector-length argv)) (eqv? "silent" (vector-ref argv 2))))
+(define QUIETLOGIN (and (< 2 (vector-length argv)) (eqv? "ADMINISTRATOR" (vector-ref argv 2))))
 (define VIEWPORTANIMATION #t)
 (define MAPSCROLL 'always) ; always edge never
 (define KITTEHBRAIN  #f)
@@ -948,11 +948,11 @@
               (cond ((eq? a 'voice) (apply IPCvoice d)) ; Avatar messages
                     ((eq? a 'force) (apply IPCforce d))
                     ((eq? a 'who) (apply IPCwho d))
-                    ((eq? a 'die) (apply (myMap 'dieIPC) d)) ; Map messages
-                    ((eq? a 'move) (apply (myMap 'moveIPC) d))
-                    ((eq? a 'mapUpdateColumns) (apply (myMap 'updateColumnsIPC) d))
                     ((eq? a 'mapSetCell) (apply (myMap 'setCell) d))
-                    ((eq? a 'entity) (apply (myMap 'IPCentity) d)))))
+                    ((eq? a 'die) (apply (myMap 'dieIPC) d)) ; Map messages
+                    ((eq? a 'mapUpdateColumns) (apply (myMap 'updateColumnsIPC) d))
+                    ((eq? a 'entity) (apply (myMap 'IPCentity) d))
+                    ((eq? a 'move) (apply (myMap 'moveIPC) d)))))
             (and SHUTDOWN alive (die)) ; If shutdown signaled quasi-kill myself but continue to handle msgs
             (~))
           (begin ; Shutdown avatar

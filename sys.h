@@ -31,6 +31,7 @@ Num wscmWrite (Obj a, FILE *stream);
 Num wscmWriteMax (Obj a, FILE *stream, Int max);
 void wscmDisplayR (Obj a, Num islist, FILE *stream);
 void wscmDisplay (Obj a, FILE *stream);
+void sysDumpEnv (Obj env);
 void wscmTGEFind (void);
 void wscmInsertThread (Obj t, Obj q);
 void wscmRemoveThread (Obj t);

@@ -3034,7 +3034,7 @@ in the channel.  This should be interesting.
 
 Tue Mar 29 21:29:03 EDT 2011
 
-[ ] The entity instance in the map module should keep track of the actual map
+[x] The entity instance in the map module should keep track of the actual map
 data for each entity.  Each map block should also be accessed through a primary
 cache, before the map files, that all entities will access map data through.
 This will be one of the main functions of the map agent: to cache file map data.
@@ -3048,3 +3048,25 @@ in invalid field blocks.
 
 [ ] Map updating and rendering does not honor the field boundaries.  Field
 boundary conditions need to be added to the rendering pipeline.
+
+
+Wed Mar 30 18:20:19 EDT 2011
+
+As a matter of security, I'm still seeing World class and object environments
+extended from the REPL loop environment.  I'm trying to force all define
+expressions evaluated through eval, and thus load and wscm startup, to be so
+in the global environment.  I'm not sure where and why this isn't working.
+Fixed.  See notebook.
+
+                  (both of these buggy?)
+Map.moveObject -> map.moveCell -> Map.delCell -> Canvas.render & Viewport.render
+                               -> Map.addCell
+               -> map.moveEntitySprite -> Field.delete
+                                          Field.add
+                                          Canvas.Render
+                                          Viewport.Render
+
+The Field and Canvas have no map coordinate state.  They only know how to deal
+with their own data, modulo the field size.  Nothing currently keeps track of
+the map coordinate of the field/canvas.  The viewport does.  Should the map
+keep track of which field blocks it has (given by the map agent)?
