@@ -478,14 +478,14 @@
 
 ;(define (eval-string s) (eval (read-string s)))
 
-(define (load fn)
- (if (string? fn) (load (open-file fn))
- (if (not fn) (displayl "*load done*")
- (let ((exp (read fn)))
-   (if (eof-object? exp)
-       (close fn)
-       (begin (eval exp)
-              (load fn)))))))
+(define (load file)
+ (if (string? file) (load (open-file file))
+ (if (not file) (displayl "*load done*")
+ (let ((scmLoadExpr (read file)))
+   (if (eof-object? scmLoadExpr)
+       (close file)
+       (begin (eval scmLoadExpr)
+              (load file)))))))
 
 (define db debugger) ; Because typing (debugger) gets repetitive.
 
@@ -502,13 +502,13 @@
 
 
 ; The read eval print loop.
-(define (repl)
+(define (repl . UNUSEDscmReplArgs)
   (display (cons "MSG:" (call/cc (lambda (c) (vector-set! ERRORS (tid) c) WELCOME-MESSAGE))))
-  (let repl~ ()
+  (let scmRepl~ ()
     (display "\nwscm>")
-    (let ((ret (read stdin)))
-      (display (eval ret))
-      (if (not (eof-object? ret)) (repl~)))))
+    (let ((scmReplExpr (read stdin)))
+      (display (eval scmReplExpr))
+      (if (not (eof-object? scmReplExpr)) (scmRepl~)))))
 
 (define gc garbage-collect)
 

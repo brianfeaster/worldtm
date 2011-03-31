@@ -1385,7 +1385,10 @@ void sysError (void) {
  System calls
 ******************************************************************************/
 
-void sysQuit (void) { exit(0); }
+void sysQuit (void) {
+	if (r1==1) exit(*(int*)pop());
+	else exit(0);
+}
 
 extern Num garbageCollectionCount;
 /* This can do anything.  I change it mainly for debugging and prototyping. */
@@ -2003,8 +2006,8 @@ void sysOpen (int oflag, mode_t mode, Num silent) {
 
 void sysOpenFile (void) {
  Num silent=0;
-	if (1<r1) {
-		while (1<r1) {
+	if ((Obj)1<r1) {
+		while ((Obj)1<r1) {
 			r0=pop();
 			r1--;
 		}
@@ -2937,7 +2940,9 @@ void wscmInitialize (void) {
 	memObjStringSet(sysReinstateContinuation);
 	memObjStringSet(wscmEnvGet);
 	memObjStringSet("Not enough arguments to closure");
- 
+	memObjStringSet("expectedNoArgs");
+	memObjStringSet("Too many arguments to function");
+
 	objInitialize(sysSchedule);
 
 	/* Create empty thread vector.  All active threads are assigned a number
