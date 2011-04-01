@@ -323,7 +323,7 @@
   (define (reset defaultColumn)
     (loop2 0 size 0 size (lambda (y x)
       (vector-vector-set! field y x defaultColumn))))
-  (define (setField newField)
+  (define (setField newField) ; TODO debugging
     (set! field newField)
     (WinChatDisplay "\r\nOK vector-length " (vector-length newField)))
   ; MAIN
@@ -493,6 +493,18 @@
                        (Viewport 0              (- (Terminal 'Twidth) (* initialMapSize 2))
                                  initialMapSize (* 2 initialMapSize)
                                  #x000f myCanvas)))
+  ; Keep track of block coordinates (blockY . blockX) stored in the field.  Currently a 4x4 array
+  (define blockDescSize (/ size MapBlockSize))
+  (define blockDesc (make-vector-vector blockDescSize blockDescSize #f))
+  (define (blockDescRegister my mx)
+    (let ((by (/ my MapBlockSize))
+          (bx (/ mx MapBlockSize)))
+      (vector-vector-set! blockDesc (modulo by blockDescSize) (modulo bx blockDescSize) (cons by bx))))
+  (define (inBlockInField? my mx)
+    (let ((by (/ my MapBlockSize))
+          (bx (/ mx MapBlockSize)))
+      (equal? (cons by bx)
+              (vector-vector-ref blockDesc (modulo by blockDescSize) (modulo bx blockDescSize)))))
   ; IPC aliases
   ;(define ipcRead ((ipc 'newReader)))
   (define ipcWrite (ipc 'qwrite))
@@ -568,34 +580,38 @@
   (define (circularizeToggle) (set! circularize (not circularize)))
   ; Drop a cell on the map
   (define (mapDropCell y x cell)
-   (let ((z (+ 1 (fieldTopHeight 100 y x))))
-    ((myField 'fieldSet!) z y x cell)
-    (or NOVIEWPORT
-      (begin
-        (canvasRender 100 y x)
-        (viewportRender y x)))))
+    (if (inBlockInField? y x) (begin
+      (let ((z (+ 1 (fieldTopHeight 100 y x))))
+       ((myField 'fieldSet!) z y x cell)
+       (or NOVIEWPORT
+         (begin
+           (canvasRender 100 y x)
+           (viewportRender y x)))))))
   ; Set map cell and force rendering of cell through entire pipeline.
   (define (setCell z y x cell)
-    ((myField 'fieldSet!) z y x cell)
-    (or NOVIEWPORT
-      (begin
-        (canvasRender 100 y x)
-        (viewportRender y x))))
+    (if (inBlockInField? y x) (begin
+      ((myField 'fieldSet!) z y x cell)
+      (or NOVIEWPORT
+        (begin
+          (canvasRender 100 y x)
+          (viewportRender y x))))))
   ; Delete a cell from the field.  Update canvas if needed.
   (define (delCell cell z y x)
-    (fieldDelete z y x cell)
-    (or NOVIEWPORT 
-        (if (>= z (canvasHeight y x))
-          (begin
-            (canvasRender ceiling y x)
-            (viewportRender y x)))))
+    (if (inBlockInField? y x) (begin
+      (fieldDelete z y x cell)
+      (or NOVIEWPORT 
+          (if (>= z (canvasHeight y x))
+            (begin
+              (canvasRender ceiling y x)
+              (viewportRender y x)))))))
   ; Add a cell to the field.  Update canvas if needed.
   (define (addCell cell z y x)
-    (fieldAdd z y x cell)
-    (or NOVIEWPORT 
-        (if (>= z (canvasHeight y x)) (begin
-          (canvasRender ceiling y x)
-          (viewportRender y x)))))
+    (if (inBlockInField? y x) (begin
+      (fieldAdd z y x cell)
+      (or NOVIEWPORT 
+          (if (>= z (canvasHeight y x)) (begin
+            (canvasRender ceiling y x)
+            (viewportRender y x)))))))
   (define (moveCell cell zo yo xo z y x)
     ; Old location removal
     (delCell cell zo yo xo)
@@ -622,6 +638,7 @@
                    (viewportRender (+ m yo) (+ n xo))))))))))) ; Don't render cell if viewport to be reset
   (define (moveEntitySprite dna zo yo xo z y x centerMap)
     (if (eq? MAPSCROLL 'never) (set! centerMap #f)) ; Global toggle to disable map scrolling
+    (if (inBlockInField? y x) ; TODO this should allow one or the other old/new coordinate.  Also moveCell moveEntity seem to be overlapping in functionality.
     (letrec ((entity ((myEntityDB 'get) dna))
              (sprite (entity 'sprite))
              (h (sprite 'height))
@@ -650,7 +667,7 @@
                   (canvasRender ceiling (+ m y) (+ n x))
                   (or centerMap (viewportRender (+ m y) (+ n x))))))))) ; Don't render cell if vewport to be reset
           ; If the map needs to be recentered, then this is when the viewport is finally updated.
-          (if centerMap (viewportRecenterReset y x))))))
+          (if centerMap (viewportRecenterReset y x)))))))
   ; Given a cell index or entity DNA value, move it in the field, canvas and viewport.
   (define moveObject
     (let ((MAP-MOVE-CELL-SEMAPHORE (open-semaphore 1)))
@@ -772,25 +789,27 @@
             ((myEntityDB 'del) entity)))))
   ; The 2d vector of columns will most likely come from a map agent.
   ; The map block coordinate and map block size is also passed.
-  (define (updateColumnsIPC dna by bx blockSize cellAry) ; Called from map agent via IPC
-    (let ((fieldy (modulo by size))
-          (fieldx (modulo bx size)))
-    (if (= dna (avatar 'dna)) (begin ; Map agent has sent it to just me
+  (define (updateColumnsIPC dna my mx blockSize cellAry) ; Called from map agent via IPC
+    (let ((fy (modulo my size))
+          (fx (modulo mx size)))
+    (if (= dna (avatar 'dna)) (begin ; Make sure map agent sent specifically to me
       ; Update the field block
-      ((myField 'updateColumns) fieldy fieldx blockSize cellAry)
+      ((myField 'updateColumns) fy fx blockSize cellAry)
+      ; Register the block
+      (blockDescRegister my mx)
       ; The field has just been updated with new columns so all entities
-      ; in this range need to be added into the field columns
+      ; in this range need to be added into the field columns TODO slow
       (for-each
-        (lambda (e) (let ((y (e 'y))
-                          (x (e 'x)))
-          (if (and (<= by y) (< y (+ by blockSize))
-                   (<= bx x) (< x (+ bx blockSize)))
-            (moveObject (e 'dna)  (e 'z) (e 'y) (e 'x)  (e 'z) (e 'y) (e 'x)  #f))))
+        (lambda (e) (let ((ey (e 'y))
+                          (ex (e 'x)))
+          (if (and (<= my ey) (< ey (+ my blockSize))
+                   (<= mx ex) (< ex (+ mx blockSize)))
+            (moveObject (e 'dna)  (e 'z) ey ex  (e 'z) ey ex  #f))))
         ((myEntityDB 'getAll)))
       ; Render map block
       (or NOVIEWPORT
-        (loop2 fieldy (+ fieldy blockSize)
-               fieldx (+ fieldx blockSize)
+        (loop2 fy (+ fy blockSize)
+               fx (+ fx blockSize)
                (lambda (y x) (canvasRender 100 y x))))))))
     ; Update one or more of an entity's attribute: dna port name glyph z y x
   (define (IPCentity dna . args)
@@ -934,8 +953,7 @@
       (ipcWrite
         `(entity ,dna ,port ,name ,(gps)))
       (ipcWrite `(entity ,dna ,glyph)))
-    ; TODO debugging
-    (define setField ((myMap 'myField) 'setField))
+    (define setField ((myMap 'myField) 'setField)) ; TODO debugging
     (define (getField) ((myMap 'myField) 'field))
     ; MAIN
     ; The soul of this avatar.  For now an IPC message handler which loops
