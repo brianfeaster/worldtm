@@ -144,7 +144,7 @@ void objCopyString (void) {
 
 void objNewSymbol (Str str, Num len) {
  static Num hash, i;
-	i = hash = hashpjw(str, len) % 2029;
+	i = hash = hashpjw(str, len) % HashTableSize;
 	do {
 		r0 = memVectorObject(symbols, i);
 		/* Bucket empty so insert into symbol table. */
@@ -159,7 +159,7 @@ void objNewSymbol (Str str, Num len) {
 			return;
 		}
 		/* Otherwise continue linear sweep for empty bucket or symbol. */
-	} while ( (i=(++i==2029)?0:i) != hash);
+	} while ( (i=(++i==HashTableSize)?0:i) != hash);
 	printf ("WARNING!!!  Symbol table full!!!!\n");
 	memNewArray(TSYMBOL, len);
 	memcpy((char*)r0, str, len);
@@ -168,7 +168,7 @@ void objNewSymbol (Str str, Num len) {
 void objNewSymbolStatic (char *s) {
  static Num hash, i;
  Num len = strlen(s);
-	i = hash = hashpjw((Str)s, len) % 2029;
+	i = hash = hashpjw((Str)s, len) % HashTableSize;
 	do {
 		r0 = memVectorObject(symbols, i);
 		/* Bucket empty so insert into symbol table. */
@@ -183,7 +183,7 @@ void objNewSymbolStatic (char *s) {
 			return;
 		}
 		/* Otherwise continue linear sweep for empty bucket or symbol. */
-	} while ( (i=(++i==2029)?0:i) != hash);
+	} while ( (i=(++i==HashTableSize)?0:i) != hash);
 	printf ("WARNING!!!  Symbol table full!!!!\n");
 	memNewStatic(TSYMBOL, len);
 	memcpy((char*)r0, s, len);
@@ -415,8 +415,9 @@ void objInitialize (Func scheduler) {
 	memNewStatic(TFALSE, 2);   false=r0;   memcpy(r0, "#f", 2);
 	memNewStatic(TTRUE, 2);    true=r0;    memcpy(r0, "#t", 2);
 
-	memNewVector(TVECTOR, 2029);        symbols = r0; /* Symbol table */
-	for (n=0; n<2029; n++) memVectorSet (symbols, n, null);
+	memNewVector(TVECTOR, HashTableSize); symbols = r0; /* Symbol table */
+	for (n=0; n<HashTableSize; n++) memVectorSet (symbols, n, null);
+
 	objNewSymbolStatic("define");       sdefine = r0;
 	objNewSymbolStatic("lambda");       slambda = r0;
 	objNewSymbolStatic("macro");        smacro = r0;

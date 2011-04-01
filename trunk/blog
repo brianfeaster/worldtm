@@ -3052,13 +3052,12 @@ boundary conditions need to be added to the rendering pipeline.
 
 Wed Mar 30 18:20:19 EDT 2011
 
-As a matter of security, I'm still seeing World class and object environments
-extended from the REPL loop environment.  I'm trying to force all define
-expressions evaluated through eval, and thus load and wscm startup, to be so
-in the global environment.  I'm not sure where and why this isn't working.
+[x] As a matter of security, I'm still seeing World class and object
+environments extended from the REPL loop environment.  I'm trying to force all
+define expressions evaluated through eval, and thus load and wscm startup, to be
+so in the global environment.  I'm not sure where and why this isn't working.
 Fixed.  See notebook.
-
-                  (both of these buggy?)
+                       (both of these buggy?)
 Map.moveObject -> map.moveCell -> Map.delCell -> Canvas.render & Viewport.render
                                -> Map.addCell
                -> map.moveEntitySprite -> Field.delete
@@ -3066,7 +3065,7 @@ Map.moveObject -> map.moveCell -> Map.delCell -> Canvas.render & Viewport.render
                                           Canvas.Render
                                           Viewport.Render
 
-The Field and Canvas have no map coordinate state.  They only know how to deal
-with their own data, modulo the field size.  Nothing currently keeps track of
-the map coordinate of the field/canvas.  The viewport does.  Should the map
-keep track of which field blocks it has (given by the map agent)?
+Overall issue:  The Field and Canvas have no map coordinate state.  They only
+know how to deal with their own data, modulo the field size.  Nothing currently
+keeps track of the map coordinate of the field/canvas.  The viewport does.
+Should the map keep track of which field blocks it has (given by the map agent)?

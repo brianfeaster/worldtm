@@ -22,6 +22,8 @@ extern Obj null, nullvec, nullstr, false, true, eof,
 
 extern Num wscmDebug;
 
+const Num HashTableSize=8191;
+
 Num hashpjw (Str s, Num len);
 Num objListLength (Obj o);
 Num objDoublyLinkedListLength (Obj o);
