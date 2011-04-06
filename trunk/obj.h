@@ -22,7 +22,7 @@ extern Obj null, nullvec, nullstr, false, true, eof,
 
 extern Num wscmDebug;
 
-const Num HashTableSize=8191;
+extern const Int HashTableSize;
 
 Num hashpjw (Str s, Num len);
 Num objListLength (Obj o);

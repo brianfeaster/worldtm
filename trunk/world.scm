@@ -21,6 +21,7 @@
 (load "ipc.scm")
 (load "window.scm")
 (load "entity.scm") ; Glyph Sprite Entity EntityDb objects
+(load "irc.scm")
 
 (define SHUTDOWN #f) ; Signals to avatar's that the process is going to shutdown
 (define QUIETLOGIN (and (< 2 (vector-length argv)) (eqv? "ADMINISTRATOR" (vector-ref argv 2))))
@@ -917,6 +918,7 @@
                       (apply string (display->strings talkInput)))))
     (define (lookHere) (apply (avatarMap 'baseCell) ((avatar 'gps))))
     (define (lookAt) (apply (avatarMap 'baseCell) ((avatar 'gpsLook))))
+    (define (setIPCvoice f) (set! IPCvoice f))
     (define (IPCvoice dna level text)
      (or NOVIEWPORT
        (if (= dna 0) ; System messages
@@ -978,7 +980,6 @@
             (close-semaphore walkSemaphore)))))))
     (ipcWrite '(who)) ; Ask the IPC for a rollcall
     self))) ; Avatar
-
 
 (define (createSprite x)
  (IpcWrite (list 'entity (avatar 'dna)
@@ -1491,6 +1492,7 @@
    (setButton #\4 '(ghosts))
    (setButton #\5 '(pong))
    (setButton #\6 '(WinChatDisplay "\r\n" ((avatar 'lookAt)) ((avatarMap 'column) (avatar 'y) (+(avatar 'x)1))))
+   (setButton #\7 '(or irc (set! irc (IrcAgent WinConsoleDisplay))))
 ))
 
 ; Perform button's action
@@ -1760,8 +1762,8 @@
     (if (and (> strLen 11) (string=? "my name is " (substring talkInput 0 11)))
       (thread (changeName (substring talkInput 11 strLen))))))
  (if tankHangupTime
-  (letrec ((words (strtok talkInput #\ ))
-           (w1 (car words) ""))
+  (letrec ((words (split talkInput #\ ))
+           (w1 (car words)))
    (cond
     ;((string=? "who" talkInput) (IpcWrite '(say "I'm here!")))
     ((string=? "load the jump program" talkInput) (tankTalk "I can't find the disk"))
@@ -2039,6 +2041,9 @@
     (sleep 1000)
     (displayl "\e[" (Terminal 'Theight) "H\r\n\e[0m\e[?25h\e[?1000lgc=" (fun) "\r\n")
     (quit))))
+
+; The IRC gateway.  Spawned by pressing 7.
+(define irc #f)
 
 ; Spawn a second avatar.  Your free kitteh.
 (define kat (Avatar (string "katO'" (avatar 'name)) 1 (+ (random 10) 3458) (+ (random 10) 2764) ipc 'NOVIEWPORT))

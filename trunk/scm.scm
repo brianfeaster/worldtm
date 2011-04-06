@@ -237,13 +237,23 @@
 ; Returns a pair containing the string split on the first delimeter character.
 ;   (strtok "abc-123" #\-)  =>  ("abc" . "123")
 ;   (strtok "abc=123" #\-)  =>  ("abc=123")
-(define (strtok str delimeter)
+(define (strtok str delim)
+ (let ((len (string-length str)))
+ (let ~ ((i 0))
+   (if (= i len) (cons str "")
+   (if (eq? (string-ref str i) delim)
+       (cons (substring str 0 i)
+             (substring str (+ i 1) len))
+   (~ (+ i 1)))))))
+
+; Split's a string into a list of substring separated by 'deli
+(define (split str delim)
  (let ((len (string-length str)))
  (let ~ ((i 0))
    (if (= i len) (cons str ())
-   (if (eq? (string-ref str i) delimeter)
+   (if (eq? (string-ref str i) delim)
        (cons (substring str 0 i)
-             (strtok (substring str (+ i 1) len) delimeter))
+             (split (substring str (+ i 1) len) delim))
    (~ (+ i 1)))))))
 
 (define (string-downcase s)

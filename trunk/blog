@@ -3014,7 +3014,7 @@ The map server needs to be rewritten.  It's a hacked entity and map manager.  It
 doesn't handle more than one entity per port very well as it continuously sends
 map data to each entity as they move.
 
-[x] Refactor map agent.
+[ ] Refactor map agent.
 
 
 Mon Mar 28 16:02:19 EDT 2011
@@ -3046,7 +3046,7 @@ cells.  Faster rendering?
 mapUpdateColumns is for.  Each avatar instance will honor the message resulting
 in invalid field blocks.
 
-[ ] Map updating and rendering does not honor the field boundaries.  Field
+[x] Map updating and rendering does not honor the field boundaries.  Field
 boundary conditions need to be added to the rendering pipeline.
 
 
@@ -3069,3 +3069,17 @@ Overall issue:  The Field and Canvas have no map coordinate state.  They only
 know how to deal with their own data, modulo the field size.  Nothing currently
 keeps track of the map coordinate of the field/canvas.  The viewport does.
 Should the map keep track of which field blocks it has (given by the map agent)?
+
+
+Fri Apr  1 00:55:38 EDT 2011
+
+The map object now keeps track of loaded blocks and checks if a cell to be
+rendered is for an actual cached map block in the field.
+
+
+Sat Apr  2 18:40:57 EDT 2011
+ Coordinate Nomenclature
+    (zm ym xm)
+    (yBlock xBlock)           (blockY blockX)
+    (yField xField)           (fieldY fieldX)
+    (yBlockField xBlockField)
