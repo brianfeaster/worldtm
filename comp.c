@@ -1339,7 +1339,7 @@ void compCond (Num flags) {
 	DB ("compCond translated ");
 	DBE wscmWrite(r0, stdout);
 	expr = r0;
-	compExpression(flags & ~TAILCALL);
+	compExpression(flags);
 	DB("<--%s", __func__);
 }
 

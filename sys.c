@@ -798,7 +798,7 @@ void wscmRecv (void) {
 				ret = read(*(int*)r1, buffer, 0x1000);
 			if (ret>0) objNewString(buffer, (Num)ret); /* Return new string. */
 			else if (ret==0) r0=eof;              /* File Descriptor closed. */
-			else r0=nullstr;                      /* No bytes available yet. */
+			else r0=false;                      /* No bytes available yet. */
 		/* Deal with character read and return. */
 		} else if (r3==null) {
 			DB("SYS    reading single character");
@@ -854,6 +854,7 @@ void wscmRecv (void) {
 */
 void wscmRecvBlock (void) {
  s64 wakeupTime;
+ Num timedOut;
 	DB("::%s  <= ", __func__);
 	DBE wscmWrite(r4, stderr);
 	DBE wscmWrite(r3, stderr);
@@ -871,11 +872,17 @@ void wscmRecvBlock (void) {
 	r4=0; /* Character read count initialized to 0. */
 
 	wscmRecv();
-	if ((r2==false || (wscmTime() < *(Int*)r2)) && (r0 == false)) {
-		wscmUnRun();
-		wscmMoveToQueue(running, blocked, sreadblocked);
-		wscmSchedule();
-	}
+	timedOut = (r2!=false) && (*(Int*)r2 <= wscmTime());
+	if (r0 == false)
+		if (!timedOut) {
+			/* Nothing read and haven't timed out yet so block thread */
+			wscmUnRun();
+			wscmMoveToQueue(running, blocked, sreadblocked);
+			wscmSchedule();
+		} if (timedOut && 0<(Num)r4) {
+			/* Timeout with a partial read so return partial string */
+			objNewString(r3, (Num)r4);
+		}
 	DB("  --%s  r0="OBJ, __func__, r0);
 }
 
@@ -1170,6 +1177,7 @@ void wscmScheduleSleeping (void) {
 
 */
 void wscmScheduleBlocked (void) {
+ Num timedOut;
 	DB("-->%s <= %d blocked threads", __func__, objListLength(blocked)-1);
 
 	DBE fprintf(stderr, "   %s          sleeping queue:%d\r\n", __func__, wscmQueueCount(sleeping));
@@ -1188,7 +1196,10 @@ void wscmScheduleBlocked (void) {
 			r3 = memStackObject(memVectorObject(car(r5),0),3l);
 			r4 = memStackObject(memVectorObject(car(r5),0),4l);
 			wscmRecv();
-			if (r0 != false || (r2!=false && *(Int*)r2 <= wscmTime())) {
+			timedOut = (r2!=false) && (*(Int*)r2 <= wscmTime());
+			if (r0 != false || timedOut) {
+				/* If timed out but partial read, return the partial string */
+				if (r0==false && timedOut && 0<(Num)r4) objNewString(r3, (Num)r4);
 				/* Set thread's return value (r0 register top of stack) with
 			   	newly-read string or #f if it has timed out. */
 				memStackSet(memVectorObject(car(r5), 0), 0, r0);
@@ -1386,7 +1397,7 @@ void sysError (void) {
 ******************************************************************************/
 
 void sysQuit (void) {
-	if (r1==1) exit(*(int*)pop());
+	if ((Num)r1==1) exit(*(int*)pop());
 	else exit(0);
 }
 
@@ -1602,11 +1613,13 @@ void sysSerializeWrite (void) {
 		objNewString(buff, (Num)ret);
 	} else switch (memObjectType(r0)) {
 		case TSYMBOL : 
-		case TEOF    :
 		case TNULL   :
 		case TNULLVEC:
 		case TFALSE  :
 		case TTRUE   :
+			break;
+		case TEOF    :
+			r0 = seof;
 			break;
 		case TINTEGER:
 			wscmSerializeInteger(*(Int*)r0, 10);
@@ -2034,7 +2047,7 @@ void sysClose(void) {
 	DB("  --%s", __func__);
 }
 
-/* Given a byte count and port, read from the port count bytes or if 0 any
+/* Given a byte count, timeout and port, read from the port count bytes or if 0 any
    number of bytes.
 */
 void sysRecv (void) {

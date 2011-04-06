@@ -1,13 +1,15 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; ADTs
+;;   BList_ADT
 ;;   List_ADT
 ;;   Queue_ADT
 ;;
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; Bidirectional_List_ADT
+;; BList_ADT
 ;;
-;; A semaphore, head node and doubly linked "list" of nodes
+;; Bidirectionaly list
+;; A semaphore, the head node.  Nodes are a "list" of nodes
 ;; of the form #(datum prev next)
 ;;
 ;;  (semaphore . * )
@@ -73,6 +75,9 @@
     (let ~ ((p (BListNodePrev head)))
      (if (eq? p head) ()
        (cons (BListNodeDatum p) (~ (BListNodePrev p)))))))
+;;
+;; Bidirectional_List_ADT
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
   
 
 
