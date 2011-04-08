@@ -1602,6 +1602,7 @@ void sysSerializeDisplay (void) {
 
 void sysSerializeWrite (void) {
  static Chr buff[8192];
+ Chr c;
  Int ret;
  Num len, i;
 	DB("SYS -->%s", __func__);
@@ -1638,20 +1639,27 @@ void sysSerializeWrite (void) {
 		case TSTRING : 
 			len = 0;
 			buff[len++] = '"';
-			for (i=0; i<memObjectLength(r0); i++)
-			 switch (((char*)r0)[i]) {
-				case '\\'   : buff[len++]='\\'; buff[len++]='\\'; break;
-				case '\"'   : buff[len++]='\\'; buff[len++]='"'; break;
-				case '\a'   : buff[len++]='\\'; buff[len++]='a'; break;
-				case '\033' : buff[len++]='\\'; buff[len++]='e'; break;
-				case '\233' : buff[len++]='\\'; buff[len++]='c'; break;
-				case '\n'   : buff[len++]='\\'; buff[len++]='n'; break;
-				case '\r'   : buff[len++]='\\'; buff[len++]='r'; break;
-				case '\t'   : buff[len++]='\\'; buff[len++]='t'; break;
-				case '\v'   : buff[len++]='\\'; buff[len++]='v'; break;
-				case '\b'   : buff[len++]='\\'; buff[len++]='b'; break;
-				default     : buff[len++]=((Chr*)r0)[i];
-			 }
+			for (i=0; i<memObjectLength(r0); i++) {
+				c = ((Chr*)r0)[i];
+				switch (c) {
+				case '\0'  : buff[len++]='\\'; buff[len++]='0'; break; /*   0 */
+				case '\a'  : buff[len++]='\\'; buff[len++]='a'; break; /*   7 */
+				case '\b'  : buff[len++]='\\'; buff[len++]='b'; break; /*   8 */
+				case '\t'  : buff[len++]='\\'; buff[len++]='t'; break; /*   9 */
+				case '\n'  : buff[len++]='\\'; buff[len++]='n'; break; /*  10 */
+				case '\v'  : buff[len++]='\\'; buff[len++]='v'; break; /*  11 */
+				case '\f'  : buff[len++]='\\'; buff[len++]='f'; break; /*  12 */
+				case '\r'  : buff[len++]='\\'; buff[len++]='r'; break; /*  13 */
+				case '\033': buff[len++]='\\'; buff[len++]='e'; break; /*  27 */
+				case '\"'  : buff[len++]='\\'; buff[len++]='"'; break; /*  34 */
+				case '\\'  : buff[len++]='\\'; buff[len++]='\\'; break;/*  92 */
+				case (Chr)'\233': buff[len++]='\\'; buff[len++]='c'; break; /* 155 */
+				default:
+					/* The printable chracter or a slashified hex */
+					if ((32<=c && c<=126) || (160<=c && c<=255)) buff[len++]=c;
+					else { sprintf ((char*)buff+len, "\\x%02x", (Num)c); len+=4; }
+				}
+			}
 			buff[len++] = '"';
 			objNewString(buff, len);
 			break;

@@ -10,7 +10,7 @@
 #include "obj.h"
 
 
-const Int HashTableSize=8191;
+const Num HashTableSize=8191;
 
 /* Static symbol objects. */
 Obj null, nullvec, nullstr, false, true, eof,

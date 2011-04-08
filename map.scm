@@ -30,7 +30,7 @@
 ;; IPC
 ;;
 (load "ipc.scm") ; Includes adt.scm
-(define ipc (Ipc #f)) ; Instead of #f can pass in a serializer for debug messages
+(define ipc (Ipc #f 8155)) ; Instead of #f can pass in a serializer for debug messages
 (define ipcReader ((ipc 'newReader)))
 (define IpcWrite (ipc 'qwrite))
 
