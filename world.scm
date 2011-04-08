@@ -77,13 +77,22 @@
   13  (Terminal 'Twidth)
   #x0002))
 (define WinConsolePuts (WinConsole 'puts))
+
 (define (WinConsoleDisplay . l)
   (for-each
     (lambda (x)
      (if (not (and (pair? x) (eq? (car x) 'mapUpdateColumns))) ; Ignore mapUpdateColumns IPC message as it is very long.  That's what she said.
          (for-each WinConsolePuts (display->strings x))))
     l))
-(define (WinConsoleWrite . e) (for-each (lambda (x) (for-each WinConsolePuts (write->strings x))) e))
+
+(define (WinConsoleWrite . l)
+  (for-each
+    (lambda (x)
+     (if (not (and (pair? x) (eq? (car x) 'mapUpdateColumns))) ; Ignore mapUpdateColumns IPC message as it is very long.  That's what she said.
+         (for-each WinConsolePuts (write->strings x))))
+    l))
+
+
 ((WinConsole 'toggle))
 
 ; Input Window
@@ -1479,7 +1488,7 @@
    (setButton CHAR-CTRL-E '(begin
       (set! VIEWPORTANIMATION (not VIEWPORTANIMATION))
       (ipc '(set! Debug (not Debug)))
-      (set! SHOWBUTTONS (not SHOWBUTTONS))
+      ;(set! SHOWBUTTONS (not SHOWBUTTONS))
       (set! EDIT (not EDIT))
       ((avatarMap 'debugDumpMapInfoToggle))
       ((avatarMap 'circularizeToggle))
@@ -1983,7 +1992,7 @@
 (load "scrabble.scm") ; TODO temporary
 
 ; Create ipc object.  Pass in a serializer which prints to the console window.
-(define ipc (Ipc WinConsoleWrite 8155))
+(define ipc (Ipc WinConsoleDisplay 7155))
 (ipc '(set! Debug #f))
 
 ; TODO an often used call by the un-refactored code
