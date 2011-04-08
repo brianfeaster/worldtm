@@ -135,10 +135,9 @@
 ;(define (love-me . x) (say (string "I lick " (car parsedMsg) "'s heart.")))
 
 
-(define (IrcAgent DisplayFunction)
+(define (IrcAgent Debug)
  (define (self msg) (eval msg))
  ; Locals
- (define (Debug . l) (and Debug (for-each DisplayFunction l)))
  (define Server "irc.choopa.net")
  (define Port 6667)
  (define err_433_NicknameInUse #f)
@@ -152,13 +151,12 @@
    (set! portIRC (open-stream (open-socket Server Port)))
    portIRC)
  (define (say . l)
-   (display "PRIVMSG " portIRC)
-   (display channel portIRC)
-   (display " :" portIRC)
-   (display (apply string (map (lambda (e) (apply string (display->strings e))) l)) portIRC)
-   (display "\r\n" portIRC))
+   (let ((str (string "PRIVMSG " channel " :"
+                      (apply string (map (lambda (e) (apply string (display->strings e))) l)))))
+   (Debug "\r\n<" str ">")
+   (display (string str "\r\n") portIRC)))
  (define (send . l)
-    (Debug "\r\n" (apply string l))
+    (Debug "\r\n<" (apply string l) ">")
     (map (lambda (s) (display s portIRC)) l)
     (display "\r\n" portIRC))
  ; Pushes a parsed IRC message, vector of strings, to queue.  Might also be #eof and a raw string.
@@ -167,7 +165,7 @@
  (define (msgCommand m) (vector-ref m 1))
  (define (msgParameters m) (vector-ref m 2))
  (define (addToQueue s)
-   ;(Debug "\r\n" s)
+   ;(Debug s)
    (QueueAdd msgs s))
  ; Parse an IRC message, vector of strings, from a message string
  (define (parseMsgString ms)
@@ -210,16 +208,24 @@
          (letrec ((prefix (vector-ref ircMsg 0)) ; Consider message components
                   (command (vector-ref ircMsg 1))
                   (parameters (vector-ref ircMsg 2)))
-           (if prefix (Debug "\r\n" prefix " ") (Debug "\r\n")) ; Debug
-           (Debug "" command " " parameters)
+           (if prefix
+             (Debug "\r\n[" prefix "] [" command "] [" (serialize-write parameters) "]")
+             (Debug "\r\n"           "[" command "] [" (serialize-write parameters) "]"))
            ; Ping event TODO temporary
            (cond ((eqv? command "PING")
                   (send "PONG " parameters))
+                 ((eqv? command "TOPIC")
+                  ((avatar 'speak) (string (car (strtok prefix #\!))
+                                           " changed the topic on "
+                                           (car (strtok parameters #\:))
+                                           "to " (cdr (strtok parameters #\:)))))
                  ((eqv? command "PRIVMSG")
                   ((avatar 'speak) (string (car (strtok prefix #\!))
                                            " "
                                            (cdr (strtok parameters #\:))))))))
        (msgsDispatcher)))))
+ ; :dronechop!choopa@monitor.irc.choopa.net PRIVMSG w0rld :VERSION
+
  ; TODO
  ;  Implement error message dispatcher
  ;  Implement state machine which sets user only after a nick is set.  Use semaphore to block flow.
@@ -234,15 +240,17 @@
        (sleep 500))))
  (define (IPCvoice dna level text)
     (if (= dna 0) ; System messages
-      (say "WORLD " text)
+      () ;(say "WORLD " text)
       (letrec ((entity (((avatar 'myMap) 'entityDBGet) dna))
                (dist (if entity (distance ((entity 'gps)) ((avatar 'gps))))))
         (if (and entity (not (eq? entity avatar)) (< dist level))
-            (say (entity 'name) " " text)))))
+            (say "(" (entity 'name) ") " text)))))
  (define (start)
    (if (connectToIRCserver) (begin ; Make the connection
      (Debug "\r\n::IrcAgent connected!  Starting scanStream loops")
-     (set! avatar (Avatar "IRC" 1 3462 2770 ipc 'NOVIEWPORT)) ; Create the avatar
+     (or avatar (begin
+       (set! avatar (Avatar "IRC" 1 3462 2770 ipc 'NOVIEWPORT)) ; Create the avatar
+       ((avatar 'setIPCvoice) IPCvoice)))
      (thread (scanStream))
      (thread (msgsDispatcher))
      ; Send nick until server doesn't respond with a nick error
@@ -250,8 +258,7 @@
      (sleep 500)
      (send "USER world 0 * :The World[tm] agent")
      (sleep 500)
-     (send "JOIN " channel)
-     ((avatar 'setIPCvoice) IPCvoice))))
+     (send "JOIN " channel))))
  ; Main
  (start)
  self)

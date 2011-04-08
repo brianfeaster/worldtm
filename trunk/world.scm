@@ -1492,8 +1492,7 @@
    (setButton #\4 '(ghosts))
    (setButton #\5 '(pong))
    (setButton #\6 '(WinChatDisplay "\r\n" ((avatar 'lookAt)) ((avatarMap 'column) (avatar 'y) (+(avatar 'x)1))))
-   (setButton #\7 '(or irc (set! irc (IrcAgent WinConsoleDisplay))))
-))
+   (setButton #\7 '(or irc (set! irc (IrcAgent WinConsoleDisplay))))))
 
 ; Perform button's action
 (define (button . buttonList)
@@ -1984,7 +1983,7 @@
 (load "scrabble.scm") ; TODO temporary
 
 ; Create ipc object.  Pass in a serializer which prints to the console window.
-(define ipc (Ipc WinConsoleDisplay))
+(define ipc (Ipc WinConsoleWrite 8155))
 (ipc '(set! Debug #f))
 
 ; TODO an often used call by the un-refactored code
@@ -2054,3 +2053,4 @@
   (set! ActivityTime (time))
   (button b)
   (~)))
+
