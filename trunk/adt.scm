@@ -20,17 +20,32 @@
 ;;  to tail <-|-*  | <-|-* -|  <-|-*  |
 ;;            +--- +   +----+    +----+
 
-(define (BListCreate)
- (let ((n (vector '*BLIST* #f #f)))
+(define (BListCreate . items)
+ (letrec ((n (vector '*BLIST* #f #f))
+          (bl (cons n (open-semaphore 1))))
   (vector-set! n 1 n)
   (vector-set! n 2 n)
-  (cons n (open-semaphore 1))))
+  (map (lambda (i) (BListAddBack bl i)) items)
+  bl))
 
 (define (BListSemaphore bl) (cdr bl))
 (define (BListNodes bl) (car bl))
 (define (BListNodeDatum n) (vector-ref n 0))
 (define (BListNodeNext n) (vector-ref n 1))
 (define (BListNodePrev n) (vector-ref n 2))
+
+; Remove node from circular list.  Does not check if the head node is beingr removed.
+(define (BListRemoveNode bl n)
+  (semaphore-down (BListSemaphore bl))
+  (let ((prev (BListNodePrev n))
+        (next (BListNodeNext n)))
+    (vector-set! prev 1 next)
+    (vector-set! next 2 prev))
+  (semaphore-up (BListSemaphore bl)))
+
+(define (BListEmpty? bl)
+ (eq? (BListNodes bl)
+      (BListNodeNext (BListNodes bl))))
 
 (define (BListAddFront bl a)
  (semaphore-down (BListSemaphore bl))
@@ -48,7 +63,37 @@
           (new  (vector a head prev)))
    (vector-set! head 2 new)
    (vector-set! prev 1 new))
- (semaphore-up (BListSemaphore bl))))
+ (semaphore-up (BListSemaphore bl)))
+
+(define (BListDelFront bl)
+ (semaphore-down (BListSemaphore bl))
+ (letrec ((head (BListNodes bl))
+          (next (BListNodeNext head)))
+   (semaphore-up (BListSemaphore bl))
+   (if (eq? next head) () (begin (BListRemoveNode bl next)
+                                 (BListNodeDatum next)))))
+
+(define (BListDelBack bl)
+ (semaphore-down (BListSemaphore bl))
+ (letrec ((head (BListNodes bl))
+          (prev (BListNodePrev head)))
+   (semaphore-up (BListSemaphore bl))
+   (if (eq? prev head) () (begin (BListRemoveNode bl prev)
+                                 (BListNodeDatum prev)))))
+
+(define (BListGetFront bl)
+ (semaphore-down (BListSemaphore bl))
+ (letrec ((head (BListNodes bl))
+          (next (BListNodeNext head)))
+   (semaphore-up (BListSemaphore bl))
+   (if (eq? next head) () (BListNodeDatum next))))
+
+(define (BListGetBack bl)
+ (semaphore-down (BListSemaphore bl))
+ (letrec ((head (BListNodes bl))
+          (prev (BListNodePrev head)))
+   (semaphore-up (BListSemaphore bl))
+   (if (eq? prev head) () (BListNodeDatum prev))))
 
 (define (BListFindNode bl fn)
   (let ((head (BListNodes bl)))
@@ -64,6 +109,7 @@
            ((fn (BListNodeDatum p)) (BListNodeDatum p))
            (else (~ (BListNodePrev p)))))))
   
+; Returns a standard list containing all items in the blist
 (define (BListList bl)
   (let ((head (BListNodes bl)))
     (let ~ ((n (BListNodeNext head)))

@@ -45,9 +45,10 @@
 ;;
 ;; The entity's name defines the initial glyph, sprite and color.
 ;; A direction is 0-9 where 0=right, 2=up, ..., 7=down/right, 8=down and 9=up.
-(define (Entity dna port name z y x)
+(define (Entity dna port name z y x . ChildStack)
  (define (self msg) (eval msg))
- (define (inherit args macro) (apply macro args))
+ (define parent #f)
+ (define (info) (list 'Entity dna port name z y x 'hasChild (pair? ChildStack)))
  (define glyph (Glyph 0 15 (string-ref name 0)
                       0 15 (string-ref name (if (< 1 (string-length name)) 1 0))))
  (define sprite (Sprite 1 1 (vector glyph)))
@@ -128,7 +129,15 @@
    (if (= dir 7) (list (+ z    ltz) (+ y  1 lty) (+ x  1 ltx))
    (if (= dir 8) (list (+ z -1 ltz) (+ y    lty) (+ x    ltx))
    (if (= dir 9) (list (+ z  1 ltz) (+ y    lty) (+ x    ltx))))))))))))))
- self)
+ ; WOOEE
+ (define (main) ())
+ ; If an extended class, return the instantiated child class, otherwise return self
+ (if (pair? ChildStack)
+   ; childstack = ((child parameters) child-macro . reset of child stack)
+   (apply (cadr ChildStack) ; Child class
+          ; Args to child class: (parent parameters reset-of-childstack)
+          self (append (car ChildStack) (cddr ChildStack)))
+   self)) ; Entity
 
 
 

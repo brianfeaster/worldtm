@@ -188,9 +188,8 @@
  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
  ;; Window_subclass
  ;;
- (define (WindowNew Y0 X0 Wheight Wwidth COLOR)
+ (define (WindowNew Y0 X0 Wheight Wwidth COLOR . ChildStack)
    (define (self msg) (eval msg))
-   (define (inherit args macro) (apply macro args))
    (define id
      (let ~ ((i 1))
        (cond ((= i MAXWINDOWCOUNT)
@@ -469,7 +468,10 @@
     (begin
       (set! WindowList (cons self WindowList)) ; TODO this needs a semaphore.
       (WindowMaskReset Y0 X0 Y1 X1)
-      self)
+      (if (pair? ChildStack)
+        ; childstack = ((child parameters) child-macro . reset of child stack)
+        (apply (cadr ChildStack) self (append (car ChildStack) (cddr ChildStack)))
+        self))
     #f))
  ;;
  ;; Window_subclass
