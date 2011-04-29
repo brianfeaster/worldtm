@@ -572,7 +572,7 @@ void compMacro (Num flags) {
 	/* Generate code that generates a closure.  Closure returned in r0 created
 	   from r1 (code) and r16 (current environment). */
 	asmAsm(
-		MVI1, r0, /* Load r1 with code. */
+		MVI1, r0, /* Load r1 with code block just compiled. */
 		SYSI, objNewClosure1Env, /* Create closure from r1 and env (r16) */
 		MVI2, null, /* Replace stored lexical environment with null so dynamic environment is used when applied */
 		STI20, 1l,

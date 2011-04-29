@@ -2373,7 +2373,7 @@ void sysDebugDumpAll (void) {
 void sysDisassemble (void) {
 	r0=pop();
 	if (memObjectType(r0) == TCLOSURE) {
-		sysDumpEnv(cdr(r0));
+		if (cdr(r0) != null) sysDumpEnv(cdr(r0));
 		r0=car(r0);
 	}
 	vmDebugDumpCode(r0, stderr);

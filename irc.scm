@@ -8,6 +8,11 @@
 ; irc.efnet.nl 6667
 ; irc.prison.net 6667
 ; irc.he.net 6667
+; \x02 bold  \x16 inverse  \x1f underline
+(load "world.scm")
+
+(define IRCPRENAME "\x16(")
+(define IRCPOSTNAME ")\x16")
 
 (rem define (expandTabs line)
  (let ((split (strtok line "\t")))
@@ -135,135 +140,198 @@
 ;(define (love-me . x) (say (string "I lick " (car parsedMsg) "'s heart.")))
 
 
-(define (IrcAgent Debug)
- (define (self msg) (eval msg))
- ; Locals
- (define Server "irc.choopa.net")
- (define Port 6667)
- (define err_433_NicknameInUse #f)
- (define Nick "world")
- (define portIRC #f)
- (define channel "#worldtm")
- (define msgs (QueueCreate))
- (define avatar #f)
- ; Members
- (define (connectToIRCserver)
-   (set! portIRC (open-stream (open-socket Server Port)))
-   portIRC)
- (define (say . l)
-   (let ((str (string "PRIVMSG " channel " :"
-                      (apply string (map (lambda (e) (apply string (display->strings e))) l)))))
-   (Debug "\r\n<" str ">")
-   (display (string str "\r\n") portIRC)))
- (define (send . l)
-    (Debug "\r\n<" (apply string l) ">")
-    (map (lambda (s) (display s portIRC)) l)
-    (display "\r\n" portIRC))
- ; Pushes a parsed IRC message, vector of strings, to queue.  Might also be #eof and a raw string.
- ; IRC message interface
- (define (msgPrefix m) (vector-ref m 0))
- (define (msgCommand m) (vector-ref m 1))
- (define (msgParameters m) (vector-ref m 2))
- (define (addToQueue s)
-   ;(Debug s)
-   (QueueAdd msgs s))
- ; Parse an IRC message, vector of strings, from a message string
- (define (parseMsgString ms)
-   (let ((newMsg (vector #f #f #f)))
-     ; Parse possible PREFIX part of message
-     (if (eq? #\: (string-ref ms 0))
-       (let ((toks (strtok (cdr-string ms) #\ )))
-         (vector-set! newMsg 0 (car toks))
-         (set! ms (cdr toks)))) ; Remove prefix from ms string
-     ; Parse COMMAND and PARAMS parts of message
-     (let ((toks (strtok ms #\ )))
-         (vector-set! newMsg 1 (car toks))
-         (vector-set! newMsg 2 (cdr toks)))
-     newMsg))
- ; Scan IRC stream from portIRC and add strings to msgs queue
- (define (scanStream)
-   (define buff (make-string 512)) ; IRC enforced 512 character limit (including trailing \r\n) for messages
-   (let ~ ((c (read-char #f portIRC))
-           (i 0))
-     (cond ((eof-object? c)
-            ; #EOF Connection lost/closed to IRC server.  Add remaining buffer as a raw string and #EOF to queue.
-            (or (= i 0) (addToQueue (substring buff 0 i)))
-            (addToQueue c)) ; Add #eof
-           ((or (eq? c RETURN) (eq? c NEWLINE))
-            ; "\r\n" Line terminator scanned.  Parse and queue if at least one character in buffer.
-            (if (!= i 0) (addToQueue (parseMsgString (substring buff 0 i))))
-            (~ (read-char #f portIRC) 0))
-           (else
-            ; Continue scanning the line
-            (string-set! buff i c)
-            (~ (read-char #f portIRC) (+ i 1))))))
- ; Dispatch on queued IRC messages
- (define (msgsDispatcher)
-   (let ((ircMsg (QueueGet msgs)))
-     (if (eof-object? ircMsg)
-       (Debug "\r\nmsgsDispatcher: #eof from queue. halting")
+(define (IrcAgent Debug name z y x ipc NOVIEWPORT . ChildStack)
+ (apply Avatar name z y x ipc NOVIEWPORT
+  (list Debug)
+  (macro (parent Debug . ChildStack) ; Child
+   (define (self msg) (eval msg))
+   (define (info) (list 'IrcAgent name z y x 'hasChild (pair? ChildStack)))
+   ; Locals
+   (define portIRC #f)
+   (define Server "irc.choopa.net")
+   (define Port 6667)
+   (define Nick "world")
+   (define Nicks (BListCreate "w0rld" "worldtm" "world[tm]" "w0rld[tm]" "w0rldtm" "w[tm]rld" "w[]rld"))
+   (define channel "#worldtm")
+   (define msgs (QueueCreate))
+   ; Members
+   (define (connectToIRCserver)
+     (set! portIRC (open-stream (open-socket Server Port)))
+     portIRC)
+   (define (send . l)
+      (Debug "\r\n<" (serialize-write (apply string l)) ">")
+      (map (lambda (s) (display s portIRC)) l)
+      (display "\r\n" portIRC))
+   (define (recvChar)
+     (read-char #f portIRC))
+   ; IRC message interface
+   (define (msgNew) (vector #f #f #f))
+   (define (msgPrefix m) (vector-ref m 0))
+   (define (msgCommand m) (vector-ref m 1))
+   (define (msgParameters m) (vector-ref m 2))
+   (define (msgQueueAdd s) (QueueAdd msgs s)) ; Generally adds a parsed IRC message.  Could be a string or #eof.
+   (define (msgQueueGet) (QueueGet msgs))
+   (define (debugDumpMsg msg)
+     (Debug (if (msgPrefix msg) (string "\r\n[" (msgPrefix msg) "]") "\r\n")
+            "[" (msgCommand msg) "]"
+            "[" (serialize-write (msgParameters msg)) "]"))
+   ; Parse an IRC message, vector of strings, from a message string
+   (define (parseMsgString ms)
+     (let ((newMsg (msgNew))) ; Create new message container #(prefix command parameters)
+       ; Parse possible PREFIX part of message
+       (if (eq? #\: (string-ref ms 0))
+         (let ((toks (strtok (cdr-string ms) #\ )))
+           (vector-set! newMsg 0 (car toks))
+           (set! ms (cdr toks)))) ; Remove prefix from ms string
+       ; Parse COMMAND and PARAMS parts of message
+       (let ((toks (strtok ms #\ )))
+           (vector-set! newMsg 1 (car toks))
+           (vector-set! newMsg 2 (cdr toks)))
+       newMsg))
+   ; Scan IRC stream a character at a time and add each line to the queue
+   (define (scanStream)
+      (define buff (make-string 512)) ; IRC enforced 512 character limit (including trailing \r\n) for messages
+      (let ~ ((ch (recvChar))
+              (num 0))
+        (cond ((eof-object? ch)
+               ; #EOF-connection lost/closed to IRC server.  Add remaining buffer as a raw string and #EOF to queue.
+               (or (= num 0) (msgQueueAdd (substring buff 0 num)))
+               (msgQueueAdd ch)) ; Add #eof
+              ((or (eq? ch RETURN) (eq? ch NEWLINE))
+               ; "\r\n"-line terminator scanned.  Add to queue if at least one character scanned.
+               (if (< 0 num) (msgQueueAdd (parseMsgString (substring buff 0 num))))
+               (~ (recvChar) 0))
+              (else
+               ; Char-continue scanning a line
+               (string-set! buff num ch)
+               (~ (recvChar) (+ num 1))))))
+   (define (cmdPING parameters)
+      (send "PONG " parameters))
+   (define (cmdTOPIC prefix parameters)
+       (speak
+        (string (car (strtok prefix #\!)) " changed the topic on "
+                (car (strtok parameters #\:)) " to " (cdr (strtok parameters #\:)))))
+   ; [Shrewm!~worlda@li54-107.members.linode.com][PRIVMSG]["#not-world :it's world!"]
+   (define (cmdPRIVMSG prefix parameters)
+        (speak (string (car (strtok prefix #\!))
+                                 (let ((chan (car (strtok parameters #\ ))))
+                                   (if (string=? channel chan) "" chan))
+                                 " " (cdr (strtok parameters #\:)))))
+   (define (cmdNICK prefix parameters)
+      (if (string=? Nick (car (strtok prefix #\!))) ; "nick!.....com"
+        (begin
+         (set! Nick (cdr (strtok parameters #\:))) ; ":newnick"
+         (speak (string "my new IRC nickname is " Nick)))))
+   ; Received the error message that the nick I am assuming is invalid so try a new one
+   (define (cmd433 parameters) ; ERR_NICKNAMEINUSE
+     (letrec ((s (strtok parameters #\ )) ; ("toNick" . "desiredNick :Nickname is already in use.")
+              (toNick (car s))
+              (desiredNick (car (strtok (cdr s) #\ ))))
+        (if (string=? Nick desiredNick)
+          (begin
+            (BListAddBack Nicks Nick)
+            (set! Nick (BListDelFront Nicks))
+            (Debug "\r\nTrying to register with next prefered nick="Nick " " (BListList Nicks))
+            (send "NICK " Nick)))))
+  
+   ; Joining multiple channels.
+   ;  <"JOIN #worldtm,#not-world">
+   ;   [world!~world@li54-107.members.linode.com] [JOIN] [":#worldtm"]
+   ;   [irc.choopa.net] [332] ["world #worldtm :The World[tm] >---< IRC[k] gateway"]
+   ;   [irc.choopa.net] [333] ["world #worldtm shrewm!~shroom@li54-107.members.linode.com 1302287052"]
+   ;   [irc.choopa.net] [353] ["world = #worldtm :world shrewm @strtok"]
+   ;   [irc.choopa.net] [366] ["world #worldtm :End of /NAMES list."]
+   ; 
+   ;   [world!~world@li54-107.members.linode.com] [JOIN] [":#not-world"]
+   ;   [irc.choopa.net] [332] ["world #not-world :World:  world.dv8.org [telnet-port 7154] [ssh-user world]"]
+   ;   [irc.choopa.net] [333] ["world #not-world Shrewm!~shroom@li54-107.members.linode.com 1293489012"]
+   ;   [irc.choopa.net] [353] ["world @ #not-world :world tangles__ tangles strtok @zumthing @eap sprocket"]
+   ;   [irc.choopa.net] [366] ["world #not-world :End of /NAMES list."]
+  
+  
+   ; The agent joins then parts a channel.  Shrewm joins the channel
+   ;  [world!~world@li54-107.members.linode.com] [JOIN] [":#worldtm"]
+   ;  [world!~world@li54-107.members.linode.com] [PART] ["#worldtm"]
+   ;  [shrewm!~worlda@li54-107.members.linode.com] [JOIN] [":#worldtm"]
+   ;  [shrewm!~worlda@li54-107.members.linode.com][PART]["#worldtm"]
+  
+   ; The topic for the channel.
+   ;   [irc.choopa.net] [332] ["world #worldtm :The World[tm] >---< IRC[k] gateway"]
+   ;   [irc.choopa.net] [333] ["world #worldtm shrewm!~shroom@li54-107.members.linode.com 1302287052"]
+  
+   ; The users in the channel.
+   ;   [irc.choopa.net] [353] ["world = #worldtm :world shrewm @strtok"]
+   ;   [irc.choopa.net] [366] ["world #worldtm :End of /NAMES list."]
+  
+   (define (cmdJOIN prefix parameters)
+     (let ((joinee (car (strtok prefix #\!))))
+       (if (string=? Nick joinee)
+         ; I have joined an IRC channel for the first time
+         (begin
+           (sleep 1000)
+           (speak "Joined channel " parameters)
+           )
+         (speak (string joinee " has joined " (cdr (strtok parameters #\#)))))))
+   (define (cmdPART prefix parameters)
+     (speak (string (car (strtok prefix #\!)) " has left " (cdr (strtok parameters #\#)))))
+   ; [tangles_!~android@m630e36d0.tmodns.net][QUIT][":Ping timeout: 268 seconds"]
+   (define (cmdQUIT prefix parameters)
+     (speak (string (car (strtok prefix #\!)) " quits ")))
+   ; Dispatch on queued IRC messages
+   (define (msgsDispatcher)
+     (let ((ircMsg (msgQueueGet)))
+       (if (eof-object? ircMsg)
+         (Debug "\r\nmsgsDispatcher: #eof from queue. halting")
+       (begin
+         (if (vector? ircMsg)
+           (letrec ((prefix (vector-ref ircMsg 0)) ; Consider message components
+                    (command (vector-ref ircMsg 1))
+                    (parameters (vector-ref ircMsg 2)))
+             (debugDumpMsg ircMsg)
+             (cond ((eqv? command "PING")   (cmdPING           parameters))
+                   ((eqv? command "TOPIC")  (cmdTOPIC   prefix parameters))
+                   ((eqv? command "PRIVMSG")(cmdPRIVMSG prefix parameters))
+                   ((eqv? command "NICK")   (cmdNICK    prefix parameters))
+                   ((eqv? command "433")    (cmd433            parameters)) ; ERR_NICKNAMEINUSE
+                   ((eqv? command "JOIN")   (cmdJOIN    prefix parameters))
+                   ((eqv? command "PART")   (cmdPART    prefix parameters))
+                   ((eqv? command "JOIN")   (cmdQUIT    prefix))))
+           (Debug "\r\nmsgsDispatcher: not a valid parsed IRC message: " ircMsg))
+         (msgsDispatcher)))))
+   (define (IPCvoice adna level text)
+    (displayl "::IPCvoice\r\n")
+      (if (or (= adna 0) (= adna dna))
+        () ; Ignore system messages
+        (letrec ((entity ((myMap 'entityDBGet) adna))
+                 (dist (if entity (distance ((entity 'gps)) (gps)))))
+          (if (and entity (not (eq? entity self)) (< dist level))
+              (say IRCPRENAME (entity 'name) IRCPOSTNAME " " text)))))
+   (define (say . l)
+     (apply send "PRIVMSG " channel " :" (map (lambda (e) (apply string (display->strings e))) l)))
+   (define (main)
+     (display "IrcAgent.main")
+     (if (connectToIRCserver) (begin ; Make the connection
+       (setIPCvoice IPCvoice)
+       (Debug "\r\n::IrcAgent connected!  Starting scanStream loops")
+       (thread (scanStream))
+       (thread (msgsDispatcher))
+       (send "USER world 0 * :The World[tm] agent")
+       (send "NICK " Nick)
+       (sleep 500)
+       (send "JOIN " channel))))
+   ; WOOEE
+   (if (pair? ChildStack)
+     ; childstack = ((child parameters) child-macro . reset of child stack)
+     (apply (cadr ChildStack) self (append (car ChildStack) (cddr ChildStack)))
      (begin
-       (if (not (vector? ircMsg))
-         (Debug "\r\nmsgsDispatcher: not a valid parsed IRC message: " ircMsg)
-         (letrec ((prefix (vector-ref ircMsg 0)) ; Consider message components
-                  (command (vector-ref ircMsg 1))
-                  (parameters (vector-ref ircMsg 2)))
-           (if prefix
-             (Debug "\r\n[" prefix "] [" command "] [" (serialize-write parameters) "]")
-             (Debug "\r\n"           "[" command "] [" (serialize-write parameters) "]"))
-           ; Ping event TODO temporary
-           (cond ((eqv? command "PING")
-                  (send "PONG " parameters))
-                 ((eqv? command "TOPIC")
-                  ((avatar 'speak) (string (car (strtok prefix #\!))
-                                           " changed the topic on "
-                                           (car (strtok parameters #\:))
-                                           "to " (cdr (strtok parameters #\:)))))
-                 ((eqv? command "PRIVMSG")
-                  ((avatar 'speak) (string (car (strtok prefix #\!))
-                                           " "
-                                           (cdr (strtok parameters #\:))))))))
-       (msgsDispatcher)))))
- ; :dronechop!choopa@monitor.irc.choopa.net PRIVMSG w0rld :VERSION
+       (let ~ ((obj self))
+         (if (obj 'parent) (~ (obj 'parent)))
+         ((obj 'main)))
+       self)))
+  ChildStack)) ; IrcAgent
 
- ; TODO
- ;  Implement error message dispatcher
- ;  Implement state machine which sets user only after a nick is set.  Use semaphore to block flow.
- (define (establishNickname nick)
-   (set! err_433_NicknameInUse #f)
-   (send "NICK " nick)
-   (sleep 500)
-   (if err_433_NicknameInUse
-     (let ~ ((nick (string nick #\_))
-             (next 101))
-       (send "NICK " nick next)
-       (sleep 500))))
- (define (IPCvoice dna level text)
-    (if (= dna 0) ; System messages
-      () ;(say "WORLD " text)
-      (letrec ((entity (((avatar 'myMap) 'entityDBGet) dna))
-               (dist (if entity (distance ((entity 'gps)) ((avatar 'gps))))))
-        (if (and entity (not (eq? entity avatar)) (< dist level))
-            (say "(" (entity 'name) ") " text)))))
- (define (start)
-   (if (connectToIRCserver) (begin ; Make the connection
-     (Debug "\r\n::IrcAgent connected!  Starting scanStream loops")
-     (or avatar (begin
-       (set! avatar (Avatar "IRC" 1 3462 2770 ipc 'NOVIEWPORT)) ; Create the avatar
-       ((avatar 'setIPCvoice) IPCvoice)))
-     (thread (scanStream))
-     (thread (msgsDispatcher))
-     ; Send nick until server doesn't respond with a nick error
-     (establishNickname Nick)
-     (sleep 500)
-     (send "USER world 0 * :The World[tm] agent")
-     (sleep 500)
-     (send "JOIN " channel))))
- ; Main
- (start)
- self)
+(define ipc (Ipc #f 7155))
+(define irc (IrcAgent displayl "IRC" #x0 #xd8f #xae5 ipc #t))
+(or irc (quit)) ; Quit if connection to irc server failed
 
-;(load "adt.scm")
-;(define irc (IrcAgent display))
-;(or irc (quit)) ; Quit if connection to irc server failed
-;(repl)
+(repl)
