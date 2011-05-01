@@ -852,7 +852,7 @@
          (begin
            (tankTalk "*CLICK*")
            (set! tankHangupTime #f)))))))
-  (set! tankHangupTime (+ 10 (time))))
+  (set! tankHangupTime (+ 60 (time))))
 
 (define (tankTheOperator talkInput)
  (if (string=? "?" talkInput) (help))

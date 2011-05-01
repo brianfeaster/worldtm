@@ -909,7 +909,6 @@
             (close-semaphore walkSemaphore))))))))
     ; MAIN
     (define main (macro ()
-     (display "Avatar.main")
       (IPCHandlerLoop)
       (ipcWrite '(who)))) ; Ask the IPC for a rollcall TODO should existing avatars notice a new entity has appeard and reveal themselves automatically?  Maybe an entity doesn't care about other people.
     ; WOOEE
