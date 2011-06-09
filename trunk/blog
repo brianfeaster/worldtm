@@ -3239,3 +3239,76 @@ Thu Apr 28 02:35:07 EDT 2011
 
 High coupling is preventing the smooth refactoring of map and avatar classes to
 world.scm and everything else into user.scm.
+
+
+
+Sun May  1 18:30:24 EDT 2011
+
+Continuing hidden surface removal by adding more intelligence to cells revaled
+instead of updating the entire canvas.  It will also handle new incoming map
+blocks.  The canvas object currently keeps track of each rendered cell and its
+height.  This is initiallized to an "outside" view where the top-most cell is
+chosen.  A new bitfield will be added representing the cells that were recently
+updated relative to the avatar's visibility height.
+
+State:  (1) Avatar above topmost cell (outside), render top most cell everywhere
+        (2) Avatar under a cell (inside), render connected cells at this height,
+            top-most everywhere else.
+
+Transition:
+2->1 clear all state 2 bits.
+1->2 recursively paint new mask ceiling height locations
+2->2 recursively paint new mask ceiling height locations, reset previous
+     heights, if any in the mask, to top
+
+A list of last painted heights can be cached
+
+Initial  Walks right
+0000     under an awning
+0000     0011
+0000     0011
+0000     0011
+         0011
+
+
+
+Tue May  3 22:43:19 EDT 2011
+
+Smart ceiling removal has been postponed.  For now all incoming map blocks are
+rendered with the current height value.
+
+Lighting is the new focus.  Computing every point of a circle is required.  I
+will adapt the line walking 'lineWalks' algorithm.
+
+
+
+Thu May  5 22:49:39 EDT 2011
+
+sysNewSymbol() is not object friendly.  It passes the string pointer in r5 to
+objNewSymbol() which expects a pointer to a string .  This has the unfortunate
+condition that the string r5 references could move if the new object call
+forces a garbage collection.  The passed string pointer is then invalid.  I
+need to go through and make sure this specific code issues is resolved.
+
+Not trivial since objNewSymbol() might return an existing symbol in the symbol
+table.  This does not require the string to be copied.  The workaround is to
+make it more multi-purpose.  It gets a new flag signaling if the str should be
+copied and return a bool signalling that the symbol exists in the symbol table.
+
+
+
+Sat May 14 02:49:12 EDT 2011
+
+Lighting will be based on ambient and cached modifiable light value stored in
+the canvas object array.  The light values will be dynamically updated by light
+sources in the field.  Light sources will need to be found quickly when
+rendering new map blocks.
+
+
+
+Sat May 28 19:41:32 EDT 2011
+
+The canvas should cache modified field glyphs based on ambient and direct light
+sources.  I added a hack into the viewport renderer but this added extra
+complexity to what's supposed to be a fast window rendering object.  The
+complexity for cell illumination will occur in the canvas object.

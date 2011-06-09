@@ -15,6 +15,20 @@
 
 (define glyphUNKNOWN (Glyph 0 8 #\? 0 8 #\?))
 
+; Transforms a glyph into an illuminated glyph where the colors or characters
+; are transformed into:
+;   Brightness   Glyph
+;    >= 50      glyph as is
+;    <  50      same characters, dim colors
+;    <  40      same characters, dark gray colors
+;    <  30      random-same or no characters, dark gray colors
+;    <  20      no characters, all black
+(define (illuminate g l)
+ (if (<= 50 l) g ; Full brightness
+   (cond ((< l 20)
+          (Glyph 0 8 #\  0 8 #\ )) ; No light at all
+         (else
+          (Glyph 0 8 (glyph0ch g) 0 8 (glyph1ch g)))))) ; Dim light
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;

@@ -143,7 +143,11 @@ void objCopyString (void) {
 	memcpy(r0, r1, len);
 }
 
-void objNewSymbol (Str str, Num len) {
+/* Create or return existing hashed string object.
+	Copy the string if the copyStrp is set.
+	Return 0 if the symbol exists in the hash table, 1 if not and was created.
+*/
+Num objNewSymbolBase (Str str, Num len, Num copyStrP) {
  static Num hash, i;
 	i = hash = hashpjw(str, len) % HashTableSize;
 	do {
@@ -151,19 +155,29 @@ void objNewSymbol (Str str, Num len) {
 		/* Bucket empty so insert into symbol table. */
 		if (r0 == null) {
 			memNewArray(TSYMBOL, len);
-			memcpy(r0, str, len);
+			if (copyStrP) memcpy(r0, str, len);
 			memVectorSet(symbols, i, r0);
-			return;
+			return 1;
 		}
 		/* If something here, check if it's the symbol */
 		if(memObjectLength(r0)==len && !memcmp(r0,str,len)) {
-			return;
+			return 0;
 		}
 		/* Otherwise continue linear sweep for empty bucket or symbol. */
 	} while ( (i=(++i==HashTableSize)?0:i) != hash);
 	printf ("WARNING!!!  Symbol table full!!!!\n");
 	memNewArray(TSYMBOL, len);
-	memcpy((char*)r0, str, len);
+	if (copyStrP) memcpy((char*)r0, str, len);
+	return 1;
+}
+
+void objNewSymbol (Str str, Num len) {
+	objNewSymbolBase (str, len, 1); // 1 tells fn to copy the str
+}
+
+void objNewSymbolR5R6 (void) {
+	if (objNewSymbolBase (r5, (Num)r6, 0)) // 0 tells fn to not copy the str
+		memcpy((char*)r0, r5, (Num)r6);
 }
 
 void objNewSymbolStatic (char *s) {
