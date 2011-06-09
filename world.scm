@@ -1,5 +1,5 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; The World Client
+;; World Objects
 ;;
 ;;   Cells_object
 ;;   Column_object
@@ -8,6 +8,7 @@
 ;;   Viewport_object
 ;;   Map_object
 ;;    Avatar_object
+;;    IRC_agent
 ;;
 
 (load "ipc.scm")
@@ -24,6 +25,10 @@
 (define EDIT #f)
 (define WhisperTalkThreshold 4)
 (define TalkScreamThreshold  64)
+(define IRCPRENAME "\x16(")
+(define IRCPOSTNAME ")\x16")
+(define SUN 50)
+
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -253,7 +258,9 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Canvas_object
 ;; A canvas entry is a vector-vector consisting of a glyph and it's Z
-;; coordinate (the top most visible cell relative to the user usually).
+;; coordinate (the top most visible cell relative to the user usually)
+;; as well as an illumination value.  The britness of a glyph will be
+;; adjusted based on its illumination and global ambient light value.
 ;;
 (define (Canvas aField anEntityDB)
   (define (self msg) (eval msg))
@@ -261,35 +268,49 @@
   (define size (aField 'size))
   (define fieldCell (aField 'firstRef))
   (define fieldTopHeight (aField 'topHeight))
-  ; The canvas array.  An array of (cellGlyph . cellHeight)
+  ; The canvas array.  An array of #(cellGlyph cellHeight illumination)
   (define canvas (make-vector-vector size size #f))
+  (define (ref y x) (vector-vector-ref canvas (modulo y size) (modulo x size)))
+  ; Passing a defaultGlyph will reset the array with new entries.
+  ; Otherwise the array is mutated.
   (define (resetArray ceilingHeight . defaultGlyph)
     (set! defaultGlyph (if (null? defaultGlyph) #f (car defaultGlyph)))
     (loop2 0 size 0 size (lambda (y x)
       ; Each canvas entry consists of a map cell and its height
       ; Create pair either from defaultGlyph or based on the first visible cell
-      (vector-vector-set! canvas y x
         (if defaultGlyph
-          (cons defaultGlyph 0) ; Default
-          (letrec ((t (fieldTopHeight ceilingHeight y x)) ; First visible
+          (vector-vector-set! canvas y x
+                              (vector defaultGlyph 0 10)) ; Default (default intensity)
+          (letrec ((c (vector-vector-ref canvas y x))
+                   (t (fieldTopHeight ceilingHeight y x)) ; First visible
+                   (i (vector-ref c 2))
                    (celli (fieldCell t y x)))
-            (cons (if (cellValidIndex? celli)
-                    (cellGlyph (cellRef celli)) ; A cell's glyph
-                    (((anEntityDB 'get) celli) 'glyph)) ; An entity's glyph
-                  t)))))))
+            (vector-set! c 0 (if (cellValidIndex? celli)
+                                 (illuminate (cellGlyph (cellRef celli)) (+ SUN i)) ; A cell's glyph
+                                 (((anEntityDB 'get) celli) 'glyph))) ; An entity's glyph
+            (vector-set! c 1 t))))))
+  ; Consider the canvas cell at this position which is the #(glyph height illumination) vector
+  ;(define (ccell y x) (vector-vector-ref canvas (modulo y size) (modulo x size)))
   (define (glyph y x)
-    (car (vector-vector-ref canvas
-           (modulo y size)
-           (modulo x size))))
+    (vector-ref
+      (vector-vector-ref canvas (modulo y size)
+                                (modulo x size)) 0))
   (define (height y x)
-    (cdr (vector-vector-ref canvas
-           (modulo y size)
-           (modulo x size))))
-  (define (glyphSet y x c)
-    (set-car! (vector-vector-ref canvas
-                (modulo y size)
-                (modulo x size))
-              c))
+    (vector-ref
+      (vector-vector-ref canvas (modulo y size)
+                                (modulo x size)) 1))
+  (define (lum y x)
+    (vector-ref
+      (vector-vector-ref canvas (modulo y size)
+                                (modulo x size)) 2))
+  (define (incLum y x l)
+    ;(WinChatDisplay (list y x l))
+    (vector-set!
+      (vector-vector-ref canvas (modulo y size)
+                                (modulo x size)) 2 (+ l (lum y x))))
+  (define (glyphSet y x c l)
+    (set-car! (vector-vector-ref canvas (modulo y size) (modulo x size))
+              (illuminate c l)))
   (define (heightSet y x h)
    (set-cdr! (vector-vector-ref canvas
                (modulo y size)
@@ -298,13 +319,15 @@
   (define (render top y x)
    (let ((z (fieldTopHeight top y x))) ; Get z of first cell starting at top
      (let ((celli (fieldCell z y x))) ; Field might contain an entity's dna
-       (glyphSet y x (if (< CellMax celli)
-                               (letrec ((ent ((anEntityDB 'get) celli))
-                                        (sprite (ent 'sprite))
-                                        (ey (ent 'y))
-                                        (ex (ent 'x)))
-                                 ((sprite 'glyphRef) (- y ey) (- x ex)))
-                               (cellGlyph (cellRef celli)))))
+       (glyphSet y x
+                 (if (< CellMax celli)
+                    (letrec ((ent ((anEntityDB 'get) celli))
+                             (sprite (ent 'sprite))
+                             (ey (ent 'y))
+                             (ex (ent 'x)))
+                      ((sprite 'glyphRef) (- y ey) (- x ex)))
+                    (cellGlyph (cellRef celli)))
+                 (+ SUN (lum y x))))
      (heightSet y x z)))
   ; MAIN
   ;(WinChatDisplay "\r\nInitializing canvas...")
@@ -360,7 +383,7 @@
       (set! mx (- x (/ winWidth 2)))
       (loop2 0 winHeight 0 winWidth (lambda (y x) ; Render glyphs in viewport
         (plot (canvasGlyph (+ my y) (+ mx x))
-                      y (* x 2))))
+              y (* x 2))))
       (unlock)) ; TODO This shouldn't be such an all encompasing lock.
     ; The cell position and viewport position (upper left corner) are on a torus
     ; coordinate system (wrap along the two dimensions).  I want to render to
@@ -376,7 +399,8 @@
             (x (modulo (- gx mx) canvasSize)))
        (and (< y winHeight) (< x winWidth) (begin
          ((Terminal 'lock)) ; This shouldn't be such an all encompasing lock.
-         (plot (canvasGlyph gy gx) y (* x 2))
+         (plot (canvasGlyph gy gx)
+               y (* x 2))
          ((Terminal 'unlock)))))) ; This shouldn't be such an all encompasing lock.
     (define (animationLoop)
       (and VIEWPORTANIMATION
@@ -709,6 +733,8 @@
             ((myEntityDB 'del) entity)))))
   ; The 2d vector of columns will most likely come from a map agent.
   ; The map block coordinate and map block size is also passed.
+  ;
+  ; TODO: Collect light sources and add them to block list.  Remove old light sources first.
   (define (updateColumnsIPC dna my mx blockSize cellAry) ; Called from map agent via IPC
     (let ((fy (modulo my size))
           (fx (modulo mx size)))
@@ -730,7 +756,7 @@
       (or NOVIEWPORT
         (loop2 fy (+ fy blockSize)
                fx (+ fx blockSize)
-               (lambda (y x) (canvasRender 100 y x))))))))
+               (lambda (y x) (canvasRender ceiling y x))))))))
     ; Update one or more of an entity's attribute: dna port name glyph z y x
   (define (IPCentity dna . args)
     (let ((entity ((myEntityDB 'get) dna)))
@@ -843,8 +869,7 @@
                       (apply string (display->strings talkInput)))))
     (define (lookHere) (apply (avatarMap 'baseCell) ((avatar 'gps))))
     (define (lookAt) (apply (avatarMap 'baseCell) ((avatar 'gpsLook))))
-    (define (setIPCvoice f) (set! IPCvoice f))
-    (define (IPCvoice dna level text)
+    (define (IPCHandlerVoice dna level text)
      (or NOVIEWPORT
        (if (= dna 0) ; System messages
          (begin
@@ -874,7 +899,7 @@
                (WinChatDisplay "\r\n???" VOICEDELIMETER text)))))
        (if (and (!= dna (self 'dna)) (eqv? text "unatco"))
            (speak "no Savage"))))
-    (define (IPCforce fz fy fx dir mag)
+    (define (IPCHandlerForce fz fy fx dir mag)
      (and (= fz z) (= fy y) (= fx x) (walk dir)))
     (define (IPCact fz fy fx dir mag)
      (and (= fz z) (= fy y) (= fx x) (begin
@@ -885,6 +910,8 @@
       (ipcWrite `(entity ,dna ,glyph)))
     (define setField ((myMap 'myField) 'setField)) ; TODO debugging
     (define (getField) ((myMap 'myField) 'field))
+    (define (IPCHandlerMove . d)
+      (apply (myMap 'moveIPC) d))
     ; The soul of this avatar.  For now an IPC message handler which loops
     ; as long as local 'alive is #t and global 'SHUTDOWN is false
     (define IPCHandlerLoop (macro () ; TODO new framework which will fire up this thread in the child's environment
@@ -893,15 +920,15 @@
         (if (or alive SHUTDOWN)
           (begin
             (if (pair? e) (let ((a (car e)) (d (cdr e)))
-              (cond ((eq? a 'voice) (apply IPCvoice d)) ; Avatar messages
-                    ((eq? a 'force) (apply IPCforce d))
+              (cond ((eq? a 'voice) (apply IPCHandlerVoice d)) ; Avatar messages
+                    ((eq? a 'force) (apply IPCHandlerForce d))
                     ((eq? a 'act) (apply IPCact d))
                     ((eq? a 'who) (apply IPCwho d))
                     ((eq? a 'mapSetCell) (apply (myMap 'setCell) d))
                     ((eq? a 'die) (apply (myMap 'dieIPC) d)) ; Map messages
                     ((eq? a 'mapUpdateColumns) (apply (myMap 'updateColumnsIPC) d))
                     ((eq? a 'entity) (apply (myMap 'IPCentity) d))
-                    ((eq? a 'move) (apply (myMap 'moveIPC) d)))))
+                    ((eq? a 'move) (apply IPCHandlerMove d)))))
             (and SHUTDOWN alive (die)) ; If shutdown signaled quasi-kill myself but continue to handle msgs
             (~ (ipcRead)))
           (begin ; Shutdown avatar
@@ -939,3 +966,250 @@
                      #(0 15 #\| 0 15 #\|)
                      #(0 15 #\| 0 15 #\|)
                      #(0 15 #\| 0 15 #\|)))))))))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Kat
+;;
+(define (Kat name z y x owner ipc . ChildStack)
+ (apply Avatar name z y x ipc #t
+   (list z y x owner)
+   (macro (parent z0 y0 x0 owner . ChildStack) ; Child
+     (define (self msg) (eval msg))
+     (define (info) (list 'IrcAgent name z y x 'hasChild (pair? ChildStack)))
+
+     (define (say . l)
+       (speak (apply string (map (lambda (e) (apply string (display->strings e))) l))))
+
+     (define radius 20)
+     (define cy radius) (define cx 0)
+     (define fp 0)
+     (define (fn n m) ; F(x,y) + 2xm + m^2 + 2yn + n^2
+       (+ fp
+          (* 2 cy n)
+          (^2 n)
+          (* 2 cx m)
+          (^2 m)))
+     
+
+     (define (IPCHandlerVoice dna level text)
+      ())
+       ;((parent 'IPCHandlerVoice) dna level text) ; No need to call the parent
+
+     (define (IPCHandlerForce fz fy fx dir mag)
+       ;(speak "ouch!")
+       ((parent 'IPCHandlerForce) fz fy fx dir mag))
+
+     (define (IPCHandlerMove dna z y x)
+       ;(speak "purr")
+       (if (= dna (owner 'dna))
+         (letrec ((entLoc ((((myMap 'entityDBGet) dna) 'gps)))
+                  (m (- (cadr entLoc) y))
+                  (n (- x (caddr entLoc))))
+           (say "m=" m " n=" n " f'=" (fn m n)))))
+       ;((parent 'IPCHandlerMove) dna z y x))
+
+     (define (main)
+       ())
+     ; WOOEE
+     (if (pair? ChildStack)
+       (apply (cadr ChildStack) self (append (car ChildStack) (cddr ChildStack)))
+       (begin
+         (let ~ ((obj self))
+           (if (obj 'parent) (~ (obj 'parent)))
+           ((obj 'main)))
+         self)))
+   ChildStack)) ; IRC_agent
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; IRC_agent
+;;
+(define (IrcAgent Debug name z y x ipc . ChildStack)
+ (apply Avatar name z y x ipc #t
+  (list Debug)
+  (macro (parent Debug . ChildStack) ; Child
+   (define (self msg) (eval msg))
+   (define (info) (list 'IrcAgent name z y x 'hasChild (pair? ChildStack)))
+   ; Locals
+   (define portIRC #f)
+;   (define Server "irc.choopa.net")
+   (define Server "irc.he.net")
+   (define Port 6667)
+   (define Nick "world")
+   (define Nicks (BListCreate "w0rld" "worldtm" "world[tm]" "w0rld[tm]" "w0rldtm" "w[tm]rld" "w[]rld"))
+   ;(define channel "#worldtm")
+   (define channel "#not-world")
+   (define msgs (QueueCreate))
+   ; Members
+   (define (connectToIRCserver)
+     (set! portIRC (open-stream (open-socket Server Port)))
+     portIRC)
+   (define (send . l)
+      (Debug "\r\n<" (serialize-write (apply string l)) ">")
+      (map (lambda (s) (display s portIRC)) l)
+      (display "\r\n" portIRC))
+   (define (recvChar)
+     (read-char #f portIRC))
+   ; IRC message interface
+   (define (msgNew) (vector #f #f #f))
+   (define (msgPrefix m) (vector-ref m 0))
+   (define (msgCommand m) (vector-ref m 1))
+   (define (msgParameters m) (vector-ref m 2))
+   (define (msgQueueAdd s) (QueueAdd msgs s)) ; Generally adds a parsed IRC message.  Could be a string or #eof.
+   (define (msgQueueGet) (QueueGet msgs))
+   (define (debugDumpMsg msg)
+     (Debug (if (msgPrefix msg) (string "\r\n[" (msgPrefix msg) "]") "\r\n")
+            "[" (msgCommand msg) "]"
+            "[" (serialize-write (msgParameters msg)) "]"))
+   ; Parse an IRC message, vector of strings, from a message string
+   (define (parseMsgString ms)
+     (let ((newMsg (msgNew))) ; Create new message container #(prefix command parameters)
+       ; Parse possible PREFIX part of message
+       (if (eq? #\: (string-ref ms 0))
+         (let ((toks (strtok (cdr-string ms) #\ )))
+           (vector-set! newMsg 0 (car toks))
+           (set! ms (cdr toks)))) ; Remove prefix from ms string
+       ; Parse COMMAND and PARAMS parts of message
+       (let ((toks (strtok ms #\ )))
+           (vector-set! newMsg 1 (car toks))
+           (vector-set! newMsg 2 (cdr toks)))
+       newMsg))
+   ; Scan IRC stream a character at a time and add each line to the queue
+   (define (scanStream)
+      (define buff (make-string 512)) ; IRC enforced 512 character limit (including trailing \r\n) for messages
+      (let ~ ((ch (recvChar))
+              (num 0))
+        (cond ((eof-object? ch)
+               ; #EOF-connection lost/closed to IRC server.  Add remaining buffer as a raw string and #EOF to queue.
+               (or (= num 0) (msgQueueAdd (substring buff 0 num)))
+               (msgQueueAdd ch)) ; Add #eof
+              ((or (eq? ch RETURN) (eq? ch NEWLINE))
+               ; "\r\n"-line terminator scanned.  Add to queue if at least one character scanned.
+               (if (< 0 num) (msgQueueAdd (parseMsgString (substring buff 0 num))))
+               (~ (recvChar) 0))
+              (else
+               ; Char-continue scanning a line
+               (string-set! buff num ch)
+               (~ (recvChar) (+ num 1))))))
+   (define (cmdPING parameters)
+      (send "PONG " parameters))
+   (define (cmdTOPIC prefix parameters)
+       (speak
+        (string (car (strtok prefix #\!)) " changed the topic on "
+                (car (strtok parameters #\:)) " to " (cdr (strtok parameters #\:)))))
+   ; [Shrewm!~worlda@li54-107.members.linode.com][PRIVMSG]["#not-world :it's world!"]
+   (define (cmdPRIVMSG prefix parameters)
+        (speak (string (car (strtok prefix #\!))
+                                 (let ((chan (car (strtok parameters #\ ))))
+                                   (if (string=? channel chan) "" chan))
+                                 " " (cdr (strtok parameters #\:)))))
+   (define (cmdNICK prefix parameters)
+      (if (string=? Nick (car (strtok prefix #\!))) ; "nick!.....com"
+        (begin
+         (set! Nick (cdr (strtok parameters #\:))) ; ":newnick"
+         (speak (string "my new IRC nickname is " Nick)))))
+   ; Received the error message that the nick I am assuming is invalid so try a new one
+   (define (cmd433 parameters) ; ERR_NICKNAMEINUSE
+     (letrec ((s (strtok parameters #\ )) ; ("toNick" . "desiredNick :Nickname is already in use.")
+              (toNick (car s))
+              (desiredNick (car (strtok (cdr s) #\ ))))
+        (if (string=? Nick desiredNick)
+          (begin
+            (BListAddBack Nicks Nick)
+            (set! Nick (BListDelFront Nicks))
+            (Debug "\r\nTrying to register with next prefered nick="Nick " " (BListList Nicks))
+            (send "NICK " Nick)))))
+  
+   ; Joining multiple channels.
+   ;  <"JOIN #worldtm,#not-world">
+   ;   [world!~world@li54-107.members.linode.com] [JOIN] [":#worldtm"]
+   ;   [irc.choopa.net] [332] ["world #worldtm :The World[tm] >---< IRC[k] gateway"]
+   ;   [irc.choopa.net] [333] ["world #worldtm shrewm!~shroom@li54-107.members.linode.com 1302287052"]
+   ;   [irc.choopa.net] [353] ["world = #worldtm :world shrewm @strtok"]
+   ;   [irc.choopa.net] [366] ["world #worldtm :End of /NAMES list."]
+   ; 
+   ;   [world!~world@li54-107.members.linode.com] [JOIN] [":#not-world"]
+   ;   [irc.choopa.net] [332] ["world #not-world :World:  world.dv8.org [telnet-port 7154] [ssh-user world]"]
+   ;   [irc.choopa.net] [333] ["world #not-world Shrewm!~shroom@li54-107.members.linode.com 1293489012"]
+   ;   [irc.choopa.net] [353] ["world @ #not-world :world tangles__ tangles strtok @zumthing @eap sprocket"]
+   ;   [irc.choopa.net] [366] ["world #not-world :End of /NAMES list."]
+  
+  
+   ; The agent joins then parts a channel.  Shrewm joins the channel
+   ;  [world!~world@li54-107.members.linode.com] [JOIN] [":#worldtm"]
+   ;  [world!~world@li54-107.members.linode.com] [PART] ["#worldtm"]
+   ;  [shrewm!~worlda@li54-107.members.linode.com] [JOIN] [":#worldtm"]
+   ;  [shrewm!~worlda@li54-107.members.linode.com][PART]["#worldtm"]
+  
+   ; The topic for the channel.
+   ;   [irc.choopa.net] [332] ["world #worldtm :The World[tm] >---< IRC[k] gateway"]
+   ;   [irc.choopa.net] [333] ["world #worldtm shrewm!~shroom@li54-107.members.linode.com 1302287052"]
+  
+   ; The users in the channel.
+   ;   [irc.choopa.net] [353] ["world = #worldtm :world shrewm @strtok"]
+   ;   [irc.choopa.net] [366] ["world #worldtm :End of /NAMES list."]
+  
+   (define (cmdJOIN prefix parameters)
+     (let ((joinee (car (strtok prefix #\!))))
+       (if (string=? Nick joinee)
+         ; I have joined an IRC channel for the first time
+         (begin
+           (sleep 1000)
+           (speak "Joined channel " parameters)
+           )
+         (speak (string joinee " has joined " (cdr (strtok parameters #\#)))))))
+   (define (cmdPART prefix parameters)
+     (speak (string (car (strtok prefix #\!)) " has left " (cdr (strtok parameters #\#)))))
+   ; [tangles_!~android@m630e36d0.tmodns.net][QUIT][":Ping timeout: 268 seconds"]
+   (define (cmdQUIT prefix parameters)
+     (speak (string (car (strtok prefix #\!)) " quits ")))
+   ; Dispatch on queued IRC messages
+   (define (msgsDispatcher)
+     (let ((ircMsg (msgQueueGet)))
+       (if (eof-object? ircMsg)
+         (Debug "\r\nmsgsDispatcher: #eof from queue. halting")
+       (begin
+         (if (vector? ircMsg)
+           (letrec ((prefix (vector-ref ircMsg 0)) ; Consider message components
+                    (command (vector-ref ircMsg 1))
+                    (parameters (vector-ref ircMsg 2)))
+             (debugDumpMsg ircMsg)
+             (cond ((eqv? command "PING")   (cmdPING           parameters))
+                   ((eqv? command "TOPIC")  (cmdTOPIC   prefix parameters))
+                   ((eqv? command "PRIVMSG")(cmdPRIVMSG prefix parameters))
+                   ((eqv? command "NICK")   (cmdNICK    prefix parameters))
+                   ((eqv? command "433")    (cmd433            parameters)) ; ERR_NICKNAMEINUSE
+                   ((eqv? command "JOIN")   (cmdJOIN    prefix parameters))
+                   ((eqv? command "PART")   (cmdPART    prefix parameters))
+                   ((eqv? command "JOIN")   (cmdQUIT    prefix))))
+           (Debug "\r\nmsgsDispatcher: not a valid parsed IRC message: " ircMsg))
+         (msgsDispatcher)))))
+   (define (IPCHandlerVoice adna level text) ; Override parent's function
+      (if (or (= adna 0) (= adna dna))
+        () ; Ignore system messages
+        (letrec ((entity ((myMap 'entityDBGet) adna))
+                 (dist (if entity (distance ((entity 'gps)) (gps)))))
+          (if (and entity (not (eq? entity self)) (< dist level))
+              (say IRCPRENAME (entity 'name) IRCPOSTNAME " " text)))))
+   (define (say . l)
+     (apply send "PRIVMSG " channel " :" (map (lambda (e) (apply string (display->strings e))) l)))
+   (define (main)
+     (if (connectToIRCserver) (begin ; Make the connection
+       (Debug "\r\n::IrcAgent connected!  Starting scanStream loops")
+       (thread (scanStream))
+       (thread (msgsDispatcher))
+       (send "USER world 0 * :The World[tm] agent")
+       (send "NICK " Nick)
+       (sleep 500)
+       (send "JOIN " channel))))
+   ; WOOEE
+   (if (pair? ChildStack)
+     ; childstack = ((child parameters) child-macro . reset of child stack)
+     (apply (cadr ChildStack) self (append (car ChildStack) (cddr ChildStack)))
+     (begin
+       (let ~ ((obj self))
+         (if (obj 'parent) (~ (obj 'parent)))
+         ((obj 'main)))
+       self)))
+  ChildStack)) ; IRC_agent
+

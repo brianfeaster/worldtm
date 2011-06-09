@@ -125,14 +125,34 @@
 ((WinHelp 'puts) "\r\n  keys or 'nethack' keys")
 
 ; Initialize the color palette window
-(WinPaletteGoto 0 0) (loop 8  (lambda (i) (WinPaletteColor i 0) (WinPaletteDisplay #\ )))
-(loop 12 (lambda (i) (WinPaletteColor (+ 232 i) 0) (WinPaletteDisplay #\ )))
-(WinPaletteGoto 1 0) (loop 8  (lambda (i) (WinPaletteColor (+ 8 i) 0) (WinPaletteDisplay #\ )))
-(loop 12 (lambda (i) (WinPaletteColor (+ 232 12 i) 0) (WinPaletteDisplay #\ )))
-(WinPaletteDisplay "\r\n")
-(loop 216 (lambda (i)
-  (WinPaletteColor (+ 16 i) 0)
-  (WinPaletteDisplay #\ )))
+
+;(let generatePaletteWindowIndex ()
+; (define y 0) (define x 0)
+; (display "#((")       (loop 8  (lambda (i) (displayl (cons y (+ i x)) 0 ")(")))
+; (set! y 1) (set! x 0) (loop 8  (lambda (i) (displayl (cons y (+ i x)) 0 ")(")))
+; (set! y 2) (set! x 0) (loop 216(lambda (i) (displayl (cons (+ y (/ i 36)) (modulo  (+ i x) 36)) 0 ")(")))
+; (set! y 0) (set! x 8) (loop 12 (lambda (i) (displayl (cons y (+ i x)) 0 ")(")))
+; (set! y 1) (set! x 8) (loop 12 (lambda (i) (displayl (cons y (+ i x)) 0 ")(")))
+; (display "))"))
+
+(define WinPaletteDesc #(((0 . 0)0)((0 . 1)0)((0 . 2)0)((0 . 3)0)((0 . 4)0)((0 . 5)0)((0 . 6)0)((0 . 7)0)((1 . 0)0)((1 . 1)0)((1 . 2)0)((1 . 3)0)((1 . 4)0)((1 . 5)0)((1 . 6)0)((1 . 7)0)((2 . 0)0)((2 . 1)0)((2 . 2)0)((2 . 3)0)((2 . 4)0)((2 . 5)0)((2 . 6)0)((2 . 7)0)((2 . 8)0)((2 . 9)0)((2 . 10)0)((2 . 11)0)((2 . 12)0)((2 . 13)0)((2 . 14)0)((2 . 15)0)((2 . 16)0)((2 . 17)0)((2 . 18)0)((2 . 19)0)((2 . 20)0)((2 . 21)0)((2 . 22)0)((2 . 23)0)((2 . 24)0)((2 . 25)0)((2 . 26)0)((2 . 27)0)((2 . 28)0)((2 . 29)0)((2 . 30)0)((2 . 31)0)((2 . 32)0)((2 . 33)0)((2 . 34)0)((2 . 35)0)((3 . 0)0)((3 . 1)0)((3 . 2)0)((3 . 3)0)((3 . 4)0)((3 . 5)0)((3 . 6)0)((3 . 7)0)((3 . 8)0)((3 . 9)0)((3 . 10)0)((3 . 11)0)((3 . 12)0)((3 . 13)0)((3 . 14)0)((3 . 15)0)((3 . 16)0)((3 . 17)0)((3 . 18)0)((3 . 19)0)((3 . 20)0)((3 . 21)0)((3 . 22)0)((3 . 23)0)((3 . 24)0)((3 . 25)0)((3 . 26)0)((3 . 27)0)((3 . 28)0)((3 . 29)0)((3 . 30)0)((3 . 31)0)((3 . 32)0)((3 . 33)0)((3 . 34)0)((3 . 35)0)((4 . 0)0)((4 . 1)0)((4 . 2)0)((4 . 3)0)((4 . 4)0)((4 . 5)0)((4 . 6)0)((4 . 7)0)((4 . 8)0)((4 . 9)0)((4 . 10)0)((4 . 11)0)((4 . 12)0)((4 . 13)0)((4 . 14)0)((4 . 15)0)((4 . 16)0)((4 . 17)0)((4 . 18)0)((4 . 19)0)((4 . 20)0)((4 . 21)0)((4 . 22)0)((4 . 23)0)((4 . 24)0)((4 . 25)0)((4 . 26)0)((4 . 27)0)((4 . 28)0)((4 . 29)0)((4 . 30)0)((4 . 31)0)((4 . 32)0)((4 . 33)0)((4 . 34)0)((4 . 35)0)((5 . 0)0)((5 . 1)0)((5 . 2)0)((5 . 3)0)((5 . 4)0)((5 . 5)0)((5 . 6)0)((5 . 7)0)((5 . 8)0)((5 . 9)0)((5 . 10)0)((5 . 11)0)((5 . 12)0)((5 . 13)0)((5 . 14)0)((5 . 15)0)((5 . 16)0)((5 . 17)0)((5 . 18)0)((5 . 19)0)((5 . 20)0)((5 . 21)0)((5 . 22)0)((5 . 23)0)((5 . 24)0)((5 . 25)0)((5 . 26)0)((5 . 27)0)((5 . 28)0)((5 . 29)0)((5 . 30)0)((5 . 31)0)((5 . 32)0)((5 . 33)0)((5 . 34)0)((5 . 35)0)((6 . 0)0)((6 . 1)0)((6 . 2)0)((6 . 3)0)((6 . 4)0)((6 . 5)0)((6 . 6)0)((6 . 7)0)((6 . 8)0)((6 . 9)0)((6 . 10)0)((6 . 11)0)((6 . 12)0)((6 . 13)0)((6 . 14)0)((6 . 15)0)((6 . 16)0)((6 . 17)0)((6 . 18)0)((6 . 19)0)((6 . 20)0)((6 . 21)0)((6 . 22)0)((6 . 23)0)((6 . 24)0)((6 . 25)0)((6 . 26)0)((6 . 27)0)((6 . 28)0)((6 . 29)0)((6 . 30)0)((6 . 31)0)((6 . 32)0)((6 . 33)0)((6 . 34)0)((6 . 35)0)((7 . 0)0)((7 . 1)0)((7 . 2)0)((7 . 3)0)((7 . 4)0)((7 . 5)0)((7 . 6)0)((7 . 7)0)((7 . 8)0)((7 . 9)0)((7 . 10)0)((7 . 11)0)((7 . 12)0)((7 . 13)0)((7 . 14)0)((7 . 15)0)((7 . 16)0)((7 . 17)0)((7 . 18)0)((7 . 19)0)((7 . 20)0)((7 . 21)0)((7 . 22)0)((7 . 23)0)((7 . 24)0)((7 . 25)0)((7 . 26)0)((7 . 27)0)((7 . 28)0)((7 . 29)0)((7 . 30)0)((7 . 31)0)((7 . 32)0)((7 . 33)0)((7 . 34)0)((7 . 35)0)((0 . 8)0)((0 . 9)0)((0 . 10)0)((0 . 11)0)((0 . 12)0)((0 . 13)0)((0 . 14)0)((0 . 15)0)((0 . 16)0)((0 . 17)0)((0 . 18)0)((0 . 19)0)((1 . 8)0)((1 . 9)0)((1 . 10)0)((1 . 11)0)((1 . 12)0)((1 . 13)0)((1 . 14)0)((1 . 15)0)((1 . 16)0)((1 . 17)0)((1 . 18)0)((1 . 19)0)))
+
+;(WinPaletteGoto 0 0) (WinPaletteColor 0 15) (WinPaletteDisplay #\X)
+;(WinPaletteGoto 0 1) (loop 7  (lambda (i) (WinPaletteColor (+ i 1) 0) (WinPaletteDisplay #\ )))
+;(loop 12 (lambda (i) (WinPaletteColor (+ 232 i) 0) (WinPaletteDisplay #\ )))
+;(WinPaletteGoto 1 0) (loop 8  (lambda (i) (WinPaletteColor (+ 8 i) 0) (WinPaletteDisplay #\ )))
+;(loop 12 (lambda (i) (WinPaletteColor (+ 232 12 i) 0) (WinPaletteDisplay #\ )))
+;(WinPaletteDisplay "\r\n")
+;(loop 216 (lambda (i)
+;  (WinPaletteColor (+ 16 i) 0)
+;  (WinPaletteDisplay #\ )))
+
+; Render all 256 colors in the color palette window
+(loop 256 (lambda (i)
+  (let ((d (vector-ref WinPaletteDesc i)))
+    (WinPaletteGoto (caar d) (cdar d))
+    (WinPaletteColor i 0)
+    (WinPaletteDisplay #\ ))))
 
 
 ; Screen redraw and signal handler
@@ -340,8 +360,9 @@
 (define LastColors (make-list 32 0))
 (define CursorYX (cons 0 0))
 
-(mouseQueueRegister WinPalette eventQueue)
+(mouseQueueRegister WinPalette eventQueue) ; This window's mouse even queue is alwasy registered
 
+; #( ((y x) dimColorIdx) ...)
 ; Called by the keyboard and mouse handler to
 ; update the cursor in the palette window.
 (define (updatePaletteCursor y x)
@@ -350,36 +371,31 @@
     (WinPaletteColor (/ ((WinPalette 'getColor) oy ox) 256) 0)
     (WinPaletteGoto oy ox)
     (WinPaletteDisplay #\ )
-    (WinPaletteColor (/ ((WinPalette 'getColor) y x) 256) 0)
+    (WinPaletteColor (/ ((WinPalette 'getColor) y x) 256) ; Background color 
+                     (if (null? (memv y '(0 2))) 0 15)) ; Cursor color
     (WinPaletteGoto y x)
     (WinPaletteDisplay #\X))
     (set! CursorYX (cons y x)))
 
 (define (keyColorsAction c)
+ ; Return done.  Everything else returns true signalling we want to keep reading the keyboard
  (if (pair? (memv c (list CHAR-ESC TAB #\C #\c #\q #\Q)))
-   #f ; Return done.  Everything else returns true signalling we want to keep reading the keyboard
+   #f
+ ; Fake a mouse event as the mouse handler is contains the bulk of the code.
  (if (pair? (memv c (list RETURN NEWLINE SPACE)))
    (begin
      (mouseColorsActionHandler 'mouse0 (car CursorYX) (cdr CursorYX))
      #t)
  (let ((y (car CursorYX))
        (x (cdr CursorYX)))
-   (if (eq? c #\j)
-     (set! y (modulo (+ y 1)  (- (WinPalette 'Wheight) 1)))
-   (if (eq? c #\k)
-     (set! y (modulo (- y 1)  (- (WinPalette 'Wheight) 1)))
-   (if (eq? c #\h)
-     (set! x (modulo (- x 1)  (WinPalette 'Wwidth)))
-   (if (eq? c #\l)
-     (set! x (modulo (+ x 1)  (WinPalette 'Wwidth)))
-   (if (eq? c #\K)
-     ((WinPalette 'move) (+ -1 (WinPalette 'Y0))      (WinPalette 'X0))
-   (if (eq? c #\J)
-     ((WinPalette 'move) (+  1 (WinPalette 'Y0))      (WinPalette 'X0))
-   (if (eq? c #\H)
-     ((WinPalette 'move)       (WinPalette 'Y0) (+ -1 (WinPalette 'X0)))
-   (if (eq? c #\L)
-     ((WinPalette 'move)       (WinPalette 'Y0) (+  1 (WinPalette 'X0)))))))))))
+   (cond ((eq? c #\j) (set! y (modulo (+ y 1)  (- (WinPalette 'Wheight) 1))))
+         ((eq? c #\k) (set! y (modulo (- y 1)  (- (WinPalette 'Wheight) 1))))
+         ((eq? c #\h) (set! x (modulo (- x 1)  (WinPalette 'Wwidth))))
+         ((eq? c #\l) (set! x (modulo (+ x 1)  (WinPalette 'Wwidth))))
+         ((eq? c #\K) ((WinPalette 'move) (+ -1 (WinPalette 'Y0))      (WinPalette 'X0)))
+         ((eq? c #\J) ((WinPalette 'move) (+  1 (WinPalette 'Y0))      (WinPalette 'X0)))
+         ((eq? c #\H) ((WinPalette 'move)       (WinPalette 'Y0) (+ -1 (WinPalette 'X0))))
+         ((eq? c #\L) ((WinPalette 'move)       (WinPalette 'Y0) (+  1 (WinPalette 'X0)))))
    (updatePaletteCursor y x)
    #t))))
 
@@ -412,15 +428,17 @@
                         (glyph1bg glyph) clr (glyph1ch glyph))))))))
 
 (define (avatarColor)
-  ((WinPalette 'toggle))
+  ((WinPalette 'toggle)) ; Enable the Palette window
+  ; Push palette window's event queue to button handler.
+  ; The mouse handler is always registered.
   (keyQueueStackRegister eventQueue)
   (let ~ ()
     (let ((e (QueueGet eventQueue)))
       (if (pair? e)
-        (begin
+        (begin ; Mouse action
            (apply mouseColorsActionHandler e)
            (~))
-        (if (keyColorsAction e)
+        (if (keyColorsAction e) ; Button action
             (~)))))
   (keyQueueStackUnRegister eventQueue)
   ((WinPalette 'toggle)))
@@ -585,14 +603,21 @@
       ((avatarMap 'circularizeToggle))
       ((avatarMap 'bigger))
       (WinChatDisplay "\r\nEDIT " EDIT)))
-   (setButton #\1 '(WinChatDisplay "\r\n" (cellSymbol (cellRef ((avatar 'lookHere))))
-                                      " " (cellSymbol (cellRef ((avatar 'lookAt))))))
+   ;(setButton #\1 '(WinChatDisplay "\r\n" (cellSymbol (cellRef ((avatar 'lookHere))))
+   ;                                   " " (cellSymbol (cellRef ((avatar 'lookAt))))))
+   ;(setButton #\1 '(Avatar "kat" 1 (avatar 'y) (avatar 'x) ipc #t))
+   (setButton #\1 '(loop2 (avatar 'y) (+ (avatar 'y) 10)
+                          (avatar 'x) (+ (avatar 'x) 10)
+                          (lambda (y x)
+                            (if (= x (avatar 'x)) (WinChatDisplay "\r\n"))
+                            (WinChatDisplay " " (((avatarMap 'myCanvas) 'height) y x) ))))
    ;(setButton #\2 '(handleTerminalResize (cons 600 400)))
    (setButton #\3 '(thread (spawnKitty)))
    (setButton #\4 '(ghosts))
    (setButton #\5 '(pong))
    (setButton #\6 '(WinChatDisplay "\r\n" ((avatar 'lookAt)) ((avatarMap 'column) (avatar 'y) (+(avatar 'x)1))))
    ;(setButton #\7 '(or irc (set! irc (IrcAgent WinConsoleDisplay))))
+   (setButton #\8 '(incLightSource))
 ))
 
 ; Perform button's action
@@ -1076,6 +1101,21 @@
         (sleep 200)
         (fillgrid)))))
 
+(define irc #f)
+(define (NewIrc)
+  (set! irc (IrcAgent WinConsoleDisplay "IRC" (avatar 'z) (avatar 'y) (avatar 'x) ipc)))
+
+(define LightPoints '(((8 -2) . 5) ((8 -1) . 5) ((8 0) . 5) ((8 1) . 5) ((8 2) . 5) ((7 -4) . 5) ((7 -3) . 5) ((7 -2) . 10) ((7 -1) . 10) ((7 0) . 10) ((7 1) . 10) ((7 2) . 10) ((7 3) . 5) ((7 4) . 5) ((6 -5) . 5) ((6 -4) . 10) ((6 -3) . 10) ((6 -2) . 15) ((6 -1) . 15) ((6 0) . 15) ((6 1) . 15) ((6 2) . 15) ((6 3) . 10) ((6 4) . 10) ((6 5) . 5) ((5 -6) . 5) ((5 -5) . 10) ((5 -4) . 10) ((5 -3) . 15) ((5 -2) . 20) ((5 -1) . 20) ((5 0) . 20) ((5 1) . 20) ((5 2) . 20) ((5 3) . 15) ((5 4) . 10) ((5 5) . 10) ((5 6) . 5) ((4 -7) . 5) ((4 -6) . 10) ((4 -5) . 10) ((4 -4) . 15) ((4 -3) . 20) ((4 -2) . 20) ((4 -1) . 25) ((4 0) . 25) ((4 1) . 25) ((4 2) . 20) ((4 3) . 20) ((4 4) . 15) ((4 5) . 10) ((4 6) . 10) ((4 7) . 5) ((3 -7) . 5) ((3 -6) . 10) ((3 -5) . 15) ((3 -4) . 20) ((3 -3) . 20) ((3 -2) . 25) ((3 -1) . 30) ((3 0) . 30) ((3 1) . 30) ((3 2) . 25) ((3 3) . 20) ((3 4) . 20) ((3 5) . 15) ((3 6) . 10) ((3 7) . 5) ((2 -8) . 5) ((2 -7) . 10) ((2 -6) . 15) ((2 -5) . 20) ((2 -4) . 20) ((2 -3) . 25) ((2 -2) . 30) ((2 -1) . 35) ((2 0) . 35) ((2 1) . 35) ((2 2) . 30) ((2 3) . 25) ((2 4) . 20) ((2 5) . 20) ((2 6) . 15) ((2 7) . 10) ((2 8) . 5) ((1 -8) . 5) ((1 -7) . 10) ((1 -6) . 15) ((1 -5) . 20) ((1 -4) . 25) ((1 -3) . 30) ((1 -2) . 35) ((1 -1) . 35) ((1 0) . 40) ((1 1) . 35) ((1 2) . 35) ((1 3) . 30) ((1 4) . 25) ((1 5) . 20) ((1 6) . 15) ((1 7) . 10) ((1 8) . 5) ((0 -8) . 5) ((0 -7) . 10) ((0 -6) . 15) ((0 -5) . 20) ((0 -4) . 25) ((0 -3) . 30) ((0 -2) . 35) ((0 -1) . 40) ((0 0) . 40) ((0 1) . 40) ((0 2) . 35) ((0 3) . 30) ((0 4) . 25) ((0 5) . 20) ((0 6) . 15) ((0 7) . 10) ((0 8) . 5) ((-1 -8) . 5) ((-1 -7) . 10) ((-1 -6) . 15) ((-1 -5) . 20) ((-1 -4) . 25) ((-1 -3) . 30) ((-1 -2) . 35) ((-1 -1) . 35) ((-1 0) . 40) ((-1 1) . 35) ((-1 2) . 35) ((-1 3) . 30) ((-1 4) . 25) ((-1 5) . 20) ((-1 6) . 15) ((-1 7) . 10) ((-1 8) . 5) ((-2 -8) . 5) ((-2 -7) . 10) ((-2 -6) . 15) ((-2 -5) . 20) ((-2 -4) . 20) ((-2 -3) . 25) ((-2 -2) . 30) ((-2 -1) . 35) ((-2 0) . 35) ((-2 1) . 35) ((-2 2) . 30) ((-2 3) . 25) ((-2 4) . 20) ((-2 5) . 20) ((-2 6) . 15) ((-2 7) . 10) ((-2 8) . 5) ((-3 -7) . 5) ((-3 -6) . 10) ((-3 -5) . 15) ((-3 -4) . 20) ((-3 -3) . 20) ((-3 -2) . 25) ((-3 -1) . 30) ((-3 0) . 30) ((-3 1) . 30) ((-3 2) . 25) ((-3 3) . 20) ((-3 4) . 20) ((-3 5) . 15) ((-3 6) . 10) ((-3 7) . 5) ((-4 -7) . 5) ((-4 -6) . 10) ((-4 -5) . 10) ((-4 -4) . 15) ((-4 -3) . 20) ((-4 -2) . 20) ((-4 -1) . 25) ((-4 0) . 25) ((-4 1) . 25) ((-4 2) . 20) ((-4 3) . 20) ((-4 4) . 15) ((-4 5) . 10) ((-4 6) . 10) ((-4 7) . 5) ((-5 -6) . 5) ((-5 -5) . 10) ((-5 -4) . 10) ((-5 -3) . 15) ((-5 -2) . 20) ((-5 -1) . 20) ((-5 0) . 20) ((-5 1) . 20) ((-5 2) . 20) ((-5 3) . 15) ((-5 4) . 10) ((-5 5) . 10) ((-5 6) . 5) ((-6 -5) . 5) ((-6 -4) . 10) ((-6 -3) . 10) ((-6 -2) . 15) ((-6 -1) . 15) ((-6 0) . 15) ((-6 1) . 15) ((-6 2) . 15) ((-6 3) . 10) ((-6 4) . 10) ((-6 5) . 5) ((-7 -4) . 5) ((-7 -3) . 5) ((-7 -2) . 10) ((-7 -1) . 10) ((-7 0) . 10) ((-7 1) . 10) ((-7 2) . 10) ((-7 3) . 5) ((-7 4) . 5) ((-8 -2) . 5) ((-8 -1) . 5) ((-8 0) . 5) ((-8 1) . 5) ((-8 2) . 5)))
+(define (incLightSource)
+ (define myCanvas (avatarMap 'myCanvas))
+ (map (lambda (c)
+         ((myCanvas 'incLum)
+            (+ (caar c) (avatar 'y))
+            (+ (cadar c) (avatar 'x))
+            (cdr c)))
+  LightPoints))
+
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Genesis
 ;;
@@ -1143,8 +1183,10 @@
 ;(define irc #f)
 
 ; Spawn a second avatar.  Your free kitteh.
-(define kat (Avatar (string "katO'" (avatar 'name)) 1 (+ (random 10) 3458) (+ (random 10) 2764) ipc #t))
-(setButton #\1 '(Avatar "kat" 1 (avatar 'y) (avatar 'x) ipc #t))
+(rem define kat (Kat (string "katO'" (avatar 'name))
+                 (avatar 'z) (avatar 'y) (avatar 'x)
+                 avatar
+                 ipc))
 
 ; Keyboard command loop
 (let ~ () (let ((b (getKey)))

@@ -2292,14 +2292,17 @@ void sysVectorLength (void) {
 /* Deserializers:  String representation in r5, length r6 => new atom in r0. */
 void sysNewSymbol (void) {
 	DB("-->sysNewSymbol()");
-	objNewSymbol((Str)r5, (Num)r6);
+	objNewSymbolR5R6(); // objNewSymbol((Str)r5, (Num)r6);
 	DB("<--sysNewSymbol()");
 }
 void sysNewString (void) {
  Num len = parseString(r5); /* Mutates the string & returns the new length. */
 	DB("-->sysNewString()");
 	if ((Int)r6 == 2) r0 = nullstr;
-	else objNewString((u8*)r5, len);
+	else {
+		objNewString(NULL, len);
+   	memcpy(r0, r5, len);
+	}
 	DB("<--sysNewString()");
 }
 void sysNewCharacter (void) {

@@ -39,6 +39,7 @@ void objCopyReal    (void);
 void objNewString  (Str str, Num len);
 void objCopyString  (void);
 void objNewSymbol  (Str str, Num len);
+void objNewSymbolR5R6 (void); /* Like objNewSymbol only str/len are in r5/r6 */
 void objNewSyscall (Func f);
 void objCons12   (void); /* New pair using r1 and r2 */
 void objCons23   (void);
