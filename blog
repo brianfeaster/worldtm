@@ -3312,3 +3312,9 @@ The canvas should cache modified field glyphs based on ambient and direct light
 sources.  I added a hack into the viewport renderer but this added extra
 complexity to what's supposed to be a fast window rendering object.  The
 complexity for cell illumination will occur in the canvas object.
+
+
+
+Fri Jun 10 00:44:41 EDT 2011
+[ ] Verify map agent can host an IRC agent.
+[ ] Should there be a viewport-less map class?
