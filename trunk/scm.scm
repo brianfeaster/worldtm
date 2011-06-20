@@ -352,6 +352,12 @@
 (define (vector-vector-ref v i1 i2)
  (vector-ref (vector-ref v i1) i2))
  
+(define (vector-for-each fn v)
+ (let ~ ((i 0))
+  (or (= i (vector-length v))
+      (begin
+        (fn (vector-ref v i))
+        (~ (+ i 1))))))
 
 (define (vector-map fn v)
  (let ~ ((newv (make-vector (vector-length v)))

@@ -389,6 +389,7 @@
 (define force list)
 
 (define (mapSetCell . x) ())
+(define (sun . x) ())
 
 
 
@@ -409,6 +410,14 @@
 
 ; Start the dirty map writer thread
 (thread (dirtyMapBlockWriterLoop 5000))
+
+(thread
+ (sleep 2000)
+ (let ~ ()
+  (IpcWrite `(sun ,(* 10 (abs (- (modulo (/ (time) 3600)  10) 5)))))
+  (displayl "Waiting " (modulo time 3600) "seconds till next SUN movement\n")
+  (sleep (* 1000 (modulo time 3600))) ; Every hour on the hour
+  (~)))
 
 (thread 
  (let ((s (call/cc (lambda (c) (vector-set! ERRORS (tid) c) '*))))

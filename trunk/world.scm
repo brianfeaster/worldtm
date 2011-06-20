@@ -27,7 +27,7 @@
 (define TalkScreamThreshold  64)
 (define IRCPRENAME "\x16(")
 (define IRCPOSTNAME ")\x16")
-(define SUN 50)
+(define SUN 10)
 
 
 
@@ -716,6 +716,13 @@
      ((Terminal 'unlock))
      (viewportRecenterReset (avatar 'y) (avatar 'x))
      (set! viewportResizeClickTime (+ 125 (utime)))))))
+  (define (incLightSource y x)
+   (map (lambda (c)
+           ((myCanvas 'incLum)
+              (+ (caar c) y)
+              (+ (cadar c) x)
+              (cdr c)))
+        LightPoints))
   ; Start viewport animation loop
   (define (startAnimationLoop)
     (or NOVIEWPORT (thread ((myViewport 'animationLoop)))))
@@ -733,12 +740,17 @@
             ((myEntityDB 'del) entity)))))
   ; The 2d vector of columns will most likely come from a map agent.
   ; The map block coordinate and map block size is also passed.
-  ;
-  ; TODO: Collect light sources and add them to block list.  Remove old light sources first.
+  ; Increments the light sources in the canvas for certain cells.
   (define (updateColumnsIPC dna my mx blockSize cellAry) ; Called from map agent via IPC
     (let ((fy (modulo my size))
           (fx (modulo mx size)))
     (if (= dna (avatar 'dna)) (begin ; Make sure map agent sent specifically to me
+      ; Probe for fire cells in this new incoming block and
+      ; increment the light source radius in the canvas.
+      (loop blockSize (lambda (y)
+        (loop blockSize (lambda (x)
+          (let ((col (vector-vector-ref cellAry y x))) ; Consider the column
+             (vector-for-each (lambda (c) (if (= c 75) (incLightSource (+ fy y) (+ fx x)))) col))))))
       ; Update the field block
       ((myField 'updateColumns) fy fx blockSize cellAry)
       ; Register the block
@@ -757,7 +769,7 @@
         (loop2 fy (+ fy blockSize)
                fx (+ fx blockSize)
                (lambda (y x) (canvasRender ceiling y x))))))))
-    ; Update one or more of an entity's attribute: dna port name glyph z y x
+ ; Update one or more of an entity's attribute: dna port name glyph z y x
   (define (IPCentity dna . args)
     (let ((entity ((myEntityDB 'get) dna)))
       (if entity
@@ -779,8 +791,13 @@
    (or (= dna (avatar 'dna)) ; Skip if this is me since map rendering is handled during movement handling
        (let ((entity ((myEntityDB 'get) dna)))
          (if entity (moveEntity entity z y x)))))
+  (define (sunIPC b)
+   (or (= b SUN) (begin
+     (set! SUN b)
+     (canvasResetArray ceiling))))
   ; MAIN
   ;(WinChatDisplay "\r\nInitializing map...")
+  (set! SUN (* 10 (abs (- (modulo (/ (time) 3600)  10) 5))))
   ((myEntityDB 'add) avatar)
   (or NOVIEWPORT
     (begin
@@ -922,13 +939,14 @@
             (if (pair? e) (let ((a (car e)) (d (cdr e)))
               (cond ((eq? a 'voice) (apply IPCHandlerVoice d)) ; Avatar messages
                     ((eq? a 'force) (apply IPCHandlerForce d))
-                    ((eq? a 'act) (apply IPCact d))
-                    ((eq? a 'who) (apply IPCwho d))
-                    ((eq? a 'mapSetCell) (apply (myMap 'setCell) d))
-                    ((eq? a 'die) (apply (myMap 'dieIPC) d)) ; Map messages
+                    ((eq? a 'act)   (apply IPCact d))
+                    ((eq? a 'who)   (apply IPCwho d))
+                    ((eq? a 'move)             (apply IPCHandlerMove d))
+                    ((eq? a 'mapSetCell)       (apply (myMap 'setCell) d))
+                    ((eq? a 'die)              (apply (myMap 'dieIPC) d)) ; Map messages
                     ((eq? a 'mapUpdateColumns) (apply (myMap 'updateColumnsIPC) d))
-                    ((eq? a 'entity) (apply (myMap 'IPCentity) d))
-                    ((eq? a 'move) (apply IPCHandlerMove d)))))
+                    ((eq? a 'entity)           (apply (myMap 'IPCentity) d))
+                    ((eq? a 'sun)              (apply (myMap 'sunIPC) d)))))
             (and SHUTDOWN alive (die)) ; If shutdown signaled quasi-kill myself but continue to handle msgs
             (~ (ipcRead)))
           (begin ; Shutdown avatar
@@ -1212,4 +1230,3 @@
          ((obj 'main)))
        self)))
   ChildStack)) ; IRC_agent
-
