@@ -30,7 +30,7 @@
 ;; IPC
 ;;
 (load "ipc.scm") ; Includes adt.scm
-(define ipc (Ipc #f 7155)) ; Instead of #f can pass in a serializer for debug messages
+(define ipc (Ipc #f 8155)) ; Instead of #f can pass in a serializer for debug messages
 (define ipcReader ((ipc 'newReader)))
 (define IpcWrite (ipc 'qwrite))
 
@@ -358,6 +358,7 @@
     (begin ; Occurs the first time the entity connects
       (set! e (apply (myEntityDB 'set) dna args))
       (displayl "\e[31;1m Registered " (e 'name) " " args " \e[0m")
+      (IpcWrite `(sun ,(* 10 (abs (- (modulo (/ (time) 3600)  10) 5)))))
       (sendInitialBlocks e)))))
 
 (define (move dna . loc)
