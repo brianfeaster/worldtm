@@ -745,12 +745,6 @@
     (let ((fy (modulo my size))
           (fx (modulo mx size)))
     (if (= dna (avatar 'dna)) (begin ; Make sure map agent sent specifically to me
-      ; Probe for fire cells in this new incoming block and
-      ; increment the light source radius in the canvas.
-      (loop blockSize (lambda (y)
-        (loop blockSize (lambda (x)
-          (let ((col (vector-vector-ref cellAry y x))) ; Consider the column
-             (vector-for-each (lambda (c) (if (= c 75) (incLightSource (+ fy y) (+ fx x)))) col))))))
       ; Update the field block
       ((myField 'updateColumns) fy fx blockSize cellAry)
       ; Register the block
@@ -764,8 +758,14 @@
                    (<= mx ex) (< ex (+ mx blockSize)))
             (moveObject (e 'dna)  (e 'z) ey ex  (e 'z) ey ex  #f))))
         ((myEntityDB 'getAll)))
-      ; Render map block
       (or NOVIEWPORT
+        ; Probe for fire cells in this new incoming block and
+        ; increment the light source radius in the canvas.
+        (loop blockSize (lambda (y)
+          (loop blockSize (lambda (x)
+            (let ((col (vector-vector-ref cellAry y x))) ; Consider the column
+               (vector-for-each (lambda (c) (if (= c 75) (incLightSource (+ fy y) (+ fx x)))) col))))))
+        ; Render map block
         (loop2 fy (+ fy blockSize)
                fx (+ fx blockSize)
                (lambda (y x) (canvasRender ceiling y x))))))))

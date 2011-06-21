@@ -1113,7 +1113,7 @@
 ;;
 
 ; Create ipc object.  Pass in a serializer which prints to the console window.
-(define ipc (Ipc WinConsoleDisplay 7155))
+(define ipc (Ipc WinConsoleDisplay 8155))
 (ipc '(set! Debug #f))
 
 ; TODO an often used call by the un-refactored code
