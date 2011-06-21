@@ -591,7 +591,7 @@
 (setButton CHAR-CTRL-Q '(shutdown))
 (setButton #\Q         '(shutdown))
 (setButton #eof        '(shutdown))
-(setButton #\  '(begin (avatar '(stop)) (kat '(stop))))
+;(setButton #\  '(begin (avatar '(stop)) (kat '(stop))))
 (if QUIETLOGIN (begin
    (setButton CHAR-CTRL-C '((WinConsole 'toggle)))
    (setButton CHAR-CTRL-E '(begin
