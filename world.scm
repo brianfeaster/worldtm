@@ -792,7 +792,7 @@
        (let ((entity ((myEntityDB 'get) dna)))
          (if entity (moveEntity entity z y x)))))
   (define (sunIPC b)
-   (or (= b SUN) (begin
+   (or (= b SUN) NOVIEWPORT (begin
      (set! SUN b)
      (canvasResetArray ceiling))))
   ; MAIN
@@ -1025,7 +1025,7 @@
                   (m (- (cadr entLoc) y))
                   (n (- x (caddr entLoc))))
            (say "m=" m " n=" n " f'=" (fn m n)))))
-       ;((parent 'IPCHandlerMove) dna z y x))
+       ;((parent 'IPCHandlerMove) dna z y x)
 
      (define (main)
        ())
@@ -1037,7 +1037,8 @@
            (if (obj 'parent) (~ (obj 'parent)))
            ((obj 'main)))
          self)))
-   ChildStack)) ; IRC_agent
+   ChildStack)) ; Kat?
+
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; IRC_agent
