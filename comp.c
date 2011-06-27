@@ -137,36 +137,43 @@ void compTransformDefineFunction (void) {
 */
 void compDefine (Num flags) {
 	DB("-->compDefine");
-	expr = cdr(expr); /* Skip 'define symbol. */
 
-	push(env);
-	env = tge;
+	if (flags & NODEFINES) {
+		//CompError = 1;
+		fprintf(stderr, "ERROR: compDefine(): Define not allowed here");
+		wscmWrite(expr, stderr);
+	} else {
+		expr = cdr(expr); /* Skip 'define symbol. */
 
-	/* If the expression is of the form ((...) body) transform. */
-	if (objIsPair(car(expr))) {
-		compTransformDefineFunction();
-		expr = r0;
-	}
+		push(env);
+		env = tge;
 
-	if (TSYMBOL == memObjectType(r1=car(expr))) {
-		/* Bind (if not already bound) the symbol and get its binding. */
-		wscmTGEBind();
-		/* Emit code to set the binding's value. */
-		expr = cdr(expr);
-		if (objIsPair(expr)) {
-			push(r0); /* Save binding. */
-			expr = car(expr); /* Consider this definition's expression and compile. */
-			compExpression((Num)flags & ~TAILCALL);
-			asm(MVI1); asm(pop()); /* Load r1 with saved binding. */
-			asm(STI01); asm(0l);    /* Set binding's value. */
-		} else {
-			write (2, "ERROR: compDefine(): Missing expression.", 40);
+		/* If the expression is of the form ((...) body) transform. */
+		if (objIsPair(car(expr))) {
+			compTransformDefineFunction();
+			expr = r0;
 		}
-	} else  {
-		write (2, "ERROR: compDefine(): Not a symbol:", 34); wscmWrite(r1, stderr);
-	}
 
-	env = pop();
+		if (TSYMBOL == memObjectType(r1=car(expr))) {
+			/* Bind (if not already bound) the symbol and get its binding. */
+			wscmTGEBind();
+			/* Emit code to set the binding's value. */
+			expr = cdr(expr);
+			if (objIsPair(expr)) {
+				push(r0); /* Save binding. */
+				expr = car(expr); /* Consider this definition's expression and compile. */
+				compExpression((Num)flags & ~TAILCALL);
+				asm(MVI1); asm(pop()); /* Load r1 with saved binding. */
+				asm(STI01); asm(0l);    /* Set binding's value. */
+			} else {
+				write (2, "ERROR: compDefine(): Missing expression.", 40);
+			}
+		} else  {
+			write (2, "ERROR: compDefine(): Not a symbol:", 34); wscmWrite(r1, stderr);
+		}
+
+		env = pop();
+	}
 
 	DB("<--compDefine");
 	return;
@@ -226,7 +233,7 @@ void compTransformInternalDefinitions(void) {
 	DB("-->%s", __func__);
 
 	/* Save lambda body. */
-	while (objIsPair(car(expr)) && sdefine == caar(expr)) {
+	while (objIsPair(expr) && objIsPair(car(expr)) && sdefine == caar(expr)) {
 			push(cdr(expr));
 			expr = cdar(expr); // Consider next expression and skip 'define.
 			if (objIsPair(car(expr))) {
@@ -448,12 +455,12 @@ void compLambdaBody (Num flags) {
 			DB("   Lambda non-tail optimization");
 			push(cdr(expr)); /* Push next expr. */
 			expr = car(expr);
-			compExpression(flags & ~TAILCALL);
+			compExpression(flags & ~TAILCALL | NODEFINES);
 			expr = pop();
 		}
 		DB("   Lambda tail optimization");
 		expr = car(expr);
-		compExpression(flags | TAILCALL);
+		compExpression(flags | TAILCALL | NODEFINES);
 	}
 
 	asm(RET);
@@ -2050,14 +2057,17 @@ Num compCompile (void) {
 	CompError = 0; /* Clear error flag. */
 	//env = tge;   /* Force evaluation in the global environment */
 
-	asmAsm ( /* Keep track of original expression for debugging. */
+   /* Start emitting code.  Keep track of original expression for debugging. */
+	asmAsm (
 		BRA, 8l,
 		expr,
 		END
 	);
 
 	ret = compExpression(0);  /* No compiler flags */
-	asm(QUIT); /* Emit the QUIT opcode which exits the VM. */
+
+   /* Emit the QUIT opcode which exits the VM. */
+	asm(QUIT);
 	asmNewCode();
 
 	DB("  --%s", __func__);

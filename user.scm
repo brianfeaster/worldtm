@@ -1113,7 +1113,7 @@
 ;;
 
 ; Create ipc object.  Pass in a serializer which prints to the console window.
-(define ipc (Ipc WinConsoleDisplay 8155))
+(define ipc (Ipc WinConsoleDisplay 7155))
 (ipc '(set! Debug #f))
 
 ; TODO an often used call by the un-refactored code
@@ -1175,7 +1175,7 @@
 ;(define irc #f)
 
 ; Spawn a second avatar.  Your free kitteh.
-(rem define kat (Kat (string "katO'" (avatar 'name))
+(define kat (Kat (string "katO'" (avatar 'name))
                  (avatar 'z) (avatar 'y) (avatar 'x)
                  avatar
                  ipc))

@@ -1,5 +1,7 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Serializing - implements display and write
+;;  display_section
+;;  write_section
 ;;
 ;; This implementation first converts the object into a flattened
 ;; list of strings that comprise the object serialized representation.
@@ -12,12 +14,11 @@
 ;;      from printing at the same time to the same port.
 
 ; Keep track of internal implemenations.
-;(garbage-collect)
-;(quit)
 (define sdisplay display)
 (define swrite write)
 
-; display
+;;;;;;;;;;;;;;;;;;;;
+; display_section
 (define (display-list-serialize-list o r)
   (display-list-serialize
      (car o) (if (pair? (cdr o))
@@ -54,9 +55,13 @@
            (serialize-display (vector-ref o 4)) ">")
  (cons (serialize-display o) r)))))
 
-; Serialize an object into a list of strings.
+; Serialize an object into a list of "display" strings.
 (define (display->strings x)
  (display-list-serialize x ()))
+
+; Serialize an object into one "display" string.
+(define (display->string x)
+ (apply string (display-list-serialize x ())))
 
 (define (display x . p)
  (set! p (if (null? p) stdout (car p))) ; Default port is STDIN.
@@ -64,7 +69,8 @@
            (display->strings x)))
 
 
-; write
+;;;;;;;;;;;;;;;;;;;;
+; write_section
 (define (write-list-serialize-list o r)
   (write-list-serialize
      (car o) (if (pair? (cdr o))
@@ -96,9 +102,13 @@
        (write-list-serialize-vector o r))
  (cons (serialize-write o) r))))
 
-; write an object to a string.
+; Serialize an object into a list of "write" strings.
 (define (write->strings x)
   (write-list-serialize x ()))
+
+; Serialize an object into a "write" string.
+(define (write->string x)
+  (apply string (write-list-serialize x ())))
 
 (define (write x . p)
  (set! p (if (null? p) stdout (car p))) ; Default port is STDIN.
