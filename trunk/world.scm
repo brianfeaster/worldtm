@@ -8,6 +8,7 @@
 ;;   Viewport_object
 ;;   Map_object
 ;;    Avatar_object
+;;   Kat
 ;;    IRC_agent
 ;;
 
@@ -638,6 +639,23 @@
                                           (list 0 (+ (myViewport 'my) (/ (myViewport 'winHeight) 2)) (+ (myViewport 'mx) (/ (myViewport 'winWidth) 2)))))))))))
   (define ceiling 100)
   (define (setCeiling z) (set! ceiling z))
+  (define (createSprite x)
+   (IpcWrite (list 'entity (avatar 'dna)
+      (if (= x 0)
+        `(Sprite 1 1 ,(vector (avatar 'glyph)))
+      (if (= x 1)
+  
+        '(Sprite 3 2 #(#(0 15 #\  0 15 #\() #(0 15 #\) 0 15 #\ )  ; ()
+                       #(0 15 #\- 0 15 #\[) #(0 15 #\] 0 15 #\-)  ;-[]-
+                       #(0 15 #\_ 0 15 #\/) #(0 15 #\\ 0 15 #\_)));_/\_
+      (if (= x 2)
+        '(Sprite 7 1 #(#(0 15 #\| 0 15 #\|)
+                       #(0 15 #\| 0 15 #\|)
+                       #(0 15 #\| 0 15 #\|)
+                       #(0 15 #\| 0 15 #\|)
+                       #(0 15 #\| 0 15 #\|)
+                       #(0 15 #\| 0 15 #\|)
+                       #(0 15 #\| 0 15 #\|)))))))))
   (define (walkDetails entity)
     ; Update avatar locally in the field/canvas/viewport and via IPC
     (apply moveEntity entity ((entity 'gpsFace)))
@@ -967,24 +985,6 @@
         self)))
   ChildStack)) ; Avatar
 
-(define (createSprite x)
- (IpcWrite (list 'entity (avatar 'dna)
-    (if (= x 0)
-      `(Sprite 1 1 ,(vector (avatar 'glyph)))
-    (if (= x 1)
-
-      '(Sprite 3 2 #(#(0 15 #\  0 15 #\() #(0 15 #\) 0 15 #\ )  ; ()
-                     #(0 15 #\- 0 15 #\[) #(0 15 #\] 0 15 #\-)  ;-[]-
-                     #(0 15 #\_ 0 15 #\/) #(0 15 #\\ 0 15 #\_)));_/\_
-    (if (= x 2)
-      '(Sprite 7 1 #(#(0 15 #\| 0 15 #\|)
-                     #(0 15 #\| 0 15 #\|)
-                     #(0 15 #\| 0 15 #\|)
-                     #(0 15 #\| 0 15 #\|)
-                     #(0 15 #\| 0 15 #\|)
-                     #(0 15 #\| 0 15 #\|)
-                     #(0 15 #\| 0 15 #\|)))))))))
-
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Kat
@@ -997,7 +997,7 @@
      (define (info) (list 'IrcAgent name z y x 'hasChild (pair? ChildStack)))
 
      (define (say . l)
-       (speak (apply string (map (lambda (e) (apply string (display->strings e))) l))))
+       (speak (apply string (map display->string l))))
 
      (define radius 20)
      (define cy radius) (define cx 0)

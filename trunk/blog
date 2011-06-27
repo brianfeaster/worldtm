@@ -3318,3 +3318,17 @@ complexity for cell illumination will occur in the canvas object.
 Fri Jun 10 00:44:41 EDT 2011
 [ ] Verify map agent can host an IRC agent.
 [ ] Should there be a viewport-less map class?
+
+
+
+Mon Jun 27 02:25:05 EDT 2011
+
+Adding a check in the compiler that will prevent defines from appearing anywhere
+but at the top level or beginning of a body.  Required adding a new flag
+NODEFINES set in the recursive call to compExpression in compLambdaBody and
+checked for in the compDefine.
+
+The bug I'm trying to catch, missing closing parenthesis in an OO block's
+method, will still crash due to an #eof being parsed since the entire structure
+is thrown off at that point.  For now I'll leave this alone since the desired
+result, not necessarily the desired behavior, is met which is to error and halt.
