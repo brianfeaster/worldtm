@@ -238,24 +238,14 @@ void objNewClosure1Env (void) {
 	memVectorSet(r0, 1, env); /* r16 */
 }
 
-#if 0
-void objNewSocket (void) {
-	memNewVector(TSOCKET, 5);
-	memVectorSet(r0, 0, r1); /* Descriptor. */
-	memVectorSet(r0, 1, r2); /* Internet address string. */
-	memVectorSet(r0, 2, r3); /* Port number. */
-	memVectorSet(r0, 3, r4); /* State: accepting, connecting, open, closed*/
-	memVectorSet(r0, 4, false);  /* Push back or next available character. */
-}
-#endif
-
 void objNewPort (void) {
-	memNewVector(TPORT, 5);
+	memNewVector(TPORT, 6);
 	memVectorSet(r0, 0, r1); /* Descriptor. */
-	memVectorSet(r0, 1, r2); /* Path. */
-	memVectorSet(r0, 2, r3); /* Flags. */
-	memVectorSet(r0, 3, r4); /* State: open, closed. */
+	memVectorSet(r0, 1, r2); /* Path or internet address string. */
+	memVectorSet(r0, 2, r3); /* Flags or port number. */
+	memVectorSet(r0, 3, r4); /* State: accepting, connecting, open, closed. */
 	memVectorSet(r0, 4, false); /* Push back or next available character. */
+	memVectorSet(r0, 5, null); /* Can hold a finalizer if you want. */
 }
 
 /*
@@ -265,15 +255,6 @@ Obj objPortFlags      (Obj o) { return memVectorObject(o, 2); }
 Obj objPortState      (Obj o) { return memVectorObject(o, 3); }
 Obj objPortPushback   (Obj o) { return memVectorObject(o, 4); }
 */
-
-#if 0
-void new_continuation(void) {
- U32 length = mem_stk_count(stack);
-   mem_new_vec(TCONTINUATION, length);
-   memcpy(acc, stack+sizeof(OBJ), length*sizeof(OBJ)); /* IS THIS NAUGHTY? */
-}
-
-#endif
 
 Num objIsPair (Obj o) {
 	return memObjectType(o) == TPAIR;

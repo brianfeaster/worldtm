@@ -1168,15 +1168,15 @@
     (set! SHUTDOWN #t)
     ((avatar 'die)) ; Force an IPC message so avatar's IPC reader thread calls die method
     (sleep 1000)
-    (displayl "\e[" (Terminal 'Theight) "H\r\n\e[0m\e[?25h\e[?1000lgc=" (fun) "\r\n")
+    (displayl "\e[" (Terminal 'Theight) "H\r\n\e[0m\e[?25h\e[?1000l\r\n")
     (quit))))
 
 ; The IRC gateway.  Spawned by pressing 7.
 ;(define irc #f)
 
 ; Spawn a second avatar.  Your free kitteh.
-(define kat (Kat (string "katO'" (avatar 'name))
-                 (avatar 'z) (avatar 'y) (avatar 'x)
+(rem define kat (Kat ;(string "katO'" (avatar 'name))
+                 ;(avatar 'z) (avatar 'y) (avatar 'x)
                  avatar
                  ipc))
 

@@ -54,6 +54,7 @@ void memNewStatic      (Type t, LengthType byteLength);
 void memNewStaticVector(Type t, LengthType objLength);
 void memNewArray       (Type t, LengthType byteLength);
 void memNewVector      (Type t, LengthType objLength);
+void memNewSemaphore   (void);
 void memNewFinalizer   (void);
 void memNewPointer     (void);
 void memNewStack       (void);

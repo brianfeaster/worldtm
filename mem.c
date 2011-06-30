@@ -96,14 +96,14 @@ void memInitializeHeap (Heap *h, Num blockCount) {
 	h->last = h->start + bytes; /* Last pointer is exclusive. */
 	h->blockCount = blockCount;
 	h->finalizerCount=0;
-	DB ("   "OBJ"..."OBJ"  "HEX, h->start, h->last, bytes);
-	DB ("   --memInitializeHeap()");
+	DB ("     "OBJ"..."OBJ"  "HEX, h->start, h->last, bytes);
+	DB ("     --memInitializeHeap()");
 }
 
 /* Unallocate blockCount from tail part of object linux-memory. */
 void memShrinkHeap (Heap *h, Num blockCount) {
  Num newBlockCount;
-	DB ("::memShrinkHeap(%s)", h==&heapOld?"old":h==&heap?"heap":h==&heapNew?"new":"???");
+	DB ("   ::memShrinkHeap(%s)", h==&heapOld?"old":h==&heap?"heap":h==&heapNew?"new":"???");
 	if (0 < blockCount && blockCount <= h->blockCount) {
 		newBlockCount = h->blockCount - blockCount;
 		DB ("   range "OBJ"...%08lx", h->start+newBlockCount*BLOCK_BYTE_SIZE, blockCount*BLOCK_BYTE_SIZE);
@@ -112,25 +112,25 @@ void memShrinkHeap (Heap *h, Num blockCount) {
 		h->last = h->start + newBlockCount * BLOCK_BYTE_SIZE;
 		h->blockCount = newBlockCount;
 	}
-	DB ("--memShrinkHeap()");
+	DB ("     --memShrinkHeap()");
 }
 
 /* Release heap's blocks back to Linux.
 */
 void memFreeHeap (Heap *h) {
-	DB ("::memFreeHeap(%s)", h==&heapOld?"old":h==&heap?"heap":h==&heapNew?"new":"???");
+	DB ("   ::memFreeHeap(%s)", h==&heapOld?"old":h==&heap?"heap":h==&heapNew?"new":"???");
 	memShrinkHeap (h, h->blockCount);
-	DB ("--memFreeHeap()");
+	DB ("     --memFreeHeap()");
 }
 
 /* Reset heap so that it appears empty again.  Called after a heap structure
    is moved into another.
  */
 void memResetHeap (Heap *h) {
-	DB ("::memResetHeap(%s)", h==&heapOld?"old":h==&heap?"heap":h==&heapNew?"new":"???");
+	DB ("   ::memResetHeap(%s)", h==&heapOld?"old":h==&heap?"heap":h==&heapNew?"new":"???");
 	h->next = h->start = h->last = (void*)0;
 	h->blockCount = h->finalizerCount = 0;
-	DB ("--memResetHeap()");
+	DB ("     --memResetHeap()");
 }
 
 
@@ -181,6 +181,7 @@ Num memIsObjectArray (Obj o) { return !(memObjectType(o) & TBASEVECTOR); }
 Num memIsObjectVector (Obj o) { return memObjectType(o) & TBASEVECTOR; }
 
 /* Is object a special type? */
+Num memIsObjectSemaphore (Obj o) { return memObjectType(o) == TSEMAPHORE; }
 Num memIsObjectFinalizer (Obj o) { return memObjectType(o) == TFINALIZER; }
 Num memIsObjectPointer (Obj o) { return memObjectType(o) == TPOINTER; }
 Num memIsObjectStack (Obj o) { return memObjectType(o) == TSTACK; }
@@ -313,36 +314,45 @@ void memNewVector (Type type, LengthType length) {
 	DB("--memNewVector()");
 }
 
-/* Finalizer is just a C function pointer that is called when this object
-   becomes garbage.
+/* Semaphore is a pair containing a semaphore counter (number) and a finalizer.
 */
-void memNewFinalizer (void) {
-	DB("::memNewFinalizer()");
-	memNewObject (memMakeDescriptor(TFINALIZER, 1),
+void memNewSemaphore (void) {
+	DB("::%s", __func__);
+	memNewObject (memMakeDescriptor(TSEMAPHORE, 1),
 	              memVectorLengthToObjectSize(1));
-	heap.finalizerCount++;
-	DB("--memNewFinalizer");
+	DB("  --%s", __func__);
 }
 
-/* Pointer object is a normal C pointer followed by an object pointer
-   which the first pointer should be pointing into.
+/* Finalizer is a pair containg a C function pointer and an object.
+   The C function is called with the object pointer.
+*/
+void memNewFinalizer (void) {
+	DB("::%s", __func__);
+	memNewObject (memMakeDescriptor(TFINALIZER, 2),
+	              memVectorLengthToObjectSize(2));
+	heap.finalizerCount++;
+	DB("  --%s", __func__);
+}
+
+/* Pointer object is a normal C pointer followed by a scheme object pointer
+   which the first pointer should be pointing somewhere inside of.
 */
 void memNewPointer (void) {
-	DB("::memNewPointer()");
+	DB("::%s", __func__);
 	memNewObject (memMakeDescriptor(TPOINTER, 2),
 	              memVectorLengthToObjectSize(2));
-	DB("--memNewPointer");
+	DB("  --%s", __func__);
 }
 
 /* First item in stack vector is a pointer to an address in the vector.
    Initially it points to itself, implying an empty stack.
 */
 void memNewStack (void) {
-	DB("::memNewStack()");
+	DB("::%s", __func__);
 	memNewObject (memMakeDescriptor(TSTACK, STACK_LENGTH+1),
 	              memVectorLengthToObjectSize(STACK_LENGTH+1));
 	*(Obj*)r0 = (Obj)r0;
-	DB("--memNewStack");
+	DB("  --%s", __func__);
 }
 
 
@@ -403,7 +413,7 @@ void memVectorSet (Obj obj, Num offset, Obj item) {
 
 void memStackPush (Obj obj, Obj item) {
 	#if DEBUG_ASSERT_STACK
-	if (!memIsObjectValid(obj)) {
+	if (!memIsObjectValid(obj) && !memIsObjectInHeap(&heapNew, obj)) {
 		fprintf (stderr, "ERROR memStackPush(obj "OBJ" item "OBJ") Invalid object.", obj, item);
 		memError();
 	} else if (!memIsObjectStack(obj)) {
@@ -415,7 +425,7 @@ void memStackPush (Obj obj, Obj item) {
 		memError();
 	}
 	#endif
-	*++(*(Obj**)obj)=item;
+	*++*(Obj**)obj=item;
 }
 
 void memStackSet (Obj obj, Num topOffset, Obj item) {
@@ -439,7 +449,7 @@ void memStackSet (Obj obj, Num topOffset, Obj item) {
 Obj  memStackPop (Obj obj) {
  Obj ret;
 	#if DEBUG_ASSERT
-	if (!memIsObjectValid(obj)) {
+	if (!memIsObjectValid(obj) && !memIsObjectInHeap(&heapNew, obj)) {
 		DB ("ERROR memStackPop(obj "OBJ") Invalid object.", obj);
 		memError();
 	} else if (!memIsObjectStack(obj)) {
@@ -483,7 +493,7 @@ u8 memArrayObject (Obj obj, Num offset) {
 
 Obj memVectorObject (Obj obj, Num offset) {
 	#if DEBUG_ASSERT
-	if (!memIsObjectValid(obj)) {
+	if (!memIsObjectValid(obj) && !memIsObjectInHeap(&heapNew, obj)) {
 		DB ("ERROR memVectorObject(obj "OBJ" offset "NUM") Invalid object.",
 		    obj, offset);
 		memError();
@@ -638,9 +648,22 @@ void memObjectCopyToHeapNew (Obj *obj) {
 	assert(heapNew.next < heapNew.last);
 
 	ret:
-	DB("   --memObjectCopyToHeapNew");
+	DB("     --memObjectCopyToHeapNew");
 }
 
+
+/* If a finalizer oject is found in the heap, call it. */
+void memScanAndCallFinalizers(Heap *heap) {
+ Obj o;
+	o = heap->start + DescSize;
+	while (o < heap->next) {
+		if (memObjectType(o) == TFINALIZER) {
+			DB("      Found finalizer "OBJ" in young heap", o);
+			(*(Func1*)o)(((Obj*)o)[1]);
+		}
+		o += memObjectSize(o);
+	}
+}
 
 
 /* Function pointers called before and after a GC proper.
@@ -651,7 +674,7 @@ Func memPreGarbageCollect  = 0,
 Num memGCFlag=0;
 
 
-/* Internal garbage collection call.  Passed in for debuggin is the
+/* Internal garbage collection call.  Passed in for debugging is the
    desired new object descriptor as well as the number of bytes used
    to represent (descriptor byte count included) the object.
 */
@@ -683,18 +706,12 @@ void memGarbageCollectInternal (Descriptor desc, Num byteSize) {
 	memValidateHeapStructures();
 #endif
 
-	DB("::memGarbageCollectInternal()");
-//	fprintf (stderr, "-->memGarbageCollectInternal() %c\n", GarbageCollectionMode==GC_MODE_YOUNG?'y':'o');
+	if(GarbageCollectionMode==GC_MODE_YOUNG)
+		DB ("::%s   mode=YOUNG old_count:%x young_count:%x", __func__, heapOld.blockCount, heap.blockCount);
+	else
+		DB ("::%s   mode=OLD   old_count:%x young_count:%x", __func__, heapOld.blockCount, heap.blockCount);
 
 	if (memPreGarbageCollect) memPreGarbageCollect();
-
-	if (GarbageCollectionMode==GC_MODE_YOUNG) {
-		DB("   memGarbageCollect   young gc   old count %x   young count %x",
-		heapOld.blockCount, heap.blockCount);
-	} else {
-		DB("   memGarbageCollect   old gc   old count %x   young count %x",
-		heapOld.blockCount, heap.blockCount);
-	}
 
 	garbageCollectionCount++;
 
@@ -749,7 +766,9 @@ DB("   collecting and compacting mutated old object references...");
 	*/
 
 
-	/* Compact object referenced by vectors in old heap. */
+	/* Compact object referenced by vectors in old heap.  In young-only collection
+	   the old objects are root set.  Each old object must be checked for references
+	   in the current young heap. */
 	if ( GarbageCollectionMode==GC_MODE_YOUNG) {
 		DB("   Collecting objects referenced by old heap objects.");
 		newObj = heapOld.start + DescSize;
@@ -818,10 +837,16 @@ DB("   collecting and compacting mutated old object references...");
 	}
 
 	/* Check finalizer count. */
-	if (heapNew.finalizerCount != (heap.finalizerCount
-	                            + (GarbageCollectionMode == GC_MODE_OLD
-	                               ? heapOld.finalizerCount : 0))) {
-		fprintf (stderr, "\n\aWARNING: memGarbageCollectInternal() finalizer count difference");
+	if (heapNew.finalizerCount != (heap.finalizerCount + (GarbageCollectionMode == GC_MODE_OLD
+	                                                      ? heapOld.finalizerCount
+                                                         : 0))) {
+		DB ("   Finalizer count difference");
+
+		memScanAndCallFinalizers(&heap);
+
+		if (GarbageCollectionMode == GC_MODE_OLD) {
+			memScanAndCallFinalizers(&heapOld);
+		}
 	}
 
 	/* Free up heap and old heap if doing an old heap collection.  The live
@@ -886,7 +911,7 @@ DB("   collecting and compacting mutated old object references...");
 
 	//printf ("[count %d  heapOld %08x  heap %08x(%08x)  heapNew %08x  count %x]\n", garbageCollectionCount, heapOld.start, heap.start, heap.last-heap.start, heapNew.start, heapNew.blockCount);
 
-	DB("--memGarbageCollectInternal");
+	DB("  --memGarbageCollectInternal");
 }
 
 
@@ -930,7 +955,6 @@ void memDebugDumpHeapHeaders (FILE *stream) {
 	fprintf (stream, "r06 "OBJ"  r0e "OBJ"  r16 "OBJ"  r1e "OBJ"     env      rcode\n", r6, re, r16, r1e);
 	fprintf (stream, "r07 "OBJ"  r0f "OBJ"  r17 "OBJ"  r1f "OBJ" sem tge      stack\n", r7, rf, r17, r1f);
 }
-#define semaphores rf  /* WSCM: semaphore counters */
 #define blocked    r10 /* WSCM: I/O and Semaphore blocked threads */
 #define threads    r11 /* WSCM: Thread vector */
 #define sleeping   r12 /* WSCM: Sleeping thread */
@@ -966,7 +990,11 @@ void memDebugDumpObject (Obj o, FILE *stream) {
 
 	/* Dump the object's address and descriptor information.
 	   7fe8f5f44610 81 PAIR      2 #(7fe8f5f445f0 7fe8f5f44600) */
-	fprintf (stream, "\n"OBJ" "HEX02" %-7s"HEX4,
+	fprintf (stream, "\n%c"OBJ" "HEX02"%-7s"HEX4,
+		memIsObjectInHeap(&heapStatic, o)?'s':
+			memIsObjectInHeap(&heapOld, o)?'o':
+				memIsObjectInHeap(&heap, o)?'y':
+					memIsObjectInHeap(&heapNew, o)?'n':'?',
 		o, memObjectType(o), memTypeString(memObjectType(o)), memObjectLength(o));
 
 	/* Some objects are just an instance of the descriptor
@@ -985,7 +1013,7 @@ void memDebugDumpObject (Obj o, FILE *stream) {
 		} else if (memIsObjectShadow(o)) {
 			fprintf (stream, " *"OBJ"", *(Obj*)o);
 		} else if (memIsObjectFinalizer(o)) {
-			fprintf (stream, " ("OBJ")()", *(Obj*)o);
+			fprintf (stream, " ("HEX" . "OBJ")", ((Obj*)o)[0], ((Obj*)o)[1]);
 		} else {
 			for (i=0; i<memObjectLength(o); i++) {
 				obj = ((Obj*)o)[i];
@@ -1171,7 +1199,7 @@ void memValidateHeapStructures (void) {
 Chr* memTypeString (Type t) {
  char *s;
 	switch(t) {
-		case TBASEARRAY:   s="BASEARRAY"; break;
+		case TBASEARRAY:   s="BASEARY"; break;
 		case TFALSE:       s="FALSE"; break;
 		case TTRUE:        s="TRUE"; break;
 		case TNULL:        s="NULL"; break;
@@ -1194,7 +1222,8 @@ Chr* memTypeString (Type t) {
 		case TSOCKET:      s="SOCKET"; break;
 		case TSYSCALL:     s="SYSCALL"; break;
 
-		case TFINALIZER:   s="FINALIZER"; break;
+		case TSEMAPHORE:   s="SEMAPH"; break;
+		case TFINALIZER:   s="FINALIZ"; break;
 		case TPOINTER:     s="POINTER"; break;
 		case TSTACK:       s="STACK"; break;
 		case TSHADOW:      s="SHADOW"; break;

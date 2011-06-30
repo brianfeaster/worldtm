@@ -28,7 +28,7 @@
 (define TalkScreamThreshold  64)
 (define IRCPRENAME "\x16(")
 (define IRCPOSTNAME ")\x16")
-(define SUN 10)
+(define SUN 50)
 
 
 
@@ -815,7 +815,7 @@
      (canvasResetArray ceiling))))
   ; MAIN
   ;(WinChatDisplay "\r\nInitializing map...")
-  (set! SUN (* 10 (abs (- (modulo (/ (time) 3600)  10) 5))))
+  (if (= SUN 0) (set! SUN (* 10 (abs (- (modulo (/ (time) 3600)  10) 5)))))
   ((myEntityDB 'add) avatar)
   (or NOVIEWPORT
     (begin
@@ -986,13 +986,15 @@
   ChildStack)) ; Avatar
 
 
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Kat
 ;;
-(define (Kat name z y x owner ipc . ChildStack)
- (apply Avatar name z y x ipc #t
-   (list z y x owner)
-   (macro (parent z0 y0 x0 owner . ChildStack) ; Child
+(define (Kat owner ipc . ChildStack)
+ (apply Avatar (string "katO'" (owner 'name))
+               (owner 'z) (owner 'y) (owner 'x) ipc #t
+   (list owner)
+   (macro (parent owner . ChildStack) ; Child
      (define (self msg) (eval msg))
      (define (info) (list 'IrcAgent name z y x 'hasChild (pair? ChildStack)))
 
@@ -1038,6 +1040,7 @@
            ((obj 'main)))
          self)))
    ChildStack)) ; Kat?
+
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
