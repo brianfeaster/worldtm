@@ -45,11 +45,18 @@ void memAssertions() {
 	assert(memArrayLengthToObjectSize(25)==40);
 }
 
+void myFinalizer (Obj o) {
+	printf ("myFinalizer called with arg"OBJ"\n", o);
+}
+
+extern int GarbageCollectionMode;
+
 int main (int argc, char *argv[]) {
  int i, j;
 
 	// If any arguments passed to test unit, do more fun things.
 	if (argc==2) {
+		// Force failure if -f arguement passed
 		if (!strcmp(argv[1], "-f")) return -1;
 	}
 
@@ -58,7 +65,7 @@ int main (int argc, char *argv[]) {
 
 	memAssertions();
 
-	memNewArray(TSYMBOL, 8); r1=r0;
+	memNewArray(TSYMBOL, 256); r1=r0;
 	memNewArray(TINTEGER, 4); r2=r0;
 	memNewArray(TINTEGER, 4); r3=r0;
 	memNewVector(TPAIR, 2); r4=r0;
@@ -78,7 +85,16 @@ int main (int argc, char *argv[]) {
 		for (j=0; j<16; j++) ((char*)r0)[j] = j+i;
 	}
 
+	memNewFinalizer();
+	memVectorSet(r0, 0, myFinalizer);
+	memVectorSet(r0, 1, r3);
+
 	memDebugDumpAll(stdout);
+	memGarbageCollect();
+	memDebugDumpAll(stdout);
+	r0=0;
+	memGarbageCollect();
+	GarbageCollectionMode = 1;
 	memGarbageCollect();
 	memDebugDumpAll(stdout);
 
@@ -87,6 +103,7 @@ int main (int argc, char *argv[]) {
 	(*(Obj**)rf)++; // This is illegal but I want to verify that popping clears the object on the stack.
 	memDebugDumpObject(rf, stdout);
 	assert(memStackObject(rf, 0)==0);
+
 	goto ret;
 
 	memVectorSet(r9, 1, r2);

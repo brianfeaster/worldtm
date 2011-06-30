@@ -46,7 +46,6 @@ void objCons23   (void);
 void objNewVector  (Num len);
 void objNewVector1 ();
 void objNewClosure1Env (void);
-//void objNewSocket (void);
 void objNewPort (void);
 
 Num objIsPair (Obj o);

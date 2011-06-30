@@ -3,7 +3,6 @@
 
 /* Register aliases.
 */
-#define semaphores rf  /* WSCM: semaphore counters */
 #define blocked    r10 /* WSCM: I/O and Semaphore blocked threads */
 #define threads    r11 /* WSCM: Thread vector */
 #define sleeping   r12 /* WSCM: Sleeping thread */
@@ -124,6 +123,7 @@ typedef void (*Func2) (Obj a, Obj b);
 #define TSOCKET        0x87l
 #define TSYSCALL       0x88l
 
+#define TSEMAPHORE     0xfbl
 #define TFINALIZER     0xfcl
 #define TPOINTER       0xfdl
 #define TSTACK         0xfel

@@ -7,8 +7,6 @@
 #include "sys.h"
 #include <termios.h>
 
-const Num MaxSemaphoreCount=1024;
-
 /* Concepts:
      (Operator operand operand operand ...)
 
@@ -258,6 +256,12 @@ Int wscmWriteR (Obj a, Num islist, FILE *stream, Int max) {
 			count += fprintf(stream, " NEXT:");
 			count += wscmWriteR(memVectorObject(a, 4), 0, stream, max);
 			count += fprintf(stream, ">");
+			break;
+		case TSEMAPHORE:
+			count += fprintf(stream, "#SEMAPHORE<count:"NUM">", *(Num*)a);
+			break;
+		case TFINALIZER:
+			count += fprintf(stream, "#FINALIZER<"NUM" "OBJ">", *(Num*)a, ((Obj*)a)[1]);
 			break;
 		case TSYSCALL:
 			count += fprintf(stream, "#SYSCALL<"OBJ">", a);
@@ -543,6 +547,8 @@ void wscmOpenRemoteStream (void);
 
 void wscmAcceptRemoteStream (void);
 
+void sysClose(void);
+
 void wscmOpenLocalSocket (void);
 void wscmOpenLocalStream (void);
 
@@ -635,6 +641,18 @@ void wscmAcceptRemoteStream (void) {
 	This has been done.
 */
 
+void wscmSocketFinalizer (Obj o) {
+	if (memVectorObject(o, 3) == sclosed) {
+		DB("wscmSocketFinalizer:  Socket already closed");
+	} else {
+		DB("wscmSocketFinalizer:  Closing socket");
+		DBE wscmDisplay(o, stderr);
+		close(*(int*)o);
+		memVectorSet(o, 3, sclosed);
+	}
+}
+
+
 void wscmOpenLocalSocket (void) {
  int ld, on=1;
  struct sockaddr_in sai;
@@ -682,7 +700,14 @@ void wscmOpenLocalSocket (void) {
 	r1=(Obj)(Int)ld;
 	r2=r3;         /* Put port number in host field for the hell of it. */
 	r4=saccepting; /* State object starts out in accepting state. */
-	objNewPort();
+	objNewPort(); r1=r0;
+
+	/* Create and set the socket's "close" finalizer */
+	memNewFinalizer();
+	memVectorSet(r0, 0, wscmSocketFinalizer);
+	memVectorSet(r0, 1, r1);
+	memVectorSet(r1, 5, r0);
+	r0=r1;
 
 ret:
 	DB("<--%s", __func__);
@@ -970,11 +995,12 @@ void wscmRemoveThread (Obj t) {
 void wscmMoveToQueue (Obj thread, Obj queue, Obj state) {
 	DB("-->%s", __func__);
 	/* To keep round robin scheduler happy we need to trick it by moving
-	   the running pointer back a thread. */
+	   the 'running' object back a thread. */
 	memVectorSet(car(thread), 2, state); /* Set thread's new state. */
 	wscmRemoveThread(thread);
 	/* If inserting into ready queue, insert behind the running thread,
-	   otherwise insert at end of passed queue. */
+	   otherwise insert at end of passed queue.  The ternary expression
+	   performs this logic. */
 	wscmInsertThread(thread, queue==ready?running:queue);
 	DB("<--%s", __func__);
 }
@@ -1286,50 +1312,49 @@ void wscmScheduleBlocked (void) {
 	DB("<--%s", __func__);
 }
 
-void wscmScheduleSemaphoreBlocked (Num sem) {
- Int value, found=0;
+/* Called by sysSemaphoreUp, not the scheduler */
+void wscmScheduleSemaphoreBlocked (Obj sem, Num all) {
+ Obj semaphore, next;
+ Int found=0;
 	DB("\e[33m-->%s\n", __func__);
 	r4=cdr(blocked); /* For each thread r4 in blocked queue... */
-	while (r4!=blocked) {
+	while (!found && r4!=blocked) {
+		next = cdr(r4);
 		/* Check thread status in its descriptor. */
 		if (memVectorObject(car(r4),2) == ssemaphore) {
-			/* Look at thread's r0 register stored on its stack. */
-			value = (Int)memStackObject(memVectorObject(car(r4),0),1);
-			if (value == sem) {
-				DB("   unblocking thread");
+			/* Look at thread's r1 register stored on its stack. */
+			semaphore = memStackObject(memVectorObject(car(r4),0),1);
+			DB("considering blocked thread with sem:");
+			DBE wscmWrite(sem, stderr);
+			DBE wscmWrite(semaphore, stderr);
+			if (semaphore == sem) {
 				DB("   %s UnBlocking thread %d\n", __func__, memVectorObject(car(r4), 1));
-				/* Set thread's return value (r0 register top of stack) with
-			   	new semaphore value. */
-				objNewInt(*(Int*)memVectorObject(semaphores, sem));
-				memStackSet(memVectorObject(car(r4), 0), 0, r0);
+				/* Set thread's return value (r0 register which is found at the top of the thread's stack)
+				   to #t if another thread down'ed the semaphore and #f if close-semaphore called. */
+				memStackSet(memVectorObject(car(r4), 0), 0, all?false:true);
 				wscmMoveToQueue(r4, ready, sready);
-				r4=blocked; /* Force exit from loop. */
-				found=1;
-			} else {
-				r4 = cdr(r4);
+				if (!all) found=1;
 			}
-		} else {
-			r4 = cdr(r4);
 		}
+		r4=next;
 	}
-	if (!found) {
-		DB ("ERROR: Couldn't find thread blocked on semaphore %d.", sem);
+	if (!all && !found) {
+		fprintf (stderr, "ERROR: Couldn't find thread blocked on semaphore:");
+		wscmWrite(sem, stderr);
 		exit (-1);
 	}
 	DB("<--%s\e[0m\n", __func__);
 }
 
 void wscmSchedule (void) {
-	//fprintf(stderr, "::%s\r", __func__);
+	DB("::%s", __func__);
 	if (!wscmIsQueueEmpty(sleeping)) wscmScheduleSleeping();
 	if (!wscmIsQueueEmpty(blocked)) wscmScheduleBlocked();
 	while (wscmIsQueueEmpty(ready)) {
-// All are aparently getting blocked.
-	//fprintf (stderr, "   %s [t:%d b:%d s:%d sem:%d]\r", __func__, objDoublyLinkedListLength(ready), objDoublyLinkedListLength(blocked), objDoublyLinkedListLength(sleeping), *(Int*)memVectorObject(semaphores, 0));
 		//fprintf(stderr, "   %s looping: ready queue empty\rn", __func__);
 		/* No more threads so shutdown. */
 		if (wscmIsQueueEmpty(sleeping) && wscmIsQueueEmpty(blocked)) {
-			//fprintf(stderr, "   No more threads.  Bye bye.");
+			DB("  No more threads.  Bye bye.");
 			exit(0);
 		}
 		if (!wscmIsQueueEmpty(sleeping)) wscmScheduleSleeping();
@@ -1344,13 +1369,16 @@ void wscmSchedule (void) {
 	}
 
 	/* Switch to another thread.  Round robin scheme.  Just go to next thread. */
-	//fprintf(stderr, "   Round robin");
 	running = cdr(running);
-	if (running==ready) running=cdr(ready); // Can this happen?
+
+	/* Can this happen? */
+	if (running==ready) running=cdr(ready);
 	if (running==ready) fprintf (stderr, "ERROR: deal with this!");
+
 	vmSigAlarmReset(); /* Enable scheduler's interrupt timer. */
 	wscmRun();
-	//fprintf(stderr, "  --%s =>%d\rn", __func__, memVectorObject(car(running), 1));
+
+	DB("  --%s =>%d", __func__, memVectorObject(car(running), 1));
 }
 
 /* Force a call to the error handler/continuation which must be defined in
@@ -1405,7 +1433,9 @@ extern Num garbageCollectionCount;
 /* This can do anything.  I change it mainly for debugging and prototyping. */
 void sysFun (void) {
 	//fprintf (stderr, "Stacklength=[%d]", memStackLength(stack));
-	objNewInt((Int)garbageCollectionCount);
+	//memDebugDumpHeapHeaders(stderr);
+	//memDebugDumpYoungHeap(stderr);
+	//objNewInt((Int)garbageCollectionCount);
 }
 
 
@@ -2048,6 +2078,9 @@ void sysClose(void) {
 		 && memObjectType(r0) != TPORT) {
 		printf ("WARNING: sysClose: not a socket: ");
 		wscmDisplay(r0, stdout);
+	} if (memVectorObject(r0, 3) == sclosed) {
+		printf ("WARNING: sysClose: socket already closed: ");
+		wscmDisplay(r0, stdout);
 	} else {
 		close(*(int*)r0);
 		memVectorSet(r0, 3, sclosed);
@@ -2383,76 +2416,71 @@ void sysDisassemble (void) {
 
 }
 
+/* Semaphores are just immediate numbers.
+*/
 void sysOpenSemaphore (void) {
- Num i=0;
 	if (wscmAssertArgumentCount(1, __func__)) return;
-	/* Look for next available semaphore. */
-	while (i<MaxSemaphoreCount && memVectorObject(semaphores, i) != null) i++;
 
-	if (i>= MaxSemaphoreCount) {
-		r0=null;
-		assert (i<MaxSemaphoreCount);
-	} else {
-		/* Create new integer object from passed initial count value. */
-		objNewInt(*(Int*)pop());
-		memVectorSet(semaphores, i, r0);
-		/* Return the semaphore index. */
-		objNewInt((Int)i);
-	}
+	memNewSemaphore();
+	memVectorSet(r0, 0, (Obj)*(Int*)pop()); /* Initialize the semaphore's counter */
 }
 
 void sysCloseSemaphore (void) {
  Num index;
 	if (wscmAssertArgumentCount(1, __func__)) return;
-	r0 = memVectorObject(semaphores, index=*(Num*)pop());
-	memVectorSet(semaphores, index, null);
+	r0 = pop();
+	if (memVectorObject(r0,0)==false)
+		r0 = false; /* Semaphore already closed */
+	else {
+		memVectorSet(r0, 0, false);
+		wscmScheduleSemaphoreBlocked(r0, 1); /* 1 means unblock all threads on this semaphore */
+		r0 = true;
+	}
 }
 
 void sysSemaphoreDown (void) {
- Obj semIdx, sem;
  Int newCount;
-	DB("-->%s ", __func__);
+	DB("::%s ", __func__);
 	if (wscmAssertArgumentCountRange(1, 1, __func__)) return;
 
-	semIdx = pop();
-	sem = memVectorObject(semaphores, *(Num*)semIdx);
-	newCount = *(Int*)sem - 1;
+	/* Decrement the semaphore's counter */
+	r0 = pop();
+	if (memVectorObject(r0,0)==false) {
+		r0 = false;
+	} else {
+		newCount = --*(Int*)r0;
 
-	/* New decremented counter object into r0 */
-	objNewInt(newCount);
-	memVectorSet(semaphores, *(Num*)semIdx, r0);
-
-	if (newCount < 0) {
-		/* Block thread on this semaphore.  Store semaphore index in r1. */
-		DB ("   %s !!! Blocking thread %d", __func__, memVectorObject(car(running), 1));
-		r1 = (Obj)*(Num*)semIdx;
-		wscmUnRun();
-		wscmMoveToQueue(running, blocked, ssemaphore);
-		wscmSchedule();
+		if (newCount < 0) {
+			/* Block thread on this semaphore.  Store semaphore index in r1. */
+			DB ("   %s !!! Blocking thread %d", __func__, memVectorObject(car(running), 1));
+			r1 = r0;
+			wscmUnRun();
+			wscmMoveToQueue(running, blocked, ssemaphore); /* TODO create a separate semaphore blocked queue */
+			wscmSchedule();
+		} else
+			r0 = true;
 	}
-	/* Return new decremented counter value already in r0 */
 
-	DB("<--%s ", __func__);
+	DB("  --%s ", __func__);
 }
 
 void sysSemaphoreUp (void) {
- Obj semIdx, sem;
  Int newCount;
 	DB("-->%s\n", __func__);
 	if (wscmAssertArgumentCountRange(1, 1, __func__)) return;
-	semIdx = pop();
-	sem = memVectorObject(semaphores, *(Num*)semIdx);
-	newCount = *(Int*)sem + 1;
 
-	/* New incremented counter object into r0 */
-	objNewInt(newCount);
-	memVectorSet(semaphores, *(Num*)semIdx, r0);
+	r0 = pop();
+	if (memVectorObject(r0,0)==false) {
+		r0 = false;
+	} else {
+		newCount = ++*(Int*)r0;
 
-	/* Unblock a semaphore's blocked thread. If after incrmenting the
-	   counter the semaphore is still blocking, then this means one
-	   of the blocked threads can be awakened. */
-	if (newCount < 1) wscmScheduleSemaphoreBlocked(*(Num*)semIdx);
-	/* Return the newly incremented counter value as well */
+		/* Unblock a thread blocked by this semaphore. If after incrmenting the
+	   	counter the semaphore is still blocking, then this means one
+	   	of the blocked threads can be awakened. */
+		if (newCount < 1) wscmScheduleSemaphoreBlocked(r0, 0);
+		r0 = true;
+	}
 
 	DB("<--%s\n", __func__);
 }
@@ -2510,7 +2538,8 @@ void sysSchedule (void) {
 	if ((Int)memVectorObject(threads, 0) != 1 || !wscmIsQueueEmpty(sleeping)) {
 		wscmUnRun();
 		/* BF: TODO: This thread's stack is still active.  It MIGHT get clobbered
-		   while a new thread is scheduled, wakes up or unblocked.*/
+		   while a new thread is scheduled, wakes up or unblocked.  Is this because
+		   there is no system stack? */
 		wscmSchedule();
 	}
 
@@ -2994,11 +3023,6 @@ void wscmInitialize (void) {
 	memVectorSet(blocked, 1, blocked);
 	memVectorSet(blocked, 2, blocked);
 
-	/* Create semaphore counters. */
-	i=MaxSemaphoreCount;
-	objNewVector(i);  semaphores=r0;
-	while (i--) memVectorSet(semaphores, i, null);
-
 	/* Create empty global environment list. */
 	objNewSymbol((Str)"TGE", 3);
 	r1=r0;  r2=null;  objCons12();  env=tge=r0;
@@ -3069,6 +3093,8 @@ void wscmInitialize (void) {
 	wscmDefineSyscall (sysSignal, "signal");
 	wscmDefineSyscall (sysToggleDebug, "toggle-debug");
 
+	memObjStringRegister(wscmSocketFinalizer, "wscmSocketFinalizer");
+
 	/* Create the standard I/O port object */
 	r1=(Obj)0; /* Descriptor */
 	objNewSymbol ((Str)"stdin", 5);  r2=r3=r0; /* Address and port */
@@ -3092,7 +3118,6 @@ void wscmInitialize (void) {
 	r0=symbols; wscmDefine("symbols");
 	wscmCreateRead();  wscmDefine("read");
 	wscmCreateRepl();  wscmDefine("repl2");
-	r0=semaphores;  wscmDefine("semaphores");
 	r0=eof; wscmDefine("#eof");
 	objNewInt(42); wscmDefine ("y");
 	objNewInt(1); wscmDefine ("x");

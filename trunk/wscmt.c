@@ -27,6 +27,21 @@ void testGoto() {
 	return;
 }
 
+Num wscmWrite (Obj a, FILE *stream);
+extern int GarbageCollectionMode;
+
+void objVerifySemaphore (void) {
+	objNewInt(7);
+	push(r0);
+	sysOpenSemaphore();
+	//memDebugDumpAll(stdout);
+	wscmWrite(r0, stdout);
+	r0=r1=null;
+	GarbageCollectionMode = 1;
+   memGarbageCollect();
+	//memDebugDumpAll(stdout);
+}
+
 
 int main (void) {
 	DB ("::%s", __func__);
@@ -53,6 +68,7 @@ int main (void) {
 
 	DBE memDebugDumpAll(stdout);
 	DBE vmDebugDumpCode(code, stdout);
+	objVerifySemaphore();
 	DB ("  --%s", __func__);
 	return 0;
 }

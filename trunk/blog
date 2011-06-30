@@ -3332,3 +3332,40 @@ The bug I'm trying to catch, missing closing parenthesis in an OO block's
 method, will still crash due to an #eof being parsed since the entire structure
 is thrown off at that point.  For now I'll leave this alone since the desired
 result, not necessarily the desired behavior, is met which is to error and halt.
+
+
+
+Mon Jun 27 19:24:48 EDT 2011
+
+Fixed finalizer objects: #(internalCFunction(Obj) parentObject)
+
+The callback function will be called by the garbage collector when it becomes
+an unreferenced objects.  The parent object will be passed to the C function.
+If it exists in an old generation, it will take longer for them to be finalized
+since complete old garbage collections occur less often than young heap
+collections.
+
+I had to fix finalizers so that I could complete the semaphore implementation
+which had to be explicitly "closed" after usage.
+
+I need to also fix ports so they are automatically closed after being collected.
+
+Realized that both sysClose and the close finalizer should check first that the
+port object is not closed.  Otherwise it could be used to close new ports opened
+on the same internal descriptor number.
+
+[ ] Think about semaphores garbage collected while other threads are waiting on
+them.  Is this even possible?
+
+
+
+Tue Jun 28 03:48:55 EDT 2011
+
+Semaphores should not be stored in a global vector.  This will prevent the
+semaphore from ever becoming garbage unless close-semaphore is called.  It will
+keep track of threads waiting on it.  Currently the schedule must scan all
+blocked threads for any waiting on this semaphore.
+
+Is there a problem implementing semaphore counters as mutable internal integers?
+The old implementation was a global vector of semaphores which, when incremented
+or decremented, would be replaced with a new scheme number object.
