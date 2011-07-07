@@ -1,13 +1,13 @@
 #define DEBUG 0
+#define DEBUG_SECTION "MEM "
 #define DEBUG_ASSERT 1
 #define DEBUG_ASSERT_STACK 1
 #define VALIDATE_HEAP 0
-#define DB_MODULE "MEM "
-#include "debug.h"
 #include <errno.h>
 #include <string.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include "debug.h"
 /* Two sets of objects, old and young,  will be maintained.  Normally, the
    young object heap will be copy collected, when it fills up, to a new
    young heap.  The old heap will not be touched.  Only when the young heap
@@ -706,10 +706,11 @@ void memGarbageCollectInternal (Descriptor desc, Num byteSize) {
 	memValidateHeapStructures();
 #endif
 
-	if(GarbageCollectionMode==GC_MODE_YOUNG)
+	if(GarbageCollectionMode==GC_MODE_YOUNG) {
 		DB ("::%s   mode=YOUNG old_count:%x young_count:%x", __func__, heapOld.blockCount, heap.blockCount);
-	else
+	} else {
 		DB ("::%s   mode=OLD   old_count:%x young_count:%x", __func__, heapOld.blockCount, heap.blockCount);
+	}
 
 	if (memPreGarbageCollect) memPreGarbageCollect();
 
@@ -1284,4 +1285,5 @@ void memError (void) {
 	//exit(-1);
 }
 
-#undef DB_MODULE
+#undef DEBUG_SECTION
+#undef DEBUG

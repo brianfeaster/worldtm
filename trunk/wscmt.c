@@ -1,12 +1,11 @@
-#define DEBUG 0
-#define DB_MODULE "WSCMTEST "
-#include "debug.h"
-
 #include <stdio.h>
 #include <unistd.h>
 #include <stdlib.h>
 #include <assert.h>
 #include "sys.h"
+#define DEBUG 0
+#define DEBUG_SECTION "WSCMTEST "
+#include "debug.h"
 
 
 extern void sysIllegalOperator();
@@ -62,7 +61,7 @@ int main (void) {
 	expr=r0; compCompile();
 
 	// Fire up VM.
-	sleep(1); interrupt=0; /* Give the interrupt handler time to trigger so forcing it to 0 actually stays 0. */
+	sleep(1); vmInterrupt=0; /* Give the interrupt handler time to trigger so forcing it to 0 actually stays 0. */
 	code=r0; ip=0; vmRun();
 	memGarbageCollect();
 
@@ -73,4 +72,5 @@ int main (void) {
 	return 0;
 }
 
-#undef DB_MODULE
+#undef DEBUG_SECTION
+#undef DEBUG

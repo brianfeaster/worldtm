@@ -1,5 +1,5 @@
 #define DEBUG 0
-#define DB_MODULE "OBJ "
+#define DEBUG_SECTION "OBJ "
 #include "debug.h"
 
 #include <stdio.h>
@@ -58,38 +58,6 @@ void tree_copy (void) { /* COPIES TREE ACC INTO ACC */
 	}
 }
 #endif
-
-Num objListLength (Obj o) {
- Num i=0;
-	while (objIsPair(o)) {
-		o = cdr(o);
-		i++;
-	}
-	return i;
-}
-
-Num objDoublyLinkedListLength (Obj o) {
- Obj next=cdr(o);
- Num i=0;
-	while (next!=o) {next=cdr(next); i++; }
-	return i;
-}
-
-/* Creates vector in r0 from list in r1.
-*/
-void objListToVector (void) {
- Num i=0, len;
-	r1=r0;
-	len = objListLength(r0);
-	if (len) {
-		memNewVector(TVECTOR, len); /* Create empty vector */
-		while (i<len) { /* Stuff vector*/
-			memVectorSet(r0, i++, car(r1));
-			r1 = cdr(r1);
-		}
-	} else
-		r0 = nullvec;
-}
 
 /* Creates a new integer object in r0.
 */
@@ -220,6 +188,15 @@ void objCons23 (void) {
 	memVectorSet(r0, 1, r3);
 }
 
+/* TODO should a doubly linked list be its own object type?
+*/
+void objNewDoublyLinkedListNode (void) {
+	memNewVector(TVECTOR, 3);
+	memVectorSet(r0, 0, null);
+	memVectorSet(r0, 1, r0);
+	memVectorSet(r0, 2, r0);
+}
+
 /* Create uninitialized vector in r0 of length r1:immediate
 */
 void objNewVector (Num len) {
@@ -259,6 +236,93 @@ Obj objPortPushback   (Obj o) { return memVectorObject(o, 4); }
 Num objIsPair (Obj o) {
 	return memObjectType(o) == TPAIR;
 }
+
+
+/* caar <=> (car (car x)) <=>
+    LDI0 #<binding x>
+    BRT  TPAIR a
+    ; error code here
+    a: LD00 hmmmm LD needs an offset value
+*/
+Obj  car  (Obj o) { return memVectorObject(o, 0);}
+Obj  caar (Obj o) { return car(car(o));}
+Obj  cdar (Obj o) { return cdr(car(o));}
+
+Obj  cdr  (Obj o) { return memVectorObject(o, 1);}
+Obj  cadr (Obj o) { return car(cdr(o));}
+Obj  cddr (Obj o) { return cdr(cdr(o));}
+
+void push (Obj o) { memStackPush(stack, o);}
+Obj  pop  (void)  { return memStackPop(stack);}
+
+
+Num objListLength (Obj o) {
+ Num i=0;
+	while (objIsPair(o)) {
+		o = cdr(o);
+		i++;
+	}
+	return i;
+}
+
+
+Num objDoublyLinkedListLength (Obj o) {
+ Obj next=cdr(o);
+ Num i=1;
+	while (next!=o) {next=cdr(next); i++; }
+	return i;
+}
+
+Obj objDoublyLinkedListNext (Obj node) {
+	return memVectorObject(node, 1);
+}
+
+Obj objDoublyLinkedListPrev (Obj node) {
+	return memVectorObject(node, 2);
+}
+
+/* Insert thread node 'node' before node 'lst' 
+      prev  node  lst            lst   node  lst
+      t->   q->   p->            t->   q->   t-->
+    <-q   <-p   <-t           <--t   <-q   <-t
+ Implemented as vectors #(datum next prev).
+*/
+void objDoublyLinkedListInsert (Obj lst, Obj node) {
+ Obj prev;
+	prev = objDoublyLinkedListPrev(lst);
+	memVectorSet(node, 1, lst);
+	memVectorSet(node, 2, prev);
+	memVectorSet(lst,  2, node);
+	memVectorSet(prev, 1, node);
+}
+
+/* Add doubly linked list node 'node' after node 'lst'
+*/
+void objDoublyLinkedListAdd (Obj lst, Obj node) {
+ Obj next;
+	next = objDoublyLinkedListNext(lst);
+	memVectorSet(node, 1, next);
+	memVectorSet(node, 2, lst);
+	memVectorSet(next, 2, node);
+	memVectorSet(lst,  1, node);
+}
+
+/* Creates vector in r0 from list in r1.
+*/
+void objListToVector (void) {
+ Num i=0, len;
+	r1=r0;
+	len = objListLength(r0);
+	if (len) {
+		memNewVector(TVECTOR, len); /* Create empty vector */
+		while (i<len) { /* Stuff vector*/
+			memVectorSet(r0, i++, car(r1));
+			r1 = cdr(r1);
+		}
+	} else
+		r0 = nullvec;
+}
+
 
 void objDumpR (Obj o, FILE *stream, Num islist) {
  Num i;
@@ -360,24 +424,6 @@ void objDump (Obj o, FILE *stream) {
 }
 
 
-/* caar <=> (car (car x)) <=>
-    LDI0 #<binding x>
-    BRT  TPAIR a
-    ; error code here
-    a: LD00 hmmmm LD needs an offset value
-*/
-Obj  car  (Obj o) { return memVectorObject(o, 0);}
-Obj  caar (Obj o) { return car(car(o));}
-Obj  cdar (Obj o) { return cdr(car(o));}
-
-Obj  cdr  (Obj o) { return memVectorObject(o, 1);}
-Obj  cadr (Obj o) { return car(cdr(o));}
-Obj  cddr (Obj o) { return cdr(cdr(o));}
-
-void push (Obj o) { memStackPush(stack, o);}
-Obj  pop  (void)  { return memStackPop(stack);}
-
-
 Func objCallerPreGarbageCollect = 0,
    objCallerPostGarbageCollect = 0;
 
@@ -393,19 +439,18 @@ void objGCPost (void) {
 		if (objCallerPostGarbageCollect) objCallerPostGarbageCollect ();
 }
 
-
 /* Called by sys.c */
 void objInitialize (Func scheduler) {
  Int i;
  Num n;
-	DB("::%s", __func_);
+	DB("::%s", __func__);
 	DB("  initializing memory module");
 	asmInitialize(scheduler, objGCPre, objGCPost, objDump);
 	memInitialize(0, 0);
 	/* These primitive types are also external (display) strings. */
 	memNewStatic(TNULL, 2);    null=r0;    memcpy(r0, "()", 2);
 	/* This is a strange object with a descriptor and no content.
-	   Since little endian a valid poitner to empty C string.  */
+	   Since little endian a valid pointer to empty C string.  */
 	memNewStatic(TNULLSTR, 0); nullstr=r0;
 	memNewStatic(TNULLVEC, 3); nullvec=r0; memcpy(r0, "#()", 3);
 	memNewStatic(TFALSE, 2);   false=r0;   memcpy(r0, "#f", 2);
@@ -499,7 +544,7 @@ void objInitialize (Func scheduler) {
 		memVectorSet(staticIntegers, (Num)i+1023, r0);
 	}
 
-	DB("  --%s", __func_);
+	DB("  --%s", __func__);
 }
 
-#undef DB_MODULE
+#undef DEBUG_SECTION

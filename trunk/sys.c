@@ -1,28 +1,35 @@
-#define DEBUG 0
-#define DB_MODULE "SYS "
-#include "debug.h"
-
+#define DEBUG_ALL 0
 #include <assert.h>
 #include <sys/stat.h>
 #include "sys.h"
 #include <termios.h>
+#include "debug.h"
 
-/* Concepts:
-     (Operator operand operand operand ...)
+/* 
+   Usefull_functions
+   Serializers_internal
+   Environment_functions
+   Networking_stuff
+   Scheduling_stuff
+   System_calls
+   Initialization_stuff
 
-     parameters:       Expressions evaluated during a procedure application.
-     arguments:        Evaluated parameters (operand values) a function is
-                       applied to.
-     formal arguments: Function variables
+ Concepts:
+   (Operator operand operand operand ...)
 
-     free variable:    Non-local binding.
-     bound variable:   Local binding.
+   parameters:       Expressions evaluated during a procedure application.
+   arguments:        Evaluated parameters (operand values) a function is
+                     applied to.
+   formal arguments: Function variables
 
-     "A bound variable gets a value stored in it's location"
+   free variable:    Non-local binding.
+   bound variable:   Local binding.
+
+   "A bound variable gets a value stored in it's location"
 */
 
 /******************************************************************************
- Usefull functions.
+ Usefull_functions
 ******************************************************************************/
 
 /* Return number of milliseconds since epoch as a 64bit unsigned.
@@ -104,8 +111,11 @@ void sysStackToList (void) {
 
 
 /******************************************************************************
+ Serializers_internal
  Internal object serializers and output function.
 ******************************************************************************/
+#define DEBUG DEBUG_ALL|0
+#define DEBUG_SECTION "SYS_SERIALIZER "
 
 /* Given a signed integer and base, create a new string object in r0
    representing the number's external signed representation.
@@ -119,7 +129,7 @@ void wscmSerializeInteger (Int theint, Num base) {
  u8 buff[64], /* Big enough to contain signed 64bit binary ascii number. */
     *ptr=buff+64;
  Num  signBit, dividend, glyph;
-	DB("-->%s", __func__);
+	DB("::"STR, __func__);
 	assert(base<32);
 	// Special cases which the general algorithm doesn't handle gracefully.
 	if (theint == LLONG_MIN) objNewString((u8*)"-9223372036854775808", 20); /* TODO handle all bases */
@@ -142,7 +152,7 @@ void wscmSerializeInteger (Int theint, Num base) {
 		if (signBit) *--ptr = '-'; /* Here's the sign. */
 		objNewString(ptr, (Num)(buff+64-ptr));
 	}
-	DB("<--%s", __func__);
+	DB("  --"STR, __func__);
 }
 
 Int wscmWriteR (Obj a, Num islist, FILE *stream, Int max) {
@@ -417,11 +427,16 @@ void sysDumpEnv (Obj env) {
 	fprintf (stderr, "\n\\------------------------------------------------------\n");
 }
 
+#undef DEBUG_SECTION
+#undef DEBUG
+
 
 
 /******************************************************************************
- Environment functions.
+ Environment_functions
 ******************************************************************************/
+#define DEBUG DEBUG_ALL|0
+#define DEBUG_SECTION "SYS_ENV "
 
 /* Look for the symbol in r1 in the global environment.  Return in r0 the
    binding (value . symbol) or null if not found.
@@ -429,7 +444,7 @@ void sysDumpEnv (Obj env) {
 	Return  r0
 */
 void wscmTGEFind (void) {
-	DB("ENV     -->wscmTGEFind <= ");
+	DB("::"STR, __func__);
 	DBE wscmWrite(r1, stderr);
 	/* Scan over the list of (value . symbol) pairs. */
 	for (r0=cdr(tge); r0!=null; r0=cdr(r0)) {
@@ -439,14 +454,14 @@ void wscmTGEFind (void) {
 			break;
 		}
 	}
-	DB("ENV     <--wscmTGEFind => ");
+	DB("  --"STR, __func__);
 	DBE wscmWrite(r0, stderr);
 }
 
 /* Given a symbol in r1, bind it to a new location if it doesn't already
    exist in the global environment.  The 'binding' is returned in r0. */
 void wscmTGEBind (void) {
-	DB("ENV -->wscmTGEBind");
+	DB("::"STR, __func__);
 	/* Look for symbol r1 in TGE. Binding returned in r0. */
 	wscmTGEFind();
 	if (null == r0) {
@@ -459,7 +474,7 @@ void wscmTGEBind (void) {
 		DB("ENV    Added binding ");
 		DBE wscmWrite(cdr(r0), stderr);
 	}
-	DB("ENV <--wscmTGEBind");
+	DB("  --"STR, __func__);
 }
 
 /* Looks for first occurance of symbol in r1 in a chain of pseudo environments.
@@ -468,20 +483,20 @@ void wscmTGEBind (void) {
 */
 Int wscmEnvFind (void) {
  Int ret, depth=0, offset;
-	DB("COMP -->wscmEnvFind: ");
+	DB("::"STR" <= ", __func__);
 	DBE wscmWrite(r1, stderr);
 	push(env);
 	while (env != tge) {
-		DB("        Examining env: ");
+		DB("  Examining env: ");
 		DBE wscmWrite(cdr(env), stderr);
 		/* Start at 2 since local environment values start at offset 2. */
 		offset=2;
 		for (r0=cdr(env); objIsPair(r0); r0=cdr(r0)) {
-			DB("        looking at:");
+			DB("  Looking at:");
 			DBE wscmWrite(car(r0), stderr);
 			if (car(r0) == r1) { /* Pseudo env ( ^ a b c), so just check car */
 				ret = (depth<<8) | offset;
-				DB("        found in local environment");
+				DB("  Found in local environment");
 				goto ret;
 			}
 			offset++;
@@ -492,7 +507,7 @@ Int wscmEnvFind (void) {
 	ret = 0;
  ret:
 	env=pop();
-	DB("COMP <--wscmEnvFind => %02x", ret);
+	DB("::"STR" => "INT, __func__, ret);
 	return ret;
 }
 
@@ -505,7 +520,7 @@ Int wscmEnvFind (void) {
 */
 void wscmEnvGet (void) {
  Num offset;
-	DB("-->%s", __func__);
+	DB("::"STR, __func__);
 	push(env); /* Save environment. */
 	while (env != tge) {
 		/* Start at 2 since local environment values start at offset 2. */
@@ -525,23 +540,29 @@ void wscmEnvGet (void) {
 
 	if (r0==null) {
 		/* Symbol nonexistant.  Display error and return symbol. */
-		fprintf (stderr, "\nERROR: wscmEnvGet() Unbound symbol:");
-		wscmWrite(r1, stderr);
-		fprintf (stderr, ".\n");
+		printf ("ERROR: Unbound symbol '");
+		wscmWrite(r1, stdout);
+		printf ("'\n");
 		r0 = r1;
 	} else {
 		r0 = car(r0);
 	}
  ret:
 	env=pop(); /* Restore environment. */
-	DB("<--%s", __func__);
+	DB("  --"STR, __func__);
 }
+
+#undef DEBUG_SECTION
+#undef DEBUG
 
 
 
 /*******************************************************************************
- Networking stuff.
+ Networking_stuff
 *******************************************************************************/
+#define DEBUG DEBUG_ALL|0
+#define DEBUG_SECTION "SYS_NET "
+
 void wscmOpenRemoteSocket (void);
 void wscmOpenRemoteStream (void);
 
@@ -563,7 +584,7 @@ void wscmOpenRemoteSocket (void) {
  int fd;
  struct hostent *he;
  struct sockaddr_in sai;
-	DB("-->%s", __func__);
+	DB("::"STR, __func__);
 	r3=pop(); /* Port number. */
 	r2=pop(); /* Internet address string. */
 	fd = socket(PF_INET, SOCK_STREAM, 0);
@@ -596,20 +617,20 @@ void wscmOpenRemoteSocket (void) {
 	objNewPort();
 	
 ret:
-	DB("<--%s", __func__);
+	DB("  --"STR, __func__);
 }
 
 void wscmOpenRemoteStream (void) {
-	DB("-->%s", __func__);
+	DB("::"STR, __func__);
 	if (memVectorObject(r1, 3) == sconnecting) wscmAcceptRemoteStream();
 
 	if (r1!=eof && memVectorObject(r1, 3) == sconnecting) {
 		DB("SYS    blocking on a remote connecting socket...");
 		wscmUnRun();
 		wscmMoveToQueue(running, blocked, sopenblocked);
-		wscmSchedule();
+		wscmScheduler();
 	}
-	DB("<--%s", __func__);
+	DB("  --"STR, __func__);
 }
 
 /* Expect listening socket port in r1.
@@ -617,7 +638,7 @@ void wscmOpenRemoteStream (void) {
 void wscmAcceptRemoteStream (void) {
  Int ret;
  struct pollfd fds={(int)car(r1), POLLOUT, 0};
-	DB("-->%s", __func__);
+	DB("::"STR, __func__);
 	ret = poll(&fds, 1, 0);
 	if (ret == 1) {
 		if (fds.revents & POLLOUT) {
@@ -629,7 +650,7 @@ void wscmAcceptRemoteStream (void) {
 	} else if (ret == -1) {
 		r0=r1=eof;
 	}
-	DB("<--%s", __func__);
+	DB("  --"STR, __func__);
 }
 
 
@@ -723,7 +744,7 @@ void wscmOpenLocalStream (void) {
 		DB("SYS    blocking on an accept a connection...");
 		wscmUnRun();
 		wscmMoveToQueue(running, blocked, sopenblocked);
-		wscmSchedule();
+		wscmScheduler();
 	}
 	DB("<--%s", __func__);
 }
@@ -903,7 +924,7 @@ void wscmRecvBlock (void) {
 			/* Nothing read and haven't timed out yet so block thread */
 			wscmUnRun();
 			wscmMoveToQueue(running, blocked, sreadblocked);
-			wscmSchedule();
+			wscmScheduler();
 		} if (timedOut && 0<(Num)r4) {
 			/* Timeout with a partial read so return partial string */
 			objNewString(r3, (Num)r4);
@@ -949,36 +970,43 @@ void wscmSend (void) {
 	DB("<--%s", __func__);
 }
 
+#undef DEBUG_SECTION
+#undef DEBUG
+
+
 
 /*******************************************************************************
- Scheduling stuff.  Process queues are doubly linked lists implemented as
- vectors #(datum next prev).
+ Scheduling_stuff   Process queues are doubly linked lists.
 *******************************************************************************/
+#define DEBUG DEBUG_ALL | 0
+#define DEBUG_SECTION "SYS_SCHED "
 
-/* Insert thread queue entry t between p and q where p is the previous thread
-   to q.  Also works when the queue is empty.
-      p     t     q              q     t     q
-      t->   q->   p->            t->   q->   t->            
-    <-q   <-p   <-t            <-t   <-q   <-t
-*/
-void wscmInsertThread (Obj t, Obj q) {
- Obj p, n;
-	p = memVectorObject(q, 2);
-	n = q;
-	memVectorSet(t, 1, n); /* Set next link. */
-	memVectorSet(t, 2, p); /* Set previous link. */
-	memVectorSet(n, 2, t); /* Set next's previous link. */
-	memVectorSet(p, 1, t); /* Set previous' next link. */
+void wscmNewThreadDescriptor (void) { objNewVector(3); }
+
+Obj wscmThreadDescStack (Obj d) { return memVectorObject(d, 0); }
+Obj wscmThreadDescId    (Obj d) { return memVectorObject(d, 1); }
+Obj wscmThreadDescState (Obj d) { return memVectorObject(d, 2); }
+
+Obj wscmThreadDescriptor (Obj t) { return car(t); }
+
+Obj wscmThreadStack (Obj t) { return wscmThreadDescStack (car(t)); }
+Obj wscmThreadId    (Obj t) { return wscmThreadDescId    (car(t)); }
+Obj wscmThreadState (Obj t) { return wscmThreadDescState (car(t)); }
+
+Int wscmIsQueueEmpty (Obj q) { return cdr(q)==q; }
+
+/* Symbol 'thread' is a vector of thread objects indexed by their thread ID (tid).
+   The first object is the thread count as an immediate integer. */
+Obj wscmThreadCount (void) {
+	return memVectorObject(threads, 0);
 }
 
-/* Remove thread from its doubly linked list.
-*/
 void wscmRemoveThread (Obj t) {
  Obj p, n;
-	DB("-->%s", __func__);
+	DB("    ::"STR, __func__);
 	if (t!=ready && t!=sleeping && t!=blocked) {
-		p = memVectorObject(t, 2); /* Previous doubly linked list entry. */
-		n = memVectorObject(t, 1); /* Next doubly linked list entry. */
+		p = objDoublyLinkedListPrev(t); /* Previous doubly linked list entry. */
+		n = objDoublyLinkedListNext(t); /* Next doubly linked list entry. */
 		memVectorSet(p, 1, n); /* Set previous' next to next. */
 		memVectorSet(n, 2, p); /* Set next's previous to previous. */
 		/* Keep running pointer on the ready queue. */
@@ -986,14 +1014,14 @@ void wscmRemoveThread (Obj t) {
 	} else {
 		fprintf (stderr, "WARNING: %s: Attempting to remove thread queue head.\r\n", __func__);
 	}
-	DB("<--%s", __func__);
+	DB("      --"STR, __func__);
 }
 
 /* Move thread from its current queue to specified queue.
 	State one of: sready srunning ssleeping ssemaphore sopenblocked sreadblocked swriteblocked
 */
 void wscmMoveToQueue (Obj thread, Obj queue, Obj state) {
-	DB("-->%s", __func__);
+	DB("  ::"STR, __func__);
 	/* To keep round robin scheduler happy we need to trick it by moving
 	   the 'running' object back a thread. */
 	memVectorSet(car(thread), 2, state); /* Set thread's new state. */
@@ -1001,8 +1029,8 @@ void wscmMoveToQueue (Obj thread, Obj queue, Obj state) {
 	/* If inserting into ready queue, insert behind the running thread,
 	   otherwise insert at end of passed queue.  The ternary expression
 	   performs this logic. */
-	wscmInsertThread(thread, queue==ready?running:queue);
-	DB("<--%s", __func__);
+	objDoublyLinkedListInsert (queue==ready?running:queue, thread);
+	DB("    --"STR, __func__);
 }
 
 /* Creates a new thread object which is inserted into the running queue.
@@ -1013,7 +1041,7 @@ void wscmMoveToQueue (Obj thread, Obj queue, Obj state) {
 */
 void wscmNewThread (void) {
  Num tid;
-	DB("-->%s", __func__);
+	DB("  ::"STR"", __func__);
 
 	/* Find next available thread id.  Thread table's first entry
 	   is the count so index range is 1 to MAX_THREADS inclusive. */
@@ -1024,7 +1052,7 @@ void wscmNewThread (void) {
 			goto done;
 		}
 
-	DB("\nOS    Thread id: "NUM"\n", tid);
+	DB("    tid="NUM, tid);
 
 	/* Create thread's stack (in an un-running state). */
 	r1=r0; /* Code block */
@@ -1045,48 +1073,36 @@ void wscmNewThread (void) {
 	memStackPush(r2, 0);   /* Initial r0. */
 
 	/* Create thread descriptor #( #<stack> tid 'state) and add to thread table vector */
-	objNewVector(3);
+	wscmNewThreadDescriptor();
 	memVectorSet(r0, 0, r2);      /* Set stack */
 	memVectorSet(r0, 1, (Obj)tid); /* Set id */
 	memVectorSet(r0, 2, sready);  /* Set 'ready' state */
 
 	/* Add thread descriptor to thread table vector and increment count */
 	memVectorSet(threads, tid, r0);
-	memVectorSet(threads, 0, memVectorObject(threads, 0)+1);
+	memVectorSet(threads, 0, wscmThreadCount()+1);
 
 	/* Create new doubly linked list queue element for this thread descriptor and
 	   insert into the ready queue before the current running thread */
 	r1=r0; /* Thread descriptor */
-	objNewVector(3);
+	objNewDoublyLinkedListNode();
 	memVectorSet(r0, 0, r1);
-	wscmInsertThread (r0, running);
+	objDoublyLinkedListInsert (running, r0); /* Insert new thread before current thread */
 
 	objNewInt((Int)tid);
 done:
-	DB("<--%s id:"INT, __func__, tid);
-}
-
-Obj wscmThreadStack (Obj t) { return memVectorObject (t, 0); }
-Obj wscmThreadId    (Obj t) { return memVectorObject (t, 1); }
-Obj wscmThreadState (Obj t) { return memVectorObject (t, 2); }
-Int wscmIsQueueEmpty (Obj q) { return cdr(q)==q; }
-
-Int wscmQueueCount (Obj q) {
- Obj t;
-	Int i=0;
-	for (t=cdr(q); t!=q; t=cdr(t)) i++;
-	return i;
-}
+	DB("    --"STR" tid:"NUM, __func__, tid);
+} /* wscmNewThread */
 
 /* Make the running thread (the stack) ready to be stashed away.
 */
 void wscmUnRun (void) {
  Obj threadDescriptor;
-	DB("-->%s", __func__);
+	DB("  ::"STR, __func__);
 
 	/* Verify thread is in runningstate then change to ready state. */
-	threadDescriptor = car(running);
-	assert(memVectorObject(threadDescriptor, 2) == srunning);
+	threadDescriptor = wscmThreadDescriptor(running);
+	assert(wscmThreadDescState(threadDescriptor) == srunning);
 	memVectorSet(threadDescriptor, 2, sready);
 
 	push (env);
@@ -1104,18 +1120,18 @@ void wscmUnRun (void) {
 	push (r1);
 	push (r0);
 
-	DB("<--%s", __func__);
+	DB("    --"STR, __func__);
 }
 
 /* Make running thread ready for the VM.  Pop all the saved registers. */
 void wscmRun (void) {
-	DB("OS -->wscmRun() <= thread:%d ", memVectorObject(car(running),1));
+	DB("  ::"STR " tid="INT, __func__, wscmThreadId(running));
 	if (memVectorObject(car(running),2) != sready) {
-		fprintf (stderr, "WARNING: wscmRun: not a 'ready thread:");
-		wscmDisplay(memVectorObject(car(running),2), stderr);
+		fprintf (stderr, "WARNING: wscmRun: Should be 'ready' thread but is ");
+		wscmDisplay(wscmThreadState(running), stderr);
 	} else {
 		/* Get stack from descriptor. */
-		stack = memVectorObject(car(running),0);
+		stack = wscmThreadStack(running);
 		r0 = pop();
 		r1 = pop();
 		r2 = pop();
@@ -1130,21 +1146,21 @@ void wscmRun (void) {
 		code=pop();
 		ip=pop();
 		env=pop();
-		memVectorSet(car(running), 2, srunning);
+		memVectorSet(wscmThreadDescriptor(running), 2, srunning);
 	}
-	DB("OS <--wscmRun() => ");
-	DBE wscmWrite(car(running), stderr);
+	DB("    --"STR" => ", __func__);
+	DBE wscmWrite(wscmThreadDescriptor(running), stderr);
 }
 
 /* Put thread on sleep list.  Stack contains the millisecond count to sleep.
 */
 void wscmSleepThread (void) {
  s64 wakeupTime;
-	DB("OS -->wscmSleepThread=>");
+	DB("::"STR, __func__);
 	r0 = pop(); /* The call to sleep returns the argument passed to it. */
 	wscmUnRun();
 	wakeupTime = wscmTime() + *(Int*)r0;
-	DB("      wakeupTime = %lld/%lld", wakeupTime, wscmTime());
+	DB("  wakeupTime %lldms = %lld-%lld", wakeupTime-wscmTime(), wakeupTime, wscmTime());
 	/* Wakeup time (u64) goes on top of stack. */
 	objNewInt(wakeupTime);
 	push(r0);
@@ -1159,39 +1175,48 @@ void wscmSleepThread (void) {
 	wscmMoveToQueue(running, r3, ssleeping); /* Insert thread into list. */
 
 	/* Go setup another thread to start running. */
-	wscmSchedule();
-	DB("OS <--wscmSleepThread");
+	wscmScheduler();
+	DB("  --"STR, __func__);
 }
 
 /* Deal with sleeping threads that need to wake up.  If nothing in ready queue
    nor blocked queue then wait for topmost thread to wakeup. */
+//	if (signalFlag) { wscmSpawnSignalHandler(); }
 void wscmScheduleSleeping (void) {
  Obj sleepingThreadDescriptor;
  Int wakeupTime;
-	DB("-->%s", __func__);
-	sleepingThreadDescriptor = cadr(sleeping);
-	/* Next thread's wakeup time on top of its stack. */
-	wakeupTime = *(s64*)memStackObject(memVectorObject(sleepingThreadDescriptor,0),0) - wscmTime();
-	/* Only sleeping threads exist so wait for next one to wakeup. */
-	if (wakeupTime>0 && wscmIsQueueEmpty(ready) && wscmIsQueueEmpty(blocked)) {
-		DB("OS    Waiting %lld", wakeupTime);
-		/* Disable scheduler's interrupt timer as it'll interrupt our
-		   sleeping.  It will be reactivated by the scheduler*/
+	DB("    ::%s", __func__);
+	sleepingThreadDescriptor = wscmThreadDescriptor(cdr(sleeping));
+
+	/* Only sleeping threads exist so wait for next one to wakeup.
+	   Next thread's wakeup time on top of its stack. */
+	wakeupTime = *(s64*)memStackObject(wscmThreadDescStack(sleepingThreadDescriptor),0) - wscmTime();
+	if (wakeupTime > 0
+	    && wscmIsQueueEmpty(ready)
+	    && wscmIsQueueEmpty(blocked)) {
+		DB("      Waiting "INT"ms", wakeupTime);
+		/* Disable VM's interrupt timer as it'll interrupt our
+		   sleeping.  It will be reactivated by the VM module upon return.
+
+		   BF TODO does this even matter?  The only way this scheduler is
+		   called is after the timer interrupts the VM */
 		ualarm(0,0);
 		usleep((useconds_t)wakeupTime*1000);
-		wakeupTime=0;
+		wakeupTime = *(s64*)memStackObject(memVectorObject(sleepingThreadDescriptor,0),0) - wscmTime();
+		DB("      Remaining "INT"ms", wakeupTime);
 	}
 
-	/* If next sleeping thread is ready to be woken up, insert into ready
-	   queue. */
+	/* Consider wakeup time again.  An interrupt might have prematurely interrupted usleep() */
+
+	/* If next sleeping thread is ready to be woken up, insert into ready queue. */
 	if (wakeupTime <= 0) {
-		DB("OS    Waking");
+		DB("      Waking next sleeping thread");
 		/* Pop wake-time from stack. */
-		memStackPop(memVectorObject(sleepingThreadDescriptor, 0));
+		memStackPop(wscmThreadDescStack(sleepingThreadDescriptor));
 		wscmMoveToQueue(cdr(sleeping), ready, sready);
 	}
 
-	DB("<--%s", __func__);
+	DB("      --%s", __func__);
 }
 
 /* Move all blocked threads that can and have read a chracter from their
@@ -1204,19 +1229,19 @@ void wscmScheduleSleeping (void) {
 */
 void wscmScheduleBlocked (void) {
  Num timedOut;
-	DB("-->%s <= %d blocked threads", __func__, objListLength(blocked)-1);
+	DB("    ::"STR"  blocked:"NUM"  sleeping:"NUM, __func__,
+	   objDoublyLinkedListLength(blocked)-1,
+	   objDoublyLinkedListLength(sleeping)-1);
 
-	DBE fprintf(stderr, "   %s          sleeping queue:%d\r\n", __func__, wscmQueueCount(sleeping));
-	DBE fprintf(stderr, "   %s          blocked queue :%d\r\n", __func__, wscmQueueCount(blocked));
-	/* For each thread r5 in blocked queue... */
+	/* For each doubly linked list node of blocked threads... */
 	r5=cdr(blocked);
 	while (r5!=blocked) {
-	DB("   %s considering thread %d\r", __func__, memVectorObject(car(r5), 1));
+	DB("      considering blocked thread "NUM, wscmThreadId(r5));
 		/* Consider status in the descriptor of this thread. */
-		r1 = memVectorObject(car(r5),2);
+		r1 = wscmThreadState(r5);
 
 		if (r1 == sreadblocked) {
-			DB("   dealing with a read blocked thread");
+			DB("        dealing with a read blocked thread");
 			r1 = memStackObject(memVectorObject(car(r5),0),1l);
 			r2 = memStackObject(memVectorObject(car(r5),0),2l);
 			r3 = memStackObject(memVectorObject(car(r5),0),3l);
@@ -1242,13 +1267,13 @@ void wscmScheduleBlocked (void) {
 			}
 		}
 		else if (r1 == swriteblocked) {
-			DB("   dealing with a write blocked thread");
+			DB("        dealing with a write blocked thread");
 			r1 = memStackObject(memVectorObject(car(r5),0),1);
 			r2 = memStackObject(memVectorObject(car(r5),0),2);
 			r3 = memStackObject(memVectorObject(car(r5),0),3);
 			wscmSend();
 			if (r0 != false) {
-				DB("   unblocking thread");
+				DB("        unblocking thread");
 				/* Set thread's return value (r0 register top of stack) with
 			   	sent string. */
 				memStackSet(memVectorObject(car(r5), 0), 0, r2);
@@ -1258,21 +1283,21 @@ void wscmScheduleBlocked (void) {
 			/* Store back registers into thread since wscmSend more than likely
 			   changed them and keep this thread blocked. */
 			} else {
-				DB("   not unblocking thread");
+				DB("        not unblocking thread");
 				memStackSet(memVectorObject(car(r5), 0), 1, r1);
 				memStackSet(memVectorObject(car(r5), 0), 2, r2);
 				memStackSet(memVectorObject(car(r5), 0), 3, r3);
 				r5 = cdr(r5);
 			}
 		} else if (r1 == sopenblocked) {
-			DB("OS    dealing with a open-blocked thread");
+			DB("        dealing with a open-blocked thread");
 			/* Snag port from sleeping thread (r1). */
 			r1 = memStackObject(memVectorObject(car(r5),0),1);
 			/* If a connection is made on the port and set to a non-accepting
 			   state, set the threads return value (r0) to the port and move the
 			   thread to the ready queue. */
 			if (memVectorObject(r1, 3) == saccepting) {
-				DB("OS    dealing with a new incomming stream connection thread");
+				DB("        dealing with a new incomming stream connection thread");
 				push(r5); /* Since the following clobbers r5. */
 				wscmAcceptLocalStream();
 				r5=pop();
@@ -1284,7 +1309,7 @@ void wscmScheduleBlocked (void) {
 				}
 				r5 = cdr(r5);
 			} else if (memVectorObject(r1, 3) == sconnecting) {
-				DB("OS    dealing with a new remote stream connection thread");
+				DB("        dealing with a new remote stream connection thread");
 				wscmAcceptRemoteStream();
 				if (r1==eof || memVectorObject(r1, 3) != sconnecting) {
 					memStackSet(memVectorObject(car(r5), 0), 0, r1);
@@ -1305,18 +1330,18 @@ void wscmScheduleBlocked (void) {
 			/* Skip semaphore blocked threads. */
 			r5 = cdr(r5);
 		} else {
-			fprintf (stderr, "ERROR: wscmScheduleBlocked: unknown thread state.");
+			fprintf (stderr, "ERROR: wscmScheduleBlocked: unknown thread state");
 			r5 = cdr(r5);
 		}
 	}
-	DB("<--%s", __func__);
+	DB("      --"STR, __func__);
 }
 
 /* Called by sysSemaphoreUp, not the scheduler */
 void wscmScheduleSemaphoreBlocked (Obj sem, Num all) {
  Obj semaphore, next;
  Int found=0;
-	DB("\e[33m-->%s\n", __func__);
+	DB("::"STR, __func__);
 	r4=cdr(blocked); /* For each thread r4 in blocked queue... */
 	while (!found && r4!=blocked) {
 		next = cdr(r4);
@@ -1324,14 +1349,14 @@ void wscmScheduleSemaphoreBlocked (Obj sem, Num all) {
 		if (memVectorObject(car(r4),2) == ssemaphore) {
 			/* Look at thread's r1 register stored on its stack. */
 			semaphore = memStackObject(memVectorObject(car(r4),0),1);
-			DB("considering blocked thread with sem:");
+			DB("  considering blocked thread with sem:");
 			DBE wscmWrite(sem, stderr);
 			DBE wscmWrite(semaphore, stderr);
 			if (semaphore == sem) {
-				DB("   %s UnBlocking thread %d\n", __func__, memVectorObject(car(r4), 1));
+				DB("  unblocking thread tid:"NUM, wscmThreadId(r4));
 				/* Set thread's return value (r0 register which is found at the top of the thread's stack)
 				   to #t if another thread down'ed the semaphore and #f if close-semaphore called. */
-				memStackSet(memVectorObject(car(r4), 0), 0, all?false:true);
+				memStackSet(wscmThreadStack(r4), 0, all?false:true);
 				wscmMoveToQueue(r4, ready, sready);
 				if (!all) found=1;
 			}
@@ -1343,18 +1368,59 @@ void wscmScheduleSemaphoreBlocked (Obj sem, Num all) {
 		wscmWrite(sem, stderr);
 		exit (-1);
 	}
-	DB("<--%s\e[0m\n", __func__);
+	DB("  --"STR, __func__);
 }
 
-void wscmSchedule (void) {
-	DB("::%s", __func__);
+#define MAX_SIGNAL_VALUE 32
+Int signalFlag=0;
+Int caughtSignals[MAX_SIGNAL_VALUE]={0};
+
+/* Spawn a new signal handler thread.  Function exist
+   in global signal-handler vector.
+*/
+void wscmSpawnSignalHandler(void) {
+ Num i;
+	DB("::"STR, __func__);
+	DBE for (i=0; i<MAX_SIGNAL_VALUE; ++i) { fprintf (stderr, " "NUM, caughtSignals[i]); }
+
+	signalFlag=0;
+	for (i=0; i<MAX_SIGNAL_VALUE; ++i) {
+		if (caughtSignals[i]) {
+			DB("  caughtSignals["NUM"]="NUM, i, caughtSignals[i]);
+			caughtSignals[i]=0;
+			push(r0); /* Save state */
+			push(r1);
+			push(r2);
+				r1=signalhandlers;  wscmTGEFind(); r0=car(r0); /* Consider vector of signalhandlers. */
+				r1 = memVectorObject(r0, i);
+				r0 = car(r1);
+				/* Hack:  replace inital opcode with NOP since closure obj
+				   code expects the closure to be passed in via r0 as well.
+				   TODO: BF: IS THIS STILL REQUIRD? */
+				memVectorSet(r0, 3, NOP);
+				memVectorSet(r0, 4, NOP);
+				wscmNewThread();
+			r2=pop();
+			r1=pop();
+			r0=pop();
+		}
+	}
+	DB("  --"STR, __func__);
+}
+
+void wscmScheduler (void) {
+	DB("  ::"STR, __func__);
+	DBE debugDumpThreadInfo ();
 	if (!wscmIsQueueEmpty(sleeping)) wscmScheduleSleeping();
 	if (!wscmIsQueueEmpty(blocked)) wscmScheduleBlocked();
 	while (wscmIsQueueEmpty(ready)) {
-		//fprintf(stderr, "   %s looping: ready queue empty\rn", __func__);
+		/* A signal might have occured during the scheduler
+		   requiring a signal handler thread to be spawned */
+		if (signalFlag) { wscmSpawnSignalHandler(); }
+
 		/* No more threads so shutdown. */
 		if (wscmIsQueueEmpty(sleeping) && wscmIsQueueEmpty(blocked)) {
-			DB("  No more threads.  Bye bye.");
+			DB("    No more threads.  So long and thanks for all the fish.");
 			exit(0);
 		}
 		if (!wscmIsQueueEmpty(sleeping)) wscmScheduleSleeping();
@@ -1378,11 +1444,78 @@ void wscmSchedule (void) {
 	vmSigAlarmReset(); /* Enable scheduler's interrupt timer. */
 	wscmRun();
 
-	DB("  --%s =>%d", __func__, memVectorObject(car(running), 1));
+	DB("    --"STR"  =>"NUM, __func__, wscmThreadId(running));
 }
 
+/* This function passed to the virtual machine module during initialization
+   and is called periodically to schedule a new thread, spawn a new signal
+   handler thread.
+*/
+void sysSchedule (void) {
+	DB("::"STR, __func__);
+
+	if (signalFlag) { wscmSpawnSignalHandler(); }
+
+	/* Either schedule a new thread or return back to VM on same thread. */
+	/* TODO what about the blocked queue? */
+	if ((Num)wscmThreadCount() != 1 || !wscmIsQueueEmpty(sleeping)) {
+		DB("  Scheduling another thread");
+		wscmUnRun();
+		wscmScheduler();
+	} else {
+		DB("  No other threads.  Continuing current thread.");
+	}
+
+	DB("  --"STR, __func__);
+}
+
+void catchSignal (int sig) {
+	DB("::"STR, __func__);
+	assert(0 < sig && sig < MAX_SIGNAL_VALUE);
+	caughtSignals[sig]=1;
+	vmInterrupt=1; /* Let virtual machine know an interrupt occured. */
+	signalFlag=1;
+	DB("  --"STR, __func__);
+}
+
+/* Syscall to set a signal handler for a specified signal number.
+   The signal handler will always be the catchSignal().  See above. */
+void sysSignal (void) {
+ Num s = *(Num*)pop();
+	DB("::"STR" Setting signal "NUM, __func__, s);
+	if (wscmAssertArgumentCount(1, __func__)) return;
+	signal((int)s, catchSignal); /* Have to cast to an uint64 to int32 */
+	DB("  --"STR, __func__);
+}
+
+void debugDumpThreadInfo (void) {
+ Obj node;
+	fprintf (stderr, "    ::"STR, __func__);
+	for(node = cdr(blocked); node != blocked; node=cdr(node)) {
+		fprintf (stderr, "      blocked "NUM"\n", wscmThreadId(node));
+	}
+	for(node = cdr(sleeping); node != sleeping; node=cdr(node)) {
+		fprintf (stderr, "      sleeping "NUM"\n", wscmThreadId(node));
+	}
+	for(node = cdr(ready); node != ready; node=cdr(node)) {
+		fprintf (stderr, "      ready "NUM" %s\n", wscmThreadId(node), running==ready?"running":"");
+	}
+	fprintf (stderr, "      --"STR, __func__);
+}
+
+#undef DEBUG_SECTION
+#undef DEBUG
+
+
+
+/******************************************************************************
+ System_calls
+******************************************************************************/
+#define DEBUG DEBUG_ALL|0
+#define DEBUG_SECTION "SYS_SYSCALL "
+
 /* Force a call to the error handler/continuation which must be defined in
-   the global environment in the ERRORS vector indexed  by thread ID.
+   the global environment in the ERRORS vector indexed by thread ID.
 
 	Given  r1  number of expression on stack to pop and group into a message list
    r0 holds the invalid operator or message.
@@ -1419,11 +1552,6 @@ void sysError (void) {
 	DB("  --%s", __func__);
 }
 
-
-/******************************************************************************
- System calls
-******************************************************************************/
-
 void sysQuit (void) {
 	if ((Num)r1==1) exit(*(int*)pop());
 	else exit(0);
@@ -1437,7 +1565,6 @@ void sysFun (void) {
 	//memDebugDumpYoungHeap(stderr);
 	//objNewInt((Int)garbageCollectionCount);
 }
-
 
 /* 1. Call the function and pass it 5
    2. Call the function and pass code
@@ -1967,13 +2094,13 @@ void sysTID (void) {
 }
 
 void sysUnthread (void) {
-	DB("SYS -->sysUnthread <= %d", memVectorObject(car(running), 1));
+	DB("::"STR" <= "NUM, __func__, wscmThreadId(running));
 	/* Remove from thread vector table. */
-	memVectorSet(threads, (Num)memVectorObject(car(running), 1), null);
+	memVectorSet(threads, (Num)wscmThreadId(running), null);
 	/* Decrement thread count. */
-	memVectorSet(threads, 0, memVectorObject(threads, 0)-1);
+	memVectorSet(threads, 0, wscmThreadCount()-1);
 	wscmRemoveThread(running);
-	wscmSchedule();
+	wscmScheduler();
 	DB("SYS <--sysUnthread");
 }
 
@@ -2191,7 +2318,7 @@ void sysSend (void) {
 		if (r0 == false) { /* Still more to send. */
 			wscmUnRun();
 			wscmMoveToQueue(running, blocked, swriteblocked);
-			wscmSchedule();
+			wscmScheduler();
 		}
 	}
 	DB("<--%s", __func__);
@@ -2230,9 +2357,9 @@ void sysTGELookup (void) {
 	DB("SYS -->sysTGELookup");
 	wscmTGEFind();
 	if (r0 == null) {
-		fprintf (stderr, "\nERROR: sysTGELookup() Unbound symbol:");
-		wscmWrite(r1, stderr);
-		fprintf (stderr, ".\n");
+		printf ("ERROR: Unbound symbol '");
+		wscmWrite(r1, stdout);
+		printf ("'\n");
 		r0 = r1;
 		// TODO  Kill thread, stop machine, return to monitor/shell?
 	} else {
@@ -2255,8 +2382,9 @@ void sysTGEMutate (void) {
 	r2=r0; /* Since a syscall, save value we're trying to set!. */
 	wscmTGEFind();
 	if (r0 == null) {
-		write (2, "ERROR: sysTGEMutate(): Unbound symbol: ", 37);
-		wscmWrite(r1, stderr);
+		printf ("ERROR: Unbound symbol '");
+		wscmWrite(r1, stdout);
+		printf ("'\n");
 		r0 = r2; /* Return value. */
 		// TODO  Kill thread, stop machine, return to monitor/shell?
 	} else {
@@ -2426,7 +2554,6 @@ void sysOpenSemaphore (void) {
 }
 
 void sysCloseSemaphore (void) {
- Num index;
 	if (wscmAssertArgumentCount(1, __func__)) return;
 	r0 = pop();
 	if (memVectorObject(r0,0)==false)
@@ -2456,7 +2583,7 @@ void sysSemaphoreDown (void) {
 			r1 = r0;
 			wscmUnRun();
 			wscmMoveToQueue(running, blocked, ssemaphore); /* TODO create a separate semaphore blocked queue */
-			wscmSchedule();
+			wscmScheduler();
 		} else
 			r0 = true;
 	}
@@ -2503,78 +2630,111 @@ void sysUTime (void) {
 	DB("<--%s\n", __func__);
 }
 
-#define MAX_SIGNAL_VALUE 32
-Int caughtSignals[MAX_SIGNAL_VALUE]={0};
-
-/* This function passed to the virtual machine module during initialization
-   and is called periodically to reschedule a new thread.
-*/
-void sysSchedule (void) {
- Num i;
-	DB("-->%s", __func__);
-
-	for (i=0; i<MAX_SIGNAL_VALUE; ++i)
-		/* Spawn new signal handler thread.  Function exist in global signal-handler vector.*/
-		if (caughtSignals[i]) {
-			caughtSignals[i]=0;
-			push(r0); /* Save state */
-			push(r1);
-			push(r2);
-				r1=signalhandlers;  wscmTGEFind(); r0=car(r0); /* Consider vector of signalhandlers. */
-				r1 = memVectorObject(r0, i);
-				r0 = car(r1);
-				/* Hack:  replace inital opcode with NOP since closure obj
-				   code expects the closure to be passed in via r0 as well.
-				   TODO: BF: IS THIS STILL REQUIRD? */
-				memVectorSet(r0, 3, NOP);
-				memVectorSet(r0, 4, NOP);
-				wscmNewThread();
-			r2=pop();
-			r1=pop();
-			r0=pop();
-		}
-
-	/* If just a single thread in existence, leave it alone and just continue on. */
-	if ((Int)memVectorObject(threads, 0) != 1 || !wscmIsQueueEmpty(sleeping)) {
-		wscmUnRun();
-		/* BF: TODO: This thread's stack is still active.  It MIGHT get clobbered
-		   while a new thread is scheduled, wakes up or unblocked.  Is this because
-		   there is no system stack? */
-		wscmSchedule();
-	}
-
-	DB("<--%s", __func__);
-}
-
-void catchSignal (int sig) {
-	assert(0 < sig && sig < MAX_SIGNAL_VALUE);
-	caughtSignals[sig]=1;
-	interrupt=1; /* Let virtual machine know an interrupt occured. */
-}
-
-void sysSignal (void) {
-/*
-	mem_vec_set(signals, sig, r2);
-*/
-	DB("-->%s\n", __func__);
-	if (wscmAssertArgumentCount(1, __func__)) return;
-	signal((int)(*(Num*)pop()), catchSignal);
-	DB("<--%s\n", __func__);
-}
-
 void sysToggleDebug (void) {
-/*
-	mem_vec_set(signals, sig, r2);
-*/
 	wscmDebug ^= 1;
 	r0 = wscmDebug ? true : false;
 }
 
+void sysDumpCallStackCode (void) {
+ Num i;
+ Obj o, l=NULL;
+
+	sysDumpEnv(r16);
+	sysDumpEnv(r15);
+	for (i=0; i<memStackLength(stack); ++i) {
+		o = memStackObject(stack, i);
+		printf ("Stack "INT" "HEX016" "OBJ NL, i, memIsObjectValid(o)?memObjectDescriptor(o):0, o);
+	}
+
+	for (i=0; i<memStackLength(stack); ++i) {
+		o = memStackObject(stack, i);
+		if (memIsObjectValid(o)) {
+			if (memObjectType(o)==TCODE) {
+				printf (NL "Stack "INT" "HEX016" "OBJ NL, i, memObjectDescriptor(o), o);
+				wscmWrite(memVectorObject(o, 2), stdout);
+				if (l!=NULL) sysDumpEnv(l);
+				else printf (NL);
+			}
+		}
+		l = o;
+	}
+}
+
+void sysDebugger (void) {
+ struct winsize win;
+ int done=0, cmd, fl;
+ struct termios tios, tios_orig;
+
+	fflush(stdout);
+
+	/* Force cooked mode. */
+	tcgetattr(1, &tios_orig); /* Backup termios */
+	tcgetattr(1, &tios);
+	tios.c_iflag |= (ICRNL | IXON | IXOFF | IXANY);
+	tios.c_oflag |= OPOST;
+	tios.c_lflag |= (ECHO | ICANON | ISIG | IEXTEN);
+	tcsetattr(1, TCSANOW, &tios);
+
+	/* Force blocking input */
+	fl=fcntl(0, F_GETFL, 0);
+	fcntl (0, F_SETFL, fl&~O_NONBLOCK);
+
+	ioctl(1, TIOCGWINSZ, &win); printf ("\e[0m\e[%dH\n", win.ws_row); /* Move cursor to bottom of screen */
+	while (!done) {
+		printf ("\n\e[1m-------------------------------");
+		printf ("\nc    vmDebugDumpCode(r1c, stderr)");
+		printf ("\nC a  vmDebugDumpCode(a, stderr)");
+		printf ("\nu    sysDumpCallStackCode()");
+		printf ("\ne    sysDumpEnv(env)");
+		printf ("\ns    wscmWrite(stack, stderr)");
+		printf ("\ny    wscmWrite(symbols, stderr)");
+		printf ("\nh    memDebugDumpHeapHeaders(stderr)"); 
+		printf ("\n3    memDebugDumpYoungHeap(stderr)"); 
+		printf ("\nw a  wscmWrite(a1, stderr)");
+		printf ("\nR    return");
+		printf ("\nX    crash");
+		printf ("\nQ    exit(-1)");
+		printf ("\n-------------------------------\e[0m");
+		printf ("\nwscmdbg>");
+		while (strchr("\r\n \t", cmd=getchar())); /* Skip whitespace */
+		if (cmd=='c') vmDebugDumpCode(code, stderr);
+	   if (cmd=='C') {
+			Obj arg;
+			scanf("%lx", &arg);
+			vmDebugDumpCode(arg, stderr);
+		}
+		if (cmd=='u') sysDumpCallStackCode();
+		if (cmd=='e') sysDumpEnv(env);
+		if (cmd=='s') wscmWrite(stack, stderr);
+		if (cmd=='y') wscmWrite(symbols, stderr);
+	   if (cmd=='h') memDebugDumpHeapHeaders(stderr);
+	   if (cmd=='3') memDebugDumpYoungHeap (stderr);
+	   if (cmd=='w') {
+			Obj arg;
+			scanf("%lx", &arg);
+			if (memObjString(arg)) printf (memObjString(arg));
+			else wscmWrite(arg, stderr);
+		}
+		if (cmd=='R') done=1;
+		if (cmd=='X') *(Int*)0=0;
+		if (cmd=='Q') exit(-1);
+	}
+
+	/* Restore terminal and IO */
+	tcsetattr(1, TCSANOW, &tios_orig);
+	fcntl (0, F_SETFL, fl);
+}
+
+#undef DEBUG_SECTION
+#undef DEBUG
+
 
 
 /*******************************************************************************
- Initialization stuff.
+ Initialization_stuff
 *******************************************************************************/
+#define DEBUG DEBUG_ALL|0
+#define DEBUG_SECTION "SYS_INIT "
 
 /* Bind 'symbol in global environment and assign a syscall object
    created from 'function.
@@ -2996,6 +3156,8 @@ void wscmInitialize (void) {
 	memObjStringSet("expectedNoArgs");
 	memObjStringSet("Too many arguments to function");
 
+	/* Initialize the object module.  Pass in a callback which
+	   is a call to the scheduler */
 	objInitialize(sysSchedule);
 
 	/* Create empty thread vector.  All active threads are assigned a number
@@ -3006,10 +3168,12 @@ void wscmInitialize (void) {
 	for (i=1; i<=MAX_THREADS; i++) memVectorSet(threads, i, null);
 
 	/* Create empty ready thread doubly linked list. */
-	objNewVector(3);  running=ready=r0;
+	objNewVector(3);  ready=r0;
 	memVectorSet(ready, 0, sready);
 	memVectorSet(ready, 1, ready);
 	memVectorSet(ready, 2, ready);
+
+	running = ready;
 
 	/* Create empty sleeping threads doubly linked list. */
 	objNewVector(3);  sleeping=r0;
@@ -3119,8 +3283,8 @@ void wscmInitialize (void) {
 	wscmCreateRead();  wscmDefine("read");
 	wscmCreateRepl();  wscmDefine("repl2");
 	r0=eof; wscmDefine("#eof");
-	objNewInt(42); wscmDefine ("y");
-	objNewInt(1); wscmDefine ("x");
+	objNewInt(42); wscmDefine ("y"); /* It's always nice to have x and y defined with useful values */
+	objNewInt(69); wscmDefine ("x");
 
 	/* Signal handler vector */
 	i=32;
@@ -3131,94 +3295,5 @@ void wscmInitialize (void) {
 	DB("  --%s", __func__);
 }
 
-void sysDumpCallStackCode (void) {
- Num i;
- Obj o, l=NULL;
-
-	sysDumpEnv(r16);
-	sysDumpEnv(r15);
-	for (i=0; i<memStackLength(stack); ++i) {
-		o = memStackObject(stack, i);
-		printf ("Stack "INT" "HEX016" "OBJ NL, i, memIsObjectValid(o)?memObjectDescriptor(o):0, o);
-	}
-
-	for (i=0; i<memStackLength(stack); ++i) {
-		o = memStackObject(stack, i);
-		if (memIsObjectValid(o)) {
-			if (memObjectType(o)==TCODE) {
-				printf (NL "Stack "INT" "HEX016" "OBJ NL, i, memObjectDescriptor(o), o);
-				wscmWrite(memVectorObject(o, 2), stdout);
-				if (l!=NULL) sysDumpEnv(l);
-				else printf (NL);
-			}
-		}
-		l = o;
-	}
-}
-
-void sysDebugger (void) {
- struct winsize win;
- int done=0, cmd, fl;
- struct termios tios, tios_orig;
-
-	fflush(stdout);
-
-	/* Force cooked mode. */
-	tcgetattr(1, &tios_orig); /* Backup termios */
-	tcgetattr(1, &tios);
-	tios.c_iflag |= (ICRNL | IXON | IXOFF | IXANY);
-	tios.c_oflag |= OPOST;
-	tios.c_lflag |= (ECHO | ICANON | ISIG | IEXTEN);
-	tcsetattr(1, TCSANOW, &tios);
-
-	/* Force blocking input */
-	fl=fcntl(0, F_GETFL, 0);
-	fcntl (0, F_SETFL, fl&~O_NONBLOCK);
-
-	ioctl(1, TIOCGWINSZ, &win); printf ("\e[0m\e[%dH\n", win.ws_row); /* Move cursor to bottom of screen */
-	while (!done) {
-		printf ("\n\e[1m-------------------------------");
-		printf ("\nc    vmDebugDumpCode(r1c, stderr)");
-		printf ("\nC a  vmDebugDumpCode(a, stderr)");
-		printf ("\nu    sysDumpCallStackCode()");
-		printf ("\ne    sysDumpEnv(env)");
-		printf ("\ns    wscmWrite(stack, stderr)");
-		printf ("\ny    wscmWrite(symbols, stderr)");
-		printf ("\nh    memDebugDumpHeapHeaders(stderr)"); 
-		printf ("\n3    memDebugDumpYoungHeap(stderr)"); 
-		printf ("\nw a  wscmWrite(a1, stderr)");
-		printf ("\nR    return");
-		printf ("\nX    crash");
-		printf ("\nQ    exit(-1)");
-		printf ("\n-------------------------------\e[0m");
-		printf ("\nwscmdbg>");
-		while (strchr("\r\n \t", cmd=getchar())); /* Skip whitespace */
-		if (cmd=='c') vmDebugDumpCode(code, stderr);
-	   if (cmd=='C') {
-			Obj arg;
-			scanf("%lx", &arg);
-			vmDebugDumpCode(arg, stderr);
-		}
-		if (cmd=='u') sysDumpCallStackCode();
-		if (cmd=='e') sysDumpEnv(env);
-		if (cmd=='s') wscmWrite(stack, stderr);
-		if (cmd=='y') wscmWrite(symbols, stderr);
-	   if (cmd=='h') memDebugDumpHeapHeaders(stderr);
-	   if (cmd=='3') memDebugDumpYoungHeap (stderr);
-	   if (cmd=='w') {
-			Obj arg;
-			scanf("%lx", &arg);
-			if (memObjString(arg)) printf (memObjString(arg));
-			else wscmWrite(arg, stderr);
-		}
-		if (cmd=='R') done=1;
-		if (cmd=='X') *(Int*)0=0;
-		if (cmd=='Q') exit(-1);
-	}
-
-	/* Restore terminal and IO */
-	tcsetattr(1, TCSANOW, &tios_orig);
-	fcntl (0, F_SETFL, fl);
-}
-
-#undef DB_MODULE
+#undef DEBUG_SECTION
+#undef DEBUG

@@ -25,9 +25,7 @@ extern Num wscmDebug;
 extern const Num HashTableSize;
 
 Num hashpjw (Str s, Num len);
-Num objListLength (Obj o);
-Num objDoublyLinkedListLength (Obj o);
-void objListToVector (void);
+
 /* Object creators.  All new objects returned in r0.
 */
 void objNewInt      (Int x);
@@ -39,18 +37,19 @@ void objCopyReal    (void);
 void objNewString  (Str str, Num len);
 void objCopyString  (void);
 void objNewSymbol  (Str str, Num len);
-void objNewSymbolR5R6 (void); /* Like objNewSymbol only str/len are in r5/r6 */
+void objNewSymbolR5R6 (void); /* Like objNewSymbol only 'str'/'len' are in r5/r6 */
 void objNewSyscall (Func f);
 void objCons12   (void); /* New pair using r1 and r2 */
 void objCons23   (void);
+void objNewDoublyLinkedListNode (void); /* Doubly linked list node.  #(item prev next) */
 void objNewVector  (Num len);
 void objNewVector1 ();
 void objNewClosure1Env (void);
 void objNewPort (void);
 
+/* Object operations
+ */
 Num objIsPair (Obj o);
-
-void objDump (Obj a, FILE *stream);
 
 Obj car (Obj o);
 Obj caar (Obj o);
@@ -63,10 +62,20 @@ Obj cddr (Obj o);
 void push (Obj o);
 Obj  pop  (void);
 
+Num  objListLength (Obj o);
+Num  objDoublyLinkedListLength (Obj o);
 
+Obj  objDoublyLinkedListNext   (Obj node);
+Obj  objDoublyLinkedListPrev   (Obj node);
+void objDoublyLinkedListAdd    (Obj lst, Obj node);
+void objDoublyLinkedListInsert (Obj lst, Obj node);
+
+void objListToVector (void);
+
+/* Module
+*/
+void objDump (Obj a, FILE *stream);
 
 void objInitialize (Func scheduler);
-
-
 
 #endif

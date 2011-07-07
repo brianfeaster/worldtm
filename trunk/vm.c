@@ -1,13 +1,13 @@
-#define DEBUG 0
 #define VALIDATE 1
-#define DB_MODULE "VM "
-#include "debug.h"
 #include <stdio.h>
 #include <string.h>
 #include <signal.h> /* for signal() */
 #include <unistd.h> /* For ualarm() */
 #include <fcntl.h>
 #include "vm.h"
+#include "debug.h"
+#define DEBUG 0
+#define DEBUG_SECTION "VM "
 
 #include <unistd.h> /* For write(). */
 
@@ -46,9 +46,8 @@ void vmPreGarbageCollect (void) {
 	if (vmGCCount++ == 0) {
 		/* These are passed from obj.c */
 		if (vmCallerPreGarbageCollect) vmCallerPreGarbageCollect();
-		/* Only convert ip to offset if it's a pointer (big number larger pointing
-			into the code object).  Multiply by eight to force opcode offset (not
-			byte). */
+		/* Only convert ip to offset if it's a pointer (big number larger pointing into
+			the code object).  Multiply by eight to force opcode offset (not byte). */
 		if (ip >= code) ip = (Obj)((ip - code)/8);
 		DB("  --vmPreGarbageCollect  ip "OBJ"  code"OBJ, ip, code);
 	}
@@ -65,33 +64,36 @@ void vmPostGarbageCollect (void) {
 }
 
 
-/* This causes the machine to make a call to the interrupt handler.
+/* This causes the virtual machine to make a call to the interrupt handler.
+   It is set in this module by the timer signal handler.  It is also set
+   in the sys module by catchSignal() the generic signaler handling mechanism.
 */
-Int interrupt=0;
+Int vmInterrupt=0;
 
 void vmSigAlarmHandler (int sig) {
-	interrupt=1;
+	vmInterrupt=1;
 }
 
 void vmSigAlarmReset (void) {
-	ualarm(10*1000,0); /* 10 miliseconds (100 tics/sec)*/
+	ualarm(10*1000,0); /* 10 miliseconds (100 tics/sec) and no repeat interval set*/
 }
 
-Func vmCallerScheduler = NULL;
+Func callerScheduler = NULL;
 
 void vmInterruptHandler (void) {
-	DB("VM -->vmInterruptHandler <= %08x %08x", code, ip);
-	/* Calling these pre/post functions for now until I abstract better the
-		concept of massaging register values into garbage-collector-friendly
-		values. */
+	DB("::"STR"  code:"OBJ" ip:"OBJ, __func__ , code, ip);
+	vmInterrupt=0;
+
+	/* Calling pre/post functions to, at least, massage register
+	   values into garbage-collector-friendly values. */
 	vmPreGarbageCollect();
 
-	if (vmCallerScheduler) vmCallerScheduler();
+	if (callerScheduler) callerScheduler(); /* If a scheduler is registered, call it every time slice. */
 
 	vmPostGarbageCollect();
-	interrupt=0;
 	vmSigAlarmReset();
-	DB("VM <--vmInterruptHandler => %08x %08x", code, ip);
+
+	DB("  --"STR"  code:"OBJ" ip:"OBJ, __func__, code, ip);
 }
 
 
@@ -341,11 +343,11 @@ void vmVm (Int cmd) {
 		ip += 8;
 		ip += *(Int*)ip;
 		ip += 8;
-		if (interrupt) vmInterruptHandler();
+		if (vmInterrupt) vmInterruptHandler();
 		goto **(void**)(ip);
 	} else {
 		ip += 16;
-		if (interrupt) vmInterruptHandler();
+		if (vmInterrupt) vmInterruptHandler();
 		goto **(void**)(ip);
 	}
 
@@ -364,11 +366,11 @@ void vmVm (Int cmd) {
 		ip += 8;
 		ip += *(Int*)ip;
 		ip += 8;
-		if (interrupt) vmInterruptHandler();
+		if (vmInterrupt) vmInterruptHandler();
 		goto **(void**)(ip);
 	} else {
 		ip += 2*8;
-		if (interrupt) vmInterruptHandler();
+		if (vmInterrupt) vmInterruptHandler();
 		goto **(void**)(ip);
 	}
 
@@ -377,11 +379,11 @@ void vmVm (Int cmd) {
 		ip += 8;
 		ip += *(Int*)ip;
 		ip += 8;
-		if (interrupt) vmInterruptHandler();
+		if (vmInterrupt) vmInterruptHandler();
 		goto **(void**)(ip);
 	} else {
 		ip += 2*8;
-		if (interrupt) vmInterruptHandler();
+		if (vmInterrupt) vmInterruptHandler();
 		goto **(void**)(ip);
 	}
 
@@ -390,11 +392,11 @@ void vmVm (Int cmd) {
 		ip += 8;
 		ip += *(Int*)ip;
 		ip += 8;
-		if (interrupt) vmInterruptHandler();
+		if (vmInterrupt) vmInterruptHandler();
 		goto **(void**)(ip);
 	} else {
 		ip += 2*8;
-		if (interrupt) vmInterruptHandler();
+		if (vmInterrupt) vmInterruptHandler();
 		goto **(void**)(ip);
 	}
 
@@ -404,11 +406,11 @@ void vmVm (Int cmd) {
 		ip += 8;
 		ip += *(Int*)ip;
 		ip += 8;
-		if (interrupt) vmInterruptHandler();
+		if (vmInterrupt) vmInterruptHandler();
 		goto **(void**)(ip);
 	} else {
 		ip += 2*8;
-		if (interrupt) vmInterruptHandler();
+		if (vmInterrupt) vmInterruptHandler();
 		goto **(void**)(ip);
 	}
 
@@ -418,11 +420,11 @@ void vmVm (Int cmd) {
 		ip += 8;
 		ip += *(Int*)ip;
 		ip +=8;
-		if (interrupt) vmInterruptHandler();
+		if (vmInterrupt) vmInterruptHandler();
 		goto **(void**)(ip);
 	} else {
 		ip += 2*8;
-		if (interrupt) vmInterruptHandler();
+		if (vmInterrupt) vmInterruptHandler();
 		goto **(void**)(ip);
 	}
 
@@ -431,11 +433,11 @@ void vmVm (Int cmd) {
 		ip += 8;
 		ip += *(Int*)ip;
 		ip +=8;
-		if (interrupt) vmInterruptHandler();
+		if (vmInterrupt) vmInterruptHandler();
 		goto **(void**)(ip);
 	} else {
 		ip += 2*8;
-		if (interrupt) vmInterruptHandler();
+		if (vmInterrupt) vmInterruptHandler();
 		goto **(void**)(ip);
 	}
 
@@ -445,11 +447,11 @@ void vmVm (Int cmd) {
 		ip += 8;
 		ip += *(Int*)ip;
 		ip += 8;
-		if (interrupt) vmInterruptHandler();
+		if (vmInterrupt) vmInterruptHandler();
 		goto **(void**)(ip);
 	} else {
 		ip += 2*8;
-		if (interrupt) vmInterruptHandler();
+		if (vmInterrupt) vmInterruptHandler();
 		goto **(void**)(ip);
 	}
 
@@ -459,11 +461,11 @@ void vmVm (Int cmd) {
 		ip += 8;
 		ip += *(Int*)ip;
 		ip += 8;
-		if (interrupt) vmInterruptHandler();
+		if (vmInterrupt) vmInterruptHandler();
 		goto **(void**)(ip);
 	} else {
 		ip += 2*8;
-		if (interrupt) vmInterruptHandler();
+		if (vmInterrupt) vmInterruptHandler();
 		goto **(void**)(ip);
 	}
 
@@ -472,18 +474,18 @@ void vmVm (Int cmd) {
 	ip += 8l;
 	ip += *(Num*)ip;
 	ip += 8l;
-	if (interrupt) vmInterruptHandler();
+	if (vmInterrupt) vmInterruptHandler();
 	goto **(void**)(ip);
 
 	/* Jump to first instruction in block in r0. */
 	j0: OPDB("j0");
 	ip = code = r0;
-	if (interrupt) vmInterruptHandler();
+	if (vmInterrupt) vmInterruptHandler();
 	goto **(void**)ip;
 
 	j2: OPDB("j2");
 	ip = code = r2;
-	if (interrupt) vmInterruptHandler();
+	if (vmInterrupt) vmInterruptHandler();
 	goto **(void**)ip;
 
 	/* Link block/offset then jump to first instruction in block in acc. */
@@ -493,7 +495,7 @@ void vmVm (Int cmd) {
 	retcode = code;
 	retenv = env;
 	ip = code = r0;
-	if (interrupt) vmInterruptHandler();
+	if (vmInterrupt) vmInterruptHandler();
 	goto **(void**)ip;
 
 	/* Link block/offset then jump to first instruction in block in acc. */
@@ -503,7 +505,7 @@ void vmVm (Int cmd) {
 	retcode = code;
 	retenv = env;
 	ip = code = r2;
-	if (interrupt) vmInterruptHandler();
+	if (vmInterrupt) vmInterruptHandler();
 	goto **(void**)ip;
 
 	/* Ret to caller. */
@@ -512,7 +514,7 @@ void vmVm (Int cmd) {
 	code = retcode;
 	ip = code + (Int)retip;
 	ip += 8;
-	if (interrupt) vmInterruptHandler();
+	if (vmInterrupt) vmInterruptHandler();
 	goto **(void**)(ip);
 
 	/* Immediate syscall.  Like 'sys' only C address is immediate value.  Set
@@ -523,7 +525,7 @@ void vmVm (Int cmd) {
 	vmPreGarbageCollect();
 	(*(void(**)(void))((Obj*)code+(Int)ip-1))();
 	vmPostGarbageCollect();
-	if (interrupt) vmInterruptHandler();
+	if (vmInterrupt) vmInterruptHandler();
 	goto **(void**)ip;
 
 	/* System call.  Really just a C function call, address in accumulator. 
@@ -534,7 +536,7 @@ void vmVm (Int cmd) {
 	vmPreGarbageCollect();
 	(*(void(*)(void))r0)();
 	vmPostGarbageCollect();
-	if (interrupt) vmInterruptHandler();
+	if (vmInterrupt) vmInterruptHandler();
 	goto **(void**)ip;
 
 	/* Halt virtual machine.  Return to OS?*/
@@ -570,7 +572,7 @@ void vmInitialize (Func scheduler, Func preGC, Func postGC, void(*vmObjDumper)(O
 	if (shouldInitialize) {
 		shouldInitialize=0;
 		vmVm(INIT); // Initialize the opcodes (C jump addresses).
-		if (scheduler) vmCallerScheduler = scheduler;
+		if (scheduler) callerScheduler = scheduler; /* sys.c:sysSchedule()  */
 		if (preGC) vmCallerPreGarbageCollect = preGC;
 		if (postGC) vmCallerPostGarbageCollect = postGC;
 		if (vmObjDumper) vmObjectDumper = vmObjDumper;
@@ -721,4 +723,5 @@ void vmDebugDumpCode (Obj c, FILE *stream) {
 	fcntl (0, F_SETFL, fdState);
 	DB (INDENT2"--"STR, __func__);
 }
-#undef DB_MODULE
+#undef DEBUG_SECTION
+#undef DEBUG

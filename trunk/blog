@@ -3369,3 +3369,32 @@ blocked threads for any waiting on this semaphore.
 Is there a problem implementing semaphore counters as mutable internal integers?
 The old implementation was a global vector of semaphores which, when incremented
 or decremented, would be replaced with a new scheme number object.
+
+
+
+Thu Jun 30 06:04:40 EDT 2011
+
+Ahh, since semaphore counters were returned as values, they could not be
+mutated so new number objects were always created.  Since semaphore calls now
+return #t or #f, this is moot.
+
+
+
+Sun Jul  3 18:07:47 EDT 2011
+
+Time to abstract thread queue operations behind doubly linked lists.  I'm not
+sure if they should live in the obj or sys module.  I decided on the obj module.
+I debated whether there should be a head node for doubly linked lists.  A head
+node could point to an arbitrary node in the dllist.  But what does one do if
+they all get deleted?
+
+A scheme defined signal handler will be handled in the scheduler.
+
+
+
+Wed Jul  6 03:09:33 EDT 2011
+
+Cleaning up debug message facility.  The scheduler doesn't handle interrupt
+spawned threads very well.  I need to rethink the structure and order of the
+scheduler and thread creation.  Threads can be spawned from another thread
+or via an interrupt handler.

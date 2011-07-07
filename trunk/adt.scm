@@ -8,7 +8,7 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; BList_ADT
 ;;
-;; Bidirectionaly list
+;; Bidirectional list
 ;; A semaphore, the head node.  Nodes are a "list" of nodes
 ;; of the form #(datum prev next)
 ;;

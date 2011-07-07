@@ -1,11 +1,9 @@
+#ifndef _DEBUG_H
+#define _DEBUG_H
+/* Include this module and #define DEBUG as 1 and #DEBUG_SECTION
+   as a string for debug messages.
+*/
 #include <stdio.h>
-#include <unistd.h> // for sleep TODO TEMPORARY
-
-#if DEBUG
-
-#ifndef DB_MODULE
-#define DB_MODULE "DEBUG"
-#endif
 
 #define NOR "\e[0m"
 #define BLK  "\e[0;30m"
@@ -32,14 +30,7 @@
 #define INDENT4 INDENT3"   "
 #define INDENT5 INDENT4"   "
 
-#define DB(...) fprintf(stderr, "\n" DB_MODULE __VA_ARGS__)
-#define DBE if(1)
-#define ENTER "-->"
-#define LEAVE "<--"
-
-#else
-
-#define DB(...)
-#define DBE if(0)
+#define DB(...) if(DEBUG)fprintf(stderr, "\n" DEBUG_SECTION __VA_ARGS__)
+#define DBE if(DEBUG)
 
 #endif

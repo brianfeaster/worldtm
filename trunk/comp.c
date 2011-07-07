@@ -1,5 +1,5 @@
 #define DEBUG 0
-#define DB_MODULE "COMP "
+#define DEBUG_SECTION "COMP "
 #include "debug.h"
 
 #include <stdio.h>
@@ -2074,4 +2074,5 @@ Num compCompile (void) {
 	return ret;
 }
 
-#undef DB_MODULE
+#undef DEBUG_SECTION
+#undef DEBUG

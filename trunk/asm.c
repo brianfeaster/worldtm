@@ -1,9 +1,9 @@
 #define DEBUG 0
-#define DB_MODULE "ASM "
-#include "debug.h"
+#define DEBUG_SECTION "ASM "
 #include <stdarg.h>
 #include <string.h>
 #include "asm.h"
+#include "debug.h"
 
 
 void asmAsm (Obj o,...) {
@@ -143,5 +143,5 @@ void asmInitialize (Func scheduler, Func preGC, Func postGC, void(*vmObjDumper)(
 	}
 }
 
-
-#undef DB_MODULE
+#undef DEBUG
+#undef DEBUG_SECTION
