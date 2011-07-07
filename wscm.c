@@ -1,9 +1,8 @@
 #define DEBUG 0
-#define DB_MODULE "WSCM "
-#include "debug.h"
-
+#define DEBUG_SECTION "WSCM "
 #include <stdio.h>
 #include "sys.h"
+#include "debug.h"
 
 
 /* Weird hack that implements a read-eval-print loop as a syscall.  The strange
@@ -18,7 +17,7 @@ void wscmCReadEvalPrintLoop (void) {
  Num i;
 	yyrestart(0);     /* Tell scanner to use stdin as input. */
 	wscmNewThread();  /* Create a new thread. */
-	wscmSchedule();   /* Prepare it for the VM. */
+	wscmScheduler();   /* Prepare it for the VM. */
 	while (r0 != eof) {
 		env = tge; /* Evaluate in TGE */
 		//DBE wscmDumpTGE();
@@ -62,8 +61,8 @@ void wscmStringReadEvalPrintLoop (void) {
   (send \"\r\nbye.\r\n\" stdout))");
 	yyparse(); /* Use the internal parser */
 	expr=r0; compCompile();
-	wscmNewThread(); /* Createa a new thread */
-	wscmSchedule();
+	wscmNewThread(); /* Create a new thread */
+	wscmScheduler();
 	vmRun();
 	DB("  --%s", __func__);
 }
@@ -92,7 +91,8 @@ int main (int argc, char *argv[]) {
 	/* Three ways of firing up a repl. */
 
 	/* REPL as compiled inlined scheme with asynchronous threads */
-	wscmStringReadEvalPrintLoop(); return 0;
+	wscmStringReadEvalPrintLoop();
+	return 0;
 
 	/* REPL in a blocking C loop */
 	//wscmCReadEvalPrintLoop(); return 0;
@@ -116,10 +116,11 @@ int main (int argc, char *argv[]) {
 
 	wscmWrite(r0, stderr);
 	wscmNewThread();
-	wscmSchedule();
+	wscmScheduler();
 	vmRun();
 
 	return 0;
 }
 
-#undef DB_MODULE
+#undef DEBUG_SECTION
+#undef DEBUG

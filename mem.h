@@ -10,6 +10,7 @@
 #ifndef _MEM_H
 #define _MEM_H
 
+#include <stdio.h>
 #include "globals.h"
 
 #define MEMOBJECTMAXSIZE 0xffffffffl 
@@ -105,11 +106,10 @@ void memValidateObject (Obj o);
 void memValidateHeapStructures (void);
 
 Chr* memTypeString        (Type t);
-
 /* Mechanism to associate a pointer address with a string.  A macro is
    provided to associate a pointer addresses and its string representation.
    char* must be the type due to how the preprocessor generates symbols. */
-char* memObjString         (Obj obj);
+char* memObjString        (Obj obj);
 void memObjStringRegister (Obj obj, char* str);
 #define memObjStringSet(o) memObjStringRegister(o, #o);
 

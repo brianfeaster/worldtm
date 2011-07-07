@@ -25,7 +25,7 @@ void *NOP,
      *J0, *J2, *JAL0, *JAL2, *RET,
      *SYSI, *SYS0, *QUIT;
 
-extern Int interrupt;
+extern Int vmInterrupt;
 
 void vmSigAlarmReset (void);
 

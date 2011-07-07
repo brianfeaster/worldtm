@@ -1,6 +1,5 @@
 #include <stdarg.h>
 #include <string.h>
-#include "debug.h"
 #include "asm.h"
 
 /* Debugging: Syscalls.

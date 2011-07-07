@@ -51,6 +51,37 @@ void objTestVerifyStackMutation (void) {
 	assert(0 == memStackLength(r1f));
 }
 
+void objTestDoublyLinkedList (void) {
+
+	/* Create doubly linked list in r4 */
+	objNewDoublyLinkedListNode(); r4=r0;
+	assert(1 == objDoublyLinkedListLength(r4)); /* Verify length */
+
+	objNewInt(69); /* Set its cargo */
+	memVectorSet(r4, 0, r0);
+
+	objNewDoublyLinkedListNode(); r1=r0;
+	objDoublyLinkedListAdd(r4, r1); /* Add another node to dllist */
+
+	objNewInt(100); /* Set its cargo */
+	memVectorSet(r1, 0, r0);
+
+	objNewDoublyLinkedListNode(); r1=r0;
+	objDoublyLinkedListInsert(r4, r1); /* Add another node to dllist */
+	assert(3 == objDoublyLinkedListLength(r4)); /* Verify length */
+
+	objNewInt(42);
+	memVectorSet(r1, 0, r0);
+
+	/* Verify doubly linked list traversal */
+	assert(*(Int*)car(r4) == 69);
+	r4 = objDoublyLinkedListNext(r4); assert(*(Int*)car(r4) == 100);
+	r4 = objDoublyLinkedListNext(r4); assert(*(Int*)car(r4) == 42);
+	r4 = objDoublyLinkedListPrev(r4); assert(*(Int*)car(r4) == 100);
+	r4 = objDoublyLinkedListPrev(r4); assert(*(Int*)car(r4) == 69);
+	r4 = objDoublyLinkedListPrev(r4); assert(*(Int*)car(r4) == 42);
+}
+
 int main (int argc, char *argv[]) {
 	// If any arguments passed to test unit, do more fun things.
 	if (argc==2 && !strcmp(argv[1], "-f")) return -1;
@@ -66,6 +97,8 @@ int main (int argc, char *argv[]) {
 	objTestVerifyObjects();
 
 	objTestVerifyStackMutation();
+
+	objTestDoublyLinkedList();
 
 	//memDebugDumpHeapStructures();
 
