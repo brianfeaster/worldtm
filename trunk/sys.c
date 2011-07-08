@@ -18,8 +18,7 @@
    (Operator operand operand operand ...)
 
    parameters:       Expressions evaluated during a procedure application.
-   arguments:        Evaluated parameters (operand values) a function is
-                     applied to.
+   arguments:        Evaluated parameters (operand values) a function is applied to.
    formal arguments: Function variables
 
    free variable:    Non-local binding.
@@ -448,7 +447,6 @@ void wscmTGEFind (void) {
 	DBE wscmWrite(r1, stderr);
 	/* Scan over the list of (value . symbol) pairs. */
 	for (r0=cdr(tge); r0!=null; r0=cdr(r0)) {
-		//DBE wscmWrite(car(r0), stderr);
 		if (cdar(r0) == r1) {
 			r0 = car(r0);
 			break;
@@ -1024,7 +1022,7 @@ void wscmMoveToQueue (Obj thread, Obj queue, Obj state) {
 	DB("  ::"STR, __func__);
 	/* To keep round robin scheduler happy we need to trick it by moving
 	   the 'running' object back a thread. */
-	memVectorSet(car(thread), 2, state); /* Set thread's new state. */
+	memVectorSet(wscmThreadDescriptor(thread), 2, state); /* Set thread's new state. */
 	wscmRemoveThread(thread);
 	/* If inserting into ready queue, insert behind the running thread,
 	   otherwise insert at end of passed queue.  The ternary expression
@@ -1126,7 +1124,7 @@ void wscmUnRun (void) {
 /* Make running thread ready for the VM.  Pop all the saved registers. */
 void wscmRun (void) {
 	DB("  ::"STR " tid="INT, __func__, wscmThreadId(running));
-	if (memVectorObject(car(running),2) != sready) {
+	if (wscmThreadState(running) != sready) {
 		fprintf (stderr, "WARNING: wscmRun: Should be 'ready' thread but is ");
 		wscmDisplay(wscmThreadState(running), stderr);
 	} else {
@@ -1166,11 +1164,11 @@ void wscmSleepThread (void) {
 	push(r0);
 
 	/* Put this thread in order of wakup time in the sleeping list.  */
-	r3=cdr(sleeping);
+	r3=objDoublyLinkedListNext(sleeping);
 	while (r3 != sleeping) {
-		if (*(s64*)memStackObject(memVectorObject(car(r3),0),0) > wakeupTime)
+		if (*(s64*)memStackObject(wscmThreadStack(r3),0) > wakeupTime)
 			break;
-		r3 = cdr(r3);
+		r3 = objDoublyLinkedListNext(r3);
 	}
 	wscmMoveToQueue(running, r3, ssleeping); /* Insert thread into list. */
 
@@ -1186,7 +1184,7 @@ void wscmScheduleSleeping (void) {
  Obj sleepingThreadDescriptor;
  Int wakeupTime;
 	DB("    ::%s", __func__);
-	sleepingThreadDescriptor = wscmThreadDescriptor(cdr(sleeping));
+	sleepingThreadDescriptor = wscmThreadDescriptor(objDoublyLinkedListNext(sleeping));
 
 	/* Only sleeping threads exist so wait for next one to wakeup.
 	   Next thread's wakeup time on top of its stack. */
@@ -1202,18 +1200,18 @@ void wscmScheduleSleeping (void) {
 		   called is after the timer interrupts the VM */
 		ualarm(0,0);
 		usleep((useconds_t)wakeupTime*1000);
-		wakeupTime = *(s64*)memStackObject(memVectorObject(sleepingThreadDescriptor,0),0) - wscmTime();
+
+		/* Consider wakeup time again.  An interrupt might have prematurely interrupted usleep() */
+		wakeupTime = *(s64*)memStackObject(wscmThreadDescStack(sleepingThreadDescriptor),0) - wscmTime();
 		DB("      Remaining "INT"ms", wakeupTime);
 	}
-
-	/* Consider wakeup time again.  An interrupt might have prematurely interrupted usleep() */
 
 	/* If next sleeping thread is ready to be woken up, insert into ready queue. */
 	if (wakeupTime <= 0) {
 		DB("      Waking next sleeping thread");
 		/* Pop wake-time from stack. */
 		memStackPop(wscmThreadDescStack(sleepingThreadDescriptor));
-		wscmMoveToQueue(cdr(sleeping), ready, sready);
+		wscmMoveToQueue(objDoublyLinkedListNext(sleeping), ready, sready);
 	}
 
 	DB("      --%s", __func__);
@@ -1234,7 +1232,7 @@ void wscmScheduleBlocked (void) {
 	   objDoublyLinkedListLength(sleeping)-1);
 
 	/* For each doubly linked list node of blocked threads... */
-	r5=cdr(blocked);
+	r5=objDoublyLinkedListNext(blocked);
 	while (r5!=blocked) {
 	DB("      considering blocked thread "NUM, wscmThreadId(r5));
 		/* Consider status in the descriptor of this thread. */
@@ -1242,10 +1240,10 @@ void wscmScheduleBlocked (void) {
 
 		if (r1 == sreadblocked) {
 			DB("        dealing with a read blocked thread");
-			r1 = memStackObject(memVectorObject(car(r5),0),1l);
-			r2 = memStackObject(memVectorObject(car(r5),0),2l);
-			r3 = memStackObject(memVectorObject(car(r5),0),3l);
-			r4 = memStackObject(memVectorObject(car(r5),0),4l);
+			r1 = memStackObject(wscmThreadStack(r5), 1l);
+			r2 = memStackObject(wscmThreadStack(r5), 2l);
+			r3 = memStackObject(wscmThreadStack(r5), 3l);
+			r4 = memStackObject(wscmThreadStack(r5), 4l);
 			wscmRecv();
 			timedOut = (r2!=false) && (*(Int*)r2 <= wscmTime());
 			if (r0 != false || timedOut) {
@@ -1253,46 +1251,46 @@ void wscmScheduleBlocked (void) {
 				if (r0==false && timedOut && 0<(Num)r4) objNewString(r3, (Num)r4);
 				/* Set thread's return value (r0 register top of stack) with
 			   	newly-read string or #f if it has timed out. */
-				memStackSet(memVectorObject(car(r5), 0), 0, r0);
-				r1=cdr(r5);
+				memStackSet(wscmThreadStack(r5), 0, r0);
+				r1=objDoublyLinkedListNext(r5);
 				wscmMoveToQueue(r5, ready, sready);
 				r5=r1;
 			/* Store back registers into thread keeping it blocked. */
 			} else {
-				memStackSet(memVectorObject(car(r5), 0), 1l, r1);
-				memStackSet(memVectorObject(car(r5), 0), 2l, r2);
-				memStackSet(memVectorObject(car(r5), 0), 3l, r3);
-				memStackSet(memVectorObject(car(r5), 0), 4l, r4);
-				r5 = cdr(r5);
+				memStackSet(wscmThreadStack(r5), 1l, r1);
+				memStackSet(wscmThreadStack(r5), 2l, r2);
+				memStackSet(wscmThreadStack(r5), 3l, r3);
+				memStackSet(wscmThreadStack(r5), 4l, r4);
+				r5=objDoublyLinkedListNext(r5);
 			}
 		}
 		else if (r1 == swriteblocked) {
 			DB("        dealing with a write blocked thread");
-			r1 = memStackObject(memVectorObject(car(r5),0),1);
-			r2 = memStackObject(memVectorObject(car(r5),0),2);
-			r3 = memStackObject(memVectorObject(car(r5),0),3);
+			r1 = memStackObject(wscmThreadStack(r5), 1);
+			r2 = memStackObject(wscmThreadStack(r5), 2);
+			r3 = memStackObject(wscmThreadStack(r5), 3);
 			wscmSend();
 			if (r0 != false) {
 				DB("        unblocking thread");
 				/* Set thread's return value (r0 register top of stack) with
 			   	sent string. */
-				memStackSet(memVectorObject(car(r5), 0), 0, r2);
-				r1=cdr(r5);
+				memStackSet(wscmThreadStack(r5), 0, r2);
+				r1=objDoublyLinkedListNext(r5);
 				wscmMoveToQueue(r5, ready, sready);
 				r5=r1;
 			/* Store back registers into thread since wscmSend more than likely
 			   changed them and keep this thread blocked. */
 			} else {
 				DB("        not unblocking thread");
-				memStackSet(memVectorObject(car(r5), 0), 1, r1);
-				memStackSet(memVectorObject(car(r5), 0), 2, r2);
-				memStackSet(memVectorObject(car(r5), 0), 3, r3);
-				r5 = cdr(r5);
+				memStackSet(wscmThreadStack(r5), 1, r1);
+				memStackSet(wscmThreadStack(r5), 2, r2);
+				memStackSet(wscmThreadStack(r5), 3, r3);
+				r5=objDoublyLinkedListNext(r5);
 			}
 		} else if (r1 == sopenblocked) {
 			DB("        dealing with a open-blocked thread");
 			/* Snag port from sleeping thread (r1). */
-			r1 = memStackObject(memVectorObject(car(r5),0),1);
+			r1 = memStackObject(wscmThreadStack(r5),1);
 			/* If a connection is made on the port and set to a non-accepting
 			   state, set the threads return value (r0) to the port and move the
 			   thread to the ready queue. */
@@ -1302,36 +1300,38 @@ void wscmScheduleBlocked (void) {
 				wscmAcceptLocalStream();
 				r5=pop();
 				if (memVectorObject(r1, 3) != saccepting) {
-					memStackSet(memVectorObject(car(r5), 0), 0, r1);
-					r1=cdr(r5);
+					memStackSet(wscmThreadStack(r5), 0, r1);
+					r1=objDoublyLinkedListNext(r5);
 					wscmMoveToQueue(r5, ready, sready);
 					r5=r1;
+				} else {
+					r5=objDoublyLinkedListNext(r5);
 				}
-				r5 = cdr(r5);
 			} else if (memVectorObject(r1, 3) == sconnecting) {
 				DB("        dealing with a new remote stream connection thread");
 				wscmAcceptRemoteStream();
 				if (r1==eof || memVectorObject(r1, 3) != sconnecting) {
-					memStackSet(memVectorObject(car(r5), 0), 0, r1);
-					r1=cdr(r5);
+					memStackSet(wscmThreadStack(r5), 0, r1);
+					r1=objDoublyLinkedListNext(r5);
 					wscmMoveToQueue(r5, ready, sready);
 					r5=r1;
+				} else {
+					r5=objDoublyLinkedListNext(r5);
 				}
-				r5 = cdr(r5);
 			} else if (memVectorObject(r1, 3) == sclosed) {
-				memStackSet(memVectorObject(car(r5), 0), 0, eof);
-				r1=cdr(r5);
+				memStackSet(wscmThreadStack(r5), 0, eof);
+				r1=objDoublyLinkedListNext(r5);
 				wscmMoveToQueue(r5, ready, sready);
 				r5=r1;
 			} else { /* Must be in a connecting state. */
-				r5 = cdr(r5);
+				r5=objDoublyLinkedListNext(r5);
 			}
 		} else if (r1 == ssemaphore) {
 			/* Skip semaphore blocked threads. */
-			r5 = cdr(r5);
+			r5=objDoublyLinkedListNext(r5);
 		} else {
 			fprintf (stderr, "ERROR: wscmScheduleBlocked: unknown thread state");
-			r5 = cdr(r5);
+			r5=objDoublyLinkedListNext(r5);
 		}
 	}
 	DB("      --"STR, __func__);
@@ -1342,13 +1342,13 @@ void wscmScheduleSemaphoreBlocked (Obj sem, Num all) {
  Obj semaphore, next;
  Int found=0;
 	DB("::"STR, __func__);
-	r4=cdr(blocked); /* For each thread r4 in blocked queue... */
+	r4=objDoublyLinkedListNext(blocked); /* For each thread r4 in blocked queue... */
 	while (!found && r4!=blocked) {
-		next = cdr(r4);
+		next=objDoublyLinkedListNext(r4);
 		/* Check thread status in its descriptor. */
-		if (memVectorObject(car(r4),2) == ssemaphore) {
+		if (wscmThreadState(r4) == ssemaphore) {
 			/* Look at thread's r1 register stored on its stack. */
-			semaphore = memStackObject(memVectorObject(car(r4),0),1);
+			semaphore = memStackObject(wscmThreadStack(r4),1);
 			DB("  considering blocked thread with sem:");
 			DBE wscmWrite(sem, stderr);
 			DBE wscmWrite(semaphore, stderr);
@@ -1435,10 +1435,10 @@ void wscmScheduler (void) {
 	}
 
 	/* Switch to another thread.  Round robin scheme.  Just go to next thread. */
-	running = cdr(running);
+	running = objDoublyLinkedListNext(running);
 
 	/* Can this happen? */
-	if (running==ready) running=cdr(ready);
+	if (running==ready) running=objDoublyLinkedListNext(ready);
 	if (running==ready) fprintf (stderr, "ERROR: deal with this!");
 
 	vmSigAlarmReset(); /* Enable scheduler's interrupt timer. */
@@ -1491,13 +1491,13 @@ void sysSignal (void) {
 void debugDumpThreadInfo (void) {
  Obj node;
 	fprintf (stderr, "    ::"STR, __func__);
-	for(node = cdr(blocked); node != blocked; node=cdr(node)) {
+	for(node = objDoublyLinkedListNext(blocked); node != blocked; node=objDoublyLinkedListNext(node)) {
 		fprintf (stderr, "      blocked "NUM"\n", wscmThreadId(node));
 	}
-	for(node = cdr(sleeping); node != sleeping; node=cdr(node)) {
+	for(node = objDoublyLinkedListNext(sleeping); node != sleeping; node=objDoublyLinkedListNext(node)) {
 		fprintf (stderr, "      sleeping "NUM"\n", wscmThreadId(node));
 	}
-	for(node = cdr(ready); node != ready; node=cdr(node)) {
+	for(node = objDoublyLinkedListNext(ready); node != ready; node=objDoublyLinkedListNext(node)) {
 		fprintf (stderr, "      ready "NUM" %s\n", wscmThreadId(node), running==ready?"running":"");
 	}
 	fprintf (stderr, "      --"STR, __func__);
@@ -1538,7 +1538,7 @@ void sysError (void) {
 	     (car closure) Code block
 	     (cdr closure) Parent environment */
 	objNewSymbol ((Str)"ERRORS", 6);  r1=r0;  wscmTGEFind(); r0=car(r0);
-	tid = (Num)cdr(car(running));
+	tid = (Num)wscmThreadId(running);
 	r0 = memVectorObject(r0, tid);
 	/* r0 needs to remain the closure when a code block is first run
 	   since the called code expects to find a lexical enviroment in the
@@ -1560,6 +1560,7 @@ void sysQuit (void) {
 extern Num garbageCollectionCount;
 /* This can do anything.  I change it mainly for debugging and prototyping. */
 void sysFun (void) {
+	debugDumpThreadInfo ();
 	//fprintf (stderr, "Stacklength=[%d]", memStackLength(stack));
 	//memDebugDumpHeapHeaders(stderr);
 	//memDebugDumpYoungHeap(stderr);
@@ -2089,7 +2090,7 @@ void sysSleep (void) {
 void sysTID (void) {
 	DB("-->%s", __func__);
 	if (wscmAssertArgumentCount(0, __func__)) return;
-	objNewInt((Int)memVectorObject(car(running), 1));
+	objNewInt((Int)wscmThreadId(running));
 	DB("<--%s", __func__);
 }
 
@@ -2579,7 +2580,7 @@ void sysSemaphoreDown (void) {
 
 		if (newCount < 0) {
 			/* Block thread on this semaphore.  Store semaphore index in r1. */
-			DB ("   %s !!! Blocking thread %d", __func__, memVectorObject(car(running), 1));
+			DB ("   %s !!! Blocking thread %d", __func__, wscmThreadId(running));
 			r1 = r0;
 			wscmUnRun();
 			wscmMoveToQueue(running, blocked, ssemaphore); /* TODO create a separate semaphore blocked queue */

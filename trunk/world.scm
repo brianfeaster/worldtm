@@ -16,7 +16,7 @@
 (load "window.scm")
 (load "entity.scm") ; Glyph Sprite Entity EntityDb objects
 
-(define SHUTDOWN #f) ; Signals to avatar's that the process is going to shutdown
+(define SHUTDOWN #f) ; Signals to avatars that the process is going to shutdown
 (define QUIETLOGIN (and (< 2 (vector-length argv)) (eqv? "ADMINISTRATOR" (vector-ref argv 2))))
 (define VIEWPORTANIMATION #t)
 (define MAPSCROLL 'always) ; always edge never
@@ -990,56 +990,97 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Kat
 ;;
-(define (Kat owner ipc . ChildStack)
+(define (Kat owner . ChildStack)
  (apply Avatar (string "katO'" (owner 'name))
-               (owner 'z) (owner 'y) (owner 'x) ipc #t
-   (list owner)
-   (macro (parent owner . ChildStack) ; Child
-     (define (self msg) (eval msg))
-     (define (info) (list 'IrcAgent name z y x 'hasChild (pair? ChildStack)))
+               (owner 'z) (owner 'y) (owner 'x)
+               (owner 'ipc) #t
+  (list owner)
+  (macro (parent owner . ChildStack) ; Child
+   (define (self msg) (eval msg))
+   (define (info) (list 'IrcAgent name z y x 'hasChild (pair? ChildStack)))
 
-     (define (say . l)
-       (speak (apply string (map display->string l))))
+   (define (say . l)
+     (speak (apply string (map display->string l))))
 
-     (define radius 20)
-     (define cy radius) (define cx 0)
-     (define fp 0)
-     (define (fn n m) ; F(x,y) + 2xm + m^2 + 2yn + n^2
-       (+ fp
-          (* 2 cy n)
-          (^2 n)
-          (* 2 cx m)
-          (^2 m)))
-     
+   (define radius 20)
+   (define cy radius) (define cx 0)
+   (define fp 0)
+   (define (fn n m) ; F(x,y) + 2xm + m^2 + 2yn + n^2
+     (+ fp
+        (* 2 cy n)
+        (^2 n)
+        (* 2 cx m)
+        (^2 m)))
 
-     (define (IPCHandlerVoice dna level text)
-      ())
-       ;((parent 'IPCHandlerVoice) dna level text) ; No need to call the parent
+   ; Walks in a straight line to my owner/spawner.
+   (define (walkToParent)
+     (let ((py (owner 'y))
+           (px (owner 'x)))
+       (let ~ ((steps (lineWalks y x py px)))
+         (if (pair? steps) (begin
+           (walk (car steps))
+           (sleep 500)
+           (~ (cdr steps)))))))
 
-     (define (IPCHandlerForce fz fy fx dir mag)
-       ;(speak "ouch!")
-       ((parent 'IPCHandlerForce) fz fy fx dir mag))
+   (define FollowFlag #f)
 
-     (define (IPCHandlerMove dna z y x)
-       ;(speak "purr")
-       (if (= dna (owner 'dna))
-         (letrec ((entLoc ((((myMap 'entityDBGet) dna) 'gps)))
-                  (m (- (cadr entLoc) y))
-                  (n (- x (caddr entLoc))))
-           (say "m=" m " n=" n " f'=" (fn m n)))))
-       ;((parent 'IPCHandlerMove) dna z y x)
+   ; When called, I will constantly follow my owner.  Evaluate these in World's chat bar:
+   ; :(define k (list (Kat avatar) (Kat avatar) (Kat avatar)))
+   ; :(map (lambda (k) ((k 'followParent))) k)
+   (define (followParent)
+    ; Stop thread if called again or or spawn a new thread
+    (if FollowFlag
+     (set! FollowFlag #f)
+     (thread
+      (set! FollowFlag #t)
+      (let ~ ((dy #f) ; Desired location I'm walking towards
+              (dx #f)
+              (steps #f) ; List of walk directions I'm taking
+              (oy (owner 'y)) ; New parent location
+              (ox (owner 'x)))
+         (if (pair? steps) (walk (car steps))) ; Can't move if we're at the parent location
+         (sleep (+ 500 (modulo dna 1000)))
+         (if FollowFlag
+          ; Continue walking along current path or start a new one if parent moves
+          (if (and (eqv? dy oy) (eqv? dx ox))
+             (~ dy dx (if (pair? steps) (cdr steps) ()) (owner 'y) (owner 'x))
+             (~ oy ox (lineWalks y x oy ox) oy ox)))))))
 
-     (define (main)
-       ())
-     ; WOOEE
-     (if (pair? ChildStack)
-       (apply (cadr ChildStack) self (append (car ChildStack) (cddr ChildStack)))
-       (begin
-         (let ~ ((obj self))
-           (if (obj 'parent) (~ (obj 'parent)))
-           ((obj 'main)))
-         self)))
-   ChildStack)) ; Kat?
+   (define (IPCHandlerVoice dna level text)
+    ())
+     ;((parent 'IPCHandlerVoice) dna level text) ; No need to call the parent else it appears the parent heard it.
+
+   (define (IPCHandlerForce fz fy fx dir mag)
+     ;(speak "ouch!")
+     ((parent 'IPCHandlerForce) fz fy fx dir mag))
+
+   (define (IPCHandlerMove dna z y x)
+     ;(speak "purr")
+
+     ;(if (= dna (owner 'dna))
+     ;  (letrec ((entLoc ((((myMap 'entityDBGet) dna) 'gps)))
+     ;           (m (- (cadr entLoc) y))
+     ;           (n (- x (caddr entLoc))))
+     ;    (say "m=" m " n=" n " f'=" (fn m n))))
+
+     ;((parent 'IPCHandlerMove) dna z y x)
+   )
+
+   (define (main)
+    (thread
+     (sleep 1000)
+     (speak "Happy Birthday!  I'm symbol kat in TGE for you hackers." 1)
+     (followParent)))
+
+   ; WOOEE
+   (if (pair? ChildStack)
+     (apply (cadr ChildStack) self (append (car ChildStack) (cddr ChildStack)))
+     (begin
+       (let ~ ((obj self))
+         (if (obj 'parent) (~ (obj 'parent)))
+         ((obj 'main)))
+       self)))
+ ChildStack)) ; Kat
 
 
 
@@ -1184,7 +1225,7 @@
      (speak (string (car (strtok prefix #\!)) " has left " (cdr (strtok parameters #\#)))))
    ; [tangles_!~android@m630e36d0.tmodns.net][QUIT][":Ping timeout: 268 seconds"]
    (define (cmdQUIT prefix parameters)
-     (speak (string (car (strtok prefix #\!)) " quits ")))
+     (speak (string (car (strtok prefix #\!)) parameters)))
    ; Dispatch on queued IRC messages
    (define (msgsDispatcher)
      (let ((ircMsg (msgQueueGet)))
@@ -1203,7 +1244,7 @@
                    ((eqv? command "433")    (cmd433            parameters)) ; ERR_NICKNAMEINUSE
                    ((eqv? command "JOIN")   (cmdJOIN    prefix parameters))
                    ((eqv? command "PART")   (cmdPART    prefix parameters))
-                   ((eqv? command "JOIN")   (cmdQUIT    prefix))))
+                   ((eqv? command "QUIT")   (cmdQUIT    prefix))))
            (Debug "\r\nmsgsDispatcher: not a valid parsed IRC message: " ircMsg))
          (msgsDispatcher)))))
    (define (IPCHandlerVoice adna level text) ; Override parent's function
