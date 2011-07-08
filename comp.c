@@ -40,7 +40,7 @@ void compRem () {
 }
 
 void compEval (Num flags) {
-	DB("::%s", __func__);
+	DB("::"STR, __func__);
 	expr = cadr(expr);
 	compExpression(flags & ~TAILCALL);
 	asmAsm(
@@ -55,20 +55,20 @@ void compEval (Num flags) {
 			POP15, POP1E, POP1D,
 		END);
 	}
-	DB("  --%s", __func__);
+	DB("  --"STR, __func__);
 }
 
 /* Doesn't need compiling so just return it.
 */
 void compSelfEvaluating (void) {
-	DB("-->compSelfEvaluating ");
+	DB("::"STR, __func__);
 	asm(MVI0); asm(expr);
-	DB("<--compSelfEvaluating ");
+	DB("  --"STR, __func__);
 }
 
 void compVariableReference (Num flags) {
  Int ret, depth;
-	DB("-->compVariableReference: ");
+	DB("::"STR, __func__);
 	DBE wscmWrite(expr, stderr);
 	r1 = expr;
 
@@ -104,9 +104,7 @@ void compVariableReference (Num flags) {
 		}
 	}
 
-	//memDebugDumpObject(asmstack);
-
-	DB("<--compVariableReference");
+	DB("  --"STR, __func__);
 }
 
 /* Transform expr:((fn formals) body) into the form
@@ -114,7 +112,7 @@ void compVariableReference (Num flags) {
    yet.  Would rather implement a macro transformation facility.
 */
 void compTransformDefineFunction (void) {
-	DB("-->%s <= ", __func__);
+	DB("::"STR, __func__);
 	r5 = cdr(expr);  /* Function's body. */
 	expr = car(expr);
 	r3 = car(expr); /* Function's name. */
@@ -125,8 +123,8 @@ void compTransformDefineFunction (void) {
 	r1=r0;      r2=null; objCons12(); /* ((lambda formals body)) */
 	r1=r3;      r2=r0;   objCons12(); /* (fn (lambda formals body)) */
 	
-	DB("<--%s <= ", __func__);
-	DBE wscmWrite(expr, stdout);
+	DB(" --"STR" =>", __func__);
+	DBE wscmWrite(expr, stderr);
 }
 
 
@@ -136,7 +134,7 @@ void compTransformDefineFunction (void) {
    current working environment.
 */
 void compDefine (Num flags) {
-	DB("-->compDefine");
+	DB("::"STR, __func__);
 
 	if (flags & NODEFINES) {
 		//CompError = 1;
@@ -175,7 +173,7 @@ void compDefine (Num flags) {
 		env = pop();
 	}
 
-	DB("<--compDefine");
+	DB("  --"STR, __func__);
 	return;
 }
 
@@ -234,16 +232,16 @@ void compTransformInternalDefinitions(void) {
 
 	/* Save lambda body. */
 	while (objIsPair(expr) && objIsPair(car(expr)) && sdefine == caar(expr)) {
-			push(cdr(expr));
-			expr = cdar(expr); // Consider next expression and skip 'define.
-			if (objIsPair(car(expr))) {
-				compTransformDefineFunction(); // Returns (fn (lambda formals body))
-			} else {
-				r0=expr;
-			}
-			expr = pop();
-			push(r0);
-			definitionsCount++;
+		push(cdr(expr));
+		expr = cdar(expr); // Consider next expression and skip 'define.
+		if (objIsPair(car(expr))) {
+			compTransformDefineFunction(); // Returns (fn (lambda formals body))
+		} else {
+			r0=expr;
+		}
+		expr = pop();
+		push(r0);
+		definitionsCount++;
 	}
 
 	/* expr is now pointing at body of function.  If there were any internal

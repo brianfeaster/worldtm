@@ -443,8 +443,7 @@ void objGCPost (void) {
 void objInitialize (Func scheduler) {
  Int i;
  Num n;
-	DB("::%s", __func__);
-	DB("  initializing memory module");
+	DB("::"STR, __func__);
 	asmInitialize(scheduler, objGCPre, objGCPost, objDump);
 	memInitialize(0, 0);
 	/* These primitive types are also external (display) strings. */

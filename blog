@@ -3398,3 +3398,18 @@ Cleaning up debug message facility.  The scheduler doesn't handle interrupt
 spawned threads very well.  I need to rethink the structure and order of the
 scheduler and thread creation.  Threads can be spawned from another thread
 or via an interrupt handler.
+
+
+
+Fri Jul  8 00:33:20 EDT 2011
+
+While implementing agents, I have been including simple movement logic in a
+threaded loop "inside" the entity class.  The thread tends to keep running
+even during or after a shutdown causing the World Scheme process to crash.
+Separate threaded entity logic needs to be abstracted better to handle proper
+and improper process termination.  It would be better to handle the worst case.
+
+Perhaps these hacks are just that.  The entities and their threds should stick
+to the IPC mechanism and not try and communicate directly with each other at
+World Scheme environment level.  They are living and working in kernel space
+when they should be in their own protected user space.
