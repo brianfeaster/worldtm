@@ -473,6 +473,7 @@
   (define ViewportPutc       (or NOVIEWPORT (myViewport 'putc)))
   (define (ViewportPuts . l) (or NOVIEWPORT (for-each (myViewport 'puts) l)))
   (define (ViewportDisplay . e) (or NOVIEWPORT (for-each (lambda (x) (for-each (myViewport 'puts) (display->strings x))) e)))
+  (define UnknownEntity (Sprite 1 1 (vector #(0 7 #\? 0 7 #\?))))
   ; Members
   (define DebugDumpFlag #f)
   (define circularize #t)
@@ -585,7 +586,7 @@
     (if (eq? MAPSCROLL 'never) (set! centerMap #f)) ; Global toggle to disable map scrolling
     (if (inBlockInField? y x) ; TODO this should allow one or the other old/new coordinate.  Also moveCell moveEntity seem to be overlapping in functionality.
     (letrec ((entity ((myEntityDB 'get) dna))
-             (sprite (entity 'sprite))
+             (sprite (if entity (entity 'sprite) UnknownEntity)) ; A non existant entity still gets rendered
              (h (sprite 'height))
              (w (sprite 'width))
              (coordinates (sprite 'coordinates))) ; List of the sprites glyph coordinates
@@ -1244,7 +1245,7 @@
                    ((eqv? command "433")    (cmd433            parameters)) ; ERR_NICKNAMEINUSE
                    ((eqv? command "JOIN")   (cmdJOIN    prefix parameters))
                    ((eqv? command "PART")   (cmdPART    prefix parameters))
-                   ((eqv? command "QUIT")   (cmdQUIT    prefix))))
+                   ((eqv? command "QUIT")   (cmdQUIT    prefix parameters))))
            (Debug "\r\nmsgsDispatcher: not a valid parsed IRC message: " ircMsg))
          (msgsDispatcher)))))
    (define (IPCHandlerVoice adna level text) ; Override parent's function

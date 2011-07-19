@@ -3413,3 +3413,6 @@ Perhaps these hacks are just that.  The entities and their threds should stick
 to the IPC mechanism and not try and communicate directly with each other at
 World Scheme environment level.  They are living and working in kernel space
 when they should be in their own protected user space.
+
+
+The entity DB should be non-mutating.  Entities will be returned whole.

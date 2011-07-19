@@ -14,6 +14,7 @@
 (load "ultima4.cells")
 (load "scrabble.scm") ; TODO temporary
 
+(define HUB-PORT 7154)
 (define KITTEHBRAIN  #f)
 (define ActivityTime (time))
 (define SHOWBUTTONS #f)
@@ -1118,7 +1119,7 @@
 ;;
 
 ; Create ipc object.  Pass in a serializer which prints to the console window.
-(define ipc (Ipc WinConsoleDisplay 7155))
+(define ipc (Ipc WinConsoleDisplay HUB-PORT))
 (ipc '(set! Debug #f))
 
 ; TODO an often used call by the un-refactored code

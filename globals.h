@@ -1,7 +1,7 @@
 #ifndef _GLOBALS_H
 #define _GLOBALS_H
 
-/* Register aliases.
+/* Global virtual machine register aliases.
 */
 #define blocked    r10 /* WSCM: I/O and Semaphore blocked threads */
 #define threads    r11 /* WSCM: Thread vector */
@@ -96,10 +96,13 @@ typedef void (*Func2) (Obj a, Obj b);
 #define OBJ0 "%016lx"
 
 
-/* Scheme object types.  Byte with highest bit signifying a memory vector
-   object.  The lower 56 bits are used in descriptors for the object length
-   either number of bytes in the array or the vector size.
- */
+#define NL "\n"
+
+
+/* Scheme object type field used by the scanner and obj module.  A byte with
+   highest bit signifying the base type which is either a "vector" or "array"
+   object.
+*/
 #define TBASEARRAY     0x00l
 #define TFALSE         0x01l
 #define TTRUE          0x02l
@@ -129,30 +132,8 @@ typedef void (*Func2) (Obj a, Obj b);
 #define TSTACK         0xfel
 #define TSHADOW        0xffl
 
-
-/* Compiler flags.  Make sure only 20 bits are used as garbage collector
-   assumes vector object pointers less than 2^20 are numeric constants.
-   This doesn't make sense now since the compiler flag register is passed
-   in C land.
-*/
-static const Num TAILCALL  = 0x00010000;
-static const Num NODEFINES = 0x00020000;
-/*
-static const Num R8 =        0x00000100;
-static const Num R7 =        0x00000080;
-static const Num R6 =        0x00000040;
-static const Num R5 =        0x00000020;
-static const Num R4 =        0x00000010;
-static const Num R3 =        0x00000008;
-static const Num R2 =        0x00000004;
-static const Num R1 =        0x00000002;
-static const Num R0 =        0x00000001;
-*/
-
 #define MAX_THREADS 1024
 
 #define ASSERT assert
-
-#define NL "\n"
 
 #endif
