@@ -2,6 +2,7 @@
 #define DEBUG_SECTION "ASM "
 #include <stdarg.h>
 #include <string.h>
+#include <stdlib.h> // exit()
 #include "asm.h"
 #include "debug.h"
 
@@ -15,12 +16,45 @@ void asmAsm (Obj o,...) {
 	while (obj!=END) {
 		DB(INDENT1 INT4":"OBJ, memStackLength(asmstack), obj);
 		memStackPush(asmstack, obj);
-		obj=va_arg(ap, Obj);
+		obj = va_arg(ap, Obj);
 	}
 	va_end(ap);
 	DB (INDENT1 "--" STR, __func__); 
 }
 
+void asmSkipRedundantPopsAndPushes (Num opcodeStart) {
+ Num len;
+ Num opcodeEnd;
+ Num opcodeWrite;
+ Num i;
+	/* Remove occurrances of pop_15/1e/1d push_1d/1e/15 */
+	// Debug dump un-assembled code stack.
+	memNewVector(TCODE, len=(memStackLength(asmstack)-opcodeStart));
+	memcpy(r0, asmstack+ObjSize, len*ObjSize);
+	vmDebugDumpCode(r0, stderr);
+
+	opcodeEnd = memStackLength(asmstack)+1;
+	opcodeWrite = opcodeStart+1l;
+	for (i=opcodeWrite; i<opcodeEnd+6; i++) {
+		printf ("looking "INT"\r\n", i);
+		if (POP15 == memVectorObject(asmstack, i) &&
+		    POP1E == memVectorObject(asmstack, i+1) &&
+		    POP1D == memVectorObject(asmstack, i+2) &&
+		    PUSH1D == memVectorObject(asmstack, i+3) &&
+		    PUSH1E == memVectorObject(asmstack, i+4) &&
+		    PUSH15 == memVectorObject(asmstack, i+5)) {
+			i += 6;
+			fprintf (stderr, "\r\nFound it at "INT"\r\n", opcodeWrite);
+			vmDebugDumpCode(asmstack, stderr);
+			exit(0);
+		} else {
+			memVectorSet(asmstack, opcodeWrite++, memVectorObject(asmstack, i));
+		}
+	}
+	// 'Pop' unused opcodes off stack leaving the freshly compiled code behind.
+	*(Obj*)asmstack = asmstack + 8 * (opcodeWrite-1);
+
+}
 
 void asmCompileAsmstack (Num opcodeStart) {
  Num j, i, opcodeEnd, opcodeWrite, labelCount=0, addrCount=0;
@@ -34,37 +68,13 @@ void asmCompileAsmstack (Num opcodeStart) {
 	/* Store for instruction addresses and LABELS */
 	memNewVector(TVECTOR, 80); r3=r0;
 
-	/* Remove occurrances of pop_15/1e/1d push_1d/1e/15
-	// Debug dump un-assembled code stack.
-	memNewVector(TCODE, len=(memStackLength(asmstack)-opcodeStart));
-	memcpy(r0, asmstack+ObjSize, len*ObjSize);
-	vmDebugDumpCode(r0, stderr);
-
-	opcodeEnd = memStackLength(asmstack)+1;
-	opcodeWrite = opcodeStart+1l;
-	for (i=opcodeWrite; i<opcodeEnd; i++) {
-		printf ("looking "INT"\r\n", i);
-		if (POP15 == memVectorObject(asmstack, i)    && POP1E == memVectorObject(asmstack, i+1)  && POP1D == memVectorObject(asmstack, i+2) &&
-		    PUSH1D == memVectorObject(asmstack, i+3) && PUSH1E == memVectorObject(asmstack, i+4) && PUSH15 == memVectorObject(asmstack, i+5)) {
-			i += 6;
-			fprintf (stderr, "\r\nFound it at "INT"\r\n", opcodeWrite);
-			vmDebugDumpCode(asmstack, stderr);
-			exit(0);
-		} else {
-			memVectorSet(asmstack, opcodeWrite++, memVectorObject(asmstack, i));
-		}
-	}
-	// 'Pop' unused opcodes off stack leaving the freshly compiled code behind.
-	*(Obj*)asmstack = asmstack + 8 * (opcodeWrite-1);
-	 */
-
 	/* Compress stack of opcodes onto itself moving the label and address info
 	   to their respective lists.  Iterating over the stack but treating it
 	   like a vector thus the shifting by one (skipping over the stack objects
 	   pointer.
 	*/
 	opcodeEnd = memStackLength(asmstack)+1;
-	opcodeWrite = opcodeStart+1;
+	opcodeWrite = opcodeStart;
 	for (i=opcodeWrite; i<opcodeEnd; i++) {
 		r0 = memVectorObject(asmstack, i);
 		if (r0 == LABEL) {

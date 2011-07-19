@@ -463,7 +463,6 @@ void compLambdaBody (Num flags) {
 
 	asm(RET);
 	asmNewCode(); /* Transfer code stack to fixed size code vector. */
-	//vmDebugDump();
 
 	/* Revert back to code block we're generating. */
 	asmstack=pop();
@@ -622,7 +621,7 @@ void compVectorRef (Num flags) {
 		asm(POP1);
 		asm(SYSI); asm(compVerifyVectorRef);
 		/* Load object's integer value into register. */
-		asm(LDI20); asm(0l); // This fails runtime type check.
+		asm(LDI20); asm(0l); /* This fails runtime type check */
 		asm(LD012);
 	}
 	DB("<--%s", __func__);
@@ -1256,15 +1255,15 @@ void compAIf (Num flags) {
 	DB("   setting branch on false:%03x brt TFALSE %02x", falseBraAddr, (8*(trueContAddr-falseBraAddr)));
 	memVectorSet(asmstack, falseBraAddr, (Obj)(8*(trueContAddr-falseBraAddr)));
 
-	/* Compile alternate.  Might not be specified in expression so just return (). */
+	/* Compile alternate.  Might not be specified in expression so just return #f. */
 	DB("   compiling alternate");
 	expr = pop();
-	if (expr == null) {
-		//asm(MVI0); asm(null);
-	}
-	else {
-		expr = car(expr); /* Consider alternate expression. */
+	if (objIsPair(expr)) {
+		 /* Compile alternate expression. */
+		expr = car(expr);
 		compExpression(flags);
+	} else {
+		/* reg 0 already #f from test condition */
 	}
 
 	/* Fill in the "branch after true block" field. */

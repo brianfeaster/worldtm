@@ -95,7 +95,8 @@ int main (int argc, char *argv[]) {
 	return 0;
 
 	/* REPL in a blocking C loop */
-	//wscmCReadEvalPrintLoop(); return 0;
+	wscmCReadEvalPrintLoop();
+	return 0;
 
 	/* Bind symbol 'input and assign the stdin port or the filename passed as arg
 	   1 to wscm. */

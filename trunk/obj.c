@@ -59,21 +59,18 @@ void tree_copy (void) { /* COPIES TREE ACC INTO ACC */
 }
 #endif
 
-/* Creates a new integer object in r0.
+/* Creates a new integer object in r0.  A few small
+   integers are cached and used instead.
 */
 void objNewInt  (Int i) {
-/* Attempt at implementing static integers. */
 	if (-1023l<=i && i<=1024l) {
+		/* Lookup cached integer */
 		r0 = ((Obj*)staticIntegers)[i+1023];
-		assert (*(Int*)r0 == i);
 	} else {
+		/* Generate a new integer object */
    	memNewArray(TINTEGER, sizeof(Int));
    	*(Int*)r0 = i;
 	}
-/*
-   memNewArray(TINTEGER, sizeof(Int));
-   *(Int*)r0 = i;
-*/
 }
 
 /* Create and set object in r0 to immediate signed integer value in r1.
@@ -188,8 +185,6 @@ void objCons23 (void) {
 	memVectorSet(r0, 1, r3);
 }
 
-/* TODO should a doubly linked list be its own object type?
-*/
 void objNewDoublyLinkedListNode (void) {
 	memNewVector(TVECTOR, 3);
 	memVectorSet(r0, 0, null);
@@ -197,17 +192,17 @@ void objNewDoublyLinkedListNode (void) {
 	memVectorSet(r0, 2, r0);
 }
 
-/* Create uninitialized vector in r0 of length r1:immediate
-*/
 void objNewVector (Num len) {
    memNewVector(TVECTOR, len);
 }
+
+/* Create uninitialized vector in r0 of length imm:r1
+*/
 void objNewVector1 (void) {
    memNewVector(TVECTOR, (LengthType)r1);
 }
 
-/* Create new closure in r0 which is (<code> . <environment>)
-   Code pased in r1.
+/* Create new closure in r0 which is (r1=<code> . r16=<environment>)
 */
 void objNewClosure1Env (void) {
    memNewVector(TCLOSURE, 2);
@@ -238,12 +233,6 @@ Num objIsPair (Obj o) {
 }
 
 
-/* caar <=> (car (car x)) <=>
-    LDI0 #<binding x>
-    BRT  TPAIR a
-    ; error code here
-    a: LD00 hmmmm LD needs an offset value
-*/
 Obj  car  (Obj o) { return memVectorObject(o, 0);}
 Obj  caar (Obj o) { return car(car(o));}
 Obj  cdar (Obj o) { return cdr(car(o));}
@@ -445,7 +434,6 @@ void objInitialize (Func scheduler) {
  Num n;
 	DB("::"STR, __func__);
 	asmInitialize(scheduler, objGCPre, objGCPost, objDump);
-	memInitialize(0, 0);
 	/* These primitive types are also external (display) strings. */
 	memNewStatic(TNULL, 2);    null=r0;    memcpy(r0, "()", 2);
 	/* This is a strange object with a descriptor and no content.

@@ -159,6 +159,7 @@
 ;; An entity database.  List of entity/avatar objects.
 ;; TODO use hashtable
 ;; TODO port to map.scm
+;; TODO this is not an assoc list.  It's just a list of entities.
 ;;
 ; Association list of entites to their DNA values.
 (define (EntityDB)

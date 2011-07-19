@@ -100,10 +100,10 @@ int main (int argc, char *argv[]) {
 
 	objTestDoublyLinkedList();
 
+	goto done;
 	//memDebugDumpHeapStructures();
 
 	/* Assemble a new program. */
-/*
 	asmAsm(
 		SYSI, helloWorld,
 		MVI1, r1,
@@ -126,12 +126,12 @@ int main (int argc, char *argv[]) {
 		BRA, ADDR, "top",
 		END
 	);
-	asmCompile(0);
+	asmCompileAsmstack(0);
 	asmNewCode();
-	vmDebugDump();
+	vmDebugDumpCode(r0,stdout);
 	code=r0;  ip=0;  vmRun();
 	memGarbageCollect();
-	memDebugDumpHeapStructures();
+	memDebugDumpHeapHeaders(stdout);
 	goto done;
 	memStackPush(stack, r0);
 	memGarbageCollect();
@@ -143,6 +143,5 @@ int main (int argc, char *argv[]) {
 	memGarbageCollect();
 	memGarbageCollect();
 done:
-*/
 	return 0;
 }

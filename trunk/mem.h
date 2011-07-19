@@ -1,11 +1,10 @@
-/*
- Automatic compacting object heap system.
+/* Automatic compacting object heap system
  
- Allows one to create one of two basic automatically memory managed heap
- objects:  an array of bytes and a vector of said objects.  The module will
- automatically reclaim unused memory when necessary so no implicit removal
- of objects are required.  Currently, a generational bi-heap collector is
- implemented.
+   Allows one to create one of two basic automatically memory managed heap
+   objects:  An "array" of bytes and a "vector" of arrays and vectors.  The
+   module will automatically reclaim unused memory when necessary so no implicit
+   removal of objects are required.  Currently, a generational bi-heap collector
+   is implemented.
 */ 
 #ifndef _MEM_H
 #define _MEM_H
@@ -13,7 +12,15 @@
 #include <stdio.h>
 #include "globals.h"
 
-#define MEMOBJECTMAXSIZE 0xffffffffl 
+/* Byte size of a Linux virtual memory block and the resolution of mmap.
+   0x001000 = 2^12 = 4Kb
+*/
+#define BLOCK_BYTE_SIZE ((Num)0x1000)
+
+#define ObjSize sizeof(Obj)
+
+/* Limit the size of any object to 16Mb (2^24) objects for sanity. */
+#define MEMOBJECTMAXSIZE ((Num)0x1000000)
 
 /* This must be called before usage of this library.  Two functions are passed
    (or NULL for either) and are called before and after every GC.
@@ -32,7 +39,6 @@ typedef Num Descriptor;
 typedef Num Type;       // Highest byte of descriptor.
 typedef Num LengthType; // Remaining bytes of descriptor.
 
-extern const Num ObjSize;
 
 
 /* Registers:  These make up the root set for the garbage collector.  All
@@ -44,10 +50,9 @@ extern Obj r0,  r1,  r2,  r3,  r4,  r5,  r6,  r7,
            r10, r11, r12, r13, r14, r15, r16, r17,
            r18, r19, r1a, r1b, r1c, r1d, r1e, r1f;
 
-extern Num memGCFlag; // Flag set if in the middle of a GC.
-
 
 Num memArrayLengthToObjectSize  (LengthType length);
+Num memVectorLengthToObjectSize  (LengthType length);
 
 /* Object Creators that store new object in r0.
 */
@@ -114,4 +119,4 @@ void memObjStringRegister (Obj obj, char* str);
 #define memObjStringSet(o) memObjStringRegister(o, #o);
 
 
-#endif
+#endif /* _MEM_H */

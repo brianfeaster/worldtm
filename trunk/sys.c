@@ -1562,7 +1562,7 @@ extern Num garbageCollectionCount;
 void sysFun (void) {
 	debugDumpThreadInfo ();
 	//fprintf (stderr, "Stacklength=[%d]", memStackLength(stack));
-	//memDebugDumpHeapHeaders(stderr);
+	memDebugDumpHeapHeaders(stderr);
 	//memDebugDumpYoungHeap(stderr);
 	//objNewInt((Int)garbageCollectionCount);
 }
