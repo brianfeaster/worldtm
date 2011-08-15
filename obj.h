@@ -1,7 +1,33 @@
 #ifndef _OBJ_H
 #define _OBJ_H
+#include "globals.h"
 
-#include "asm.h"
+
+/* Scheme object types used by the scanner and obj module.  A byte with
+   highest bit signifying the base type which is either a "vector" or "array"
+   object.
+*/
+#define TFALSE         0x00l
+#define TTRUE          0x01l
+#define TNULL          0x02l
+#define TNULLVEC       0x03l
+#define TNULLSTR       0x04l
+#define TEOF           0x05l
+#define TCHAR          0x06l
+#define TSTRING        0x07l
+#define TSYMBOL        0x08l
+#define TINTEGER       0x09l
+#define TREAL          0x0al
+
+#define TPAIR          0x80l
+#define TVECTOR        0x81l
+#define TCLOSURE       0x82l
+#define TCONTINUATION  0x83l
+#define TPORT          0x84l
+#define TSOCKET        0x85l
+#define TSYSCALL       0x86l
+
+
 
 /* Object constants.
 */
@@ -44,8 +70,9 @@ void objCons23   (void);
 void objNewDoublyLinkedListNode (void); /* Doubly linked list node.  #(item prev next) */
 void objNewVector  (Num len);
 void objNewVector1 ();
-void objNewClosure1Env (void);
+
 void objNewPort (void);
+int objPortDescriptor (Obj p);
 
 /* Object operations
  */
@@ -59,8 +86,6 @@ Obj cdr (Obj o);
 Obj cadr (Obj o);
 Obj cddr (Obj o);
 
-void push (Obj o);
-Obj  pop  (void);
 
 Num  objListLength (Obj o);
 Num  objDoublyLinkedListLength (Obj o);
@@ -76,6 +101,6 @@ void objListToVector (void);
 */
 void objDump (Obj a, FILE *stream);
 
-void objInitialize (Func scheduler);
+void objInitialize (void);
 
 #endif

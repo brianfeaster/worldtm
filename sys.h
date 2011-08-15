@@ -1,59 +1,77 @@
 #ifndef _SYS_H
 #define _SYS_H
-
 #include <stdio.h>
-#include <math.h>   /* sqrt() */
-#include <unistd.h>
-#include <limits.h>
-#include <fcntl.h>  /* fcntl() */
-#include <stdlib.h> /* random() */
-#include <unistd.h> /* write() */
-#include <string.h> /* strlen() */
-#include <sys/time.h> /* gettimeofday() */
-#include <errno.h> /* for errno */
-#include <sys/types.h>  /* for socket() */
-#include <sys/socket.h>
-#include <netinet/in.h> /* for htons() */
-#include <netdb.h>      /* for gethostbyname() */
-#include <arpa/inet.h>  /* for inet_ntoa() */
-#include <time.h>  /* for time() */
-#include <sys/poll.h>
+#include "globals.h"
 
-#include <signal.h>     /* for signal() */
-#include <sys/ioctl.h>  /* for ioctl() and struct winsize*/
 
-#include "scanner.h"
-#include "obj.h"
-#include "comp.h"
+void sysNewClosure1Env (void);
 
-Int wscmWriteR (Obj a, Num islist, FILE *stream, Int max);
-Num wscmWrite (Obj a, FILE *stream);
-Num wscmWriteMax (Obj a, FILE *stream, Int max);
-void wscmDisplayR (Obj a, Num islist, FILE *stream);
-void wscmDisplay (Obj a, FILE *stream);
-void sysDumpEnv (Obj env);
-void wscmTGEFind (void);
-void wscmInsertThread (Obj t, Obj q);
-void wscmRemoveThread (Obj t);
-void wscmMoveToQueue (Obj thread, Obj queue, Obj state);
-void wscmNewThread (void);
-void wscmUnRun (void);
-void wscmRun (void);
-void wscmSleepThread (void);
-void wscmScheduleSleeping (void);
-void wscmScheduleBlocked (void);
-void wscmScheduler (void);
-void debugDumpThreadInfo (void);
-void sysError (void);
-void sysUnthread (void);
-void sysOpenFile (void);
-void sysOpenSemaphore (void);
-void sysSchedule (void);
-void catchSignal (int sig);
-void sysSignal (void);
-void wscmDefine (char* sym);
-void wscmInitialize (void);
-void sysDumpCallStackCode (void);
-void sysDebugger (void);
+/* Scanner state fields */
+#define FINALSTATE  0x80l
+#define PUSHBACK    0x40
+
+/* Scanner final states including states requiring a character push-back */
+#define SOPENPAREN        FINALSTATE|0x00
+#define SSTRING           FINALSTATE|0x01
+#define SVECTOR           FINALSTATE|0x02
+#define SQUOTE            FINALSTATE|0x03
+#define SCLOSEPAREN       FINALSTATE|0x04
+#define STRUE             FINALSTATE|0x05
+#define SFALSE            FINALSTATE|0x06
+#define SCHARACTER        FINALSTATE|0x07
+#define SEOF              FINALSTATE|0x08
+#define SQUASIQUOTE       FINALSTATE|0x09
+#define SUNQUOTESPLICING  FINALSTATE|0x0a
+#define SUNQUOTE FINALSTATE|PUSHBACK|0x0b
+#define SBINARY  FINALSTATE|PUSHBACK|0x0c
+#define SSYMBOL  FINALSTATE|PUSHBACK|0x0d
+#define SHEX     FINALSTATE|PUSHBACK|0x0e
+#define SOCT     FINALSTATE|PUSHBACK|0x0f
+#define SDOT     FINALSTATE|PUSHBACK|0x10
+#define SREAL    FINALSTATE|PUSHBACK|0x11
+#define SINTEGER FINALSTATE|PUSHBACK|0x12
+
+/* Useful_functions */
+s64 sysTime (void);
+
+/* Scanning_parsing */
+extern Chr yytext[];
+extern Num yyleng;
+
+Num parseString (Str str);
+void yyrestart(int fd);
+void yy_scan_string(Str buff);
+void yy_scan_bytes(u8 *buff, Num len);
+Num transition (Num ch, Num state);
+Num yylex (void);
+void yyparse (void);
+
+/* Environment_functions */
+void sysTGEFind (void);
+void sysTGEBind (void);
+Int sysEnvFind (void);
+void sysEnvGet (void);
+void wscmDefineSyscall (Func function, char* symbol);
+
+/* Serializers_internal */
+void sysSerializeInteger (Int theint, Num base);
+Int sysWriteR (Obj a, Num islist, FILE *stream, Int max);
+Num sysWrite (Obj a, FILE *stream);
+Num sysWriteMax (Obj a, FILE *stream, Int max);
+void sysDisplayR (Obj a, Num islist, FILE *stream);
+void sysDisplay (Obj a, FILE *stream);
+void sysDumpTGE (void);
+void sysDumpEnv (Obj e);
+
+/* Networking_stuff */
+void sysOpenRemoteSocket (void);
+void sysOpenLocalSocket (void);
+void sysAcceptRemoteStream (void);
+void sysAcceptLocalStream (void);
+void sysRecv (void);
+void sysSend (void);
+
+/* Initialization_stuff */
+void sysInitialize (void);
 
 #endif

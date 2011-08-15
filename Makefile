@@ -15,47 +15,56 @@ LDFLAGS = -lm
 # -lm       Math library (probably trig functions).
 # -lcrypto  Crypto library for md5sum hash function.
 
-MEMTOBJS  = memt.o        mem.o
-OBJTOBJS  = objt.o        mem.o obj.o vm.o asm.o
-VMTOBJS   = vmt.o         mem.o       vm.o
-ASMTOBJS  = asmt.o        mem.o obj.o vm.o asm.o
-WSCMTOBJS = wscmt.o sys.o mem.o obj.o vm.o asm.o comp.o scanner.o
-WSCMOBJS  = wscm.o  sys.o mem.o obj.o vm.o asm.o comp.o scanner.o
+MEMTOBJS  = memt.o                                     mem.o
+VMTOBJS   = vmt.o                                 vm.o mem.o
+ASMTOBJS  = asmt.o                          asm.o vm.o mem.o
+OBJTOBJS  = objt.o                    obj.o            mem.o
+SYSTOBJS  = syst.o              sys.o obj.o            mem.o
+OSTOBJS   =  ost.o         os.o sys.o obj.o            mem.o
+COMPTOBJS = compt.o comp.o os.o sys.o obj.o asm.o vm.o mem.o
+WSCMTOBJS = wscmt.o comp.o      sys.o obj.o asm.o vm.o mem.o
+
+WSCMOBJS  =  wscm.o comp.o os.o sys.o obj.o asm.o vm.o mem.o
 
 wscm: $(WSCMOBJS)
 
-wscm.o: sys.h comp.h obj.h asm.h vm.h mem.h globals.h debug.h scanner.h
+mem.o:                                     mem.h globals.h debug.h
 
-comp.o: comp.h obj.h asm.h vm.h mem.h globals.h debug.h
+vm.o:                                 vm.h mem.h globals.h debug.h
 
-obj.o:         obj.h asm.h vm.h mem.h globals.h debug.h
+asm.o:                          asm.h vm.h mem.h globals.h debug.h
 
-asm.o:               asm.h vm.h mem.h globals.h debug.h
+obj.o:                    obj.h            mem.h globals.h debug.h
 
-vm.o:                      vm.h mem.h globals.h debug.h
+sys.o:              sys.h obj.h            mem.h globals.h debug.h
 
-mem.o:                          mem.h globals.h debug.h
+os.o:          os.h sys.h obj.h            mem.h globals.h debug.h
 
-scanner.o:     obj.h            mem.h globals.h         scanner.h
+comp.o: comp.h os.h sys.h obj.h asm.h vm.h mem.h globals.h debug.h
 
-build: globals.h debug.h mem.h vm.h asm.h obj.h comp.h sys.h scanner.h mem.c vm.c asm.c obj.c comp.c sys.c wscm.c scanner.c
-	cat globals.h debug.h mem.h vm.h asm.h obj.h comp.h sys.h scanner.h mem.c vm.c asm.c obj.c comp.c sys.c wscm.c scanner.c > build.c ; gcc $(CFLAGS) $(LDFLAGS) build.c -o wscm
+wscm.o: comp.h os.h sys.h obj.h asm.h vm.h mem.h globals.h debug.h
+
+build: globals.h debug.h mem.h vm.h asm.h obj.h sys.h os.h comp.h mem.c vm.c asm.c obj.c sys.c os.c comp.c wscm.c
+	cat globals.h debug.h mem.h vm.h asm.h obj.h sys.h os.h comp.h mem.c vm.c asm.c obj.c sys.c os.c comp.c wscm.c > build.c ; gcc $(CFLAGS) $(LDFLAGS) build.c -o wscm
 
 memt: $(MEMTOBJS)
-
-objt: $(OBJTOBJS)
 
 vmt: $(VMTOBJS)
 
 asmt: $(ASMTOBJS)
 
+objt: $(OBJTOBJS)
+
+syst: $(SYSTOBJS)
+
+ost: $(OSTOBJS)
+
+compt: $(COMPTOBJS)
+
 wscmt: $(WSCMTOBJS)
 
 memtest: memt
 	./memt
-
-objtest: objt
-	./objt
 
 vmtest: vmt
 	./vmt
@@ -63,20 +72,32 @@ vmtest: vmt
 asmtest: asmt
 	./asmt
 
+objtest: objt
+	./objt
+
+systest: syst
+	./syst
+
+ostest: ost
+	./ost
+
+comptest: compt
+	./compt
+
 wscmtest: wscmt
 	./wscmt
 
 worldscheme: wscm
 	./wscm scmt.scm
 
-tests: memt objt vmt asmt wscmt
+tests: memt vmt asmt objt syst ost compt wscmt
 
-test: memtest objtest vmtest asmtest wscmtest worldscheme
+test: memtest vmtest asmtest objtest systest ostest comptest wscmtest worldscheme
 
 linecount:
-	wc Makefile asm.c asm.h asmt.c comp.c comp.h debug.h globals.h mem.c mem.h memt.c obj.c obj.h objt.c scanner.c scanner.h vm.c vm.h vmt.c sys.h sys.c wscm.c wscmt.c
+	wc Makefile globals.h debug.h mem.h vm.h asm.h obj.h sys.h os.h comp.h mem.c vm.c asm.c obj.c sys.c os.c comp.c wscm.c memt.c vmt.c asmt.c objt.c syst.c ost.c compt.c wscmt.c
 
 clean:
-	rm $(WSCMOBJS) $(WSCMTOBJS) $(MEMTOBJS) $(OBJTOBJS) $(VMTOBJS) $(ASMTOBJS) wscm wscmt asmt vmt objt memt build.o build.c
+	rm $(MEMTOBJS) $(VMTOBJS) $(ASMTOBJS) $(OBJTOBJS) $(SYSTOBJS) $(OSTOBJS) $(COMPTOBJS) $(WSCMTOBJS) $(WSCMOBJS) memt vmt asmt objt syst ost compt wscmt wscm build.c build.o
 
 

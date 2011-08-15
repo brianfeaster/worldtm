@@ -1,18 +1,17 @@
+#define DEBUG 0
+#define DB_DESC "WSCMTEST "
 #include <stdio.h>
 #include <unistd.h>
 #include <stdlib.h>
 #include <assert.h>
 #include "sys.h"
-#define DEBUG 0
-#define DEBUG_SECTION "WSCMTEST "
+#include "comp.h"
 #include "debug.h"
 
-
+extern void sysOpenSemaphore (void);
 extern void sysIllegalOperator();
-extern void sysTGELookup();
 extern void sysTGEMutate();
 extern void wscmInitialize();
-extern void objNewClosure1Env();
 extern void vmVm(Int cmd);
 
 
@@ -26,7 +25,6 @@ void testGoto() {
 	return;
 }
 
-Num wscmWrite (Obj a, FILE *stream);
 extern int GarbageCollectionMode;
 
 void objVerifySemaphore (void) {
@@ -34,11 +32,35 @@ void objVerifySemaphore (void) {
 	push(r0);
 	sysOpenSemaphore();
 	//memDebugDumpAll(stdout);
-	wscmWrite(r0, stdout);
+	sysWrite(r0, stdout);
 	r0=r1=null;
 	GarbageCollectionMode = 1;
    memGarbageCollect();
 	//memDebugDumpAll(stdout);
+}
+
+/* Numerical equivalence. */
+void sysEquals (void) {
+	r1=pop();  r0=pop();
+	r0 = TINTEGER == memObjectType(r0)
+	     && TINTEGER == memObjectType(r1)
+	     && *(Int*)r0 == *(Int*)r1
+	     ? true : false;
+}
+
+void wscmtDisplay (void) {
+ Int fd=1;
+ FILE *stream=NULL;
+
+	if ((Int)r1==2) fd=*(Int*)pop(); /* Descriptor. */
+
+	if (fd==1) stream = stdout;
+	if (fd==2) stream = stderr;
+	assert(NULL != stream);
+
+	sysDisplay(r0=pop(), stream);
+
+	return;
 }
 
 
@@ -48,7 +70,15 @@ int main (void) {
 	printf("\e[25?l");
 	testGoto();
 
-	wscmInitialize();
+	objInitialize();
+	compInitialize();
+
+	/* Create empty global environment list. */
+	objNewSymbol((Str)"TGE", 3);
+	r1=r0;  r2=null;  objCons12();  env=tge=r0;
+
+	wscmDefineSyscall (wscmtDisplay, "display");
+	wscmDefineSyscall (sysEquals, "=");
 
 	// Expression to evaluate.
 	//yy_scan_string((Str)"(begin (display \"\n\") (fun '*) (display \"The end.\n\"))");
@@ -72,5 +102,5 @@ int main (void) {
 	return 0;
 }
 
-#undef DEBUG_SECTION
+#undef DB_DESC
 #undef DEBUG

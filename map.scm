@@ -15,7 +15,7 @@
 ;;
 ;; Lord British's castle (108 86)
 ;;
-(define HUB-PORT 7154)
+(define HUB-PORT 8155)
 (define DNA 17749)
 (define MYNAME "MAP AGENT")
 (define ActivityTime (time)) ; Used for the idle time with the 'who' expression
@@ -30,7 +30,7 @@
 ;; IPC
 ;;
 (load "ipc.scm") ; Includes adt.scm
-(define ipc (Ipc #f HUB-PORT)) ; Instead of #f can pass in a serializer for debug messages
+(define ipc (Ipc display HUB-PORT)) ; Instead of #f can pass in a serializer for debug messages
 (define ipcReader ((ipc 'newReader)))
 (define IpcWrite (ipc 'qwrite))
 
