@@ -4,14 +4,18 @@
 #include <assert.h>
 #include <sys/mman.h> /* mmap() */
 #include "mem.h"
-#define TEST(fn) (printf("Calling test: "#fn"()  "), fn(),printf("PASS\n"))
-extern int GarbageCollectionMode;
-extern Num memHeapLength (Num h);
 
-/* Call this for a pretty dump of the registers and heap objects */
-void memtDebugDump  (void) {
-	 memDebugDumpAll (stdout);
-}
+#define TEST(fn) (printf("Calling test: "#fn"()  "), fn(),printf("PASS\n"))
+
+extern Num memHeapLength (Num h);
+Num TSYMBOL =0x01;
+Num TINTEGER=0x02;
+Num TSTRING =0x03;
+
+Num TPAIR   =0x80;
+Num TVECTOR =0x81;
+
+
 
 /* Verify the expected number of objects in each heap
  */
@@ -58,7 +62,7 @@ void memtSizeof (void) {
 
 
 
-/* Verify mmap returns  a memory block size of 4Kb/#x1000 bytes.
+/* Verify mmap returns a memory block size of 4Kb/#x1000 bytes.
    It does this by differencing the addresses of two consecutive calls.
 */
 void memtMmap (void) {
@@ -92,26 +96,24 @@ void memtObjectSize (void) {
 }
 
 
-
 /* Create some objects and push/pop them to the stack.
 */
 void memtVerifyObjectCreationAndCollection (void) {
- Num i, j;
-	memtVerifyHeapLengths(0, 0, 0, 0);
+ Chr i, j;
+	memtVerifyHeapLengths(0, 0, 1, 0);
 
 	memNewArray(TSYMBOL, 256); r1=r0;
 	memNewArray(TINTEGER, 4); r2=r0;
 	memNewArray(TINTEGER, 4); r3=r0;
 	memNewVector(TPAIR, 2); r4=r0;
-	memNewStack(); r1f=r0;
 
 	memtVerifyHeapLengths(0, 0, 5, 0);
 
-	memStackPush(r1f, r1);
-	memStackPush(r1f, r2);
-	memStackPush(r1f, r3);
-	memStackPush(r1f, r4);
-	memStackPush(r1f, r1f);
+	memPush(r1);
+	memPush(r2);
+	memPush(r3);
+	memPush(r4);
+	memPush(r1f);
 	assert(memStackLength(r1f) == 5);
 
 	memVectorSet(r4, 0, r1);
@@ -119,8 +121,8 @@ void memtVerifyObjectCreationAndCollection (void) {
 
 	for (i=0; i<16; i++) {
 		memNewArray(TINTEGER, 16);
-		memStackPush(r1f, r0);
-		for (j=0; j<16; j++) ((char*)r0)[j] = j+i;
+		memPush(r0);
+		for (j=0; j<16; j++) ((Chr*)r0)[j] = (Chr)(j+i);
 	}
 	assert(memStackLength(r1f) == 21);
 
@@ -209,7 +211,8 @@ void memtNewLargeVectorObject (void) {
 
 
 
-/* Allocate a simple object until the garbage collector is triggered
+/* Allocate a simple object repeatedly until the garbage collector is triggered.
+   One object should exist after collecting.
 */
 void memtAutomaticGarbageCollect (void) {
 	/* Called 0x40000 times */
@@ -230,10 +233,16 @@ int main (int argc, char *argv[]) {
 	/* Force a failure by passing -f to this program */
 	if (argc==2 && !strcmp(argv[1], "-f")) return -1;
 
+	setbuf(stdout,0);
 	printf ("--Welcome to unit test %s----------------\n", __FILE__);
 
-	setbuf(stdout,0);
-	memInitialize(memtPreGarbageCollect, NULL);
+	memInitialize(memtPreGarbageCollect, 0);
+
+	memRegisterType(TSYMBOL, "symbol");
+	memRegisterType(TINTEGER, "integer");
+	memRegisterType(TPAIR, "pair");
+	memRegisterType(TSTRING, "string");
+	memRegisterType(TVECTOR, "vector");
 
 	TEST(memtSizeof);
 	TEST(memtMmap);

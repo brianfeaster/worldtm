@@ -1,13 +1,12 @@
 #define DEBUG 0
-#define DEBUG_SECTION "OBJ "
+#define DB_DESC "OBJ "
 #include "debug.h"
-
 #include <stdio.h>
 #include <unistd.h>
 #include <string.h> /* memcpy */
 #include <assert.h>
-
 #include "obj.h"
+#include "mem.h"
 
 
 const Num HashTableSize=8191;
@@ -37,9 +36,9 @@ Num wscmDebug=0;
 Num hashpjw (Str s, Num len) {
  Num ret=0, mask;
 	while (len--) {
-		if ((mask=(ret=(ret<<4)+*s++)&0xf<<28)) ret^=(mask|mask>>24);
+		if ((mask=(ret=(ret<<4)+*s++)&(Num)0xf<<28)) ret^=(mask|mask>>24);
 	}
-	if ((mask=(ret=(ret<<4)+*--s)&0xf<<28)) ret^=(mask|mask>>24);
+	if ((mask=(ret=(ret<<4)+*--s)&(Num)0xf<<28)) ret^=(mask|mask>>24);
 	return ret;
 }
 
@@ -116,12 +115,12 @@ Num objNewSymbolBase (Str str, Num len, Num copyStrP) {
  static Num hash, i;
 	i = hash = hashpjw(str, len) % HashTableSize;
 	do {
-		r0 = memVectorObject(symbols, i);
+		r0 = memVectorObject(rsymbols, i);
 		/* Bucket empty so insert into symbol table. */
 		if (r0 == null) {
 			memNewArray(TSYMBOL, len);
 			if (copyStrP) memcpy(r0, str, len);
-			memVectorSet(symbols, i, r0);
+			memVectorSet(rsymbols, i, r0);
 			return 1;
 		}
 		/* If something here, check if it's the symbol */
@@ -150,12 +149,12 @@ void objNewSymbolStatic (char *s) {
  Num len = strlen(s);
 	i = hash = hashpjw((Str)s, len) % HashTableSize;
 	do {
-		r0 = memVectorObject(symbols, i);
+		r0 = memVectorObject(rsymbols, i);
 		/* Bucket empty so insert into symbol table. */
 		if (r0 == null) {
 			memNewStatic(TSYMBOL, len); /* r0 now holds new symbol */
 			memcpy(r0, s, len);
-			memVectorSet(symbols, i, r0);
+			memVectorSet(rsymbols, i, r0);
 			return;
 		}
 		/* If something here, check if it's the symbol */
@@ -188,8 +187,8 @@ void objCons23 (void) {
 void objNewDoublyLinkedListNode (void) {
 	memNewVector(TVECTOR, 3);
 	memVectorSet(r0, 0, null);
-	memVectorSet(r0, 1, r0);
-	memVectorSet(r0, 2, r0);
+	memVectorSet(r0, 1, r0); /* Next */
+	memVectorSet(r0, 2, r0); /* Prev */
 }
 
 void objNewVector (Num len) {
@@ -202,14 +201,6 @@ void objNewVector1 (void) {
    memNewVector(TVECTOR, (LengthType)r1);
 }
 
-/* Create new closure in r0 which is (r1=<code> . r16=<environment>)
-*/
-void objNewClosure1Env (void) {
-   memNewVector(TCLOSURE, 2);
-	memVectorSet(r0, 0, r1);
-	memVectorSet(r0, 1, env); /* r16 */
-}
-
 void objNewPort (void) {
 	memNewVector(TPORT, 6);
 	memVectorSet(r0, 0, r1); /* Descriptor. */
@@ -217,7 +208,11 @@ void objNewPort (void) {
 	memVectorSet(r0, 2, r3); /* Flags or port number. */
 	memVectorSet(r0, 3, r4); /* State: accepting, connecting, open, closed. */
 	memVectorSet(r0, 4, false); /* Push back or next available character. */
-	memVectorSet(r0, 5, null); /* Can hold a finalizer if you want. */
+	memVectorSet(r0, 5, false); /* Can hold a finalizer if you want. */
+}
+
+int objPortDescriptor (Obj p) {
+	return (int)(memVectorObject(p, 0));
 }
 
 /*
@@ -234,15 +229,13 @@ Num objIsPair (Obj o) {
 
 
 Obj  car  (Obj o) { return memVectorObject(o, 0);}
+Obj  cdr  (Obj o) { return memVectorObject(o, 1);}
+
 Obj  caar (Obj o) { return car(car(o));}
 Obj  cdar (Obj o) { return cdr(car(o));}
 
-Obj  cdr  (Obj o) { return memVectorObject(o, 1);}
 Obj  cadr (Obj o) { return car(cdr(o));}
 Obj  cddr (Obj o) { return cdr(cdr(o));}
-
-void push (Obj o) { memStackPush(stack, o);}
-Obj  pop  (void)  { return memStackPop(stack);}
 
 
 Num objListLength (Obj o) {
@@ -308,8 +301,9 @@ void objListToVector (void) {
 			memVectorSet(r0, i++, car(r1));
 			r1 = cdr(r1);
 		}
-	} else
+	} else {
 		r0 = nullvec;
+	}
 }
 
 
@@ -355,7 +349,7 @@ void objDumpR (Obj o, FILE *stream, Num islist) {
 			fwrite ("\"", 1, 1, stream);
 			break;
 		case TCLOSURE :
-			if (cdr(o) == tge)
+			if (cdr(o) == rtge)
 				fprintf(stream, "#CLOSURE<CODE:"OBJ" TGE:"OBJ">", car(o), cdr(o));
 			else
 				fprintf(stream, "#CLOSURE<CODE:"OBJ" ENV:"OBJ">", car(o), cdr(o));
@@ -380,21 +374,31 @@ void objDumpR (Obj o, FILE *stream, Num islist) {
 			fwrite ("#(", 1, 2, stream);
 			for (i=0; i<memObjectLength(o); i++) {
 				if (i) fwrite (" ", 1, 1, stream);
-				fprintf(stream, OBJ, *((Obj*)o+i));
+				//fprintf(stream, OBJ, *((Obj*)o+i));
+				objDumpR(((Obj*)o)[i], stream, 0);
 			}
 			fwrite (")", 1, 1, stream);
-			break;
-		case TCODE :
-			fprintf(stream, "#<CODE "OBJ">", o);
-			break;
-		case TSTACK :
-			fprintf(stream, "#<STACK "OBJ">", o);
 			break;
 		case TSYSCALL :
 			fprintf(stream, "#<SYSCALL "OBJ">", *(Obj*)o);
 			break;
+		case TPORT :
+			fprintf(stream, "#<PORT ");
+			objDumpR(memVectorObject(o, 0), stream, 0);
+			fprintf(stream, " ");
+			objDumpR(memVectorObject(o, 1), stream, 0);
+			fprintf(stream, " ");
+			objDumpR(memVectorObject(o, 2), stream, 0);
+			fprintf(stream, " ");
+			objDumpR(memVectorObject(o, 3), stream, 0);
+			fprintf(stream, " ");
+			objDumpR(memVectorObject(o, 4), stream, 0);
+			fprintf(stream, " ");
+			objDumpR(memVectorObject(o, 5), stream, 0);
+			fprintf(stream, ">");
+			break;
 		default :
-			if (tge == o) {
+			if (rtge == o) {
 				fprintf(stream, "#<TGE "OBJ">", o);
 			} else {
 				fprintf(stream, HEX, o);
@@ -413,125 +417,137 @@ void objDump (Obj o, FILE *stream) {
 }
 
 
-Func objCallerPreGarbageCollect = 0,
-   objCallerPostGarbageCollect = 0;
-
-int objGCCounter=0;
-
-void objGCPre (void) {
-	if (objGCCounter++ == 0)
-		if (objCallerPreGarbageCollect) objCallerPreGarbageCollect ();
-}
-
-void objGCPost (void) {
-	if (objGCCounter-- == 1)
-		if (objCallerPostGarbageCollect) objCallerPostGarbageCollect ();
-}
-
-/* Called by sys.c */
-void objInitialize (Func scheduler) {
+void objInitialize (void) {
+ static Num shouldInitialize=1;
  Int i;
  Num n;
-	DB("::"STR, __func__);
-	asmInitialize(scheduler, objGCPre, objGCPost, objDump);
-	/* These primitive types are also external (display) strings. */
-	memNewStatic(TNULL, 2);    null=r0;    memcpy(r0, "()", 2);
-	/* This is a strange object with a descriptor and no content.
-	   Since little endian a valid pointer to empty C string.  */
-	memNewStatic(TNULLSTR, 0); nullstr=r0;
-	memNewStatic(TNULLVEC, 3); nullvec=r0; memcpy(r0, "#()", 3);
-	memNewStatic(TFALSE, 2);   false=r0;   memcpy(r0, "#f", 2);
-	memNewStatic(TTRUE, 2);    true=r0;    memcpy(r0, "#t", 2);
+	DBBEG();
+	if (shouldInitialize) {
+		DB("Activating module...");
+		shouldInitialize=0;
+		memInitialize(0, 0);
+		DB("Register the internal object types");
+		memRegisterType(TFALSE, "false");
+		memRegisterType(TTRUE, "true");
+		memRegisterType(TNULL, "null");
+		memRegisterType(TNULLVEC, "nullvec");
+		memRegisterType(TNULLSTR, "nullstr");
+		memRegisterType(TEOF, "eof");
+		memRegisterType(TCHAR, "chr");
+		memRegisterType(TSTRING, "str");
+		memRegisterType(TSYMBOL, "symb");
+		memRegisterType(TINTEGER, "int");
+		memRegisterType(TREAL, "real");
+		memRegisterType(TPAIR, "pair");
+		memRegisterType(TVECTOR, "vector");
+		memRegisterType(TCLOSURE, "closure");
+		memRegisterType(TCONTINUATION, "contin");
+		memRegisterType(TPORT, "port");
+		memRegisterType(TSOCKET, "socket");
+		memRegisterType(TSYSCALL, "syscall");
 
-	memNewVector(TVECTOR, HashTableSize); symbols = r0; /* Symbol table */
-	for (n=0; n<HashTableSize; n++) memVectorSet (symbols, n, null);
+		/* These primitive types are also external (display) strings. */
+		memNewStatic(TNULL, 2);    null=r0;    memcpy(r0, "()", 2);
+		/* This is a strange object with a descriptor and no content.
+		   Since little endian a valid pointer to empty C string.  */
+		memNewStatic(TNULLSTR, 0); nullstr=r0;
+		memNewStatic(TNULLVEC, 3); nullvec=r0; memcpy(r0, "#()", 3);
+		memNewStatic(TFALSE, 2);   false=r0;   memcpy(r0, "#f", 2);
+		memNewStatic(TTRUE, 2);    true=r0;    memcpy(r0, "#t", 2);
 
-	objNewSymbolStatic("define");       sdefine = r0;
-	objNewSymbolStatic("lambda");       slambda = r0;
-	objNewSymbolStatic("macro");        smacro = r0;
-	objNewSymbolStatic("quote");        squote = r0;
-	objNewSymbolStatic("unquote");      sunquote = r0;
-	objNewSymbolStatic("quasiquote");   squasiquote = r0;
-	objNewSymbolStatic("unquote-splicing"); sunquotesplicing = r0;
-	objNewSymbolStatic("begin");        sbegin = r0;
-	objNewSymbolStatic("if");           sif = r0;
-	objNewSymbolStatic("=>");           saif = r0;
-	objNewSymbolStatic("cond");         scond = r0;
-	objNewSymbolStatic("else");         selse = r0;
-	objNewSymbolStatic("or");           sor = r0;
-	objNewSymbolStatic("and");          sand = r0;
-	objNewSymbolStatic("set!");         ssetb = r0;
-	objNewSymbolStatic("vector-ref");   svectorref= r0;
-	objNewSymbolStatic("vector-vector-ref"); svectorvectorref= r0;
-	objNewSymbolStatic("vector-set!");  svectorsetb= r0;
-	objNewSymbolStatic("vector-vector-set!");  svectorvectorsetb= r0;
-	objNewSymbolStatic("vector-length");svectorlength= r0;
-	objNewSymbolStatic("cons");         scons= r0;
-	objNewSymbolStatic("car");          scar= r0;
-	objNewSymbolStatic("cdr");          scdr= r0;
-	objNewSymbolStatic("set-car!");     ssetcarb= r0;
-	objNewSymbolStatic("set-cdr!");     ssetcdrb= r0;
-	objNewSymbolStatic("procedure?");   sprocedurep= r0;
-	objNewSymbolStatic("null?");        snullp= r0;
-	objNewSymbolStatic("pair?");        spairp= r0;
-	objNewSymbolStatic("vector?");      svectorp= r0;
-	objNewSymbolStatic("string?");      sstringp= r0;
-	objNewSymbolStatic("integer?");     sintegerp= r0;
-	objNewSymbolStatic("symbol?");      ssymbolp= r0;
-	objNewSymbolStatic("port?");        sportp= r0;
-	objNewSymbolStatic("append");       sappend= r0;
-	objNewSymbolStatic("eof-object?");  seofobjectp= r0;
-	objNewSymbolStatic("thread");       sthread= r0;
-	objNewSymbolStatic("let");          slet= r0;
-	objNewSymbolStatic("letrec");       sletrec= r0;
-	objNewSymbolStatic("eval");         seval= r0;
-	objNewSymbolStatic("apply");        sapply= r0;
-	objNewSymbolStatic("call/cc");      scallcc= r0;
-	objNewSymbolStatic("syntax-rules"); ssyntaxrules= r0;
-	objNewSymbolStatic("#eof");         seof= r0;
-	objNewSymbolStatic("not");          snot = r0;
-	objNewSymbolStatic("+");            sadd = r0;
-	objNewSymbolStatic("-");            ssub = r0;
-	objNewSymbolStatic("*");            smul = r0;
-	objNewSymbolStatic("/");            sdiv = r0;
-	objNewSymbolStatic("logand");       slogand = r0;
-	objNewSymbolStatic("rem");          srem = r0;
-	objNewSymbolStatic("running");      srunning = r0;
-	objNewSymbolStatic("ready");        sready = r0;
-	objNewSymbolStatic("sleeping");     ssleeping = r0;
-	objNewSymbolStatic("blocked");      sblocked = r0;
-	objNewSymbolStatic("dead");         sdead = r0;
-	objNewSymbolStatic("semaphore");    ssemaphore = r0;
-	objNewSymbolStatic("openblocked");  sopenblocked = r0;
-	objNewSymbolStatic("readblocked");  sreadblocked = r0;
-	objNewSymbolStatic("writeblocked"); swriteblocked = r0;
-	objNewSymbolStatic("accepting");    saccepting = r0;
-	objNewSymbolStatic("connecting");   sconnecting = r0;
-	objNewSymbolStatic("open");         sopen = r0;
-	objNewSymbolStatic("closed");       sclosed = r0;
-	objNewSymbolStatic("SIGNALHANDLERS");  signalhandlers=r0;
+		memNewVector(TVECTOR, HashTableSize); rsymbols = r0; /* Symbol table */
+		for (n=0; n<HashTableSize; n++) memVectorSet (rsymbols, n, null);
 
-	/* Table of character objects.  The 257th character is the EOF object. */
-	memNewStaticVector(TVECTOR, 257);   characters = r0;
-	for (n=0; n<256; n++) {
-		memNewStatic(TCHAR, 1);  *(Num*)r0=n;
-		memVectorSet(characters, n, r0);
+		objNewSymbolStatic("define");       sdefine = r0;
+		objNewSymbolStatic("lambda");       slambda = r0;
+		objNewSymbolStatic("macro");        smacro = r0;
+		objNewSymbolStatic("quote");        squote = r0;
+		objNewSymbolStatic("unquote");      sunquote = r0;
+		objNewSymbolStatic("quasiquote");   squasiquote = r0;
+		objNewSymbolStatic("unquote-splicing"); sunquotesplicing = r0;
+		objNewSymbolStatic("begin");        sbegin = r0;
+		objNewSymbolStatic("if");           sif = r0;
+		objNewSymbolStatic("=>");           saif = r0;
+		objNewSymbolStatic("cond");         scond = r0;
+		objNewSymbolStatic("else");         selse = r0;
+		objNewSymbolStatic("or");           sor = r0;
+		objNewSymbolStatic("and");          sand = r0;
+		objNewSymbolStatic("set!");         ssetb = r0;
+		objNewSymbolStatic("vector-ref");   svectorref= r0;
+		objNewSymbolStatic("vector-vector-ref"); svectorvectorref= r0;
+		objNewSymbolStatic("vector-set!");  svectorsetb= r0;
+		objNewSymbolStatic("vector-vector-set!");  svectorvectorsetb= r0;
+		objNewSymbolStatic("vector-length");svectorlength= r0;
+		objNewSymbolStatic("cons");         scons= r0;
+		objNewSymbolStatic("car");          scar= r0;
+		objNewSymbolStatic("cdr");          scdr= r0;
+		objNewSymbolStatic("set-car!");     ssetcarb= r0;
+		objNewSymbolStatic("set-cdr!");     ssetcdrb= r0;
+		objNewSymbolStatic("procedure?");   sprocedurep= r0;
+		objNewSymbolStatic("null?");        snullp= r0;
+		objNewSymbolStatic("pair?");        spairp= r0;
+		objNewSymbolStatic("vector?");      svectorp= r0;
+		objNewSymbolStatic("string?");      sstringp= r0;
+		objNewSymbolStatic("integer?");     sintegerp= r0;
+		objNewSymbolStatic("symbol?");      ssymbolp= r0;
+		objNewSymbolStatic("port?");        sportp= r0;
+		objNewSymbolStatic("append");       sappend= r0;
+		objNewSymbolStatic("eof-object?");  seofobjectp= r0;
+		objNewSymbolStatic("thread");       sthread= r0;
+		objNewSymbolStatic("let");          slet= r0;
+		objNewSymbolStatic("letrec");       sletrec= r0;
+		objNewSymbolStatic("eval");         seval= r0;
+		objNewSymbolStatic("apply");        sapply= r0;
+		objNewSymbolStatic("call/cc");      scallcc= r0;
+		objNewSymbolStatic("syntax-rules"); ssyntaxrules= r0;
+		objNewSymbolStatic("#eof");         seof= r0;
+		objNewSymbolStatic("not");          snot = r0;
+		objNewSymbolStatic("+");            sadd = r0;
+		objNewSymbolStatic("-");            ssub = r0;
+		objNewSymbolStatic("*");            smul = r0;
+		objNewSymbolStatic("/");            sdiv = r0;
+		objNewSymbolStatic("logand");       slogand = r0;
+		objNewSymbolStatic("rem");          srem = r0;
+		objNewSymbolStatic("running");      srunning = r0;
+		objNewSymbolStatic("ready");        sready = r0;
+		objNewSymbolStatic("sleeping");     ssleeping = r0;
+		objNewSymbolStatic("blocked");      sblocked = r0;
+		objNewSymbolStatic("dead");         sdead = r0;
+		objNewSymbolStatic("semaphore");    ssemaphore = r0;
+		objNewSymbolStatic("openblocked");  sopenblocked = r0;
+		objNewSymbolStatic("readblocked");  sreadblocked = r0;
+		objNewSymbolStatic("writeblocked"); swriteblocked = r0;
+		objNewSymbolStatic("accepting");    saccepting = r0;
+		objNewSymbolStatic("connecting");   sconnecting = r0;
+		objNewSymbolStatic("open");         sopen = r0;
+		objNewSymbolStatic("closed");       sclosed = r0;
+		objNewSymbolStatic("SIGNALHANDLERS");  signalhandlers=r0;
+
+		/* Table of character objects.  The 257th character is the EOF object. */
+		memNewStaticVector(TVECTOR, 257);   characters = r0;
+		for (n=0; n<256; n++) {
+			memNewStatic(TCHAR, 1);  *(Num*)r0=n;
+			memVectorSet(characters, n, r0);
+		}
+
+		/* Treat character number 256 0x100 as a char and as the eof object. */
+		memNewStatic(TEOF, 4);  eof = r0;
+		*(Int*)eof = 256l;
+ 		memVectorSet(characters, 256, eof);
+
+		/* Table of integer constants. */
+		memNewStaticVector(TVECTOR, 2048);  staticIntegers = r0;
+		for (i=-1023l; i<=1024l; ++i) {
+  	 	memNewStatic(TINTEGER, sizeof(Int));
+			*(Int*)r0 = i;
+			memVectorSet(staticIntegers, (Num)i+1023, r0);
+		}
+	} else {
+		DB("Module already activated");
 	}
 
-	/* Treat character number 256 0x100 as a char and as the eof object. */
-	memNewStatic(TEOF, 4);  eof = r0;
-	*(Int*)eof = 256l;
- 	memVectorSet(characters, 256, eof);
-
-	/* Table of integer constants. */
-	memNewStaticVector(TVECTOR, 2048);  staticIntegers = r0;
-	for (i=-1023l; i<=1024l; ++i) {
-   	memNewStatic(TINTEGER, sizeof(Int));
-		*(Int*)r0 = i;
-		memVectorSet(staticIntegers, (Num)i+1023, r0);
-	}
-
-	DB("  --%s", __func__);
+	DBEND();
 }
 
-#undef DEBUG_SECTION
+#undef DB_DESC
+#undef DEBUG

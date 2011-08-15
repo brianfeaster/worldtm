@@ -1096,8 +1096,8 @@
    (define (info) (list 'IrcAgent name z y x 'hasChild (pair? ChildStack)))
    ; Locals
    (define portIRC #f)
-;   (define Server "irc.choopa.net")
-   (define Server "irc.he.net")
+   (define Server "irc.choopa.net")
+;   (define Server "irc.he.net")
    (define Port 6667)
    (define Nick "world")
    (define Nicks (BListCreate "w0rld" "worldtm" "world[tm]" "w0rld[tm]" "w0rldtm" "w[tm]rld" "w[]rld"))

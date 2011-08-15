@@ -1,27 +1,6 @@
 #ifndef _GLOBALS_H
 #define _GLOBALS_H
 
-/* Global virtual machine register aliases.
-*/
-#define blocked    r10 /* WSCM: I/O and Semaphore blocked threads */
-#define threads    r11 /* WSCM: Thread vector */
-#define sleeping   r12 /* WSCM: Sleeping thread */
-#define running    r13 /* WSCM: Current thread */
-#define ready      r14 /* WSCM: Thread list */
-
-#define retenv     r15 /* VM: Caller's environment */
-#define env        r16 /* WSCM: Current active environment */
-#define tge        r17 /* WSCM: Global environment */
-#define expr       r18 /* WSCM: Expression being compiled */
-#define symbols    r19 /* OBJ: Symbol table used by scanner and OS */
-#define asmstack   r1a /* VM: Opcode stack where machine code is emitted */
-#define ip         r1b /* VM: Current running program instruction pointer */
-#define code       r1c /* VM: Currently running code object */
-#define retip      r1d /* VM: Caller's ip */
-#define retcode    r1e /* VM: Caller's code block */
-#define stack      r1f /* VM: Global stack used by VM */
-
-
 /* C Type declarations representing the number of bits for unsigned, signed and
    real types.  Currently these match the Linode virtual machines I'm hosted on.
  */
@@ -59,6 +38,7 @@ typedef void (*Func2) (Obj a, Obj b);
 
 /* Printf format strings for the above types.
 */
+#define CHR "%c"
 #define STR "%s"
 
 #define X8  "%x"
@@ -84,7 +64,7 @@ typedef void (*Func2) (Obj a, Obj b);
 #define HEX       "%lx"
 #define HEX2     "%2lx"
 #define HEX4     "%4lx"
-#define HEX02   "%02lx"
+#define HEX02   "%02lX"
 #define HEX04   "%04lx"
 #define HEX016 "%016lx"
 
@@ -92,48 +72,11 @@ typedef void (*Func2) (Obj a, Obj b);
 
 /* Memory pointers seem to be in the 12 hex-digit
    range so this is the usual format string length.  */
-#define OBJ  "%012lx"
+#define OBJ  "%012lX"
 #define OBJ0 "%016lx"
 
 
 #define NL "\n"
 
-
-/* Scheme object type field used by the scanner and obj module.  A byte with
-   highest bit signifying the base type which is either a "vector" or "array"
-   object.
-*/
-#define TBASEARRAY     0x00l
-#define TFALSE         0x01l
-#define TTRUE          0x02l
-#define TNULL          0x03l
-#define TNULLVEC       0x04l
-#define TNULLSTR       0x05l
-#define TEOF           0x06l
-#define TCHAR          0x07l
-#define TSTRING        0x08l
-#define TSYMBOL        0x09l
-#define TINTEGER       0x0al
-#define TREAL          0x0bl
-
-#define TBASEVECTOR    0x80l
-#define TPAIR          0x81l
-#define TVECTOR        0x82l
-#define TCLOSURE       0x83l
-#define TCONTINUATION  0x84l
-#define TCODE          0x85l
-#define TPORT          0x86l
-#define TSOCKET        0x87l
-#define TSYSCALL       0x88l
-
-#define TSEMAPHORE     0xfbl
-#define TFINALIZER     0xfcl
-#define TPOINTER       0xfdl
-#define TSTACK         0xfel
-#define TSHADOW        0xffl
-
-#define MAX_THREADS 1024
-
-#define ASSERT assert
 
 #endif

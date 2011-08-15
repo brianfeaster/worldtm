@@ -1,7 +1,6 @@
 #ifndef _DEBUG_H
 #define _DEBUG_H
-/* Include this module and #define DEBUG as 1 and #DEBUG_SECTION
-   as a string for debug messages.
+/* Include this module and #define DEBUG as 1 and #DB_DESC as a string for debug messages.
 */
 #include <stdio.h>
 
@@ -23,14 +22,14 @@
 #define BCYN  "\e[0;1;36m"
 #define BWHT  "\e[0;1;37m"
 
-#define INDENT0 ""
-#define INDENT1 INDENT0"   "
-#define INDENT2 INDENT1"   "
-#define INDENT3 INDENT2"   "
-#define INDENT4 INDENT3"   "
-#define INDENT5 INDENT4"   "
+static unsigned DBTab=0;
+#define DBSPACES "                                                                                "
+#define DBSPCLEN ((sizeof(DBSPACES)-1)/2)
 
-#define DB(...) if(DEBUG)fprintf(stderr, "\n" DEBUG_SECTION __VA_ARGS__)
+#define DBBEG(FMT,...) if(DEBUG)fprintf(stderr,"\n"DB_DESC"%s::%s"FMT,DBSPACES+2*(DBSPCLEN-(++DBTab>DBSPCLEN?DBSPCLEN:DBTab-1)),__func__,##__VA_ARGS__)
+#define    DB(FMT,...) if(DEBUG)fprintf(stderr,"\n"DB_DESC"%s"    FMT,DBSPACES+2*(DBSPCLEN-(  DBTab>DBSPCLEN?DBSPCLEN:DBTab  )),         ##__VA_ARGS__)
+#define DBEND(FMT,...) if(DEBUG)fprintf(stderr,"\n"DB_DESC"%s--%s"FMT,DBSPACES+2*(DBSPCLEN-(DBTab-->DBSPCLEN?DBSPCLEN:DBTab+1)),__func__,##__VA_ARGS__)
+
 #define DBE if(DEBUG)
 
 #endif

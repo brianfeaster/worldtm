@@ -4,34 +4,31 @@
 #include <string.h>
 #include <assert.h>
 #include <limits.h>
-#include "debug.h"
 #include "obj.h"
+#include "mem.h"
+
+#define TEST(fn) (printf("Calling test: "#fn"()  "), fn(),printf("PASS\n"))
 
 
-void helloWorld (void) {printf ("\nHello world!\n");}
-void displayInteger$0 (void) {printf ("%08x", *(s32*)r0); }
-void displayInteger$1 (void) {printf ("%08x", *(s32*)r1); }
-void displayString$0  (void) {write (1, r0, memObjectLength(r0)); }
-void displayString$1  (void) {write (1, r1, memObjectLength(r1)); }
-void displayCString   (void) {printf (r0); }
 
 /* Create some objects and assign to registers and
    create a stack with objects pushed on.
 */
-void objTestCreateObjects (void) {
-	objNewInt(0xdeadbeefb00b1355l); r1=r0;
+void objtCreateObjects (void) {
+	objNewInt((Int)0xdeadbeefb00b1355l); r1=r0;
 	objCopyInteger(); r2=r1;
 	objNewInt(-1); r3=r0;
 	objNewInt(LONG_MAX); r4=r0;
-	memNewStack(); r1f=r0;
-	objNewInt(0xdea1f00d); memStackPush (r1f, r0);
-	objNewReal(1.3);  memStackPush (r1f, r0);
-	objNewReal(15.0); memStackPush (r1f, r0);
+	objNewInt(0xdea1f00d); memPush(r0);
+	objNewReal(1.3);  memPush(r0);
+	objNewReal(15.0); memPush(r0);
 }
+
+
 
 /* Verify registers and stack contain expected object values.
 */
-void objTestVerifyObjects (void) {
+void objtVerifyObjects (void) {
 	assert(0xdeadbeefb00b1355l == *(Int*)r1);
 	assert(0xdeadbeefb00b1355l == *(Int*)r2);
 	assert(-1 == *(Int*)r3);
@@ -42,16 +39,20 @@ void objTestVerifyObjects (void) {
 	assert(0xdea1f00d == *(Int*)memStackObject(r1f, 2));
 }
 
+
+
 /* Mutate the stack and verify behavior.
 */
-void objTestVerifyStackMutation (void) {
-	assert(15.0 == *(Real*)memStackPop(r1f));
-	assert(1.3 == *(Real*)memStackPop(r1f));
-	assert(0xdea1f00d == *(Int*)memStackPop(r1f));
+void objtVerifyStackMutation (void) {
+	assert(15.0 == *(Real*)memPop());
+	assert(1.3 == *(Real*)memPop());
+	assert(0xdea1f00d == *(Int*)memPop());
 	assert(0 == memStackLength(r1f));
 }
 
-void objTestDoublyLinkedList (void) {
+
+
+void objtDoublyLinkedList (void) {
 
 	/* Create doubly linked list in r4 */
 	objNewDoublyLinkedListNode(); r4=r0;
@@ -82,66 +83,26 @@ void objTestDoublyLinkedList (void) {
 	r4 = objDoublyLinkedListPrev(r4); assert(*(Int*)car(r4) == 42);
 }
 
+
+
 int main (int argc, char *argv[]) {
-	// If any arguments passed to test unit, do more fun things.
+	/* Force a failure by passing -f to this program */
 	if (argc==2 && !strcmp(argv[1], "-f")) return -1;
 
 	setbuf(stdout, 0);
-	memInitialize(0, 0);
-	objInitialize(0);
+	printf ("--Welcome to unit test %s----------------\n", __FILE__);
 
-	objTestCreateObjects();
-	objTestVerifyObjects();
+	objInitialize();
 
+	/* Perform a full garbage collection to move module related objects to old
+	   heap for easier visual debugging of newly created young heap objects */
+	GarbageCollectionMode = 1;
 	memGarbageCollect();
-	objTestVerifyObjects();
 
-	objTestVerifyStackMutation();
+	TEST(objtCreateObjects);
+	TEST(objtVerifyObjects);
+	TEST(objtVerifyStackMutation);
+	TEST(objtDoublyLinkedList);
 
-	objTestDoublyLinkedList();
-
-	goto done;
-	//memDebugDumpHeapStructures();
-
-	/* Assemble a new program. */
-	asmAsm(
-		SYSI, helloWorld,
-		MVI1, r1,
-		SYSI, objCopyInteger,
-		SYSI, displayInteger$0,
-		MVI0, "\n+",
-		SYSI, displayCString,
-		MVI0, r2,
-		SYSI, displayInteger$0,
-		ADD10,
-		MVI0, "\n=",
-		SYSI, displayCString,
-		SYSI, displayInteger$1,
-		LABEL, "top",
-		MVI0, r2,
-		ADD10,
-		MVI0, "\r",
-		SYSI, displayCString,
-		SYSI, displayInteger$1,
-		BRA, ADDR, "top",
-		END
-	);
-	asmCompileAsmstack(0);
-	asmNewCode();
-	vmDebugDumpCode(r0,stdout);
-	code=r0;  ip=0;  vmRun();
-	memGarbageCollect();
-	memDebugDumpHeapHeaders(stdout);
-	goto done;
-	memStackPush(stack, r0);
-	memGarbageCollect();
-	memStackPop(stack);
-	memStackPop(stack);
-	memStackPop(stack);
-	memGarbageCollect();
-	memGarbageCollect();
-	memGarbageCollect();
-	memGarbageCollect();
-done:
 	return 0;
 }
