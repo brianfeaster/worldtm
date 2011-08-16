@@ -13,6 +13,14 @@
 #include "asm.h"
 #include "vm.h"
 #include "mem.h"
+/* Functions related to compiling scheme expressions into
+   virtual machine code blocks
+
+   TODO This compiler module is not reentrant.
+*/
+
+
+Num compExpression (Num flags);
 
 /* Compiler flags passed around by comp functions.
 */
@@ -30,37 +38,35 @@ static const Num R1 =        0x00000002;
 static const Num R0 =        0x00000001;
 */
 
-/* TODO This compiler module is not reentrant.
-*/
 
-//void sysDebugger (void);
-//void sysDumpCallStackCode (void);
-Num compExpression (Num flags);
 
 void compWrite (void) {
 	objDump(r0, stdout);
 }
 
+
 /* Has compiler encountered an error flag?
 */
 Num CompError;
+
 void compError (void) {
 	fprintf(stderr, "compError()");
 	exit(-1);
 }
 
+
+/* Dump the illegal operator error message including the offending expression
+*/
 void compIllegalOperator (void) {
- Num i;
-	fprintf (stderr, "ERROR: Illegal expression ");
-	write(2, "(", 1);
+	fprintf (stderr, "ERROR: Illegal operator (");
 	objDump (r0, stderr);
-	i=(Num)r1;
-	while (0 < i--) {
-		write (2, " ", 1);
-		objDump (memStackObject(rstack, i), stderr);
+	while ((Int)r1--) {
+		fprintf (stderr, " ");
+		objDump (memPop(), stderr);
 	}
-	write(2, ")", 1);
-	compError();
+	fprintf(stderr, ")");
+	r0 = false; /* TODO return false for now.  Add a call to error continuation. */
+	//compError();
 }
 
 /* Remember BASIC?  This is a 'REMark' or comment syntatic operator.
@@ -135,9 +141,8 @@ void compTGELookup (void) {
 	DB("::"STR, __func__);
 	sysTGEFind();
 	if (r0 == null) {
-		printf ("ERROR: Unbound symbol '");
+		printf ("ERROR: Unbound symbol:");
 		objDump(r1, stdout);
-		printf ("'\n");
 		r0 = r1;
 		// TODO  Kill thread, stop machine, return to monitor/shell?
 	} else {
@@ -274,8 +279,7 @@ void compTGEMutate (void) {
 		printf ("ERROR: Unbound symbol '");
 		objDump(r1, stdout);
 		printf ("'\n");
-		r0 = r2; /* Return value. */
-		// TODO  Kill thread, stop machine, return to monitor/shell?
+		r0 = r2; /* Return value. TODO  Kill thread, stop machine, return to monitor/shell? */
 	} else {
 		DB("SYS    found in tge at opcode %0x", (Int)rip-4);
 		/* Specialization optimization.  Muate code that originally called

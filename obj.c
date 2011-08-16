@@ -212,7 +212,7 @@ void objNewPort (void) {
 }
 
 int objPortDescriptor (Obj p) {
-	return (int)(memVectorObject(p, 0));
+	return (int)(Int)(memVectorObject(p, 0));
 }
 
 /*
