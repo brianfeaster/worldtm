@@ -855,25 +855,33 @@ void wscmOpen (int oflag, mode_t mode, Num silent) {
 }
 
 void syscallOpenFile (void) {
- Num silent;
+ Num silent=0;
 	DBBEG();
-	if (wscmAssertArgumentCount(1, __func__)) {
+	if (wscmAssertArgumentCountRange(1, 2, __func__)) {
 		r0 = eof;
 	} else {
+		if ((Num)r1==2) { /* If an extra argis passed, make it a silent call */
+			vmPop();
+			silent=1;
+		}
 		r1 = vmPop();
-		wscmOpen(O_RDWR, S_IRUSR|S_IWUSR, silent=0);
+		wscmOpen(O_RDWR, S_IRUSR|S_IWUSR, silent);
 	}
 	DBEND();
 }
 
 void syscallOpenNewFile (void) {
- Num silent;
+ Num silent=0;
 	DBBEG();
-	if (wscmAssertArgumentCount(1, __func__)) {
+	if (wscmAssertArgumentCountRange(1, 2, __func__)) {
 		r0 = eof;
 	} else {
+		if ((Num)r1==2) { /* If an extra argis passed, make it a silent call */
+			vmPop();
+			silent=1;
+		}
 		r1 = vmPop();
-		wscmOpen(O_CREAT|O_TRUNC|O_RDWR, S_IRUSR|S_IWUSR, silent=0);
+		wscmOpen(O_CREAT|O_TRUNC|O_RDWR, S_IRUSR|S_IWUSR, silent);
 	}
 	DBEND();
 }
