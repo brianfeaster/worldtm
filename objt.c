@@ -5,6 +5,7 @@
 #include <assert.h>
 #include <limits.h>
 #include "obj.h"
+#include "vm.h"
 #include "mem.h"
 
 #define TEST(fn) (printf("Calling test: "#fn"()  "), fn(),printf("PASS\n"))
@@ -19,9 +20,9 @@ void objtCreateObjects (void) {
 	objCopyInteger(); r2=r1;
 	objNewInt(-1); r3=r0;
 	objNewInt(LONG_MAX); r4=r0;
-	objNewInt(0xdea1f00d); memPush(r0);
-	objNewReal(1.3);  memPush(r0);
-	objNewReal(15.0); memPush(r0);
+	objNewInt(0xdea1f00d); vmPush(r0);
+	objNewReal(1.3);  vmPush(r0);
+	objNewReal(15.0); vmPush(r0);
 }
 
 
@@ -44,9 +45,9 @@ void objtVerifyObjects (void) {
 /* Mutate the stack and verify behavior.
 */
 void objtVerifyStackMutation (void) {
-	assert(15.0 == *(Real*)memPop());
-	assert(1.3 == *(Real*)memPop());
-	assert(0xdea1f00d == *(Int*)memPop());
+	assert(15.0 == *(Real*)vmPop());
+	assert(1.3 == *(Real*)vmPop());
+	assert(0xdea1f00d == *(Int*)vmPop());
 	assert(0 == memStackLength(r1f));
 }
 

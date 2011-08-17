@@ -88,6 +88,7 @@ MemTypeDescriptor memTypeDB[TMAXINTERNAL+1];
 
 void memRegisterInternalType (Type type, char *description) {
 	DBBEG();
+	assert(strlen(description)<=8);
 	DB("Type type="HEX"  char *description="STR, type, description);
 	assert(type <= TMAXINTERNAL); /* Only arrays and vector can be created externally */
 	assert(memTypeDB[type].description == NULL); /* Object types can't be redefined */
@@ -313,15 +314,6 @@ void memFreeHeap (Heap *h) {
  Object_creation
 *******************************************************************************/
 
-/* Registers.  These make up the root set used by the garbage collector.
- */
-Obj r0,  r1,  r2,  r3,  r4,  r5,  r6,  r7,
-    r8,  r9,  ra,  rb,  rc,  rd,  re,  rf,
-    r10, r11, r12, r13, r14, r15, r16, r17,
-    r18, r19, r1a, r1b, r1c, r1d, r1e, r1f;
-
-
-
 /* Objects in old heap that were mutated with objects in young heap.
    This is an additional set of root set pointers besides the registers
    above.  Any old object that has been mutated to point to an object in the
@@ -361,7 +353,8 @@ Func memPostGarbageCollect = 0;
    There is no need to zero out the new object since mmap will do so for each
    new heap
 */
-void memNewObject (Descriptor desc, Num byteSize) {
+Obj memNewObject (Descriptor desc, Num byteSize) {
+ Obj o;
  static Num recursed=0;
 	DBBEG("  desc:"HEX016"  byteSize:"HEX, desc, byteSize);
 
@@ -376,7 +369,7 @@ void memNewObject (Descriptor desc, Num byteSize) {
 	   object location (immediately after the descriptor) and increment the heap's
 	   'next' pointer. */
 	*(Descriptor*)(heap.next) = desc;
-	r0 = heap.next + DescSize;
+	o = heap.next + DescSize;
 	heap.next += byteSize;
 
 	/* Perform a GC if we've surpassed the heap size, calling this function recursively */
@@ -388,24 +381,26 @@ void memNewObject (Descriptor desc, Num byteSize) {
 		}
 		/* Make sure reg 0's bogus value isn't garbage collected and undo the next pointer.
 		   Zeroing out r0 also has the side affect of making its object garbage.  */
-		r0 = 0;
+		//r0 = 0;
 		heap.next -= byteSize;
 		memGarbageCollectInternal(desc, byteSize);
 
 		++recursed;
-		memNewObject(desc, byteSize);
+		o = memNewObject(desc, byteSize);
 		--recursed;
 	}
 
-	DBEND(" => "OBJ, r0);
+	DBEND(" => "OBJ, o);
+	return o;
 }
 
 /* Allocate a static object.  Like memNewObject except it can't fail.
 */
-void memNewStaticObject (Descriptor desc, Num byteSize) {
+Obj memNewStaticObject (Descriptor desc, Num byteSize) {
+ Obj o;
 	DBBEG("  desc:"HEX016"  byteSize:"HEX, desc, byteSize);
 	*(Descriptor*)heapStatic.next = desc;
-	r0 = heapStatic.next + DescSize;
+	o = heapStatic.next + DescSize;
 	heapStatic.next += byteSize;
 
 	/* Check that we're still within the static buffer boundary. */
@@ -413,78 +408,95 @@ void memNewStaticObject (Descriptor desc, Num byteSize) {
 		fprintf (stderr, "ERROR: memNewStaticObject(): Static buffer overflow.\a\n");
 		memError();
 	}
-	DBEND(" => "OBJ, r0);
+	DBEND(" => "OBJ, o);
+	return o;
 }
 
 
-void memNewStatic (Type type, LengthType length) {
+Obj memNewStatic (Type type, LengthType length) {
+Obj o;
 	DBBEG("  type:"HEX02"  length:"HEX, type, length);
-	memNewStaticObject (memMakeDescriptor(type, length),
+	o = memNewStaticObject (memMakeDescriptor(type, length),
 	                    memArrayLengthToObjectSize(length));
 	DBEND();
+	return o;
 }
 
-void memNewStaticVector (Type type, LengthType length) {
+Obj memNewStaticVector (Type type, LengthType length) {
+Obj o;
 	DBBEG("  type:"HEX02"  length:"HEX, type, length);
-	memNewStaticObject (memMakeDescriptor(type, length),
+	o = memNewStaticObject (memMakeDescriptor(type, length),
 	                    memVectorLengthToObjectSize(length));
 	DBEND();
+	return o;
 }
 
-void memNewArray (Type type, LengthType length) {
+Obj memNewArray (Type type, LengthType length) {
+Obj o;
 	DBBEG("  type:"HEX02"  length:"HEX, type, length);
-	memNewObject (memMakeDescriptor(type, length),
+	o = memNewObject (memMakeDescriptor(type, length),
 	              memArrayLengthToObjectSize(length));
 	DBEND();
+	return o;
 }
 
-void memNewVector (Type type, LengthType length) {
+Obj memNewVector (Type type, LengthType length) {
+Obj o;
 	DBBEG("  type:"HEX02"  length:"HEX, type, length);
-	memNewObject (memMakeDescriptor(type, length),
+	o = memNewObject (memMakeDescriptor(type, length),
 	              memVectorLengthToObjectSize(length));
 	DBEND();
+	return o;
 }
 
 /* Semaphore is a pair containing a semaphore counter (number) and a finalizer.
 */
-void memNewSemaphore (void) {
+Obj memNewSemaphore (void) {
+ Obj o;
 	DBBEG();
-	memNewObject (memMakeDescriptor(TSEMAPHORE, 1),
+	o = memNewObject (memMakeDescriptor(TSEMAPHORE, 1),
 	              memVectorLengthToObjectSize(1));
 	DBEND();
+	return o;
 }
 
 /* Finalizer is a pair containg a C function pointer in the CAR and an object
    in the CDR.  The C function is called with the object pointer when it is
    realized to be garbage.
 */
-void memNewFinalizer (void) {
+Obj memNewFinalizer (void) {
+ Obj o;
 	DBBEG();
-	memNewObject (memMakeDescriptor(TFINALIZER, 2),
+	o = memNewObject (memMakeDescriptor(TFINALIZER, 2),
 	              memVectorLengthToObjectSize(2));
 	heap.finalizerCount++;
 	DBEND();
+	return o;
 }
 
 /* Pointer object is a normal C pointer followed by a scheme object pointer
    which the first pointer should be pointing somewhere inside of.
 */
-void memNewPointer (void) {
+Obj memNewPointer (void) {
+ Obj o;
 	DBBEG();
-	memNewObject (memMakeDescriptor(TPOINTER, 2),
+	o = memNewObject (memMakeDescriptor(TPOINTER, 2),
 	              memVectorLengthToObjectSize(2));
 	DBEND();
+	return o;
 }
 
 /* First item in stack vector is a pointer to an address in the vector.
    Initially it points to itself, implying an empty stack.
 */
-void memNewStack (void) {
+Obj memNewStack (void) {
+ Obj o;
 	DBBEG();
-	memNewObject (memMakeDescriptor(TSTACK, STACK_LENGTH+1),
+	o = memNewObject (memMakeDescriptor(TSTACK, STACK_LENGTH+1),
 	              memVectorLengthToObjectSize(STACK_LENGTH+1));
-	*(Obj*)r0 = (Obj)r0;
+	*(Obj*)o = (Obj)o;
 	DBEND();
+	return o;
 }
 
 
@@ -678,19 +690,17 @@ Num memStackLength (Obj obj) {
 	return (Num)(((Obj**)obj)[0] - (Obj*)obj);
 }
 
-void memPush (Obj o) {
-	memStackPush(r1f, o);
-}
-
-Obj memPop (void) {
-	return memStackPop(r1f);
-}
+//void memPush (Obj o) { memStackPush(r1f, o); }
+//Obj memPop (void) { return memStackPop(r1f); }
 
 
 
 /*******************************************************************************
  Garbage_collector
 *******************************************************************************/
+#define MemRootSetCountMax 64
+Num MemRootSetCount=0;
+Obj *MemRootSet[MemRootSetCountMax];
 
 /* Calculate a pointer object's index offset into the object it's pointing
    at. A pointer is a vector whos first element is a void* and the second
@@ -852,7 +862,7 @@ void memScanAndCallFinalizers(Heap *heap) {
 */
 void memGarbageCollectInternal (Descriptor desc, Num byteSize) {
  static Num memGCFlag=0;
- Num newHeapSize;
+ Num newHeapSize, i;
 
 	/* Verify no recursive call. */
 	assert(memGCFlag==0);
@@ -888,7 +898,9 @@ void memGarbageCollectInternal (Descriptor desc, Num byteSize) {
 	memInitializeHeap (&heapNew, newHeapSize);
 
 	/* Copy objects in registers to new heap. */
-	DB("COLLECTING REGISTERS");
+	DB("Collecting root set");
+	for (i=0; i<MemRootSetCount; ++i) memObjectCopyToHeapNew(MemRootSet[i]);
+	/*
 	memObjectCopyToHeapNew (&r0);  memObjectCopyToHeapNew (&r1);
 	memObjectCopyToHeapNew (&r2);  memObjectCopyToHeapNew (&r3);
 	memObjectCopyToHeapNew (&r4);  memObjectCopyToHeapNew (&r5);
@@ -905,6 +917,7 @@ void memGarbageCollectInternal (Descriptor desc, Num byteSize) {
 	memObjectCopyToHeapNew (&r1a); memObjectCopyToHeapNew (&r1b);
 	memObjectCopyToHeapNew (&r1c); memObjectCopyToHeapNew (&r1d);
 	memObjectCopyToHeapNew (&r1e); memObjectCopyToHeapNew (&r1f);
+	*/
 
 	/* Treat objects in heapOld as a root set. This is temporary until I re-enable
 	   the mutated:old-object list (commented code below). */
@@ -1011,7 +1024,11 @@ void memGarbageCollect () {
 /*******************************************************************************
  Debugging_aids
 *******************************************************************************/
+
+/* Dump heap and root object details
+*/
 void memDebugDumpHeapHeaders (FILE *stream) {
+ Num i;
 	// Set a default stream.
 	if (stream == NULL) stream=stderr;
 
@@ -1034,23 +1051,20 @@ void memDebugDumpHeapHeaders (FILE *stream) {
 	fprintf (stream, "Objects %10lx   %10lx   %10lx   %10lx\n",
 	        memHeapLength(0),  memHeapLength(1),
 	        memHeapLength(2),  memHeapLength(3));
-	fprintf (stream, "Finalizer %8lx   %10lx   %10lx   %10lx\n",
+	fprintf (stream, "Finalizer %8lx   %10lx   %10lx   %10lx",
 	        heapStatic.finalizerCount,  heapOld.finalizerCount,
 	        heap.finalizerCount,        heapNew.finalizerCount);
 
-	fprintf (stream, "r00 "OBJ"  r08 "OBJ"  r10 "OBJ"  r18 "OBJ" blocked  tge\n",  r0, r8, r10, r18);
-	fprintf (stream, "r01 "OBJ"  r09 "OBJ"  r11 "OBJ"  r19 "OBJ" threads  retenv\n",  r1, r9, r11, r19);
-	fprintf (stream, "r02 "OBJ"  r0a "OBJ"  r12 "OBJ"  r1a "OBJ" sleeping retip\n",r2, ra, r12, r1a);
-	fprintf (stream, "r03 "OBJ"  r0b "OBJ"  r13 "OBJ"  r1b "OBJ" running  retcode\n",    r3, rb, r13, r1b);
-	fprintf (stream, "r04 "OBJ"  r0c "OBJ"  r14 "OBJ"  r1c "OBJ" ready    env\n",  r4, rc, r14, r1c);
-	fprintf (stream, "r05 "OBJ"  r0d "OBJ"  r15 "OBJ"  r1d "OBJ" expr     ip\n",   r5, rd, r15, r1d);
-	fprintf (stream, "r06 "OBJ"  r0e "OBJ"  r16 "OBJ"  r1e "OBJ" symbols  code\n", r6, re, r16, r1e);
-	fprintf (stream, "r07 "OBJ"  r0f "OBJ"  r17 "OBJ"  r1f "OBJ" asmstack stack\n", r7, rf, r17, r1f);
+	for (i=0; i<MemRootSetCount; ++i) {
+		if (0 == i%4) printf ("\n");
+		fprintf (stream, "%8s "OBJ, memObjString(MemRootSet[i]), *MemRootSet[i]);
+	}
+	fprintf (stream, "\n");
 }
 
 void memDebugDumpObject (Obj o, FILE *stream) {
  Int i, fdState;
- char* s;
+ Str s;
  Obj obj;
 
 	fcntl (0, F_SETFL, (fdState=fcntl(0, F_GETFL, 0))&~O_NONBLOCK);
@@ -1063,7 +1077,7 @@ void memDebugDumpObject (Obj o, FILE *stream) {
 
 	/* Dump the object's address and descriptor information.
 	   7fe8f5f44610 81 PAIR      2 #(7fe8f5f445f0 7fe8f5f44600) */
-	fprintf (stream, "\n%c "OBJ" "HEX02"%-7s"HEX4,
+	fprintf (stream, "\n%c "OBJ" "HEX02"%-5s"HEX4,
 		memIsObjectInHeap(&heapStatic, o)?'s':
 			memIsObjectInHeap(&heapOld, o)?'o':
 				memIsObjectInHeap(&heap, o)?'y':
@@ -1086,7 +1100,9 @@ void memDebugDumpObject (Obj o, FILE *stream) {
 		} else if (memIsObjectShadow(o)) {
 			fprintf (stream, " *"OBJ"", *(Obj*)o);
 		} else if (memIsObjectFinalizer(o)) {
-			fprintf (stream, " ("HEX" . "OBJ")", ((Obj*)o)[0], ((Obj*)o)[1]);
+			fprintf (stream, " ("HEX":"STR" . "OBJ")", ((Obj*)o)[0], memObjString(((Obj*)o)[0]), ((Obj*)o)[1]);
+
+
 		} else {
 			for (i=0; i<memObjectLength(o); i++) {
 				obj = ((Obj*)o)[i];
@@ -1234,7 +1250,6 @@ void memValidateObject (Obj o) {
 	if (!valid) {
 		fprintf (stderr, "\nERROR memValidateObject() found bad object:"OBJ NL, o);
 		memDebugDumpObject (o, NULL);
-		//sysDebugger();
 	}
 	DBEND();
 }
@@ -1294,7 +1309,7 @@ Str memTypeString (Type t) {
 	assert(t <= TMAXINTERNAL);
 	return memTypeDB[t].description
 		?  memTypeDB[t].description
-		: (Str)"unknown";
+		: (Str)"?????";
 }
 
 
@@ -1303,24 +1318,29 @@ Str memTypeString (Type t) {
    the type due to how the preprocessor generates
    symbols. */
 #define TABLEMAX 4096
-typedef struct {Obj obj;  char* str;} osPair;
+typedef struct {Obj obj;  Str str;} osPair;
 osPair osTable[TABLEMAX];
 Num osCount=0;
 
-char* memObjString (Obj obj) {
+Str memObjString (Obj obj) {
  Num i;
 	for (i=0; i<osCount; ++i)
 		if (osTable[i].obj==obj) return osTable[i].str;
 	return NULL;
 }
 
-void memObjStringRegister (Obj obj, char *str) {
+void memObjStringRegister (Obj obj, Str str) {
 	DBBEG("  Registering "OBJ"  string="STR" on existing str="STR, obj, str, memObjString(obj));
 	assert(NULL == memObjString(obj));
 	assert(osCount < TABLEMAX);
 	osTable[osCount].obj = obj;
 	osTable[osCount++].str = str;
 	DBEND();
+}
+
+void memError (void) {
+	fprintf (stderr, "\nERROR: memError() called: Halting process with a seg fault.\n");
+	*(int*)0 = 0; // Force a crash to catch in debugger.
 }
 
 
@@ -1336,8 +1356,8 @@ void memInitialize (Func preGC, Func postGC) {
 		DB("Activating module...");
 		shouldInitialize=0;
 		DB("Register the internal object types");
-		memRegisterInternalType(TSEMAPHORE, "semaphore");
-		memRegisterInternalType(TFINALIZER, "finalizer");
+		memRegisterInternalType(TSEMAPHORE, "semaphr");
+		memRegisterInternalType(TFINALIZER, "finalal");
 		memRegisterInternalType(TPOINTER, "pointer");
 		memRegisterInternalType(TSTACK, "stack");
 		memRegisterInternalType(TSHADOW, "shadow");
@@ -1346,8 +1366,6 @@ void memInitialize (Func preGC, Func postGC) {
 		memInitializeHeap  (&heap, HEAP_BLOCK_COUNT);
 		memResetHeapObject (&heapOld); /* Old heap unused initially */
 		GarbageCollectionMode = GC_MODE_YOUNG;
-		DB("Create a stack");
-		memNewStack();  r1f = r0;
 	} else {
 		DB("Module already activated");
 	}
@@ -1372,9 +1390,17 @@ void memRegisterType (Type type, char *description) {
 	memRegisterInternalType (type, description);
 }
 
-void memError (void) {
-	fprintf (stderr, "\nERROR: memError() called: Halting process with a seg fault.\n");
-	*(int*)0 = 0; // Force a crash to catch in debugger.
+
+/* Register the address of an object pointer.  All of these object locations
+   are used as the root set for the garbage collector.
+*/
+void memRegisterRootObject (Obj *objp, Str desc) {
+	assert(MemRootSetCount<MemRootSetCountMax);
+	MemRootSet[MemRootSetCount++] = objp;
+	memObjStringRegister (objp, desc);
 }
+
+
+
 #undef DB_DESC
 #undef DEBUG

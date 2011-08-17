@@ -14,11 +14,11 @@
 /* A character buffer and the functions that print to it
 */
 FILE *fp;
-char *buff, *baseString;
+char *fpBuff;
 Num buffLength=0;
 
 void vmtIOInit (void) {
-	fp = open_memstream(&buff, &buffLength);
+	fp = open_memstream(&fpBuff, &buffLength);
 	assert(NULL != fp);
 }
 
@@ -28,21 +28,24 @@ void vmtIOFlush (void) {
 
 void vmtIOFinalize (void) {
 	fclose(fp);
-	free(buff);
+	free(fpBuff);
 }
 
 void displayIntegerR1 (void) {
-	fprintf (fp, "%d", r1);
+	//printf("%d", r1);
+	fprintf(fp, "%d", r1);
 }
 
 void displayStringR1 (void) {
-	fprintf (fp, "%s", r1);
+	//printf("%s", r1);
+	fprintf(fp, "%s", r1);
 }
 
 /* A machine language program that outputs to a buffer some strings and numbers.
 */
 void fancyHelloWorld (void) {
  LengthType codeSize;
+ char *baseString;
  /* Registers holding runable code objects */
  #define helloWorldSub r10
  #define printNumbersSub r11
@@ -61,7 +64,7 @@ void fancyHelloWorld (void) {
 		RET };
 
 	codeSize = sizeof(helloWorld);
-   memNewVector(TCODE, codeSize/8);
+   r0 = memNewVector(TCODE, codeSize/8);
 	helloWorldSub = r0;
 	memcpy(helloWorldSub, helloWorld, codeSize);
 
@@ -87,7 +90,7 @@ void fancyHelloWorld (void) {
 		RET };
 
 	codeSize = sizeof(printNumbers);
-   memNewVector(TCODE, codeSize/8);
+   r0 = memNewVector(TCODE, codeSize/8);
 	printNumbersSub = r0;
 	memcpy(printNumbersSub, printNumbers, codeSize);
 
@@ -115,7 +118,7 @@ void fancyHelloWorld (void) {
 		QUIT };
 
 	codeSize = sizeof(mainCode);
-   memNewVector(TCODE, codeSize/8);
+   r0 = memNewVector(TCODE, codeSize/8);
 	rcode = r0;
 	memcpy(rcode, mainCode, codeSize);
 
@@ -130,7 +133,7 @@ void fancyHelloWorld (void) {
 	             "3Hello,World[tm]!2Hello,World[tm]!1Hello,World[tm]!001234\n"
 	             "3Hello,World[tm]!2Hello,World[tm]!1Hello,World[tm]!001234\n";
 	assert(buffLength == strlen(baseString));
-	assert(0 == strcmp(buff, baseString));
+	assert(0 == strcmp(fpBuff, baseString));
 
 	vmtIOFinalize();
 }
@@ -140,9 +143,9 @@ void fancyHelloWorld (void) {
 /* Verify the interrupt/scheduler handler mechanism.  The handler will
    increment r5 every time slice.  The machine language program will
    halt after four r5 incrementeds.  */
+void vmtSigAlarmReset (void) { ualarm(10*1000,0); }
 void vmtSchedulerHandler (void) { ++r5; vmtSigAlarmReset(); } 
 void vmtSigAlarmHandler (int sig) { vmInterrupt=1;}
-void vmtSigAlarmReset (void) { ualarm(10*1000,0); }
 
 void testScheduler (void) {
 	vmInitialize(vmtSchedulerHandler, NULL);
@@ -169,7 +172,7 @@ void testScheduler (void) {
 		BNEI5, (Obj)4, (Obj)(-5*8),
 		QUIT };
 
-	memNewVector(TCODE, sizeof(prog)/8);
+	r0 = memNewVector(TCODE, sizeof(prog)/8);
 	memcpy(r0, prog, sizeof(prog));
 	rcode = r0;
 	rip = 0;
@@ -189,6 +192,7 @@ int main (int argc, char *argv[]) {
 
 	vmInitialize(0, 0);
 
+	//memDebugDumpAll(stdout);
 	TEST(fancyHelloWorld);
 	TEST(testScheduler);
 

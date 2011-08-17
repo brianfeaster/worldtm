@@ -4,6 +4,7 @@
 #include <assert.h>
 #include "os.h"
 #include "obj.h"
+#include "vm.h"
 #include "mem.h"
 
 #define TEST(fn) (printf("Calling test: "#fn"()  "), fn(),printf("PASS\n"))

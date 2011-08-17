@@ -1,6 +1,6 @@
 # Makefile for Wscheme.  It's simple.
 
-CFLAGS = -Wall -ggdb -Wno-format -Wno-trigraphs -march=native -Wconversion -O3
+CFLAGS = -Wall -ggdb -Wno-format -Wno-trigraphs -march=native -Wconversion
 #CFLAGS = -D_GNU_SOURCE -march=pentium -Wall -Wno-format -Wno-trigraphs -ggdb -Wconversion -O3
 # -Wall            -- Many warnings.
 # -Wno-format      -- Disable the annoying printf warnings.
@@ -18,11 +18,11 @@ LDFLAGS = -lm
 MEMTOBJS  = memt.o                                     mem.o
 VMTOBJS   = vmt.o                                 vm.o mem.o
 ASMTOBJS  = asmt.o                          asm.o vm.o mem.o
-OBJTOBJS  = objt.o                    obj.o            mem.o
-SYSTOBJS  = syst.o              sys.o obj.o            mem.o
-OSTOBJS   =  ost.o         os.o sys.o obj.o            mem.o
+OBJTOBJS  = objt.o                    obj.o       vm.o mem.o
+SYSTOBJS  = syst.o              sys.o obj.o       vm.o mem.o
+OSTOBJS   =  ost.o         os.o sys.o obj.o       vm.o mem.o
 COMPTOBJS = compt.o comp.o os.o sys.o obj.o asm.o vm.o mem.o
-WSCMTOBJS = wscmt.o comp.o      sys.o obj.o asm.o vm.o mem.o
+WSCMTOBJS = wscmt.o comp.o os.o sys.o obj.o asm.o vm.o mem.o
 
 WSCMOBJS  =  wscm.o comp.o os.o sys.o obj.o asm.o vm.o mem.o
 
@@ -34,11 +34,11 @@ vm.o:                                 vm.h mem.h globals.h debug.h
 
 asm.o:                          asm.h vm.h mem.h globals.h debug.h
 
-obj.o:                    obj.h            mem.h globals.h debug.h
+obj.o:                    obj.h       vm.h mem.h globals.h debug.h
 
-sys.o:              sys.h obj.h            mem.h globals.h debug.h
+sys.o:              sys.h obj.h       vm.h mem.h globals.h debug.h
 
-os.o:          os.h sys.h obj.h            mem.h globals.h debug.h
+os.o:          os.h sys.h obj.h       vm.h mem.h globals.h debug.h
 
 comp.o: comp.h os.h sys.h obj.h asm.h vm.h mem.h globals.h debug.h
 

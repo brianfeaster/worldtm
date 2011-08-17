@@ -3423,3 +3423,23 @@ Wed Jul 20 13:23:18 EDT 2011
 
 There are still instances where world code doesn't handle the case of a non-
 existant entity in the EntityDB.
+
+
+
+Tue Aug 16 00:55:47 EDT 2011
+
+Do I reimplement the compiler now or continue to clean it up.
+
+
+
+Tue Aug 16 13:06:09 EDT 2011
+
+open-socket and open-stream need a timeout.
+
+Global registers are a virtual machine concept.  The mem module should just
+provide a mechanism for registering root set object pointers.
+
+Moving register definitions to the VM module.  The mem module will return newly
+allocated array and vector objects from the corresponding new functions.
+
+[mem]-[vm]-[obj]- - - sys op comp wscm

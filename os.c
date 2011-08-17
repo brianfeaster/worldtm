@@ -6,6 +6,7 @@
 #include "os.h"
 #include "sys.h"
 #include "obj.h"
+#include "vm.h"
 #include "mem.h"
 /*
  Scheduling
@@ -22,8 +23,8 @@
 /* Semaphores are just immediate numbers.
 */
 void osOpenSemaphore (void) {
-	memNewSemaphore();
-	memVectorSet(r0, 0, (Obj)*(Int*)memPop()); /* Initialize the semaphore's counter */
+	r0 = memNewSemaphore();
+	memVectorSet(r0, 0, (Obj)*(Int*)vmPop()); /* Initialize the semaphore's counter */
 }
 
 void osNewThreadDescriptor (void) {
@@ -88,7 +89,7 @@ void osNewThread (void) {
 
 	/* Create thread's stack (in an un-running state). */
 	r1=r0; /* Code block */
-	memNewStack(); r2=r0;
+	r2 = memNewStack();
 	memStackPush(r2, renv); /* Initial environment. */
 	memStackPush(r2, 0);   /* Initial ip. */
 	memStackPush(r2, r1);  /* Initial code. */
@@ -244,9 +245,9 @@ void osScheduleBlocked (void) {
 			   thread to the ready queue. */
 			if (memVectorObject(r1, 3) == saccepting) {
 				DB(" dealing with a new incomming stream connection thread");
-				memPush(r5); /* Since the following clobbers r5. */
+				vmPush(r5); /* Since the following clobbers r5. */
 				sysAcceptLocalStream(); r1=r0;
-				r5=memPop();
+				r5=vmPop();
 				if (memVectorObject(r1, 3) != saccepting) {
 					memStackSet(osThreadStack(r5), 0, r1);
 					r1=objDoublyLinkedListNext(r5);
@@ -294,20 +295,20 @@ void osRun (void) {
 	} else {
 		/* Get stack from descriptor. */
 		rstack = osThreadStack(rrunning);
-		r0 = memPop();
-		r1 = memPop();
-		r2 = memPop();
-		r3 = memPop();
-		r4 = memPop();
-		r5 = memPop();
-		r6 = memPop();
-		r7 = memPop();
-		rretcode=memPop();
-		rretip=memPop();
-		rretenv=memPop();
-		rcode=memPop();
-		rip=memPop();
-		renv=memPop();
+		r0 = vmPop();
+		r1 = vmPop();
+		r2 = vmPop();
+		r3 = vmPop();
+		r4 = vmPop();
+		r5 = vmPop();
+		r6 = vmPop();
+		r7 = vmPop();
+		rretcode=vmPop();
+		rretip=vmPop();
+		rretenv=vmPop();
+		rcode=vmPop();
+		rip=vmPop();
+		renv=vmPop();
 		memVectorSet(osThreadDescriptor(rrunning), 2, srunning);
 	}
 	DBEND(" => ");
@@ -394,20 +395,20 @@ void osUnRun (void) {
 	assert(osThreadDescState(threadDescriptor) == srunning);
 	memVectorSet(threadDescriptor, 2, sready);
 
-	memPush(renv);
-	memPush(rip);
-	memPush(rcode);
-	memPush(rretenv);
-	memPush(rretip);
-	memPush(rretcode);
-	memPush(r7);
-	memPush(r6);
-	memPush(r5);
-	memPush(r4);
-	memPush(r3);
-	memPush(r2);
-	memPush(r1);
-	memPush(r0);
+	vmPush(renv);
+	vmPush(rip);
+	vmPush(rcode);
+	vmPush(rretenv);
+	vmPush(rretip);
+	vmPush(rretcode);
+	vmPush(r7);
+	vmPush(r6);
+	vmPush(r5);
+	vmPush(r4);
+	vmPush(r3);
+	vmPush(r2);
+	vmPush(r1);
+	vmPush(r0);
 
 	DBEND();
 }
@@ -418,13 +419,13 @@ void osUnRun (void) {
 void osSleepThread (void) {
  s64 wakeupTime;
 	DBBEG();
-	r0 = memPop(); /* The call to sleep returns the argument passed to it. */
+	r0 = vmPop(); /* The call to sleep returns the argument passed to it. */
 	osUnRun();
 	wakeupTime = sysTime() + *(Int*)r0;
 	DB("wakeupTime %lldms = %lld-%lld", wakeupTime-sysTime(), wakeupTime, sysTime());
 	/* Wakeup time (u64) goes on top of stack. */
 	objNewInt(wakeupTime);
-	memPush(r0);
+	vmPush(r0);
 
 	/* Put this thread in order of wakup time in the sleeping list.  */
 	r3=objDoublyLinkedListNext(rsleeping);
@@ -490,9 +491,9 @@ void osSpawnSignalHandler(void) {
 		if (caughtSignals[i]) {
 			DB("caughtSignals["NUM"]="NUM, i, caughtSignals[i]);
 			caughtSignals[i]=0;
-			memPush(r0); /* Save state */
-			memPush(r1);
-			memPush(r2);
+			vmPush(r0); /* Save state */
+			vmPush(r1);
+			vmPush(r2);
 				r1=signalhandlers;  sysTGEFind(); r0=car(r0); /* Consider vector of signalhandlers. */
 				r1 = memVectorObject(r0, i);
 				r0 = car(r1);
@@ -502,9 +503,9 @@ void osSpawnSignalHandler(void) {
 //TODO		memVectorSet(r0, 3, NOP);
 //TODO		memVectorSet(r0, 4, NOP);
 				osNewThread();
-			r2=memPop();
-			r1=memPop();
-			r0=memPop();
+			r2=vmPop();
+			r1=vmPop();
+			r0=vmPop();
 		}
 	}
 	DBEND();

@@ -24,7 +24,7 @@ static void asmtVmDebugDumpCode (void) {
 
 
 
-int maint (void) {
+int myTest (void) {
  char *welcomemsg="Hello, unit test!!!";
  Num programOutputStringCompare;
 	setbuf(stdout, NULL);
@@ -113,7 +113,7 @@ int main (int argc, char *argv[]) {
 
 	asmInitialize();
 
-	TEST(maint);
+	TEST(myTest);
 
 	return 0;
 }

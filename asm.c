@@ -16,11 +16,11 @@ Obj ADDR; /* Branch opcode offset symbol. */
 Obj END;  /* Sentinel for assembly programs.  Must be last assembly opcode. */
 
 void asmAsm (Obj o, ...) {
- Obj obj;
  va_list ap;
+ Obj obj;
+	DBBEG ();
 	va_start(ap, o);
 	obj = o;
-	DBBEG ();
 	while (obj!=END) {
 		DB(INT4":"OBJ, memStackLength(rasmstack), obj);
 		memStackPush(rasmstack, obj);
@@ -37,7 +37,7 @@ void asmSkipRedundantPopsAndPushes (Num opcodeStart) {
  Num i;
 	/* Remove occurrances of pop_15/1e/1d push_1d/1e/15 */
 	// Debug dump un-assembled code stack.
-	memNewVector(TCODE, len=(memStackLength(rasmstack)-opcodeStart));
+	r0 = memNewVector(TCODE, len=(memStackLength(rasmstack)-opcodeStart));
 	memcpy(r0, rasmstack+ObjSize, len*ObjSize);
 	vmDebugDumpCode(r0, stderr);
 
@@ -67,14 +67,14 @@ void asmSkipRedundantPopsAndPushes (Num opcodeStart) {
 void asmCompileAsmstack (Num opcodeStart) {
  Num j, i, opcodeEnd, opcodeWrite, labelCount=0, addrCount=0;
 	DB("::%s", __func__);
-	memPush(r0);
-	memPush(r1);
-	memPush(r2);
-	memPush(r3);
+	vmPush(r0);
+	vmPush(r1);
+	vmPush(r2);
+	vmPush(r3);
 	/* Store for LABELS and opcode addresses (stored one after another).  */
-	memNewVector(TVECTOR, 80); r2=r0;
+	r2 = memNewVector(TVECTOR, 80);
 	/* Store for instruction addresses and LABELS */
-	memNewVector(TVECTOR, 80); r3=r0;
+	r3 = memNewVector(TVECTOR, 80);
 
 	/* Compress stack of opcodes onto itself moving the label and address info
 	   to their respective lists.  Iterating over the stack but treating it
@@ -128,10 +128,10 @@ void asmCompileAsmstack (Num opcodeStart) {
 			fprintf(stderr, "ERROR: %s: Can't find label [%s].", __func__, r0);
 		}
 	}
-	r3 = memPop();
-	r2 = memPop();
-	r1 = memPop();
-	r0 = memPop();
+	r3 = vmPop();
+	r2 = vmPop();
+	r1 = vmPop();
+	r0 = vmPop();
 	DB("--%s", __func__);
 }
 
@@ -139,7 +139,7 @@ void asmCompileAsmstack (Num opcodeStart) {
 void asmNewCode (void) {
  Num len;
 	DB("::%s", __func__);
-	memNewVector(TCODE, len=memStackLength(rasmstack));
+	r0 = memNewVector(TCODE, len=memStackLength(rasmstack));
 	memcpy(r0, rasmstack+8, len*8);
 	/* Reset assembly stack by setting the first entry to
 	   the stack itself (points to itself). */
@@ -159,7 +159,7 @@ void asmInitialize (void) {
 		LABEL = &LABEL;
 		ADDR = &ADDR;
 		END = &END;
-		memNewStack(); rasmstack = r0;
+		rasmstack = memNewStack();
 	} else {
 		DB("  Module already activated");
 	}

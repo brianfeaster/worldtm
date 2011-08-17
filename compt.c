@@ -1,16 +1,27 @@
 #include <stdio.h>
-#include <stdarg.h>
 #include <string.h>
+#include <assert.h>
 #include "comp.h"
-#include "asm.h"
+#include "os.h"
 #include "sys.h"
+#include "asm.h"
+#include "vm.h"
+
 
 #define TEST(fn) (printf("Calling test: "#fn"()  "), fn(),printf("PASS\n"))
 
 
 
-int maint (void) {
-	return 0;
+/* Verify a simple lambda expression compiles and evaluates
+*/
+void simpleLambda (void) {
+	yy_scan_string ((Str)"((lambda () 99))");
+	yyparse(); /* Use the internal parser */
+	rexpr=r0; compCompile();
+	rcode=r0;
+	rip=0;
+	vmRun();
+	assert(99 == *(Int*)r0); /* The expression returns the number 99 */
 }
 
 
@@ -23,57 +34,7 @@ int main (int argc, char *argv[]) {
 
 	compInitialize();
 
-	TEST(maint);
-
-#if 0
-void helloWorld (void) {printf ("\nHello world!\n");}
-void displayInteger$0 (void) {printf ("%08x", *(s32*)r0); }
-void displayInteger$1 (void) {printf ("%08x", *(s32*)r1); }
-void displayString$0  (void) {write (1, r0, memObjectLength(r0)); }
-void displayString$1  (void) {write (1, r1, memObjectLength(r1)); }
-void displayCString   (void) {printf (r0); }
-
-
-	/* Assemble a new program. */
-	asmAsm(
-		SYSI, helloWorld,
-		MVI1, r1,
-		SYSI, objCopyInteger,
-		SYSI, displayInteger$0,
-		MVI0, "\n+",
-		SYSI, displayCString,
-		MVI0, r2,
-		SYSI, displayInteger$0,
-		ADD10,
-		MVI0, "\n=",
-		SYSI, displayCString,
-		SYSI, displayInteger$1,
-		LABEL, "top",
-		MVI0, r2,
-		ADD10,
-		MVI0, "\r",
-		SYSI, displayCString,
-		SYSI, displayInteger$1,
-		BRA, ADDR, "top",
-		END
-	);
-	asmCompileAsmstack(0);
-	asmNewCode();
-	vmDebugDumpCode(r0,stdout);
-	code=r0;  ip=0;  vmRun();
-	memGarbageCollect();
-	memDebugDumpHeapHeaders(stdout);
-	goto done;
-	memStackPush(stack, r0);
-	memGarbageCollect();
-	memStackPop(stack);
-	memStackPop(stack);
-	memStackPop(stack);
-	memGarbageCollect();
-	memGarbageCollect();
-	memGarbageCollect();
-	memGarbageCollect();
-#endif
+	TEST(simpleLambda);
 
 	return 0;
 }

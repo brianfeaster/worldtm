@@ -14,7 +14,7 @@
 (load "ultima4.cells")
 (load "scrabble.scm") ; TODO temporary
 
-(define HUB-PORT 8155)
+(define HUB-PORT 7155)
 (define KITTEHBRAIN  #f)
 (define ActivityTime (time))
 (define SHOWBUTTONS #f)

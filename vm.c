@@ -9,7 +9,6 @@
 #include <assert.h>
 #include "vm.h"
 #include "mem.h"
-
 /* While the virtual machine is running, register rip/r1d, which is the opcode
    index, is transformed into a pointer into the rcode/r1e vector object.  This
    transformation is undone and rip reverted to an immediate index value when
@@ -21,7 +20,26 @@
 //#define OPDB(s) DBE fprintf(stderr,"\n"OBJ":"HEX" " s, rcode+8*((Obj*)rip-(Obj*)rcode), ((Obj*)rip-(Obj*)rcode))
 
 
+
+/* Registers.  These make up the root set used by the garbage collector.
+ */
+Obj r0,  r1,  r2,  r3,  r4,  r5,  r6,  r7,
+    r8,  r9,  ra,  rb,  rc,  rd,  re,  rf,
+    r10, r11, r12, r13, r14, r15, r16, r17,
+    r18, r19, r1a, r1b, r1c, r1d, r1e, r1f;
+
 int vmRunCount=0;
+
+
+void vmPush (Obj o) {
+	memStackPush(r1f, o);
+}
+
+
+Obj vmPop (void) {
+	return memStackPop(r1f);
+}
+
 
 void vmRunRestore (void) {
 	DBBEG("  ip:"OBJ"  code:"OBJ, rip, rcode);
@@ -187,7 +205,7 @@ void vmVm (Int cmd) {
 
 	/* Run machine code by jumping to first opcode (code=r13  rip=r1b). */
 	vmRunSetup();
-	DBBEG("  Starting VM:  rip="HEX"  rcode="HEX"  *rip="HEX, rip, rcode, *(void**)rip);
+	DBBEG("  Starting VM:  ip="HEX"  code="HEX"  *ip="HEX, rip, rcode, *(void**)rip);
 	goto **(void**)rip;
 
 	/* NOP */
@@ -310,28 +328,28 @@ void vmVm (Int cmd) {
 	st201: OPDB("st201"); *((Obj*)r0 + (Num)r1) = r2;  goto **(void**)(rip+=8);
 
 	/* Push register using local stack pointer. */
-	push0: OPDB("push0");  memPush(r0);  goto **(void**)(rip+=8);
-	push1: OPDB("push1");  memPush(r1);  goto **(void**)(rip+=8);
-	push2: OPDB("push2");  memPush(r2);  goto **(void**)(rip+=8);
-	push3: OPDB("push3");  memPush(r3);  goto **(void**)(rip+=8);
-	push4: OPDB("push4");  memPush(r4);  goto **(void**)(rip+=8);
-	push5: OPDB("push5");  memPush(r5);  goto **(void**)(rip+=8);
-	push7: OPDB("push7");  memPush(r7);  goto **(void**)(rip+=8);
-	push19:OPDB("push19"); memPush(r19); goto **(void**)(rip+=8);
-	push1a:OPDB("push1a"); memPush(r1a); goto **(void**)(rip+=8);
-	push1b:OPDB("push1b"); memPush(r1b); goto **(void**)(rip+=8);
+	push0: OPDB("push0");  vmPush(r0);  goto **(void**)(rip+=8);
+	push1: OPDB("push1");  vmPush(r1);  goto **(void**)(rip+=8);
+	push2: OPDB("push2");  vmPush(r2);  goto **(void**)(rip+=8);
+	push3: OPDB("push3");  vmPush(r3);  goto **(void**)(rip+=8);
+	push4: OPDB("push4");  vmPush(r4);  goto **(void**)(rip+=8);
+	push5: OPDB("push5");  vmPush(r5);  goto **(void**)(rip+=8);
+	push7: OPDB("push7");  vmPush(r7);  goto **(void**)(rip+=8);
+	push19:OPDB("push19"); vmPush(r19); goto **(void**)(rip+=8);
+	push1a:OPDB("push1a"); vmPush(r1a); goto **(void**)(rip+=8);
+	push1b:OPDB("push1b"); vmPush(r1b); goto **(void**)(rip+=8);
 
 
 	/* Pop into a register. */
-	pop0: OPDB("pop0");   r0 = memPop();  goto **(void**)(rip+=8);
-	pop1: OPDB("pop1");   r1 = memPop();  goto **(void**)(rip+=8);
-	pop2: OPDB("pop2");   r2 = memPop();  goto **(void**)(rip+=8);
-	pop3: OPDB("pop3");   r3 = memPop();  goto **(void**)(rip+=8);
-	pop4: OPDB("pop4");   r4 = memPop();  goto **(void**)(rip+=8);
-	pop7: OPDB("pop7");   r7 = memPop();  goto **(void**)(rip+=8);
-	pop19:OPDB("pop19"); r19 = memPop();  goto **(void**)(rip+=8);
-	pop1a:OPDB("pop1a"); r1a = memPop();  goto **(void**)(rip+=8);
-	pop1b:OPDB("pop1b"); r1b = memPop();  goto **(void**)(rip+=8);
+	pop0: OPDB("pop0");   r0 = vmPop();  goto **(void**)(rip+=8);
+	pop1: OPDB("pop1");   r1 = vmPop();  goto **(void**)(rip+=8);
+	pop2: OPDB("pop2");   r2 = vmPop();  goto **(void**)(rip+=8);
+	pop3: OPDB("pop3");   r3 = vmPop();  goto **(void**)(rip+=8);
+	pop4: OPDB("pop4");   r4 = vmPop();  goto **(void**)(rip+=8);
+	pop7: OPDB("pop7");   r7 = vmPop();  goto **(void**)(rip+=8);
+	pop19:OPDB("pop19"); r19 = vmPop();  goto **(void**)(rip+=8);
+	pop1a:OPDB("pop1a"); r1a = vmPop();  goto **(void**)(rip+=8);
+	pop1b:OPDB("pop1b"); r1b = vmPop();  goto **(void**)(rip+=8);
 
 	/* Add immediate to r0. */
 	addi0: OPDB("addi0"); r0 += *(Int*)(rip+=8); goto **(void**)(rip+=8);
@@ -554,7 +572,7 @@ void vmRun (void) {
 /* Default Object serializer
  */
 void vmObjectDumperDefault (Obj o, FILE *stream) {
- static char *p;
+ static Str p;
 
 	fprintf (stream, HEX, o);
 
@@ -571,6 +589,17 @@ void vmInitialize (Func interruptHandler, void(*vmObjDumper)(Obj, FILE*)) {
 		DB("  Activating module...");
 		shouldInitialize=0;
 		memInitialize(0, 0);
+		DB("Create 'registers'");
+		memRegisterRoot(r0);  memRegisterRoot(r1);  memRegisterRoot(r2);  memRegisterRoot(r3);
+		memRegisterRoot(r4);  memRegisterRoot(r5);  memRegisterRoot(r6);  memRegisterRoot(r7);
+		memRegisterRoot(r8);  memRegisterRoot(r9);  memRegisterRoot(ra);  memRegisterRoot(rb);
+		memRegisterRoot(rc);  memRegisterRoot(rd);  memRegisterRoot(re);  memRegisterRoot(rf);
+		memRegisterRoot(r10); memRegisterRoot(r11); memRegisterRoot(r12); memRegisterRoot(r13);
+		memRegisterRoot(r14); memRegisterRoot(r15); memRegisterRoot(r16); memRegisterRoot(r17);
+		memRegisterRoot(r18); memRegisterRoot(r19); memRegisterRoot(r1a); memRegisterRoot(r1b);
+		memRegisterRoot(r1c); memRegisterRoot(r1d); memRegisterRoot(r1e); memRegisterRoot(r1f);
+		DB("Create the stack");
+		r1f = memNewStack();
 		DB("Register the internal object types");
 		memRegisterType (TCODE, "code");
 		DB("Initialize opcode values");
