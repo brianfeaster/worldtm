@@ -6,6 +6,7 @@
 #include <string.h> /* memcpy */
 #include <assert.h>
 #include "obj.h"
+#include "vm.h"
 #include "mem.h"
 
 
@@ -26,7 +27,6 @@ Obj null, nullvec, nullstr, false, true, eof,
     seval, sapply, scallcc, ssyntaxrules, seof,
     snot, sadd, ssub, smul, sdiv, slogand, characters, staticIntegers, signalhandlers;
 
-Num wscmDebug=0;
 
 
 /* This is a very popular hashing algorithm found online and in various texts.
@@ -67,7 +67,7 @@ void objNewInt  (Int i) {
 		r0 = ((Obj*)staticIntegers)[i+1023];
 	} else {
 		/* Generate a new integer object */
-   	memNewArray(TINTEGER, sizeof(Int));
+   	r0 = memNewArray(TINTEGER, sizeof(Int));
    	*(Int*)r0 = i;
 	}
 }
@@ -75,27 +75,27 @@ void objNewInt  (Int i) {
 /* Create and set object in r0 to immediate signed integer value in r1.
 */
 void objCopyInteger (void) {
-   memNewArray(TINTEGER, sizeof(Int));
+   r0 = memNewArray(TINTEGER, sizeof(Int));
    *(Int*)r0 = *(Int*)r1;
 }
 
 /* Creates a new real object in r0.
 */
 void objNewReal (Real x) {
-   memNewArray(TREAL, sizeof(Real));
+   r0 = memNewArray(TREAL, sizeof(Real));
    *(Real*)r0 = x;
 }
 /* Create and set object in r0 to immediate real value in r1.
 */
 void objCopyReal (void) {
-   memNewArray(TREAL, sizeof(r32));
+   r0 = memNewArray(TREAL, sizeof(r32));
    *(r32*)r0 = *(r32*)r1;
 }
 
 /* Create new string copying len bytes from str to object in r0.
 */
 void objNewString (Str str, Num len) {
-   memNewArray(TSTRING, len);
+   r0 = memNewArray(TSTRING, len);
    if (str) memcpy(r0, str, len);
 }
 
@@ -103,7 +103,7 @@ void objNewString (Str str, Num len) {
 */
 void objCopyString (void) {
  Num len;
-   memNewArray(TSTRING, len=memObjectLength(r1));
+   r0 = memNewArray(TSTRING, len=memObjectLength(r1));
 	memcpy(r0, r1, len);
 }
 
@@ -118,7 +118,7 @@ Num objNewSymbolBase (Str str, Num len, Num copyStrP) {
 		r0 = memVectorObject(rsymbols, i);
 		/* Bucket empty so insert into symbol table. */
 		if (r0 == null) {
-			memNewArray(TSYMBOL, len);
+			r0 = memNewArray(TSYMBOL, len);
 			if (copyStrP) memcpy(r0, str, len);
 			memVectorSet(rsymbols, i, r0);
 			return 1;
@@ -130,7 +130,7 @@ Num objNewSymbolBase (Str str, Num len, Num copyStrP) {
 		/* Otherwise continue linear sweep for empty bucket or symbol. */
 	} while ( (i=(++i==HashTableSize)?0:i) != hash);
 	printf ("WARNING!!!  Symbol table full!!!!\n");
-	memNewArray(TSYMBOL, len);
+	r0 = memNewArray(TSYMBOL, len);
 	if (copyStrP) memcpy((char*)r0, str, len);
 	return 1;
 }
@@ -152,7 +152,7 @@ void objNewSymbolStatic (char *s) {
 		r0 = memVectorObject(rsymbols, i);
 		/* Bucket empty so insert into symbol table. */
 		if (r0 == null) {
-			memNewStatic(TSYMBOL, len); /* r0 now holds new symbol */
+			r0 = memNewStatic(TSYMBOL, len); /* r0 now holds new symbol */
 			memcpy(r0, s, len);
 			memVectorSet(rsymbols, i, r0);
 			return;
@@ -164,45 +164,45 @@ void objNewSymbolStatic (char *s) {
 		/* Otherwise continue linear sweep for empty bucket or symbol. */
 	} while ( (i=(++i==HashTableSize)?0:i) != hash);
 	printf ("WARNING!!!  Symbol table full!!!!\n");
-	memNewStatic(TSYMBOL, len);
+	r0 = memNewStatic(TSYMBOL, len);
 	memcpy((char*)r0, s, len);
 }
 
 void objNewSyscall (Func f) {
-   memNewStaticVector(TSYSCALL, 1);
+   r0 = memNewStaticVector(TSYSCALL, 1);
 	memVectorSet(r0, 0, f);
 }
 
 void objCons12 (void) {
-   memNewVector(TPAIR, 2);
+   r0 = memNewVector(TPAIR, 2);
 	memVectorSet(r0, 0, r1);
 	memVectorSet(r0, 1, r2);
 }
 void objCons23 (void) {
-   memNewVector(TPAIR, 2);
+   r0 = memNewVector(TPAIR, 2);
 	memVectorSet(r0, 0, r2);
 	memVectorSet(r0, 1, r3);
 }
 
 void objNewDoublyLinkedListNode (void) {
-	memNewVector(TVECTOR, 3);
+	r0 = memNewVector(TVECTOR, 3);
 	memVectorSet(r0, 0, null);
 	memVectorSet(r0, 1, r0); /* Next */
 	memVectorSet(r0, 2, r0); /* Prev */
 }
 
 void objNewVector (Num len) {
-   memNewVector(TVECTOR, len);
+   r0 = memNewVector(TVECTOR, len);
 }
 
 /* Create uninitialized vector in r0 of length imm:r1
 */
 void objNewVector1 (void) {
-   memNewVector(TVECTOR, (LengthType)r1);
+   r0 = memNewVector(TVECTOR, (LengthType)r1);
 }
 
 void objNewPort (void) {
-	memNewVector(TPORT, 6);
+	r0 = memNewVector(TPORT, 6);
 	memVectorSet(r0, 0, r1); /* Descriptor. */
 	memVectorSet(r0, 1, r2); /* Path or internet address string. */
 	memVectorSet(r0, 2, r3); /* Flags or port number. */
@@ -296,7 +296,7 @@ void objListToVector (void) {
 	r1=r0;
 	len = objListLength(r0);
 	if (len) {
-		memNewVector(TVECTOR, len); /* Create empty vector */
+		r0 = memNewVector(TVECTOR, len); /* Create empty vector */
 		while (i<len) { /* Stuff vector*/
 			memVectorSet(r0, i++, car(r1));
 			r1 = cdr(r1);
@@ -310,6 +310,7 @@ void objListToVector (void) {
 void objDumpR (Obj o, FILE *stream, Num islist) {
  Num i;
  char *c;
+ Str s;
 
 	if ((Num)o < 0x100000) {
 		fprintf(stream, "#<%x>", o);
@@ -404,10 +405,10 @@ void objDumpR (Obj o, FILE *stream, Num islist) {
 				fprintf(stream, HEX, o);
 			}
 			/* Dump the object description. */
-			c = memObjString(o);
-			if (c) {
+			s = memObjString(o);
+			if (s) {
 				fwrite (":", 1, 1, stream);
-				fwrite (c, 1, strlen(c), stream);
+				fwrite (s, 1, strlen((char*)s), stream);
 			}
 	}
 }
@@ -425,6 +426,7 @@ void objInitialize (void) {
 	if (shouldInitialize) {
 		DB("Activating module...");
 		shouldInitialize=0;
+		vmInitialize(0, 0);
 		memInitialize(0, 0);
 		DB("Register the internal object types");
 		memRegisterType(TFALSE, "false");
@@ -447,15 +449,15 @@ void objInitialize (void) {
 		memRegisterType(TSYSCALL, "syscall");
 
 		/* These primitive types are also external (display) strings. */
-		memNewStatic(TNULL, 2);    null=r0;    memcpy(r0, "()", 2);
+		null = memNewStatic(TNULL, 2);         memcpy(null, "()", 2);
 		/* This is a strange object with a descriptor and no content.
 		   Since little endian a valid pointer to empty C string.  */
-		memNewStatic(TNULLSTR, 0); nullstr=r0;
-		memNewStatic(TNULLVEC, 3); nullvec=r0; memcpy(r0, "#()", 3);
-		memNewStatic(TFALSE, 2);   false=r0;   memcpy(r0, "#f", 2);
-		memNewStatic(TTRUE, 2);    true=r0;    memcpy(r0, "#t", 2);
+		nullstr = memNewStatic(TNULLSTR, 0);
+		nullvec = memNewStatic(TNULLVEC, 3);  memcpy(nullvec, "#()", 3);
+		false = memNewStatic(TFALSE, 2);      memcpy(false, "#f", 2);
+		true = memNewStatic(TTRUE, 2);        memcpy(true, "#t", 2);
 
-		memNewVector(TVECTOR, HashTableSize); rsymbols = r0; /* Symbol table */
+		rsymbols = memNewVector(TVECTOR, HashTableSize); /* Symbol table */
 		for (n=0; n<HashTableSize; n++) memVectorSet (rsymbols, n, null);
 
 		objNewSymbolStatic("define");       sdefine = r0;
@@ -524,21 +526,22 @@ void objInitialize (void) {
 		objNewSymbolStatic("SIGNALHANDLERS");  signalhandlers=r0;
 
 		/* Table of character objects.  The 257th character is the EOF object. */
-		memNewStaticVector(TVECTOR, 257);   characters = r0;
+		characters = memNewStaticVector(TVECTOR, 257);
 		for (n=0; n<256; n++) {
-			memNewStatic(TCHAR, 1);  *(Num*)r0=n;
+			r0 = memNewStatic(TCHAR, 1);
+			*(Num*)r0 = n;
 			memVectorSet(characters, n, r0);
 		}
 
 		/* Treat character number 256 0x100 as a char and as the eof object. */
-		memNewStatic(TEOF, 4);  eof = r0;
+		eof = memNewStatic(TEOF, 4);
 		*(Int*)eof = 256l;
- 		memVectorSet(characters, 256, eof);
+		memVectorSet(characters, 256, eof);
 
 		/* Table of integer constants. */
-		memNewStaticVector(TVECTOR, 2048);  staticIntegers = r0;
+		staticIntegers = memNewStaticVector(TVECTOR, 2048);
 		for (i=-1023l; i<=1024l; ++i) {
-  	 	memNewStatic(TINTEGER, sizeof(Int));
+	  	 	r0 = memNewStatic(TINTEGER, sizeof(Int));
 			*(Int*)r0 = i;
 			memVectorSet(staticIntegers, (Num)i+1023, r0);
 		}

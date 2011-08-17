@@ -10,39 +10,6 @@
 #include "globals.h"
 
 
-/* Global virtual machine register aliases */
-#define rblocked   r10 /* WSCM: I/O and Semaphore blocked threads */
-#define rthreads   r11 /* WSCM: Thread vector */
-#define rsleeping  r12 /* WSCM: Sleeping thread */
-#define rrunning   r13 /* WSCM: Current thread */
-#define rready     r14 /* WSCM: Thread list */
-#define rexpr      r15 /* WSCM: Expression being compiled */
-
-#define rasmstack  r16 /* VM: Opcode stack where machine code is emitted */
-
-#define rsymbols   r17 /* OBJ: Symbol table used by scanner and OS */
-#define rtge       r18 /* WSCM: Global environment */
-
-#define rretenv    r19 /* VM: Caller's env */
-#define rretip     r1a /* VM: Caller's ip */
-#define rretcode   r1b /* VM: Caller's code block */
-#define renv       r1c /* VM: Current running thread's environment */
-#define rip        r1d /* VM: Current running program instruction pointer */
-#define rcode      r1e /* VM: Currently running code object */
-
-#define rstack     r1f /* Register alias: Global stack used by VM */
-
-
-/* Registers:  These make up the root set for the garbage collector.  All
-   computation should use only these as variables since a GC could move an 
-   objects location in memory at any time.
-*/
-extern Obj r0,  r1,  r2,  r3,  r4,  r5,  r6,  r7,
-           r8,  r9,  ra,  rb,  rc,  rd,  re,  rf,
-           r10, r11, r12, r13, r14, r15, r16, r17,
-           r18, r19, r1a, r1b, r1c, r1d, r1e, r1f;
-
-
 /* Byte count of a Linux virtual memory block and the resolution of mmap.
    0x001000 = 2^12 = 4Kb */
 #define BLOCK_BYTE_SIZE ((Num)0x1000)
@@ -66,15 +33,15 @@ Num memVectorLengthToObjectSize  (LengthType length);
 
 
 
-/* Object Creators that store new object in r0 */
-void memNewStatic      (Type t, LengthType byteLength);
-void memNewStaticVector(Type t, LengthType objLength);
-void memNewArray       (Type t, LengthType byteLength);
-void memNewVector      (Type t, LengthType objLength);
-void memNewSemaphore   (void);
-void memNewFinalizer   (void);
-void memNewPointer     (void);
-void memNewStack       (void);
+/* Object Creators that return new objects in the new young/heap */
+Obj memNewStatic      (Type t, LengthType byteLength);
+Obj memNewStaticVector(Type t, LengthType objLength);
+Obj memNewArray       (Type t, LengthType byteLength);
+Obj memNewVector      (Type t, LengthType objLength);
+Obj memNewSemaphore   (void);
+Obj memNewFinalizer   (void);
+Obj memNewPointer     (void);
+Obj memNewStack       (void);
 
 int memIsObjectValid  (Obj o);
 
@@ -131,9 +98,9 @@ Str memTypeString (Type t);
    provided to associate a pointer addresses and its string representation.
    char* must be the type (instead of my Str type) due to how the preprocessor
    generates symbols. */
-char* memObjString        (Obj obj);
-void memObjStringRegister (Obj obj, char* str);
-#define memObjStringSet(o) memObjStringRegister(o, #o);
+Str  memObjString         (Obj obj);
+void memObjStringRegister (Obj obj, Str str);
+#define memObjStringSet(o) memObjStringRegister(o, (Str)#o)
 
 
 
@@ -144,6 +111,9 @@ void memObjStringRegister (Obj obj, char* str);
 void memInitialize (Func preGC, Func postGC);
 
 void memRegisterType (Type type, char *description);
+
+void memRegisterRootObject (Obj *objp, Str desc);
+#define memRegisterRoot(op) memRegisterRootObject(&op, (Str)#op)
 
 
 

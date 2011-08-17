@@ -4,6 +4,7 @@
 #include <assert.h>
 #include "sys.h"
 #include "obj.h"
+#include "vm.h"
 #include "mem.h"
 
 #define TEST(fn) (printf("Calling test: "#fn"()  "), fn(),printf("PASS\n"))
@@ -23,28 +24,28 @@ void networkLocalClientServerConnection (void) {
 	r0=0;
 
 	//printf("\nOpening listening socket:  ");
-	objNewInt(8080); memPush(r0);
+	objNewInt(8080); r1=r0;
 	sysOpenLocalSocket();
 	r5=r0;
 	//objDump(r5, stdout);
 	assert(saccepting == memVectorObject(r5, 3));
 
 	//printf("\nOpening connecting socket: ");
-	objNewString((Str)"localhost", 9); memPush(r0);
-	objNewInt(8080); memPush(r0);
+	objNewString((Str)"localhost", 9); vmPush(r0);
+	objNewInt(8080); vmPush(r0);
 	sysOpenRemoteSocket();
 	r6=r0;
 	//objDump(r6, stdout);
 	assert(sconnecting == memVectorObject(r6, 3));
 
-	//printf("\nStart connecting stream:   ");
+	//printf("\nStart listener stream:                ");
 	r1=r5;
 	sysAcceptLocalStream();
 	r7=r0;
 	//objDump(r7, stdout); printf(NL);
 	assert(sopen == memVectorObject(r7, 3));
 
-	//printf("\nStart listener stream:                ");
+	//printf("\nStart connecting stream:   ");
 	r1=r6;
 	sysAcceptRemoteStream();
 	//objDump(r6, stdout); printf(NL);
@@ -60,7 +61,7 @@ void networkLocalClientServerConnection (void) {
 void verifyLocalStreamBlocks () {
 
 	//printf("\nOpening listening socket:  ");
-	objNewInt(8080); memPush(r0);
+	objNewInt(8080); r1=r0;
 	sysOpenLocalSocket();
 	r5=r0;
 	assert(saccepting == memVectorObject(r5, 3));
@@ -77,7 +78,7 @@ void networkingWriteStuff (void) {
 	r0=0;
 
 	printf("\nOpening listening socket:  ");
-	objNewInt(8080); memPush(r0);
+	objNewInt(8080); vmPush(r0);
 	sysOpenLocalSocket();
 
 	printf("\nOpening stream: ");
@@ -107,7 +108,7 @@ void networkingReadStuff (void) {
 	r0=0;
 
 	//printf("\nOpening a listening socket: ");
-	objNewInt(8080); memPush(r0);
+	objNewInt(8080); vmPush(r0);
 	sysOpenLocalSocket();
 	//objDump(r0, stdout);
 

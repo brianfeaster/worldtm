@@ -15,7 +15,7 @@
 ;;
 ;; Lord British's castle (108 86)
 ;;
-(define HUB-PORT 8155)
+(define HUB-PORT 7155)
 (define DNA 17749)
 (define MYNAME "MAP AGENT")
 (define ActivityTime (time)) ; Used for the idle time with the 'who' expression

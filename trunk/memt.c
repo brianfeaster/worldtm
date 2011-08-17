@@ -7,7 +7,10 @@
 
 #define TEST(fn) (printf("Calling test: "#fn"()  "), fn(),printf("PASS\n"))
 
-extern Num memHeapLength (Num h);
+Num memHeapLength (Num h);
+
+Obj r0, r1, r2, r3, r4, r1f;
+
 Num TSYMBOL =0x01;
 Num TINTEGER=0x02;
 Num TSTRING =0x03;
@@ -15,15 +18,24 @@ Num TSTRING =0x03;
 Num TPAIR   =0x80;
 Num TVECTOR =0x81;
 
+void push (Obj o) { memStackPush(r1f, o); }
+Obj   pop (Obj o) { return memStackPop(r1f); }
+
 
 
 /* Verify the expected number of objects in each heap
  */
-void memtVerifyHeapLengths (Num staticLen, Num oldLen, Num youngLen, Num newLen) {
-	assert(memHeapLength(0) == staticLen);
-	assert(memHeapLength(1) == oldLen);
-	assert(memHeapLength(2) == youngLen);
-	assert(memHeapLength(3) == newLen);
+Num memtVerifyHeapLengths (Num staticLen, Num oldLen, Num youngLen, Num newLen) {
+ Num ret;
+	ret = 
+		memHeapLength(0) == staticLen &&
+		memHeapLength(1) == oldLen &&
+		memHeapLength(2) == youngLen &&
+		memHeapLength(3) == newLen;
+	if (!ret) {
+		printf ("\nstatic:"NUM"  old:"NUM"  young:"NUM"  new:"NUM"\n", memHeapLength(0), memHeapLength(1), memHeapLength(2), memHeapLength(3));
+	}
+	return ret;
 }
 
 
@@ -100,48 +112,48 @@ void memtObjectSize (void) {
 */
 void memtVerifyObjectCreationAndCollection (void) {
  Chr i, j;
-	memtVerifyHeapLengths(0, 0, 1, 0);
+	assert(memtVerifyHeapLengths(0, 0, 1, 0));
 
-	memNewArray(TSYMBOL, 256); r1=r0;
-	memNewArray(TINTEGER, 4); r2=r0;
-	memNewArray(TINTEGER, 4); r3=r0;
-	memNewVector(TPAIR, 2); r4=r0;
+	r1 = memNewArray(TSYMBOL, 256);
+	r2 = memNewArray(TINTEGER, 4);
+	r3 = memNewArray(TINTEGER, 4);
+	r4 = memNewVector(TPAIR, 2);
 
-	memtVerifyHeapLengths(0, 0, 5, 0);
+	assert(memtVerifyHeapLengths(0, 0, 5, 0));
 
-	memPush(r1);
-	memPush(r2);
-	memPush(r3);
-	memPush(r4);
-	memPush(r1f);
+	push(r1);
+	push(r2);
+	push(r3);
+	push(r4);
+	push(r1f);
 	assert(memStackLength(r1f) == 5);
 
 	memVectorSet(r4, 0, r1);
 	memVectorSet(r4, 1, r2);
 
 	for (i=0; i<16; i++) {
-		memNewArray(TINTEGER, 16);
-		memPush(r0);
+		r0 = memNewArray(TINTEGER, 16);
+		push(r0);
 		for (j=0; j<16; j++) ((Chr*)r0)[j] = (Chr)(j+i);
 	}
 	assert(memStackLength(r1f) == 21);
 
 
 	for (i=0; i<16; i++) memStackPop(r1f);
-	memtVerifyHeapLengths(0, 0, 21, 0);
+	assert(memtVerifyHeapLengths(0, 0, 21, 0));
 
 	memGarbageCollect();
 	assert(memStackLength(r1f) == 5);
 
 	/* Although I popped the stack of all the integers, register 0 still
 	   points to the last integer created */
-	memtVerifyHeapLengths(0, 0, 6, 0);
+	assert(memtVerifyHeapLengths(0, 0, 6, 0));
 
 	/* Clear the registers and force a full garbage collection to clean all heaps */
 	r0=r1=r2=r3=r4=r1f=0;
 	GarbageCollectionMode = 1;
 	memGarbageCollect();
-	memtVerifyHeapLengths(0, 0, 0, 0);
+	assert(memtVerifyHeapLengths(0, 0, 0, 0));
 }
 
 
@@ -161,12 +173,11 @@ void callbackFinalizerFunction (Obj o) {
 void memtFinalizer (void) {
 
 	/* The integer */
-	memNewArray(TINTEGER, 4);
-	r1 = r0;
+	r1 = memNewArray(TINTEGER, 4);
 	*(Int*)r1 = 0xefbeadde;
 
 	/* The finalizer */
-	memNewFinalizer();
+	r0 = memNewFinalizer();
 	memVectorSet(r0, 0, callbackFinalizerFunction);
 	memVectorSet(r0, 1, r1);
 
@@ -180,7 +191,7 @@ void memtFinalizer (void) {
 	GarbageCollectionMode = 1;
 	memGarbageCollect();
 
-	assert(MyFinalizerFlag==1);
+	assert(1 == MyFinalizerFlag);
 }
 
 
@@ -188,25 +199,24 @@ void memtFinalizer (void) {
 /* Verify a large array and large vector object can be created and collected.
 */
 void memtNewLargeVectorObject (void) {
-	memNewArray(TSTRING, 0x1000000 - 16); /* 16Mb sized array object */
-	r1=r0;
-	memNewVector(TVECTOR,  0x1000000/8 - 2); /* 16Mb sized vector object */
+	r1 = memNewArray(TSTRING, 0x1000000 - 16); /* 16Mb sized array object */
+	r0 = memNewVector(TVECTOR,  0x1000000/8 - 2); /* 16Mb sized vector object */
 
 	/* Verify the two big object survive in the young heap after a GC */
-	memtVerifyHeapLengths(0, 0, 2, 0);
+	assert(memtVerifyHeapLengths(0, 0, 2, 0));
 	memGarbageCollect();
-	memtVerifyHeapLengths(0, 0, 2, 0);
+	assert(memtVerifyHeapLengths(0, 0, 2, 0));
 
 	/* Verify the two big object move to the old heap after a full GC */
 	GarbageCollectionMode = 1;
 	memGarbageCollect();
-	memtVerifyHeapLengths(0, 2, 0, 0);
+	assert(memtVerifyHeapLengths(0, 2, 0, 0));
 
 	/* Delete all objects */
 	r0 = r1 = 0;
 	GarbageCollectionMode = 1;
 	memGarbageCollect();
-	memtVerifyHeapLengths(0, 0, 0, 0);
+	assert(memtVerifyHeapLengths(0, 0, 0, 0));
 }
 
 
@@ -218,13 +228,13 @@ void memtAutomaticGarbageCollect (void) {
 	/* Called 0x40000 times */
 	for (GarbageCollectCalled=0; !GarbageCollectCalled ; memNewArray(TSYMBOL, 8));
 	/* Better be just one object in the heap, the one that triggered the GC */
-	memtVerifyHeapLengths(0, 0, 1, 0);
+	assert(memtVerifyHeapLengths(0, 0, 1, 0));
 
 	/* Delete all objects */
 	r0=0;
 	GarbageCollectionMode = 1;
 	memGarbageCollect();
-	memtVerifyHeapLengths(0, 0, 0, 0);
+	assert(memtVerifyHeapLengths(0, 0, 0, 0));
 }
 
 
@@ -238,11 +248,23 @@ int main (int argc, char *argv[]) {
 
 	memInitialize(memtPreGarbageCollect, 0);
 
-	memRegisterType(TSYMBOL, "symbol");
-	memRegisterType(TINTEGER, "integer");
+	/* Register root set object.  These are the "registers" or
+	   machine's global variables */
+	memRegisterRoot(r0);
+	memRegisterRoot(r1);
+	memRegisterRoot(r2);
+	memRegisterRoot(r3);
+	memRegisterRoot(r4);
+	memRegisterRoot(r1f);
+
+	r1f = memNewStack(); /* Create the stack for the machine */
+
+	memRegisterType(TSYMBOL, "sym");
+	memRegisterType(TINTEGER, "int");
 	memRegisterType(TPAIR, "pair");
-	memRegisterType(TSTRING, "string");
-	memRegisterType(TVECTOR, "vector");
+	memRegisterType(TSTRING, "str");
+	memRegisterType(TVECTOR, "vec");
+	memObjStringSet(callbackFinalizerFunction);
 
 	TEST(memtSizeof);
 	TEST(memtMmap);
@@ -252,5 +274,6 @@ int main (int argc, char *argv[]) {
 	TEST(memtNewLargeVectorObject);
 	TEST(memtAutomaticGarbageCollect);
 
+	//memDebugDumpAll(stdout);
 	return 0;
 }
