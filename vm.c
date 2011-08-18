@@ -569,6 +569,7 @@ void vmRun (void) {
 }
 
 
+
 /* Default Object serializer
  */
 void vmObjectDumperDefault (Obj o, FILE *stream) {
@@ -580,50 +581,6 @@ void vmObjectDumperDefault (Obj o, FILE *stream) {
 }
 
 void (*vmObjectDumper)(Obj o, FILE *stream) = vmObjectDumperDefault;
-
-
-void vmInitialize (Func interruptHandler, void(*vmObjDumper)(Obj, FILE*)) {
- static Num shouldInitialize=1;
-	DB("::"STR, __func__);
-	if (shouldInitialize) {
-		DB("  Activating module...");
-		shouldInitialize=0;
-		memInitialize(0, 0);
-		DB("Create 'registers'");
-		memRegisterRoot(r0);  memRegisterRoot(r1);  memRegisterRoot(r2);  memRegisterRoot(r3);
-		memRegisterRoot(r4);  memRegisterRoot(r5);  memRegisterRoot(r6);  memRegisterRoot(r7);
-		memRegisterRoot(r8);  memRegisterRoot(r9);  memRegisterRoot(ra);  memRegisterRoot(rb);
-		memRegisterRoot(rc);  memRegisterRoot(rd);  memRegisterRoot(re);  memRegisterRoot(rf);
-		memRegisterRoot(r10); memRegisterRoot(r11); memRegisterRoot(r12); memRegisterRoot(r13);
-		memRegisterRoot(r14); memRegisterRoot(r15); memRegisterRoot(r16); memRegisterRoot(r17);
-		memRegisterRoot(r18); memRegisterRoot(r19); memRegisterRoot(r1a); memRegisterRoot(r1b);
-		memRegisterRoot(r1c); memRegisterRoot(r1d); memRegisterRoot(r1e); memRegisterRoot(r1f);
-		DB("Create the stack");
-		r1f = memNewStack();
-		DB("Register the internal object types");
-		memRegisterType (TCODE, "code");
-		DB("Initialize opcode values");
-		vmVm(VM_INIT); /* Opcode values are really C goto addresses */
-		//DB("Activate periodic timer and its signal handler");
-		//signal(SIGALRM, vmSigAlarmHandler); /* Start the interrupt schedule timer. */
-		//vmSigAlarmReset();
-	} else {
-		DB("  Module already activated");
-	}
-
-	if (interruptHandler) {
-		DB("  Setting interruptHandler callback function");
-		assert(!vmInterruptHandler);
-		vmInterruptHandler = interruptHandler; /* sys.c:sysSchedule()  */
-	}
-	if (vmObjDumper) {
-		DB("  Setting vmObjDumper callback function");
-		assert(!vmObjectDumper);
-		vmObjectDumper = vmObjDumper;
-	}
-	DB("  --"STR, __func__);
-}
-
 
 void vmDebugDumpCode (Obj c, FILE *stream) {
  int fdState;
@@ -754,6 +711,52 @@ void vmDebugDumpCode (Obj c, FILE *stream) {
 	fcntl (0, F_SETFL, fdState);
 	DBEND ();
 }
+
+
+
+
+void vmInitialize (Func interruptHandler, void(*vmObjDumper)(Obj, FILE*)) {
+ static Num shouldInitialize=1;
+	DB("::"STR, __func__);
+	if (shouldInitialize) {
+		DB("  Activating module...");
+		shouldInitialize=0;
+		memInitialize(0, 0);
+		DB("Create 'registers'");
+		memRegisterRoot(r0);  memRegisterRoot(r1);  memRegisterRoot(r2);  memRegisterRoot(r3);
+		memRegisterRoot(r4);  memRegisterRoot(r5);  memRegisterRoot(r6);  memRegisterRoot(r7);
+		memRegisterRoot(r8);  memRegisterRoot(r9);  memRegisterRoot(ra);  memRegisterRoot(rb);
+		memRegisterRoot(rc);  memRegisterRoot(rd);  memRegisterRoot(re);  memRegisterRoot(rf);
+		memRegisterRoot(r10); memRegisterRoot(r11); memRegisterRoot(r12); memRegisterRoot(r13);
+		memRegisterRoot(r14); memRegisterRoot(r15); memRegisterRoot(r16); memRegisterRoot(r17);
+		memRegisterRoot(r18); memRegisterRoot(r19); memRegisterRoot(r1a); memRegisterRoot(r1b);
+		memRegisterRoot(r1c); memRegisterRoot(r1d); memRegisterRoot(r1e); memRegisterRoot(r1f);
+		DB("Create the stack");
+		r1f = memNewStack();
+		DB("Register the internal object types");
+		memRegisterType (TCODE, "code");
+		DB("Initialize opcode values");
+		vmVm(VM_INIT); /* Opcode values are really C goto addresses */
+		//DB("Activate periodic timer and its signal handler");
+		//signal(SIGALRM, vmSigAlarmHandler); /* Start the interrupt schedule timer. */
+		//vmSigAlarmReset();
+	} else {
+		DB("  Module already activated");
+	}
+
+	if (interruptHandler) {
+		DB("  Setting interruptHandler callback function");
+		assert(!vmInterruptHandler);
+		vmInterruptHandler = interruptHandler; /* sys.c:sysSchedule()  */
+	}
+	if (vmObjDumper) {
+		DB("  Setting vmObjDumper callback function");
+		assert(!vmObjectDumper);
+		vmObjectDumper = vmObjDumper;
+	}
+	DB("  --"STR, __func__);
+}
+
 
 #undef DB_DESC
 #undef DEBUG

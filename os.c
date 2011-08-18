@@ -441,7 +441,7 @@ void osSleepThread (void) {
 	DBEND();
 }
 
-/* Called by sysSemaphoreUp, not the scheduler.  all==1 means the semaphore is
+/* Called by syscallSemaphoreUp, not the scheduler.  all==1 means the semaphore is
    now closed and all threads blocked on this should unblock. */
 void osUnblockSemaphoreBlocked (Obj sem, Num all) {
  Obj semaphore, next;

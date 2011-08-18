@@ -2,6 +2,8 @@
 #define _SYS_H
 #include <stdio.h>
 #include "globals.h"
+#include <sys/stat.h> /* mode_t */
+
 
 
 void sysNewClosure1Env (void);
@@ -31,7 +33,7 @@ void sysNewClosure1Env (void);
 #define SREAL    FINALSTATE|PUSHBACK|0x11
 #define SINTEGER FINALSTATE|PUSHBACK|0x12
 
-/* Useful_functions */
+/* Useful */
 s64 sysTime (void);
 
 /* Scanning_parsing */
@@ -46,7 +48,7 @@ Num transition (Num ch, Num state);
 Num yylex (void);
 void yyparse (void);
 
-/* Environment_functions */
+/* Environment */
 void sysTGEFind (void);
 void sysTGEBind (void);
 Int sysEnvFind (void);
@@ -63,15 +65,18 @@ void sysDisplay (Obj a, FILE *stream);
 void sysDumpTGE (void);
 void sysDumpEnv (Obj e);
 
-/* Networking_stuff */
+/* Ports */
 void sysOpenRemoteSocket (void);
 void sysOpenLocalSocket (void);
 void sysAcceptRemoteStream (void);
 void sysAcceptLocalStream (void);
 void sysRecv (void);
 void sysSend (void);
+void sysOpenFile (int oflag, mode_t mode, Num silent);
+void sysSemaphoreDown (void);
+Int sysSemaphoreUp (void);
 
-/* Initialization_stuff */
+/* Initialization */
 void sysInitialize (void);
 
 #endif
