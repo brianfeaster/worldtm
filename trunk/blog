@@ -3443,3 +3443,25 @@ Moving register definitions to the VM module.  The mem module will return newly
 allocated array and vector objects from the corresponding new functions.
 
 [mem]-[vm]-[obj]- - - sys op comp wscm
+
+[ ] New unit test to verify a file can be created, written, read, reopened,
+silently and non-silently.  Inadvertantly deleted some map files after removing
+the ability for the open file syscall to take a 2nd parameter forcing silent
+operation.  It must have returned a value signalling the file didn't exist
+causing the map agent to creae a new map and overwrite the old one.  It
+probably should have thrown an exception or halted the thread.
+
+
+
+Wed Aug 17 16:40:04 EDT 2011
+
+Rendering during World login needs to be cleaned up.  The map doesn't refresh
+the avatar properly after logging in.
+
+I like the standard error reporting mechanism library.  I'll recreate it in
+wscheme as a way of passing more info with runtime exceptions.
+
+If the compiler can prove a syscall will never change, a direct call to the sys
+function should be compiled in.  Currently syscalls, in the wscm module, check
+the argument count then perform the task or call the sys function in the sys
+module which performs the work on the object.

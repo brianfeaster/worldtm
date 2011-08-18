@@ -818,55 +818,17 @@ void syscallOpenStream (void) {
 	DBEND();
 }
 
-/* Create a file object used for file I/O.
-   r1 <= filename
-   r0 => port object of #eof
-*/
-void wscmOpen (int oflag, mode_t mode, Num silent) {
- Chr name[160]={0};
- Num i, filenameLen;
-	DBBEG();
-
-	/* Convert Scheme string to C string */
-	filenameLen = memObjectLength(r1);
-	assert((0 < filenameLen) && (filenameLen < 160));
-	memcpy(name, r1, filenameLen);
-	name[filenameLen] = 0;
-
-	/* Filter out directory paths.  Replace all '/' with '!' */
-	for (i=0; i<filenameLen; ++i) if (name[i]=='/') name[i]='!';
-	DB ("Filename ["STR"]", name);
-
-	r1 = (Obj)(Int)open((char*)name, oflag, mode);
-
-	if (-1 == (Int)r1) {
-		if (!silent)
-			fprintf (stderr, "ERROR: wscmOpen() Unable to open local file '"STR"' \""INT":"STR"\"",
-				name, errno, strerror(errno));
-		r0 = eof;
-	} else {
-		/* Create the port object passing the filename, descriptor flags and object state */
-		objNewString(name, filenameLen);  r2=r0;
-		objNewInt(oflag);  r3=r0;
-		r4 = sopen;
-		objNewPort();
-	}
-	DBEND();
-}
-
 void syscallOpenFile (void) {
  Num silent=0;
 	DBBEG();
-	if (wscmAssertArgumentCountRange(1, 2, __func__)) {
-		r0 = eof;
-	} else {
-		if ((Num)r1==2) { /* If an extra argis passed, make it a silent call */
-			vmPop();
-			silent=1;
-		}
-		r1 = vmPop();
-		wscmOpen(O_RDWR, S_IRUSR|S_IWUSR, silent);
+	if (wscmAssertArgumentCountRange(1, 2, __func__)) return;
+
+	if ((Num)r1==2) { /* If an extra arg forces a silent sysOpenFile() call */
+		vmPop();
+		silent=1;
 	}
+	r1 = vmPop();
+	sysOpenFile(O_RDWR, S_IRUSR|S_IWUSR, silent);
 	DBEND();
 }
 
@@ -881,7 +843,7 @@ void syscallOpenNewFile (void) {
 			silent=1;
 		}
 		r1 = vmPop();
-		wscmOpen(O_CREAT|O_TRUNC|O_RDWR, S_IRUSR|S_IWUSR, silent);
+		sysOpenFile(O_CREAT|O_TRUNC|O_RDWR, S_IRUSR|S_IWUSR, silent);
 	}
 	DBEND();
 }
@@ -1163,26 +1125,16 @@ void syscallCloseSemaphore (void) {
 }
 
 void syscallSemaphoreDown (void) {
- Int newCount;
 	DBBEG();
 	if (wscmAssertArgumentCountRange(1, 1, __func__)) return;
-
-	/* Decrement the semaphore's counter */
-	r0 = vmPop();
-	if (memVectorObject(r0,0)==false) {
-		r0 = false;
-	} else {
-		newCount = --*(Int*)r0;
-
-		if (newCount < 0) {
-			/* Block thread on this semaphore.  Store semaphore index in r1. */
-			DB (" !!! Blocking thread %d", osThreadId(rrunning));
-			r1 = r0;
-			osUnRun();
-			osMoveToQueue(rrunning, rblocked, ssemaphore); /* TODO create a separate semaphore blocked queue */
-			osScheduler();
-		} else
-			r0 = true;
+	r1 = vmPop();
+	sysSemaphoreDown();
+	if (r0 == r1) {
+		/* Block thread on this semaphore.  Semaphore remains in r1. */
+		DB ("Blocking thread "NUM" on semaphore value "NUM, osThreadId(rrunning), *(Int*)r1);
+		osUnRun();
+		osMoveToQueue(rrunning, rblocked, ssemaphore); /* TODO create a separate semaphore blocked queue */
+		osScheduler();
 	}
 
 	DBEND();
@@ -1192,20 +1144,14 @@ void syscallSemaphoreUp (void) {
  Int newCount;
 	DBBEG();
 	if (wscmAssertArgumentCountRange(1, 1, __func__)) return;
-
-	r0 = vmPop();
-	if (memVectorObject(r0,0)==false) {
-		r0 = false;
-	} else {
-		newCount = ++*(Int*)r0;
-
+	r1 = vmPop();
+	sysSemaphoreUp();
+	if (r0 == r1) {
 		/* Unblock a thread blocked by this semaphore. If after incrmenting the
 	   	counter the semaphore is still blocking, then this means one
 	   	of the blocked threads can be awakened. */
-		if (newCount < 1) osUnblockSemaphoreBlocked(r0, 0);
-		r0 = true;
+		if (newCount < 1) osUnblockSemaphoreBlocked(r1, 0);
 	}
-
 	DBEND();
 }
 
@@ -1498,9 +1444,8 @@ void wscmCreateRead (void) {
 		SYSI, objListToVector,
 		POP1,  /* Restore r1. */
 		BRA, ADDR, "done",
-
-	LABEL, "quote",
 		/* quote? */
+	LABEL, "quote",
 		BNEI0, SQUOTE, ADDR, "unquotesplicing",
 		PUSH7, PUSH1A, PUSH1B,
 		MVI7, 0l,
@@ -1516,8 +1461,8 @@ void wscmCreateRead (void) {
 			SYSI, objCons12,
 		POP2, POP1,   /* Restore r1 and r2 */
 		BRA, ADDR, "done",
-	LABEL, "unquotesplicing",
 		/* unquote-splicing? */
+	LABEL, "unquotesplicing",
 		BNEI0, SUNQUOTESPLICING, ADDR, "unquote",
 		PUSH7, PUSH1A, PUSH1B,
 		MVI7, 0l,

@@ -87,7 +87,7 @@
 (define cellAIR CellMax)
 
 (cellSet cellxx  'xx  (Glyph 7  0 #\x  7  0 #\x) 'solid)
-(cellSet cellXX  'XX  (Glyph 7  0 #\X  7  0 #\X) 'solid)
+(cellSet cellXX  'XX  (Glyph 0  8 #\X  0  8 #\X) 'solid)
 (cellSet cellAIR 'air (Glyph 3 12 #\A  4  3 #\r))
 
 
