@@ -73,8 +73,8 @@ void compIllegalOperator (void) {
 /* Remember BASIC?  This is a 'REMark' or comment syntatic operator.
 */
 void compRem () {
-	DB("::"STR, __func__);
-	DB("  --"STR, __func__);
+	DBBEG();
+	DBEND();
 }
 
 /* Compiles s-expression in r0 into code block in r0.  Probably messes up
@@ -82,7 +82,7 @@ void compRem () {
 	TODO: does this mangle r19/1a/1b retenv/retip/retcode?
 */
 void compSysCompile (void) {
-	DB("-->%s", __func__);
+	DBBEG();
 	rexpr=r0;
 	vmPush(renv);
 	CompError=0;
@@ -104,12 +104,12 @@ void compSysCompile (void) {
 	if (wscmDebug) vmDebugDumpCode(r0, stderr); // Dump the code block after compiling code during runtime.
 	renv=vmPop();
 ret:
-	DB("<--%s", __func__);
+	DBEND("  =>  ");
 	DBE objDump (r0, stderr);
 }
 
 void compEval (Num flags) {
-	DB("::"STR, __func__);
+	DBBEG();
 	rexpr = cadr(rexpr);
 	compExpression(flags & ~TAILCALL);
 	asmAsm(
@@ -124,22 +124,22 @@ void compEval (Num flags) {
 			POP19, POP1B, POP1A,
 		END);
 	}
-	DB("  --"STR, __func__);
+	DBEND();
 }
 
 /* Doesn't need compiling so just return it.
 */
 void compSelfEvaluating (void) {
-	DB("::"STR, __func__);
+	DBBEG();
 	asm(MVI0); asm(rexpr);
-	DB("  --"STR, __func__);
+	DBEND();
 }
 
 /* Run time symbol lookup syscall.  If a symbol in r1 found in TGE mutate code
    to just reference the binding's value rather than make this syscall.
 */
 void compTGELookup (void) {
-	DB("::"STR, __func__);
+	DBBEG();
 	sysTGEFind();
 	if (r0 == null) {
 		printf ("ERROR: Unbound symbol:");
@@ -155,12 +155,12 @@ void compTGELookup (void) {
 		/* Force virtual machine to run this code. */
 		rip -= 4;
 	}
-	DB("  --"STR, __func__);
+	DBEND();
 }
 
 void compVariableReference (Num flags) {
  Int ret, depth;
-	DB("::"STR, __func__);
+	DBBEG();
 	DBE objDump(rexpr, stderr);
 	r1 = rexpr;
 
@@ -196,7 +196,7 @@ void compVariableReference (Num flags) {
 		}
 	}
 
-	DB("  --"STR, __func__);
+	DBEND();
 }
 
 /* Transform expr:((fn formals) body) into the form
@@ -204,7 +204,7 @@ void compVariableReference (Num flags) {
    yet.  Would rather implement a macro transformation facility.
 */
 void compTransformDefineFunction (void) {
-	DB("::"STR, __func__);
+	DBBEG();
 	r5 = cdr(rexpr);  /* Function's body. */
 	rexpr = car(rexpr);
 	r3 = car(rexpr); /* Function's name. */
@@ -215,7 +215,7 @@ void compTransformDefineFunction (void) {
 	r1=r0;      r2=null; objCons12(); /* ((lambda formals body)) */
 	r1=r3;      r2=r0;   objCons12(); /* (fn (lambda formals body)) */
 	
-	DB(" --"STR" =>", __func__);
+	DBEND("  =>  ");
 	DBE objDump(rexpr, stderr);
 }
 
@@ -226,7 +226,7 @@ void compTransformDefineFunction (void) {
    current working environment.
 */
 void compDefine (Num flags) {
-	DB("::"STR, __func__);
+	DBBEG();
 
 	if (flags & NODEFINES) {
 		//CompError = 1;
@@ -265,7 +265,7 @@ void compDefine (Num flags) {
 		renv = vmPop();
 	}
 
-	DB("  --"STR, __func__);
+	DBEND();
 	return;
 }
 
@@ -273,7 +273,7 @@ void compDefine (Num flags) {
    to just reference the binding's and mutate binding's value with r0.
 */
 void compTGEMutate (void) {
-	DB("::"STR, __func__);
+	DBBEG();
 	r2=r0; /* Since a syscall, save value we're trying to set!. */
 	sysTGEFind();
 	if (r0 == null) {
@@ -291,13 +291,13 @@ void compTGEMutate (void) {
 		/* Force virtual machine to run this code. */
 		rip -= 4;
 	}
-	DB("  --"STR, __func__);
+	DBEND();
 }
 
 
 void compSetb (Num flags) {
  Int ret, depth;
-	DB("-->compSetb");
+	DBBEG();
 	rexpr = cdr(rexpr); /* Skip 'set! symbol. */
 	vmPush(car(rexpr)); /* Save symbol. */
 	/* Emit code that evaluates the expression. */
@@ -337,7 +337,7 @@ void compSetb (Num flags) {
 		}
 	}
 
-	DB("<--compSetb");
+	DBEND();
 }
 
 /* Transform expr:((define x q) (define y r) body)
@@ -345,7 +345,7 @@ void compSetb (Num flags) {
 */
 void compTransformInternalDefinitions(void) {
  Int definitionsCount=0;
-	DB("-->%s", __func__);
+	DBBEG();
 
 	/* Save lambda body. */
 	while (objIsPair(rexpr) && objIsPair(car(rexpr)) && sdefine == caar(rexpr)) {
@@ -385,7 +385,7 @@ void compTransformInternalDefinitions(void) {
 		rexpr=r0;
 	}
 	
-	DB("<--%s => ", __func__);
+	DBEND("  =>  ");
 	DBE objDump(rexpr, stdout);
 }
 
@@ -428,7 +428,7 @@ void compTransformInternalDefinitions(void) {
 */
 void compLambdaBody (Num flags) {
  Num opcodeStart;
-	DB("-->%s", __func__);
+	DBBEG();
 	DBE objDump(rexpr, stdout);
 
 	/* Since we're creating a new code object, save the current asmstack and
@@ -585,7 +585,7 @@ void compLambdaBody (Num flags) {
 	/* Revert back to code block we're generating. */
 	rasmstack=vmPop();
 
-	DB("<--%s => ", __func__);
+	DBEND("  =>  ");
 	DBE objDump (r0, stderr);
 }
 
@@ -636,7 +636,7 @@ void compNormalizeFormals(void) {
 /* Uses  r0 r1 r2 r3 r4
 */
 void compLambda (Num flags) {
-	DB("-->%s", __func__);
+	DBBEG();
 	rexpr = cdr(rexpr); /* Skip 'lambda. */
 
 	vmPush(renv); /* Save env. */
@@ -662,13 +662,13 @@ void compLambda (Num flags) {
 		SYSI, sysNewClosure1Env, /* Create closure from r1 and env (r1c) */
 		END);
 
-	DB("<--%s", __func__);
+	DBEND();
 }
 
 
 
 void compMacro (Num flags) {
-	DB("::%s", __func__);
+	DBBEG();
 
 	vmPush(rasmstack);
 	r0=memNewStack();
@@ -701,7 +701,7 @@ void compMacro (Num flags) {
 		STI20, 1l,
 	END);
 
-	DB("  --%s", __func__);
+	DBEND();
 }
 
 
@@ -881,7 +881,7 @@ Int parseUnary (void) {
 
 void compCar (Num flags) {
  Num opcodeStart;
-	DB("-->%s", __func__);
+	DBBEG();
 	if (parseUnary()) {
 		CompError = 1;
 		objNewString((u8*)"ERROR: syntax error:", 20);  vmPush(r0);
@@ -909,11 +909,11 @@ void compCar (Num flags) {
 	);
 	asmCompileAsmstack(opcodeStart);
 ret:
-	DB("<--%s", __func__);
+	DBEND();
 }
 
 void compCdr (Num flags) {
-	DB("-->%s", __func__);
+	DBBEG();
 	if (!objIsPair(cdr(rexpr))) {
 		r0 = "ERROR: cdr illegal operand count: ";
 		CompError = 1;
@@ -923,7 +923,7 @@ void compCdr (Num flags) {
 	compExpression(flags & ~TAILCALL);
 	asm(LDI00); asm(1);
 ret:
-	DB("<--%s", __func__);
+	DBEND();
 }
 
 void compSetCarB (Num flags) {
@@ -979,7 +979,7 @@ ret:
 }
 
 void compProcedureP (Num flags) {
-	DB("-->%s", __func__);
+	DBBEG();
 	if (!objIsPair(cdr(rexpr))) {
 		write (1, "ERROR: null? illegal operand count: ", 36);
 		objDump (rexpr, stdout);
@@ -990,7 +990,7 @@ void compProcedureP (Num flags) {
 	asm(MVI0); asm(false);
 	asm(BRA); asm(2*8l);
 	asm(MVI0); asm(true);
-	DB("<--%s", __func__);
+	DBEND();
 }
 
 void compNullP (Num flags) {
@@ -1031,7 +1031,7 @@ void compPairP (Num flags) {
 
 void compVectorP (Num flags) {
  Num opcodeStart;
-	DB("-->%s", __func__);
+	DBBEG();
 	if (!objIsPair(cdr(rexpr))) {
 		write (1, "ERROR: vector? illegal operand count: ", 38);
 		objDump (rexpr, stdout);
@@ -1052,12 +1052,12 @@ void compVectorP (Num flags) {
 	);
 	asmCompileAsmstack(opcodeStart);
 
-	DB("<--%s", __func__);
+	DBEND();
 }
 
 void compStringP (Num flags) {
  Num opcodeStart;
-	DB("-->%s", __func__);
+	DBBEG();
 	if (!objIsPair(cdr(rexpr))) {
 		write (1, "ERROR: string? illegal operand count: ", 38);
 		objDump (rexpr, stdout);
@@ -1078,12 +1078,12 @@ void compStringP (Num flags) {
 	);
 	asmCompileAsmstack(opcodeStart);
 
-	DB("<--%s", __func__);
+	DBEND();
 }
 
 void compIntegerP (Num flags) {
  Num opcodeStart;
-	DB("-->%s", __func__);
+	DBBEG();
 	if (!objIsPair(cdr(rexpr))) {
 		write (1, "ERROR: integer? illegal operand count: ", 38);
 		objDump (rexpr, stdout);
@@ -1104,7 +1104,7 @@ void compIntegerP (Num flags) {
 	);
 	asmCompileAsmstack(opcodeStart);
 
-	DB("<--%s", __func__);
+	DBEND();
 }
 
 void compSymbolP (Num flags) {
@@ -1133,7 +1133,7 @@ void compSymbolP (Num flags) {
 }
 
 void compPortP (Num flags) {
-	DB("-->%s", __func__);
+	DBBEG();
 	if (!objIsPair(cdr(rexpr))) {
 		write (1, "ERROR: vector? illegal operand count: ", 38);
 		objDump (rexpr, stdout);
@@ -1148,13 +1148,13 @@ void compPortP (Num flags) {
 		MVI0, true,
 		END
 	);
-	DB("<--%s", __func__);
+	DBEND();
 }
 
 
 void compEOFObjectP (Num flags) {
  Num opcodeStart;
-	DB("-->%s", __func__);
+	DBBEG();
 	if (!objIsPair(cdr(rexpr))) {
 		printf ("ERROR: eof-object? illegal operand count: ");
 		objDump (rexpr, stdout);
@@ -1173,11 +1173,11 @@ void compEOFObjectP (Num flags) {
 		END
 	);
 	asmCompileAsmstack(opcodeStart);
-	DB("<--%s", __func__);
+	DBEND();
 }
 
 void compBegin (Num flags) {
-	DB("::"STR, __func__);
+	DBBEG();
 	rexpr = cdr(rexpr); /* Skip symbol 'begin. */
 
 	if (rexpr == null) {
@@ -1199,16 +1199,16 @@ void compBegin (Num flags) {
 		rexpr = car(rexpr);
 		compExpression(flags);
 	}
-	DB("<--compBegin");
+	DBEND();
 }
 
 void compQuote (void) {
-	DB("-->compQuote");
+	DBBEG();
 	asmAsm (
 		MVI0, cadr(rexpr),
 		END
 	);
-	DB("<--compQuote");
+	DBEND();
 }
 
 
@@ -1216,7 +1216,7 @@ void compAsmTailCall () {
 	/* Keep track of this opcode position for the compiling of the
 	   labels and branches. */
  Num opcodeStart = memStackLength(rasmstack);
-	DB("::%s", __func__);
+	DBBEG();
 	asmAsm (
 		BRTI0,  TSYSCALL, ADDR, "syscall",
 		BRTI0,  TCLOSURE, ADDR, "code",
@@ -1240,14 +1240,14 @@ void compAsmTailCall () {
 		END
 	);
 	asmCompileAsmstack(opcodeStart);
-	DB("  --%s", __func__);
+	DBEND();
 }
 
 void compAsmNonTailCall () {
 	/* Keep track of this opcode position for the compiling of the
 	   labels and branches. */
  Num opcodeStart = memStackLength(rasmstack);
-	DB("::%s", __func__);
+	DBBEG();
 	asmAsm (
 		BRTI0,  TSYSCALL, ADDR, "syscall",
 		BRTI0,  TCLOSURE, ADDR, "closure",
@@ -1274,7 +1274,7 @@ void compAsmNonTailCall () {
 		END
 	);
 	asmCompileAsmstack(opcodeStart);
-	DB("  --%s", __func__);
+	DBEND();
 }
 
 
@@ -1282,13 +1282,13 @@ void compAsmNonTailCall () {
 */
 void compIf (Num flags) {
  Num falseBraAddr, trueContAddr;
-	DB("-->%s", __func__);
+	DBBEG();
 	rexpr = cdr(rexpr); /* Skip 'if symbol. */
 	vmPush (cddr(rexpr)); /* Push alternate expressions list.  Will be NULL or a list containing the alternate expression. */
 	vmPush (cadr(rexpr));  /* Push consequent expressions. */
 
 	/* Compile 'test' expression. */
-	DB("   compiling test");
+	DB("compiling test");
 	rexpr = car(rexpr);
 	compExpression(flags & ~TAILCALL);
 
@@ -1297,7 +1297,7 @@ void compIf (Num flags) {
 	asm(BRTI0); asm(TFALSE); asm(0l);
 	falseBraAddr = memStackLength(rasmstack);
 
-	DB("   compiling consequent");
+	DB("compiling consequent");
 	rexpr = vmPop(); /* Compile consequent. */
 	compExpression(flags);
 
@@ -1307,11 +1307,11 @@ void compIf (Num flags) {
 	trueContAddr = memStackLength(rasmstack);
 
 	/* Fill in the "branch on false" field. */
-	DB("   setting branch on false:%03x brt TFALSE %02x", falseBraAddr, (8*(trueContAddr-falseBraAddr)));
+	DB("setting branch on false:%03x brt TFALSE %02x", falseBraAddr, (8*(trueContAddr-falseBraAddr)));
 	memVectorSet(rasmstack, falseBraAddr, (Obj)(8*(trueContAddr-falseBraAddr)));
 
 	/* Compile alternate.  Might not be specified in expression so just return (). */
-	DB("   compiling alternate");
+	DB("compiling alternate");
 	rexpr = vmPop();
 	if (rexpr == null) {
 		asm(MVI0); asm(null);
@@ -1322,23 +1322,23 @@ void compIf (Num flags) {
 	}
 
 	/* Fill in the "branch after true block" field. */
-	DB("   setting branch after true:%03x bra %02x", trueContAddr, (8*(memStackLength(rasmstack)-trueContAddr)));
+	DBBEG("setting branch after true:%03x bra %02x", trueContAddr, (8*(memStackLength(rasmstack)-trueContAddr)));
 	memVectorSet(rasmstack, trueContAddr,
 	                (Obj)(8 * (memStackLength(rasmstack) - trueContAddr) ));
-	DB("<--%s", __func__);
+	DBEND();
 }
 
 /* Compiles expression of the form (if testExpr (consequentExpr {value of testExpr}) alternateExpr)
 */
 void compAIf (Num flags) {
  Num falseBraAddr, trueContAddr;
-	DB("-->%s", __func__);
+	DBBEG();
 	rexpr = cdr(rexpr); /* Skip 'aif symbol. */
 	vmPush (cddr(rexpr)); /* Push alternate expressions list.  Will be NULL or a list containing the alternate expression. */
 	vmPush (cadr(rexpr));  /* Push consequent expressions. */
 
 	/* Compile 'test' expression. */
-	DB("   compiling test");
+	DB("compiling test");
 	rexpr = car(rexpr);
 	compExpression(flags & ~TAILCALL);
 
@@ -1358,7 +1358,7 @@ void compAIf (Num flags) {
 		);
 	}
 
-	DB("   compiling consequent");
+	DB("compiling consequent");
 	asm(PUSH0); /* Push result of test expression on the stack.  Becomes argument to consequent. */
 	rexpr = vmPop(); /* Compile consequent. */
 	compExpression(flags & ~TAILCALL);
@@ -1372,11 +1372,11 @@ void compAIf (Num flags) {
 	trueContAddr = memStackLength(rasmstack);
 
 	/* Fill in the "branch on false" field. */
-	DB("   setting branch on false:%03x brt TFALSE %02x", falseBraAddr, (8*(trueContAddr-falseBraAddr)));
+	DB("setting branch on false:%03x brt TFALSE %02x", falseBraAddr, (8*(trueContAddr-falseBraAddr)));
 	memVectorSet(rasmstack, falseBraAddr, (Obj)(8*(trueContAddr-falseBraAddr)));
 
 	/* Compile alternate.  Might not be specified in expression so just return #f. */
-	DB("   compiling alternate");
+	DB("compiling alternate");
 	rexpr = vmPop();
 	if (objIsPair(rexpr)) {
 		 /* Compile alternate expression. */
@@ -1387,10 +1387,10 @@ void compAIf (Num flags) {
 	}
 
 	/* Fill in the "branch after true block" field. */
-	DB("   setting branch after true:%03x bra %02x", trueContAddr, (8*(memStackLength(rasmstack)-trueContAddr)));
+	DB("setting branch after true:%03x bra %02x", trueContAddr, (8*(memStackLength(rasmstack)-trueContAddr)));
 	memVectorSet(rasmstack, trueContAddr,
 	                (Obj)(8 * (memStackLength(rasmstack) - trueContAddr) ));
-	DB("<--%s", __func__);
+	DBEND();
 }
 
 /* Transforms then compiles the cond special form
@@ -1402,7 +1402,7 @@ void compAIf (Num flags) {
 */
 void compCond (Num flags) {
  Num clauses=0;
-	DB("-->%s", __func__);
+	DBBEG();
 	rexpr = cdr(rexpr); /* Skip symbol 'cond */
 
 	/* Push clauses, checking for non-lists and verifying the else clause is last */
@@ -1464,7 +1464,7 @@ void compCond (Num flags) {
 	DBE objDump(r0, stdout);
 	rexpr = r0;
 	compExpression(flags);
-	DB("<--%s", __func__);
+	DBEND();
 }
 
 /* Compiles expressions of the form (or exp ...) into:
@@ -1473,7 +1473,7 @@ void compCond (Num flags) {
 */
 void compOr (Num flags) {
  Num opcodeStart;
-	DB("-->%s", __func__);
+	DBBEG();
 	rexpr = cdr(rexpr); /* Skip 'or. */
 
 	/* Empty or expression returns #f. */
@@ -1500,7 +1500,7 @@ void compOr (Num flags) {
 		asm (LABEL); asm ("end");
 		asmCompileAsmstack(opcodeStart);
 	}
-	DB("<-=%s", __func__);
+	DBEND();
 }
 
 /* Compiles expressions of the form (and exp ...) into:
@@ -1509,7 +1509,7 @@ void compOr (Num flags) {
 */
 void compAnd (Num flags) {
  Num opcodeStart;
-	DB("-->%s", __func__);
+	DBBEG();
 	rexpr = cdr(rexpr); /* Skip 'and. */
 
 	/* Empty or expression returns #t. */
@@ -1536,11 +1536,11 @@ void compAnd (Num flags) {
 		asm (LABEL); asm ("end");
 		asmCompileAsmstack(opcodeStart);
 	}
-	DB("<-=%s", __func__);
+	DBEND();
 }
 
 void compThread (void) {
-	DB("-->%s", __func__);
+	DBBEG();
 
 	vmPush(rasmstack); /* Save code stack. */
 
@@ -1559,13 +1559,13 @@ void compThread (void) {
 	asm(MVI0); asm(r0);
 	asm(SYSI); asm(osNewThread);
 
-	DB("<--%s => ", __func__);
+	DBEND("  => ");
 	DBE objDump(r0, stderr);
 }
 
 void compTransformLet (void) {
  Num bindingLen, i;
-	DB("-->%s", __func__);
+	DBBEG();
 	r4=car(rexpr);     /* Consider the let bindings. */
 	r5 = cdr(rexpr);   /* Consider the let body. */
 
@@ -1610,13 +1610,13 @@ void compTransformLet (void) {
 	/* Return transformed expression. */
 	rexpr=r0;
 
-	DB("<--%s => ", __func__);
+	DBEND("  =>  ");
 	DBE objDump(rexpr, stdout);
 }
 
 void compTransformNamedLet (void) {
  Num bindingLen, i;
-	DB("-->%s", __func__);
+	DBBEG();
 	r3=car(rexpr);   /* Consider the named-let name symbol. */
 	rexpr = cdr(rexpr);
 	r4=car(rexpr);   /* Consider the named-let bindings. */
@@ -1673,12 +1673,12 @@ void compTransformNamedLet (void) {
 	/* Return transformed expression. */
 	rexpr=r0;
 
-	DB("<--%s => ", __func__);
+	DBEND("  =>  ");
 	DBE objDump(rexpr, stdout);
 }
 
 void compLet (Num flags) {
-	DB("-->%s", __func__);
+	DBBEG();
 	rexpr=cdr(rexpr); /* Skip 'let. */
 
 	/* Transform named-let form (let symbol ...). */
@@ -1691,7 +1691,7 @@ void compLet (Num flags) {
 	/* Now compile the transformed form. */
 	compExpression(flags);
 
-	DB("<--%s", __func__);
+	DBEND();
 }
 
 /* Transform:
@@ -1700,7 +1700,7 @@ void compLet (Num flags) {
 */
 void compTransformLetrec (void) {
  Num len;
-	DB("-->%s", __func__);
+	DBBEG();
 	rexpr=cdr(rexpr); /* Skip letrec. */
 
    if (!objIsPair(car(rexpr))) {
@@ -1739,23 +1739,23 @@ void compTransformLetrec (void) {
 	/* Create (let ...). */
 	r1=slet; r2=r0;  objCons12();
 
-	DB("<--%s => ", __func__);
+	DBEND("  =>  ");
 	DBE objDump(r0, stdout);
 }
 
 void compLetrec (Num flags) {
-	DB("-->%s", __func__);
+	DBBEG();
 	compTransformLetrec();
 	rexpr = r0;
 	compExpression(flags);
-	DB("<--%s", __func__);
+	DBEND();
 }
 
 /* Given <qq template> in rexpr, create cons tree in r0.
 */
 void compTransformQuasiquote (int depth) {
  int isUnquote, isQuasiquote;
-	DB("-->%s", __func__);
+	DBBEG();
 	if (objIsPair(rexpr)) { /* Is this (unquote ...) */
 		isUnquote    = (car(rexpr)==sunquote);
 		isQuasiquote = (car(rexpr)==squasiquote);
@@ -1789,18 +1789,18 @@ void compTransformQuasiquote (int depth) {
 		r1=rexpr;   r2=null;  objCons12(); // atom   => (atom)
 		r1=squote; r2=r0;    objCons12(); // (atom) => (quote atom)
 	}
-	DB("<--%s", __func__);
+	DBEND();
 }
 
 void compQuasiquote (Num flags) {
-	DB("-->%s", __func__);
+	DBBEG();
 	rexpr = cadr(rexpr); // Given (quasiquote <qq template>) pass <qq template>
 	compTransformQuasiquote(0);
 	rexpr = r0;
-	DB("   %s quasiquote transformation => ", __func__);
+	DB("quasiquote transformation => ");
 	DBE objDump (rexpr, stderr);
 	compExpression(flags);
-	DB("<--%s", __func__);
+	DBEND();
 }
 
 /* Test code that for now emits a code block that peforms a compiled tree    
@@ -1809,7 +1809,7 @@ void compQuasiquote (Num flags) {
    IE ((syntax-rules (x y z)) '(1 (2 3) 4)) => x1y(2 3)z4
 */
 void compSyntaxRulesHelper (void) {
-	DB("::"STR, __func__);
+	DBBEG();
 	if (objIsPair(rexpr)) {
 		/* R2 contains the expression to be transformed.  */
 		DB("   Considering:");
@@ -1833,13 +1833,13 @@ void compSyntaxRulesHelper (void) {
 		asm(MVI1); asm(1l);
 		asm(SYSI); asm(compWrite);
 	}
-	DB("  --"STR, __func__);
+	DBEND();
 }
 
 /* Experimenal code.  Not sure if is very useful now.
 */ 
 void compSyntaxRules (void) {
-	DB("::"STR, __func__);
+	DBBEG();
 	DBE objDump (rexpr, stderr);
 	rexpr = cadr(rexpr);
 	/* Create new code block. */
@@ -1855,12 +1855,12 @@ void compSyntaxRules (void) {
 	rasmstack=vmPop();
 	asm(MVI1); asm(r0); /* Load r1 with code. */
 	asm(SYSI); asm(sysNewClosure1Env); /* Create closure from r1 and env (r1c) */
-	DB("  --"STR, __func__);
+	DBEND();
 }
 
 void compNot (Num flags) {
  Num opcodeStart;
-	DB("::"STR, __func__);
+	DBBEG();
 	rexpr = cadr(rexpr);           /* Compile this expression */
 	compExpression(flags & ~TAILCALL);
 	opcodeStart = memStackLength(rasmstack);
@@ -1873,7 +1873,7 @@ void compNot (Num flags) {
 		END
 	);
 	asmCompileAsmstack(opcodeStart);
-	DB("  --"STR, __func__);
+	DBEND();
 }
 
 /* R1A/asmstack is the stack opcodes ae pushed onto.
@@ -1881,7 +1881,7 @@ void compNot (Num flags) {
 */
 void compAdd (Num flags) {
  Int sum=0;
-	DB("-->%s", __func__);
+	DBBEG();
 	rexpr=cdr(rexpr); /* Skip '+. */
 	vmPush(rexpr); /* Save parameter list. */
 	/* Constant folding:  Scan parameter list for constants and asm a single
@@ -1914,13 +1914,13 @@ DB("   compAdd constant folding:%d", sum);
 		rexpr = cdr(rexpr);
 	}
 	asm(MV01);
-	DB("<--%s", __func__);
+	DBEND();
 }
 
 
 void compCombination (Num flags) {
  Int operandCount=0;
-	DB("-->%s rexpr=", __func__);
+	DBBEG();
 	DBE memDebugDumpObject(rexpr, stdout);
 
 	/* Make sure we push/pop the jump and linked code/ip registers at the start
@@ -1974,7 +1974,7 @@ void compCombination (Num flags) {
 	else compAsmNonTailCall();
 	
 ret:
-	DB("<--%s", __func__);
+	DBEND();
 }
 
 
@@ -1983,7 +1983,7 @@ ret:
    a combination expression. */
 void compApply (Num flags) {
  Num opcodeStart, operandCount=0;
-	DB("-->%s", __func__);
+	DBBEG();
 
 	rexpr = cdr(rexpr); /* Skip over 'apply symbol */
 
@@ -2048,7 +2048,7 @@ void compApply (Num flags) {
 	if ((unsigned)flags & TAILCALL) compAsmTailCall();
 	else compAsmNonTailCall();
 
-	DB("<--%s", __func__);
+	DBEND();
 }
 
 /* Stored stack expected in r1.
@@ -2058,7 +2058,7 @@ void compReinstateContinuation (void) {
 
 	if ((Int)r1==1) r0=vmPop();
 	else {
-		fprintf (stderr, "ERROR: %s() bad argument count %d.\n", __func__, (Int)r1);
+		fprintf (stderr, "ERROR: compReinstateContinuation() bad argument count %d.\n", (Int)r1);
 		exit (-1);
 	}
 
@@ -2077,7 +2077,7 @@ void compReinstateContinuation (void) {
 
 void compCreateContinuation (void) {
  Num length;
-	DB("-->%s", __func__);
+	DBBEG();
 	vmPush(rretenv);
 	vmPush(renv);
 	vmPush(rretip);
@@ -2108,7 +2108,7 @@ void compCreateContinuation (void) {
 	/* Skip the "continuation" jump in the code just after this syscall
 	   in the compiled code.  See compCallcc() */
 	rip += 2;
-	DB("<--%s", __func__);
+	DBEND();
 }
 
 /* At this point evaluating (fn).  Want to pass it code that when
@@ -2124,7 +2124,7 @@ void compCreateContinuation (void) {
 */
 void compCallcc (Num flags) {
  Num opcodeStart;
-	DB("-->%s", __func__);
+	DBBEG();
 	rexpr = cdr(rexpr); /* Skip over 'call/cc symbol in (call/cc fn)*/
 
 	opcodeStart = memStackLength(rasmstack);
@@ -2155,7 +2155,7 @@ void compCallcc (Num flags) {
 	asmAsm(LABEL, "continuationcall", END);
 	asmCompileAsmstack(opcodeStart);
 
-	DB("<--%s", __func__);
+	DBEND();
 }
 
 
@@ -2167,7 +2167,7 @@ void compCallcc (Num flags) {
 	An expression is either a symbol, syntax, combination or self evaluating.
 */
 Num compExpression (Num flags) {
-	DB("-->%s rexpr=", __func__);
+	DBBEG();
 	DBE memDebugDumpObject(rexpr, stdout);
 	switch (memObjectType(rexpr)) {
 		case TSYMBOL :
@@ -2220,7 +2220,7 @@ Num compExpression (Num flags) {
 			compSelfEvaluating();
 			break;
 	}
-	DB("<--%s => %d", __func__, CompError);
+	DBEND();
 	return CompError;
 }
 
@@ -2255,7 +2255,7 @@ Num compCompile (void) {
 
 void compInitialize (void) {
  static Num shouldInitialize=1;
-	DB("::"STR, __func__);
+	DBBEG();
 	if (shouldInitialize) {
 		DB("  Activating module...");
 		shouldInitialize=0;
@@ -2272,7 +2272,7 @@ void compInitialize (void) {
 	} else {
 		DB("  Module already activated");
 	}
-	DB("  --"STR, __func__);
+	DBEND();
 }
 
 #undef DB_DESC

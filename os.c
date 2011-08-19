@@ -513,7 +513,7 @@ void osSpawnSignalHandler(void) {
 
 void debugDumpThreadInfo (void) {
  Obj node;
-	fprintf (stderr, "    ::"STR, __func__);
+	DBBEG();
 	for(node = objDoublyLinkedListNext(rblocked); node != rblocked; node=objDoublyLinkedListNext(node)) {
 		fprintf (stderr, "      blocked "NUM"\n", osThreadId(node));
 	}
@@ -523,7 +523,7 @@ void debugDumpThreadInfo (void) {
 	for(node = objDoublyLinkedListNext(rready); node != rready; node=objDoublyLinkedListNext(node)) {
 		fprintf (stderr, "      ready "NUM" %s\n", osThreadId(node), rrunning==rready?"running":"");
 	}
-	fprintf (stderr, "      --"STR, __func__);
+	DBEND();
 }
 
 

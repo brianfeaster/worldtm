@@ -574,9 +574,7 @@ void vmRun (void) {
  */
 void vmObjectDumperDefault (Obj o, FILE *stream) {
  static Str p;
-
 	fprintf (stream, HEX, o);
-
 	if ((p=memObjString(o))) fprintf (stream, ":%s", p);
 }
 
@@ -587,6 +585,7 @@ void vmDebugDumpCode (Obj c, FILE *stream) {
  Obj *i=c;
  Num lineNumber;
 
+	/* Reenable i/o blocking */
 	fcntl (0, F_SETFL, (fdState=fcntl(0, F_GETFL, 0))&~O_NONBLOCK);
 
 	DBBEG ("  "OBJ"  rcode:"OBJ"  rip:"OBJ, c, rcode, rip);
@@ -701,7 +700,7 @@ void vmDebugDumpCode (Obj c, FILE *stream) {
 		else if (*i==SYS0)  {fprintf (stream, "sys_0 ");}
 		else if (*i==QUIT)  {fprintf (stream, "quit ");}
 		else {
-			fprintf (stream, "???:"HEX" ", *i);
+			fprintf(stream, HEX" = ", *i);
 			vmObjectDumper(*i, stream);
 		}
 		i++;
@@ -717,7 +716,7 @@ void vmDebugDumpCode (Obj c, FILE *stream) {
 
 void vmInitialize (Func interruptHandler, void(*vmObjDumper)(Obj, FILE*)) {
  static Num shouldInitialize=1;
-	DB("::"STR, __func__);
+	DBBEG();
 	if (shouldInitialize) {
 		DB("  Activating module...");
 		shouldInitialize=0;
@@ -751,10 +750,10 @@ void vmInitialize (Func interruptHandler, void(*vmObjDumper)(Obj, FILE*)) {
 	}
 	if (vmObjDumper) {
 		DB("  Setting vmObjDumper callback function");
-		assert(!vmObjectDumper);
+		assert(vmObjectDumperDefault == vmObjectDumper); /* Verify the object dump callback is changed once */
 		vmObjectDumper = vmObjDumper;
 	}
-	DB("  --"STR, __func__);
+	DBEND();
 }
 
 
