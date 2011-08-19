@@ -1141,7 +1141,6 @@ void syscallSemaphoreDown (void) {
 }
 
 void syscallSemaphoreUp (void) {
- Int newCount;
 	DBBEG();
 	if (wscmAssertArgumentCountRange(1, 1, __func__)) return;
 	r1 = vmPop();
@@ -1150,7 +1149,7 @@ void syscallSemaphoreUp (void) {
 		/* Unblock a thread blocked by this semaphore. If after incrmenting the
 	   	counter the semaphore is still blocking, then this means one
 	   	of the blocked threads can be awakened. */
-		if (newCount < 1) osUnblockSemaphoreBlocked(r1, 0);
+		osUnblockSemaphoreBlocked(r1, 0);
 	}
 	DBEND();
 }
@@ -1648,7 +1647,7 @@ void wscmCreateRead (void) {
 	DBEND();
 }
 
-/* Create a read-eval-print-loop code object in machine language.
+/* Create a read-eval-print-loop closure in machine language.
 */
 void wscmCreateRepl (void) {
 	DBBEG();
@@ -1927,7 +1926,7 @@ void wscmASMReadEvalPrintLoop (int argc, char *argv[]) {
 		}
 	}
 
-	objNewSymbol ((Str)"repl2", 5);  r1=r0;  /* wscmCreateRepl creates repl2 code block */
+	objNewSymbol ((Str)"repl2", 5);  r1=r0;  /* wscmCreateRepl creates repl2 closure */
 	sysTGEFind(); r0=caar(r0);
 
 	osNewThread();
@@ -1986,7 +1985,7 @@ int main (int argc, char *argv[]) {
 
 	/* Although already activated, just pass in a scheduler handler callback.
 	   Called when vmInterrupt is set.  */
-	vmInitialize(wscmSchedule, 0);
+	vmInitialize(wscmSchedule, sysDisplay);
 
 	wscmBindArgs((Num)argc, argv);
 

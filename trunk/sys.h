@@ -74,7 +74,7 @@ void sysRecv (void);
 void sysSend (void);
 void sysOpenFile (int oflag, mode_t mode, Num silent);
 void sysSemaphoreDown (void);
-Int sysSemaphoreUp (void);
+void sysSemaphoreUp (void);
 
 /* Initialization */
 void sysInitialize (void);
