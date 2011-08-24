@@ -89,8 +89,8 @@ int main (void) {
 	objNewSymbol((Str)"TGE", 3);
 	r1=r0;  r2=null;  objCons12();  renv=rtge=r0;
 
-	wscmDefineSyscall (wscmtDisplay, "display");
-	wscmDefineSyscall (sysEquals, "=");
+	sysDefineSyscall (wscmtDisplay, "display");
+	sysDefineSyscall (sysEquals, "=");
 
 	//yy_scan_string((Str)"(display (eval '(+ 1 2)))"); eval is a good one to test
 	yy_scan_string((Str)"(let ~ ((i 0)(e 9000)) (display i) (display \"\\r\")(if (= i e) (display \"\n\") (~ (+ i 1) e)))");

@@ -43,7 +43,7 @@ Obj memNewFinalizer   (void);
 Obj memNewPointer     (void);
 Obj memNewStack       (void);
 
-int memIsObjectValid  (Obj o);
+Num memIsObjectValid  (Obj o);
 
 
 

@@ -52,7 +52,10 @@ void compWrite (void) {
 Num CompError;
 
 void compError (void) {
-	fprintf(stderr, "compError()");
+	fprintf(stderr, "compError: "STR, r0);
+	while (r1--) {
+		sysDisplay(vmPop(), stderr);
+	}
 	exit(-1);
 }
 
@@ -93,6 +96,7 @@ void compSysCompile (void) {
 	);
 	if (compExpression(0))
 	{
+		r0 = "compSysCompile: compExpression failed";
 		compError();
 		goto ret;
 	}
@@ -462,7 +466,7 @@ void compLambdaBody (Num flags) {
 			MVI0, rexpr, /* Error situation.  Add expression to stack */
 			PUSH0,
 			ADDI1, 1l,
-			MVI0, "Too many arguments to function",
+			MVI0, "Too many arguments to closure",
 			SYSI, compError, /* Error correction */
 			LABEL, "expectedNoArgs",
 			END);
@@ -711,7 +715,6 @@ void compVerifyVectorRef (void) {
 		fprintf (stderr, "\nERROR::out of bounds:  (vector-ref ");
 		objDump(r1, stderr); fprintf (stderr, " ");
 		objDump(r0, stderr); fprintf (stderr, ")");
-		//sysDebugger();
 		compError();
 	}
 }
@@ -722,7 +725,6 @@ void compVerifyVectorSetB (void) {
 		objDump(r1, stderr); fprintf (stderr, " ");
 		objDump(r2, stderr); fprintf (stderr, " ");
 		objDump(r0, stderr); fprintf (stderr, ")");
-		//sysDebugger();
 		compError();
 	}
 }
@@ -2269,6 +2271,8 @@ void compInitialize (void) {
 		memObjStringSet(compVerifyVectorSetB);
 		memObjStringSet(compReinstateContinuation);
 		memObjStringSet(compCreateContinuation);
+		memObjStringSet("Not enough arguments to closure");
+		memObjStringSet("Too many arguments to function");
 	} else {
 		DB("  Module already activated");
 	}

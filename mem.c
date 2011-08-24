@@ -503,12 +503,12 @@ Obj memNewStack (void) {
 
 /* Object heap queries.
 */
-int memIsObjectInHeap (Heap *heap, Obj o) {
-	return heap->start <= o && o < heap->last;
+Num memIsObjectInHeap (Heap *heap, Obj o) {
+	return (heap->start <= o) && (o < heap->last);
 }
 
 /* Check that object pointer is in a valid heap address. */
-int memIsObjectValid  (Obj o) {
+Num memIsObjectValid  (Obj o) {
 	return memIsObjectInHeap(&heap, o)
 	       || memIsObjectInHeap(&heapOld, o)
 	       || memIsObjectInHeap(&heapStatic, o);
@@ -1329,6 +1329,8 @@ Str memObjString (Obj obj) {
 	return NULL;
 }
 
+/* Assign a fixed pointer location with a string name
+*/
 void memObjStringRegister (Obj obj, Str str) {
 	DBBEG("  Registering "OBJ"  string="STR" on existing str="STR, obj, str, memObjString(obj));
 	assert(NULL == memObjString(obj));

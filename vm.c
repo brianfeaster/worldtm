@@ -575,10 +575,10 @@ void vmRun (void) {
 void vmObjectDumperDefault (Obj o, FILE *stream) {
  static Str p;
 	fprintf (stream, HEX, o);
-	if ((p=memObjString(o))) fprintf (stream, ":%s", p);
+	if ((p = memObjString(o))) fprintf (stream, ":%s", p);
 }
 
-void (*vmObjectDumper)(Obj o, FILE *stream) = vmObjectDumperDefault;
+void (* vmObjectDumper)(Obj o, FILE *stream) = vmObjectDumperDefault;
 
 void vmDebugDumpCode (Obj c, FILE *stream) {
  int fdState;

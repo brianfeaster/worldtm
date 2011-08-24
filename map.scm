@@ -30,7 +30,7 @@
 ;; IPC
 ;;
 (load "ipc.scm") ; Includes adt.scm
-(define ipc (Ipc display HUB-PORT)) ; Instead of #f can pass in a serializer for debug messages
+(define ipc (Ipc #f HUB-PORT)) ; Instead of #f can pass in a serializer for debug messages
 (define ipcReader ((ipc 'newReader)))
 (define IpcWrite (ipc 'qwrite))
 
@@ -358,7 +358,7 @@
     (begin ; Occurs the first time the entity connects
       (set! e (apply (myEntityDB 'set) dna args))
       (displayl "\e[31;1m Registered " (e 'name) " " args " \e[0m")
-      (IpcWrite `(sun ,(* 10 (abs (- (modulo (/ (time) 3600)  10) 5)))))
+      (IpcWrite `(sun ,(Sun 0)))
       (sendInitialBlocks e)))))
 
 (define (move dna . loc)
@@ -412,13 +412,17 @@
 ; Start the dirty map writer thread
 (thread (dirtyMapBlockWriterLoop 5000))
 
+
+; Compute SUN value based on hour
+(define (Sun secs) (* 10 (abs (+ -10 (modulo (/ (+ secs (time)) 3600) 20)))))
+
 (thread
- (sleep 2000)
- (let ~ ()
-  (IpcWrite `(sun ,(* 10 (abs (- (modulo (/ (time) 3600)  10) 5)))))
-  (displayl "Waiting " (- 3600 (modulo (time) 3600)) "seconds till next SUN movement\n")
-  (sleep (* 1000 (- 3600 (modulo (time) 3600)))) ; Every hour on the hour
-  (~)))
+  (let ~ ((waitTicks 2)) ; Initial 2 second pause
+    (displayl "\n\e[1;33mWaiting "waitTicks" seconds till next SUN value " (Sun waitTicks)"...")
+    (sleep (* 1000 waitTicks))
+    (IpcWrite `(sun ,(Sun 0)))
+    (~ (- 3600 (modulo (time) 3600))))) ; Seconds till top of the hour
+
 
 (thread 
  (let ((s (call/cc (lambda (c) (vector-set! ERRORS (tid) c) '*))))

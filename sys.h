@@ -53,7 +53,8 @@ void sysTGEFind (void);
 void sysTGEBind (void);
 Int sysEnvFind (void);
 void sysEnvGet (void);
-void wscmDefineSyscall (Func function, char* symbol);
+void sysDefine (char* sym);
+void sysDefineSyscall (Func function, char* symbol);
 
 /* Serializers_internal */
 void sysSerializeInteger (Int theint, Num base);
