@@ -59,6 +59,7 @@ void debugDumpThreadInfo (void);
 
 void wscmDumpEnv (void) {
 	sysDumpEnv(renv);
+	r0 = null;
 }
 
 /* Check that r1, argument stack count, is between the argument count range.
@@ -200,12 +201,12 @@ void wscmError (char *msg) {
 
 
 void wscmSocketFinalizer (Obj o) {
-	if (memVectorObject(o, 3) == sclosed) {
+	if (objPortState(o) == sclosed) {
 		DB("wscmSocketFinalizer:  Socket already closed");
 	} else {
 		DB("wscmSocketFinalizer:  Closing socket");
 		DBE sysDisplay(o, stderr);
-		close(*(int*)o); /* TODO this should be close((int)memVectorObject(o, 0)); */
+		close(objPortDescriptor(o));
 		memVectorSet(o, 3, sclosed);
 	}
 }
@@ -252,9 +253,9 @@ void wscmRecvBlock (void) {
 
 void wscmOpenRemoteStream (void) {
 	DBBEG();
-	if (memVectorObject(r1, 3) == sconnecting) sysAcceptRemoteStream();
+	if (objPortState(r1) == sconnecting) sysAcceptRemoteStream();
 
-	if (r1!=eof && memVectorObject(r1, 3) == sconnecting) {
+	if (r1!=eof && objPortState(r1) == sconnecting) {
 		DB("SYS    blocking on a remote connecting socket...");
 		osUnRun();
 		osMoveToQueue(rrunning, rblocked, sopenblocked);
@@ -267,13 +268,13 @@ void wscmOpenRemoteStream (void) {
 void wscmOpenLocalStream (void) {
 	DBBEG();
 	/* Socket is listening so try and accept. */
-	if (memVectorObject(r1, 3) == saccepting) {
+	if (objPortState(r1) == saccepting) {
 		sysAcceptLocalStream();
 		r1 = r0;
 	}
 
 	/* Is it the same socket? */
-	if (memVectorObject(r1, 3) == saccepting) {
+	if (objPortState(r1) == saccepting) {
 		DB("SYS    blocking on an accept a connection...");
 		osUnRun();
 		osMoveToQueue(rrunning, rblocked, sopenblocked);
@@ -347,7 +348,7 @@ void syscallMakeString (void) {
  Num len;
  Chr filChar=' ';
 	DBBEG();
-	if (wscmAssertArgumentCountRange(1, 2, __func__)) return;
+	if (wscmAssertArgumentCountRange(1, 2, __func__)) goto ret;
 
 	/* Fill character if specified. */
 	if (2 == (Num)r1) filChar = *(Chr*)vmPop();
@@ -357,22 +358,21 @@ void syscallMakeString (void) {
 
 	/* Fill string if filChar character specified. */
 	if (2 == (Num)r1)  while (len--) ((Chr*)r0)[len]=filChar;
-
+ret:
 	DBEND();
 }
 
 void syscallSubString (void) {
  Num end, start;
 	DBBEG();
-	if (wscmAssertArgumentCount(3, __func__)) return;
+	if (wscmAssertArgumentCount(3, __func__)) goto ret;
 	end   = *(Num*)(r3=vmPop());
 	start = *(Num*)(r2=vmPop());
 	r1 = vmPop();
 	if (start < end) {
-		/* TODO new array is called directly since objNewString might pass an invalid pointer if a GC occurs.  Do I even want objNewString to exist? */
 		if (TSTRING == memObjectType(r1)) {
 			DB("positive len and string");
-			r0 = memNewArray(TSTRING, end-start);
+			objNewString(NULL, end-start);
 			memcpy(r0, r1+start, end-start);
 		} else {
 			DB("not a string");
@@ -393,6 +393,7 @@ void syscallSubString (void) {
 		r1 = (Obj)3;
 		wscmError("Substring Invalid range");
 	}
+ret:
 	DBEND();
 }
 
@@ -828,11 +829,11 @@ void syscallOpenStream (void) {
 		goto ret;
 	}
 
-	if (memVectorObject(r1, 3) == sconnecting) /* TODO abstract this vector-ref */
+	if (objPortState(r1) == sconnecting)
 		wscmOpenRemoteStream();
-	else if (memVectorObject(r1, 3) == saccepting)
+	else if (objPortState(r1) == saccepting)
 		wscmOpenLocalStream();
-	else if (memVectorObject(r1, 3) == sclosed)
+	else if (objPortState(r1) == sclosed)
 		r0=eof;
 	else {
 		vmPush(r1);
@@ -899,7 +900,7 @@ void syscallClose(void) {
 		 && memObjectType(r0) != TPORT) {
 		printf ("WARNING: syscallClose: not a socket: ");
 		sysDisplay(r0, stdout);
-	} if (memVectorObject(r0, 3) == sclosed) {
+	} if (objPortState(r0) == sclosed) {
 		printf ("WARNING: syscallClose: socket already closed: ");
 		sysDisplay(r0, stdout);
 	} else {
@@ -1140,10 +1141,10 @@ void syscallGarbageCollect (void) {
 
 void syscallDisassemble (void) {
 	DBBEG();
-	r0=vmPop();
+	r0 = vmPop();
 	if (memObjectType(r0) == TCLOSURE) {
 		if (cdr(r0) != null) sysDumpEnv(cdr(r0));
-		r0=car(r0);
+		r0 = car(r0); /* Consider closure's code block */
 	}
 	vmDebugDumpCode(r0, stderr);
 	DBEND();
@@ -1160,7 +1161,7 @@ void syscallCloseSemaphore (void) {
 	if (wscmAssertArgumentCount(1, __func__)) return;
 	r0 = vmPop();
 	if (memVectorObject(r0,0)==false) /* TODO this vector-ref should be abstracted using semaphore accessors */
-		r0 = false; /* Semaphore already closed */
+		r0 = false; /* Semaphore already closed so return failure */
 	else {
 		memVectorSet(r0, 0, false);
 		osUnblockSemaphoreBlocked(r0, 1); /* 1 means unblock all threads on this semaphore */
@@ -1358,10 +1359,11 @@ void wscmSignalHandler (int sig) {
 /* Syscall to set a signal handler for a specified signal number.
    The signal handler will always be the wscmSignalHandler().  See above. */
 void syscallSignal (void) {
- Num s = *(Num*)vmPop();
 	DBBEG();
-	if (wscmAssertArgumentCount(1, __func__)) return;
-	signal((int)s, wscmSignalHandler); /* Have to cast to an uint64 to int32 */
+	if (wscmAssertArgumentCount(1, __func__)) goto ret;
+	r0 = vmPop();
+	signal(*(int*)r0, wscmSignalHandler); /* Have to cast to an uint64 to int32 */
+ret:
 	DBEND();
 }
 

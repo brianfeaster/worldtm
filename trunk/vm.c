@@ -582,13 +582,13 @@ void (* vmObjectDumper)(Obj o, FILE *stream) = vmObjectDumperDefault;
 
 void vmDebugDumpCode (Obj c, FILE *stream) {
  int fdState;
- Obj *i=c;
+ Obj *i = c;
  Num lineNumber;
+
+	DBBEG ("  "OBJ"  rcode:"OBJ"  rip:"OBJ, c, rcode, rip);
 
 	/* Reenable i/o blocking */
 	fcntl (0, F_SETFL, (fdState=fcntl(0, F_GETFL, 0))&~O_NONBLOCK);
-
-	DBBEG ("  "OBJ"  rcode:"OBJ"  rip:"OBJ, c, rcode, rip);
 
 	if (stream == NULL) stream=stderr;
 

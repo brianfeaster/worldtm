@@ -25,19 +25,19 @@
    scanner.  */
 typedef Num Descriptor;
 typedef Num Type;       /* Highest byte of descriptor */
-typedef Num LengthType; /* Remaining bytes of descriptor TODO rename this just Length */
+typedef Num Length; /* Remaining bytes of descriptor */
 
 
-Num memArrayLengthToObjectSize  (LengthType length);
-Num memVectorLengthToObjectSize  (LengthType length);
+Num memArrayLengthToObjectSize  (Length length);
+Num memVectorLengthToObjectSize  (Length length);
 
 
 
 /* Object Creators that return new objects in the new young/heap */
-Obj memNewStatic      (Type t, LengthType byteLength);
-Obj memNewStaticVector(Type t, LengthType objLength);
-Obj memNewArray       (Type t, LengthType byteLength);
-Obj memNewVector      (Type t, LengthType objLength);
+Obj memNewStatic      (Type t, Length byteLength);
+Obj memNewStaticVector(Type t, Length objLength);
+Obj memNewArray       (Type t, Length byteLength);
+Obj memNewVector      (Type t, Length objLength);
 Obj memNewSemaphore   (void);
 Obj memNewFinalizer   (void);
 Obj memNewPointer     (void);

@@ -121,8 +121,8 @@ void memDebugDumpAllTypes(void) {
 #define DescTypeBitCount   8
 #define DescLengthBitCount (DescBitCount - DescTypeBitCount)
 
-#define DescTypeBitMask   (~(LengthType)0 << (DescBitCount - DescTypeBitCount))
-#define DescLengthBitMask (~(LengthType)0 >> (DescBitCount - DescLengthBitCount))
+#define DescTypeBitMask   (~(Length)0 << (DescBitCount - DescTypeBitCount))
+#define DescLengthBitMask (~(Length)0 >> (DescBitCount - DescLengthBitCount))
 //assert(DescTypeBitMask   == 0xff00000000000000l);
 //assert(DescLengthBitMask == 0x00ffffffffffffffl);
 
@@ -143,7 +143,7 @@ void memDebugDumpAllTypes(void) {
    [........|........ ........ ........ ........ ........ ........ ........]
       desc                               length
  */
-Descriptor memMakeDescriptor (Type type, LengthType length) {
+Descriptor memMakeDescriptor (Type type, Length length) {
 	return type << DescLengthBitCount | length;
 }
 
@@ -181,13 +181,13 @@ Num memIsObjectShadow (Obj o)    { return memObjectType(o) == TSHADOW; }
 
 
 /* Compute object size (total memory footprint in bytes) based on an array's 'length' */
-Num memArrayLengthToObjectSize (LengthType length) {
+Num memArrayLengthToObjectSize (Length length) {
 	return DescSize + ((length + DescSize-1) & -DescSize);
 }
 
 /* Compute object size based on vector's 'length'.
 */
-Num memVectorLengthToObjectSize (LengthType length) {
+Num memVectorLengthToObjectSize (Length length) {
 	return DescSize + length*ObjSize;
 }
 
@@ -314,11 +314,11 @@ void memFreeHeap (Heap *h) {
  Object_creation
 *******************************************************************************/
 
-/* Objects in old heap that were mutated with objects in young heap.
+/* TODO Objects in old heap that were mutated with objects in young heap.
    This is an additional set of root set pointers besides the registers
    above.  Any old object that has been mutated to point to an object in the
    young heap must exist in this set.  Otherwise during a young only GC, a
-   live object will be collected which is bad.  TODO
+   live object will be collected which is bad.
 int mutatedOldObjectsLength=0;
 Obj *(mutatedOldObjects[0x400])={0};
 */
@@ -365,9 +365,9 @@ Obj memNewObject (Descriptor desc, Num byteSize) {
 	}
 	#endif
 
-	/* Set the new object's descriptor in the heap, set register r0 to the new
-	   object location (immediately after the descriptor) and increment the heap's
-	   'next' pointer. */
+	/* Set the new object's descriptor in the heap, set object pointer 'o' to the
+	   new obj location (immediately after the descriptor) and increment the
+	   heap's 'next' pointer */
 	*(Descriptor*)(heap.next) = desc;
 	o = heap.next + DescSize;
 	heap.next += byteSize;
@@ -379,9 +379,6 @@ Obj memNewObject (Descriptor desc, Num byteSize) {
 			fprintf (stderr, "ERROR:: "STR"  Unable to find enough heap space.", __func__);
 			memError();
 		}
-		/* Make sure reg 0's bogus value isn't garbage collected and undo the next pointer.
-		   Zeroing out r0 also has the side affect of making its object garbage.  */
-		//r0 = 0;
 		heap.next -= byteSize;
 		memGarbageCollectInternal(desc, byteSize);
 
@@ -390,7 +387,7 @@ Obj memNewObject (Descriptor desc, Num byteSize) {
 		--recursed;
 	}
 
-	DBEND(" => "OBJ, o);
+	DBEND("  =>  "OBJ, o);
 	return o;
 }
 
@@ -413,7 +410,7 @@ Obj memNewStaticObject (Descriptor desc, Num byteSize) {
 }
 
 
-Obj memNewStatic (Type type, LengthType length) {
+Obj memNewStatic (Type type, Length length) {
 Obj o;
 	DBBEG("  type:"HEX02"  length:"HEX, type, length);
 	o = memNewStaticObject (memMakeDescriptor(type, length),
@@ -422,7 +419,7 @@ Obj o;
 	return o;
 }
 
-Obj memNewStaticVector (Type type, LengthType length) {
+Obj memNewStaticVector (Type type, Length length) {
 Obj o;
 	DBBEG("  type:"HEX02"  length:"HEX, type, length);
 	o = memNewStaticObject (memMakeDescriptor(type, length),
@@ -431,7 +428,7 @@ Obj o;
 	return o;
 }
 
-Obj memNewArray (Type type, LengthType length) {
+Obj memNewArray (Type type, Length length) {
 Obj o;
 	DBBEG("  type:"HEX02"  length:"HEX, type, length);
 	o = memNewObject (memMakeDescriptor(type, length),
@@ -440,7 +437,7 @@ Obj o;
 	return o;
 }
 
-Obj memNewVector (Type type, LengthType length) {
+Obj memNewVector (Type type, Length length) {
 Obj o;
 	DBBEG("  type:"HEX02"  length:"HEX, type, length);
 	o = memNewObject (memMakeDescriptor(type, length),
@@ -565,7 +562,7 @@ void memStackPush (Obj obj, Obj item) {
 		memError();
 	} else if (STACK_LENGTH <= memStackLength(obj)) {
 		printf ("ERROR memStackPush(obj "OBJ" item "OBJ") Stack overflow.", obj, item);
-		memDebugDumpObject(r1f, stderr);
+		memDebugDumpObject(obj, stderr);
 		memError();
 	}
 	#endif
@@ -689,9 +686,6 @@ Num memStackLength (Obj obj) {
 	#endif
 	return (Num)(((Obj**)obj)[0] - (Obj*)obj);
 }
-
-//void memPush (Obj o) { memStackPush(r1f, o); }
-//Obj memPop (void) { return memStackPop(r1f); }
 
 
 
@@ -900,24 +894,6 @@ void memGarbageCollectInternal (Descriptor desc, Num byteSize) {
 	/* Copy objects in registers to new heap. */
 	DB("Collecting root set");
 	for (i=0; i<MemRootSetCount; ++i) memObjectCopyToHeapNew(MemRootSet[i]);
-	/*
-	memObjectCopyToHeapNew (&r0);  memObjectCopyToHeapNew (&r1);
-	memObjectCopyToHeapNew (&r2);  memObjectCopyToHeapNew (&r3);
-	memObjectCopyToHeapNew (&r4);  memObjectCopyToHeapNew (&r5);
-	memObjectCopyToHeapNew (&r6);  memObjectCopyToHeapNew (&r7);
-	memObjectCopyToHeapNew (&r8);  memObjectCopyToHeapNew (&r9);
-	memObjectCopyToHeapNew (&ra);  memObjectCopyToHeapNew (&rb);
-	memObjectCopyToHeapNew (&rc);  memObjectCopyToHeapNew (&rd);
-	memObjectCopyToHeapNew (&re);  memObjectCopyToHeapNew (&rf);
-	memObjectCopyToHeapNew (&r10); memObjectCopyToHeapNew (&r11);
-	memObjectCopyToHeapNew (&r12); memObjectCopyToHeapNew (&r13);
-	memObjectCopyToHeapNew (&r14); memObjectCopyToHeapNew (&r15);
-	memObjectCopyToHeapNew (&r16); memObjectCopyToHeapNew (&r17);
-	memObjectCopyToHeapNew (&r18); memObjectCopyToHeapNew (&r19);
-	memObjectCopyToHeapNew (&r1a); memObjectCopyToHeapNew (&r1b);
-	memObjectCopyToHeapNew (&r1c); memObjectCopyToHeapNew (&r1d);
-	memObjectCopyToHeapNew (&r1e); memObjectCopyToHeapNew (&r1f);
-	*/
 
 	/* Treat objects in heapOld as a root set. This is temporary until I re-enable
 	   the mutated:old-object list (commented code below). */
@@ -925,24 +901,24 @@ void memGarbageCollectInternal (Descriptor desc, Num byteSize) {
 		memCopyHeapObjectsToHeapNew(&heapOld);
 	}
 
-	/* Compact the objects referenced by mutated objects in the old heap.
+	/* TODO Compact the objects referenced by mutated objects in the old heap.
 	   Also optimize this list by compacting this list while were here by
 	   removing copies of the same references.
 	if (GarbageCollectionMode == GC_MODE_YOUNG) {
 		DB("   collecting and compacting mutated old object references...");
 		for (i=0; i<mutatedOldObjectsLength; i++) {
-			/ Compact
+			// Compact
 			if (memIsObjectInHeap(&heapNew, *mutatedOldObjects[i])) {
 				mutatedOldObjects[i]
 				= mutatedOldObjects[--mutatedOldObjectsLength];;
-			/ Collect object this points to.
+			// Collect object this points to.
 			} else {
 				memObjectCopyToHeapNew(mutatedOldObjects[i]);
 			}
 		}
 	} */
 
-	/* The new heap is the new root set.  Continue compacting on these objects */
+	/* The new heap is now a root set.  Continue compacting on these objects */
 	memCopyHeapObjectsToHeapNew(&heapNew);
 
 	/* Check finalizer count. */
@@ -975,7 +951,7 @@ void memGarbageCollectInternal (Descriptor desc, Num byteSize) {
 		/*  A brand new young heap is created for new object creation */
 		memInitializeHeap (&heap, HEAP_BLOCK_COUNT + byteSize/BLOCK_BYTE_SIZE);
 		GarbageCollectionMode = GC_MODE_YOUNG;
-		//mutatedOldObjectsLength = 0;
+		//mutatedOldObjectsLength = 0; /* TODO */
 	} else { /* GarbageCollectionMode == GC_MODE_YOUNG */
 		/* Reassign new heap to young heap. */
 		heap = heapNew;
@@ -1012,8 +988,7 @@ void memGarbageCollectInternal (Descriptor desc, Num byteSize) {
 } /* memGarbageCollectInternal */
 
 
-/* External call not triggered on lack of space so no descriptor
-   nor byteSize passed
+/* External call not triggered on lack of space so no descriptor nor byteSize passed
 */
 void memGarbageCollect () {
 	memGarbageCollectInternal(0, 0);
@@ -1175,9 +1150,12 @@ void memDebugDumpAll (FILE *stream) {
 	memDebugDumpStaticHeap(stream);
 
 	fprintf (stream, "\n----OLD HEAP----");
-//	for (i=0; i<mutatedOldObjectsLength; i++) {
-//		fprintf (stream " "OBJ, mutatedOldObjects[i]);
-//	}
+	/* TODO */
+	/*
+	for (i=0; i<mutatedOldObjectsLength; i++) {
+		fprintf (stream " "OBJ, mutatedOldObjects[i]);
+	}
+	*/
 	memDebugDumpOldHeap(stream);
 
 	fprintf (stream, "\n----YOUNG HEAP----");

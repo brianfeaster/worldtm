@@ -97,17 +97,15 @@ void asmCompileAsmstack (Num opcodeStart) {
 			memVectorSet(r3, addrCount++, memVectorObject(rasmstack, ++i));
 			/* Store opcode address. */
 			memVectorSet(r3, addrCount++, (Obj)opcodeWrite);
-			/* TODO Store a 0 for the branch offset for now (could just as well
-			   just increment the opcodeWrite address without mutating the value. */
-			memVectorSet(rasmstack, opcodeWrite++, (Obj)0);
+			opcodeWrite++;
+			/* Setting branch offset to 0 for cleaner debug dumps of the asm stack */
+			memVectorSet(rasmstack, opcodeWrite, (Obj)0);
 		} else {
-			//DB("%x opcode %08x", opcodeWrite, r0);
 			memVectorSet(rasmstack, opcodeWrite++, r0);
 		}
 	}
 
-	/* 'Pop' unused opcodes off stack leaving the freshly compiled code
-	   behind. */
+	/* 'Pop' unused opcodes off stack leaving the freshly compiled code behind */
 	*(Obj*)rasmstack = rasmstack + 8 * (opcodeWrite-1);
 
 	/* Traverse address entries and resolve the branch offsets.
