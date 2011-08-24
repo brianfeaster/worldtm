@@ -505,8 +505,8 @@
 ;(define (eval-string s) (eval (read-string s)))
 
 (define (load file)
- (if (string? file) (load (open-file file))
- (if (not file) (displayl "*load done*")
+ (if (string? file) (load (open-file file 'silent))
+ (if (not (port? file)) (displayl "*load error*")
  (let ((scmLoadExpr (read file)))
    (if (eof-object? scmLoadExpr)
        (close file)
@@ -520,21 +520,34 @@
 ; continuation.
 (define ERRORS (make-vector 1024 
   (lambda (o)
-    (displayl "\nERROR::" o)
+    (display "\nEXCEPTION::")
+    (if (null? o) (display ())
+      (begin
+        (display (car o))
+        (or (null? (cdr o)) (displayl " " (cdr o)))))
     (debugger)
-    (quit))))
-
-(define WELCOME-MESSAGE "Welcome to \e[1;31mW\e[33mO\e[32mR\e[34mL\e[35mD\e[01;m.\e[?25l")
+    (unthread))))
 
 
-; The read eval print loop.
+; The read eval print loop along with an error/exception handler.
 (define (repl . UNUSEDscmReplArgs)
-  (display (cons "MSG:" (call/cc (lambda (c) (vector-set! ERRORS (tid) c) WELCOME-MESSAGE))))
+  (define WELCOME-MESSAGE "Welcome to \e[1;31mW\e[33mO\e[32mR\e[34mL\e[35mD\e[01;m.\e[?25l")
+  (let ((msg (call/cc (lambda (c) (vector-set! ERRORS (tid) c) WELCOME-MESSAGE))))
+    ; An exception during the REPL returns to this
+    ; point with 'msg' assigned the error/info list
+    (if (eq? WELCOME-MESSAGE msg) (display WELCOME-MESSAGE)
+      (begin
+        (display "ERROR::")
+        (if (pair? msg)
+            (begin (display (car msg))
+                   (or (null? (cdr msg)) (displayl " " (cdr msg))))
+            (display ())))))
+  ; The REPL loop
   (let scmRepl~ ()
     (display "\nwscm>")
     (let ((scmReplExpr (read stdin)))
       (display (eval scmReplExpr))
-      (if (not (eof-object? scmReplExpr)) (scmRepl~)))))
+      (or (eof-object? scmReplExpr) (scmRepl~)))))
 
 (define gc garbage-collect)
 

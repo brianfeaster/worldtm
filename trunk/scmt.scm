@@ -13,6 +13,6 @@
 ; Call open-socket with an invalid parameter but catch the error, display message and return 'OK.
 (display
   (call/cc (lambda (c)
-    (vector-set! ERRORS (tid) (lambda (m) (display m) (c 'OK)))
+    (vector-set! ERRORS (tid) (lambda (m) (write m) (c 'OK)))
     (open-socket 'x)
     (display 'ERROR))))

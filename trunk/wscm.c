@@ -1,5 +1,4 @@
 #define DEBUG_ALL 0
-#define DB_DESC "WSCM "
 #include "debug.h"
 #include <stdio.h>
 #include <assert.h>
@@ -32,7 +31,7 @@
    Useful_functions
    Networking_stuff
    System_calls
-   Initialization_stuff
+   Setup
 	Main
 
  Concepts:
@@ -47,6 +46,7 @@
    "A bound variable gets a value stored in it's location"
 */
 
+void syscallDebugger (void);
 void debugDumpThreadInfo (void);
 
 
@@ -54,6 +54,8 @@ void debugDumpThreadInfo (void);
 /*******************************************************************************
  Useful_functions
 *******************************************************************************/
+#define DEBUG DEBUG_ALL|0
+#define DB_DESC "WSCM_USEFUL"
 
 void wscmDumpEnv (void) {
 	sysDumpEnv(renv);
@@ -120,10 +122,64 @@ Int wscmAssertArgumentCountMin (Num min, const char *functionName) {
    Uses    r2
    Return  r0 new list
 */
-void sysStackToList (void) {
- Num count = (Num)r1;
+void wscmStackToList (void) {
+ Num count=(Num)r1;
+	assert(count <= 64); /* Don't expect more than 64 args */
 	r0=null;
-	while (count--) { r1=vmPop(); r2=r0; objCons12(); }
+	while (count--) { r1=vmPop();  r2=r0;  objCons12(); }
+}
+
+/* Replace current continuation with error handler function/continuation which
+   must be defined in the global environment in the ERRORS vector indexed by
+   thread ID.
+   r0 <= Useful expression to print
+*/
+void wscmException (void) {
+	DBBEG();
+	r3 = r0; /* The message expression */
+
+	/* Lookup ERRORS binding in TGE.
+	   TODO this should be a static object and global symbol */
+	objNewSymbol ((Str)"ERRORS", 6);  r1=r0;  sysTGEFind();
+
+	if (null == r0) {
+		/* No exception handler vector 'ERRORS' so halt process */
+		fprintf (stderr, "An error/exception has occured:");
+		sysWrite(r3, stderr);
+		fprintf (stderr, "\nEntering debugger");
+		syscallDebugger();
+		exit(-1);
+	}
+
+	/* Consider the ERROR vector from TGE binding then consider the closure */
+	r0 = car(r0);
+	r0 = memVectorObject(r0, (Num)osThreadId(rrunning));
+
+	/* r0 needs to remain the closure when a code block is first run since the
+	   called code expects to find a lexical enviroment in the closure in r0.
+	   #closure<code-block lexical-env> */
+	rcode = car(r0);
+	rip=0;
+
+	/* Pass message expression as one argument to the error handler.  r1 = arg count.  */
+	vmPush(r3);
+	r1=(Obj)1;
+	DBEND();
+}
+
+/* stack <= argument objects
+      r1 <= argument count immediate
+     msg <= message C string
+	r0 => (Info expression) object
+*/
+void wscmError (char *msg) {
+	DBBEG();
+	/* Create ("error message" arguments...) object */
+	wscmStackToList();  r2 = r0;
+	objNewString((Str)msg, strlen(msg));  r1 = r0;
+	objCons12();
+	wscmException();
+	DBEND();
 }
 
 #undef DB_DESC
@@ -140,7 +196,7 @@ void sysStackToList (void) {
    block at the Scheme thread level.
 *******************************************************************************/
 #define DEBUG DEBUG_ALL|0
-#define DB_DESC "SYS_NET "
+#define DB_DESC "WSCM_NET"
 
 
 void wscmSocketFinalizer (Obj o) {
@@ -166,10 +222,6 @@ void wscmRecvBlock (void) {
  s64 wakeupTime;
  Num timedOut;
 	DBBEG();
-	DBE sysWrite(r4, stderr);
-	DBE sysWrite(r3, stderr);
-	DBE sysWrite(r2, stderr);
-	DBE sysWrite(r1, stderr);
 
 	/* Time can be false meaning wait forever or the time the thread
 	   should be woken up regardless of character availability. */
@@ -179,7 +231,7 @@ void wscmRecvBlock (void) {
 		r2=r0;
 	}
 
-	r4=0; /* Character read count initialized to 0. */
+	r4 = 0; /* Character read count initialized to 0. */
 
 	sysRecv();
 	timedOut = (r2!=false) && (*(Int*)r2 <= sysTime());
@@ -189,9 +241,10 @@ void wscmRecvBlock (void) {
 			osUnRun();
 			osMoveToQueue(rrunning, rblocked, sreadblocked);
 			osScheduler();
-		} if (timedOut && 0<(Num)r4) {
+		} if (timedOut && 0 < (Num)r4) {
 			/* Timeout with a partial read so return partial string */
-			objNewString(r3, (Num)r4);
+			objNewString(NULL, (Num)r4);
+   		memcpy(r0, r3, (Num)r4);
 		}
 	DBEND("  =>  r0:"OBJ, r0);
 }
@@ -238,44 +291,11 @@ void wscmOpenLocalStream (void) {
  System_calls
 *******************************************************************************/
 #define DEBUG DEBUG_ALL|0
-#define DB_DESC "SYS_SYSCALL "
+#define DB_DESC "WSCM_SYSCALL "
 
-/* Force a call to the error handler/continuation which must be defined in
-   the global environment in the ERRORS vector indexed by thread ID.
-
-	Given  r1  number of expression on stack to pop and group into a message list
-   r0 holds the invalid operator or message.
-*/
 void syscallError (void) {
- Num tid;
-	DBBEG();
-
-	/* Create list in r3 of the operator and stack operand arguments.
-	   Operator is in r0, operands are on the stack and r1 is operand count. */
-	objNewString(r0, strlen(r0)); r3=r0;
-	sysStackToList(); /* uses r0-2 */
-	r1=r3; r2=r0; objCons12(); r3=r0;
-	
-	/* Look up error function/continuation in ERRORS vector
-	   in TGE and set the code register and IP:
-	     r0            The ERRORS vector  of closures/continuations
-	     (car running) The current thread
-	     (cdr thread)  Current thread ID
-	     (car closure) Code block
-	     (cdr closure) Parent environment */
-	objNewSymbol ((Str)"ERRORS", 6);  r1=r0;  sysTGEFind(); r0=car(r0);
-	tid = (Num)osThreadId(rrunning);
-	r0 = memVectorObject(r0, tid);
-	/* r0 needs to remain the closure when a code block is first run
-	   since the called code expects to find a lexical enviroment in the
-	   closure in r0 */
-	rcode=car(r0);  rip=0;
-
-	/* Push operand and set operand count */
-	vmPush(r3);
-	r1=(Obj)1;
-
-	DBEND();
+	wscmStackToList();
+	wscmException();
 }
 
 
@@ -289,85 +309,89 @@ void syscallQuit (void) {
 extern Num garbageCollectionCount;
 void sysFun (void) {
 	debugDumpThreadInfo ();
-	//fprintf (stderr, "Stacklength=[%d]", memStackLength(stack));
 	memDebugDumpHeapHeaders(stderr);
-	//memDebugDumpYoungHeap(stderr);
-	//objNewInt((Int)garbageCollectionCount);
 }
-
-/* 1. Call the function and pass it 5
-   2. Call the function and pass code
-   3. Call the function and pass the continuation code
-	Maybe this should be compiled?
-	(call/cc fn) => (fn continuation)
-*/
 
 
 void syscallDumpThreads (void) {
-	sysWrite(rthreads, stderr);
+	sysWrite(rthreads, stderr); /* TODO make this pretty */
 }
 
 
 void syscallString (void) {
  Num totalLen=0, s=0, len;
+ Type t;
 	DBBEG();
-	/* Consider sum of lengths of string argumens on stack TODO error checking */
-	while (s < (Int)r1)
-		totalLen += memObjectLength(memStackObject(rstack, s++));
-
-	if (!totalLen) {
-		/* All strings were "".  Pop them off stack and return "". */
-		while (s--) vmPop();
-		r0 = nullstr;
-	} else {
-		r0 = memNewArray(TSTRING, totalLen);
-		while (s--) {
-			totalLen -= (len = memObjectLength(r1=vmPop()));
-			memcpy(r0+totalLen, r1, len); /* New string is built in reverse */
+	/* Verify each arg is a string and sum the lengths */
+	while (s < (Int)r1) {
+		r0 = memStackObject(rstack, s++);
+		t = memObjectType(r0);
+		if (TSTRING != t && TNULLSTR != t && TCHAR != t) {
+			wscmError("String received non-string");
+			goto ret;
 		}
+		totalLen += memObjectLength(r0);
 	}
+	/* New string is built in reverse.  Even works if
+	   substrings are "" since strcpy length is 0. */
+	r0 = totalLen ? memNewArray(TSTRING, totalLen) : nullstr;
+	while (s--) {
+		totalLen -= (len = memObjectLength(r1=vmPop()));
+		memcpy(r0+totalLen, r1, len);
+	}
+	ret:
 	DBEND();
 }
 
 void syscallMakeString (void) {
  Num len;
- Chr fill=' ';
+ Chr filChar=' ';
 	DBBEG();
 	if (wscmAssertArgumentCountRange(1, 2, __func__)) return;
 
 	/* Fill character if specified. */
-	if (2 == (Num)r1) fill = *(Chr*)vmPop();
+	if (2 == (Num)r1) filChar = *(Chr*)vmPop();
 
 	/* Create string of passed length. */
 	objNewString(NULL, len=*(Num*)vmPop());
 
-	/* Fill string if fill character specified. */
-	if (2 == (Num)r1)  while (len--) ((Chr*)r0)[len]=fill;
+	/* Fill string if filChar character specified. */
+	if (2 == (Num)r1)  while (len--) ((Chr*)r0)[len]=filChar;
 
 	DBEND();
 }
 
 void syscallSubString (void) {
- Num end=0, start=0;
+ Num end, start;
 	DBBEG();
 	if (wscmAssertArgumentCount(3, __func__)) return;
-	end=*(Num*)(r2=vmPop());
-	start=*(Num*)(r1=vmPop());
-	if (end==start) {
-		r1=vmPop();
-		r0=nullstr;
-	} else {
-		if (end-start < 0) {
+	end   = *(Num*)(r3=vmPop());
+	start = *(Num*)(r2=vmPop());
+	r1 = vmPop();
+	if (start < end) {
+		/* TODO new array is called directly since objNewString might pass an invalid pointer if a GC occurs.  Do I even want objNewString to exist? */
+		if (TSTRING == memObjectType(r1)) {
+			DB("positive len and string");
+			r0 = memNewArray(TSTRING, end-start);
+			memcpy(r0, r1+start, end-start);
+		} else {
+			DB("not a string");
 			vmPush(r1);
 			vmPush(r2);
+			vmPush(r3);
 			r1 = (Obj)3;
-			r0 = "Invalid range to substring";
-			syscallError();
-		} else {
-			r0 = memNewArray(TSTRING, end-start);
-			r1=vmPop();
-			memcpy(r0, r1+start, end-start);
+			wscmError("Substring first argument not a string");
 		}
+	} else if (end==start) {
+		DB("0 len");
+		r0=nullstr;
+	} else {
+		DB("negative len");
+		vmPush(r1);
+		vmPush(r2); /* Push back args and specify error message */
+		vmPush(r3);
+		r1 = (Obj)3;
+		wscmError("Substring Invalid range");
 	}
 	DBEND();
 }
@@ -415,7 +439,7 @@ void syscallSerializeDisplay (void) {
 			objNewString(buff, (Num)ret);
 			break;
 		case TCHAR   : 
-			objNewString(r0, 1);
+			objNewString(r0, 1); /* Char objects live in static heap so address r0 won't change during a GC */
 			break;
 		default      :
 			ret = sprintf((char*)buff, HEX, (Num*)r0);
@@ -558,18 +582,23 @@ void syscallVector (void) {
 }
 
 void syscallMakeVector (void) {
- Num len;
+ Int len;
 	DBBEG();
 	if (wscmAssertArgumentCountRange(1, 2, __func__)) return;
-
-	r2 = r1==(Obj)2 ? vmPop() : null;
-	len = *(Num*)vmPop();
-	if (len<1) r0=nullvec;
-	else {
-		objNewVector(len);
-		while (len--) memVectorSet(r0, len, r2);
+	r3 = (2==(Num)r1) ? vmPop() : null; /* Fill object */
+	r2 = vmPop(); /* length */
+	len = *(Int*)r2;
+	if (0 < len) {
+		objNewVector((Num)len);
+		while (len--) memVectorSet(r0, (Num)len, r3);
+	} else if (0 == len) {
+		r0=nullvec;
+	} else {
+		/* Push back args for error message */
+		vmPush(r2);
+		if (2==(Num)r1) vmPush(r3);
+		wscmError("make-vector invalid size");
 	}
-
 	DBEND();
 }
 
@@ -587,7 +616,8 @@ void syscallRandom (void) {
 void syscallEquals (void) {
 	DBBEG();
 	if (wscmAssertArgumentCount(2, __func__)) return;
-	r1=vmPop();  r0=vmPop();
+	r1=vmPop();
+	r0=vmPop();
 	r0 = TINTEGER == memObjectType(r0)
 	     && TINTEGER == memObjectType(r1)
 	     && *(Int*)r0 == *(Int*)r1
@@ -597,8 +627,9 @@ void syscallEquals (void) {
 
 void syscallEqP (void) {
 	DBBEG();
-	if (wscmAssertArgumentCount(2, __func__)) return;
+	if (wscmAssertArgumentCount(2, __func__)) goto ret;
 	r0 = (vmPop() == vmPop()) ? true : false;
+ret:
 	DBEND();
 }
 
@@ -680,7 +711,7 @@ void syscallMul (void) {
 	DBEND();
 }
 
-/* Multiply all but the first, then divide the first by that the product.
+/* Multiply all but the first, then divide the first by the product.
 */
 void syscallDiv (void) {
  Int product=1, divisor;
@@ -766,9 +797,7 @@ void syscallOpenSocket (void) {
 		if (memObjectType(r1=vmPop()) != TINTEGER) {
 			vmPush(r1); /* Push invalid object */
 			r1 = (Obj)1;
-			r0 = "Invalid argument to syscall open-socket:";
-			syscallError();
-			return;
+			wscmError("Invalid argument to syscall open-socket");
 		} else {
 			sysOpenLocalSocket(); /* pass in port via r1 */
 			/* Create and set the socket's "close" finalizer */
@@ -782,11 +811,7 @@ void syscallOpenSocket (void) {
 	} else if (2 == (Int)r1) {
 		sysOpenRemoteSocket();
 	} else {
-		fprintf(stderr, "Invalid arguments to open-socket:");
-		sysStackToList();
-		vmPush(r0);
-		r1 = (Obj)1;
-		syscallError();
+		wscmError("Invalid arguments to open-socket:");
 	}
 	DBEND();
 }
@@ -797,9 +822,9 @@ void syscallOpenStream (void) {
 
 	r1 = vmPop();
 	if (memObjectType(r1) != TPORT) {
-		vmPush("Invalid arguments to open-stream:"); /* TODO does this work? */
-		r1++;
-		syscallError();
+		vmPush(r1);
+		r1=(Obj)1;
+		wscmError("Invalid arguments to open-stream:");
 		goto ret;
 	}
 
@@ -810,9 +835,9 @@ void syscallOpenStream (void) {
 	else if (memVectorObject(r1, 3) == sclosed)
 		r0=eof;
 	else {
-		r0 = "Invalid port state to open-stream.\n";
+		vmPush(r1);
 		r1 = (Obj)1;
-		syscallError();
+		wscmError("Invalid port state to open-stream");
 	}
  ret:
 	DBEND();
@@ -820,20 +845,32 @@ void syscallOpenStream (void) {
 
 void syscallOpenFile (void) {
  Num silent=0;
+ Int len;
+ char buff[0x1000];
 	DBBEG();
-	if (wscmAssertArgumentCountRange(1, 2, __func__)) return;
+	if (wscmAssertArgumentCountRange(1, 2, __func__)) goto ret;
 
-	if ((Num)r1==2) { /* If an extra arg forces a silent sysOpenFile() call */
+	if ((Num)r1==2) { /* An extra arg forces a silent sysOpenFile() call */
 		vmPop();
 		silent=1;
 	}
 	r1 = vmPop();
-	sysOpenFile(O_RDWR, S_IRUSR|S_IWUSR, silent);
+	sysOpenFile(O_RDWR, S_IRUSR|S_IWUSR, silent); /* r1 contains filename object */
+
+	if (false == r0 && !silent) {
+		r1=0;
+		len = sprintf(buff, "Unable to open existing file \""STR"\".  ["INT":"STR"]", r2, errno, strerror(errno));
+		assert(len<0x1000);
+		wscmError(buff);
+	}
+ret:
 	DBEND();
 }
 
 void syscallOpenNewFile (void) {
  Num silent=0;
+ Int len;
+ char buff[4096];
 	DBBEG();
 	if (wscmAssertArgumentCountRange(1, 2, __func__)) {
 		r0 = eof;
@@ -844,6 +881,13 @@ void syscallOpenNewFile (void) {
 		}
 		r1 = vmPop();
 		sysOpenFile(O_CREAT|O_TRUNC|O_RDWR, S_IRUSR|S_IWUSR, silent);
+
+		if (false == r0 && !silent) {
+			r1=0;
+			len = sprintf(buff, "Unable to open new file \""STR"\".  \"("INT")"STR"\"", r2, errno, strerror(errno));
+			assert(len<4095);
+			wscmError(buff);
+		}
 	}
 	DBEND();
 }
@@ -1225,7 +1269,7 @@ void syscallDebugger (void) {
 	ioctl(1, TIOCGWINSZ, &win); printf ("\e[0m\e[%dH\n", win.ws_row); /* Move cursor to bottom of screen */
 	while (!done) {
 		printf ("\n\e[1m-------------------------------");
-		printf ("\nc    vmDebugDumpCode(r1c, stderr)");
+		printf ("\nc    vmDebugDumpCode(code, stderr)");
 		printf ("\nC a  vmDebugDumpCode(a, stderr)");
 		printf ("\nu    sysDumpCallStackCode()");
 		printf ("\ne    sysDumpEnv(env)");
@@ -1266,7 +1310,7 @@ void syscallDebugger (void) {
 	/* Restore terminal and IO */
 	tcsetattr(1, TCSANOW, &tios_orig);
 	fcntl (0, F_SETFL, fl);
-	r0=true;
+	r0 = true;
 }
 
 
@@ -1328,43 +1372,29 @@ void syscallSignal (void) {
 
 
 /*******************************************************************************
- Initialization_stuff
+ Setup
 *******************************************************************************/
 #define DEBUG DEBUG_ALL|0
-#define DB_DESC "SYS_INIT "
-
-/* Bind symbol, created from 'sym', in TGE and assign object in r0 to the location.
-	Mutates: r1 r2
-	Returns: r0
-*/
-void wscmDefine (char* sym) {
-	DBBEG();
-	r1 = r0;
-	objNewSymbol((Str)sym, strlen(sym)); r2=r0;
-	objCons12();
-	/* Insert binding into TGE list:  (TGE (val . sym) . ...) */
-	r1=r0;  r2=cdr(rtge);  objCons12();
-	memVectorSet(rtge, 1, r0);
-	DBEND();
-	DBE sysWrite (r1, stderr);
-}
+#define DB_DESC "WSCM_INIT "
 
 /* Given  - r1:port object  r3:pointer to char
             r4:current state (see scanner.c)   r5:yytext  r6:yylen
    Return - r4:next state   r5:yytext   r6:yylen
             r0:final state if complete token scanned (reached final state).
 */
-void sysTransition (void) {
+void wscmSysTransition (void) {
 	DBBEG(" *r3="HEX" state:r4="HEX, *(Chr*)r3, r4);
-	//DBE sysWrite (r3, stderr);
-	//DBE sysWrite (r4, stderr);
+
 	/* Make the transition on char in r3 given state in r4. */
 	r4 = (Obj)transition(*(Num*)r3, (Num)r4);
 	DB("transition to state => "HEX, r4);
+
 	/* Append char to scanned token and inc yylen. */
 	*((u8*)r5+(Num)r6++) = *(u8*)r3;
+
 	/*  Reset yylen to 0 if we ever end up back to the initial state.*/
-	if ((Int)r4 == 0x00) r6=0;
+	if ((Int)r4 == 0x00)
+		r6=0;
 	else if ((Int)r4 & FINALSTATE) {
 		/* Push back character to stream if in pushback state and not eof. */
 		if (((Int)r4 & PUSHBACK) && (r3!=eof)) {
@@ -1373,10 +1403,10 @@ void sysTransition (void) {
 		}
 		r0=r4;
 	}
+
 	DBEND(" final state r0="HEX, r0);
-	//DBE sysWrite(r4, stderr);
-	//DBE sysWrite(r5, stderr);
 }
+
 
 /* Call to the read scheme closure will setup registers for calls to internal
    scanning and parsing code blocks.  This function creates that closure.
@@ -1408,9 +1438,8 @@ void wscmCreateRead (void) {
 		POP4,
 		MV30,                     /* move char to r3 */
 		MVI0, 0l, /* Initialize final state to 0.  Will return 0 when still in non-final state. */
-		SYSI, sysTransition, /* Syscall to get next state. */
+		SYSI, wscmSysTransition, /* Syscall to get next state. */
 		BEQI0, 0l, ADDR, "scan",
-
 		/* close paren? */
 		BNEI0, SCLOSEPAREN, ADDR, "dot",
 		MVI0, null,
@@ -1601,7 +1630,7 @@ void wscmCreateRead (void) {
 
 	/* r5 eventually gets a new token string buffer (copied from this) when the
 		following code runs.  BF: TODO: Implement as a dynamic buffer.*/
-	objNewString((u8*)"--------------------------------------------------------------------------------"
+	objNewString((Str)"--------------------------------------------------------------------------------"
 	                  "--------------------------------------------------------------------------------"
 	                  "--------------------------------------------------------------------------------"
 	                  "--------------------------------------------------------------------------------"
@@ -1703,6 +1732,7 @@ void wscmCreateRepl (void) {
 	DBEND();
 }
 
+
 void wscmInitialize (void) {
  Num i;
 	DBBEG();
@@ -1714,7 +1744,7 @@ void wscmInitialize (void) {
 	memObjStringSet(sysNewClosure1Env);
 	memObjStringSet(objNewVector1);
 	memObjStringSet(wscmRecvBlock);
-	memObjStringSet(sysTransition);
+	memObjStringSet(wscmSysTransition);
 	memObjStringSet(objListToVector);
 	memObjStringSet(objCons12);
 	memObjStringSet(objCopyString);
@@ -1722,9 +1752,6 @@ void wscmInitialize (void) {
 	memObjStringSet(osNewThread);
 	memObjStringSet(objCopyInteger);
 	memObjStringSet(sysEnvGet);
-	memObjStringSet("Not enough arguments to closure");
-	memObjStringSet("expectedNoArgs");
-	memObjStringSet("Too many arguments to function");
 	memObjStringSet(wscmSocketFinalizer);
 
 	/* Create empty thread vector.  All active threads are assigned a number
@@ -1760,103 +1787,103 @@ void wscmInitialize (void) {
 	r1=r0;  r2=null;  objCons12();  renv=rtge=r0;
 
 	/* Bind usefull values r2=value r1=symbol. */
-	wscmDefineSyscall (syscallError, "error");
-	wscmDefineSyscall (syscallQuit, "quit");
-	wscmDefineSyscall (sysFun, "fun");
-	wscmDefineSyscall (wscmDumpEnv, "env");
-	wscmDefineSyscall (sysDumpTGE, "tge");
-	wscmDefineSyscall (syscallDebugger, "debugger");
-	wscmDefineSyscall (syscallDumpThreads, "threads");
-	wscmDefineSyscall (syscallString, "string");
-	wscmDefineSyscall (syscallMakeString, "make-string");
-	wscmDefineSyscall (syscallSubString, "substring");
-	wscmDefineSyscall (syscallStringLength, "string-length");
-	wscmDefineSyscall (syscallSerializeDisplay, "serialize-display");
-	wscmDefineSyscall (syscallSerializeWrite, "serialize-write");
-	wscmDefineSyscall (syscallNumber2String, "number->string");
-	wscmDefineSyscall (syscallWrite, "write");
-	wscmDefineSyscall (syscallDisplay, "display");
-	wscmDefineSyscall (syscallVector, "vector");
-	wscmDefineSyscall (syscallMakeVector, "make-vector");
-	wscmDefineSyscall (syscallRandom, "random");
-	wscmDefineSyscall (syscallEquals, "=");
-	wscmDefineSyscall (syscallEqP, "eq?");
-	wscmDefineSyscall (syscallStringEqualsP, "string=?");
-	wscmDefineSyscall (syscallNotEquals, "!=");
-	wscmDefineSyscall (syscallLessThan, "<");
-	wscmDefineSyscall (syscallLessEqualThan, "<=");
-	wscmDefineSyscall (syscallGreaterThan, ">");
-	wscmDefineSyscall (syscallGreaterEqualThan, ">=");
-	wscmDefineSyscall (syscallAdd, "+");
-	wscmDefineSyscall (syscallMul, "*");
-	wscmDefineSyscall (syscallDiv, "/");
-	wscmDefineSyscall (syscallLogAnd, "logand");
-	wscmDefineSyscall (syscallSqrt, "sqrt");
-	wscmDefineSyscall (syscallRemainder, "remainder");
-	wscmDefineSyscall (syscallModulo, "modulo");
-	wscmDefineSyscall (syscallSub, "-");
-	wscmDefineSyscall (syscallTime, "time");
-	wscmDefineSyscall (syscallUTime, "utime");
-	wscmDefineSyscall (syscallSleep, "sleep");
-	wscmDefineSyscall (syscallTID, "tid");
-	wscmDefineSyscall (osUnthread, "unthread");
-	wscmDefineSyscall (syscallOpenSocket, "open-socket");
-	wscmDefineSyscall (syscallOpenStream, "open-stream");
-	wscmDefineSyscall (syscallOpenFile, "open-file");
-	wscmDefineSyscall (syscallOpenNewFile, "open-new-file");
-	wscmDefineSyscall (syscallClose, "close");
-	wscmDefineSyscall (syscallRecv, "recv");
-	wscmDefineSyscall (syscallReadChar, "read-char");
-	wscmDefineSyscall (syscallUnreadChar, "unread-char");
-	wscmDefineSyscall (syscallReadString, "read-string");
-	wscmDefineSyscall (syscallSend, "send");
-	wscmDefineSyscall (syscallSeek, "seek");
-	wscmDefineSyscall (syscallTerminalSize, "terminal-size");
-	wscmDefineSyscall (syscallStringRef, "string-ref");
-	wscmDefineSyscall (syscallStringSetB, "string-set!");
-	wscmDefineSyscall (syscallVectorLength, "vector-length");
-	wscmDefineSyscall (syscallDebugDumpAll, "dump-heap");
-	wscmDefineSyscall (syscallGarbageCollect, "garbage-collect");
-	wscmDefineSyscall (syscallDisassemble, "disassemble");
-	wscmDefineSyscall (syscallOpenSemaphore, "open-semaphore");
-	wscmDefineSyscall (syscallCloseSemaphore, "close-semaphore");
-	wscmDefineSyscall (syscallSemaphoreDown, "semaphore-down");
-	wscmDefineSyscall (syscallSemaphoreUp, "semaphore-up");
-	wscmDefineSyscall (syscallSignal, "signal");
-	wscmDefineSyscall (syscallToggleDebug, "toggle-debug");
+	sysDefineSyscall (syscallError, "error");
+	sysDefineSyscall (syscallQuit, "quit");
+	sysDefineSyscall (sysFun, "fun");
+	sysDefineSyscall (wscmDumpEnv, "env");
+	sysDefineSyscall (sysDumpTGE, "tge");
+	sysDefineSyscall (syscallDebugger, "debugger");
+	sysDefineSyscall (syscallDumpThreads, "dump-threads");
+	sysDefineSyscall (syscallString, "string");
+	sysDefineSyscall (syscallMakeString, "make-string");
+	sysDefineSyscall (syscallSubString, "substring");
+	sysDefineSyscall (syscallStringLength, "string-length");
+	sysDefineSyscall (syscallSerializeDisplay, "serialize-display");
+	sysDefineSyscall (syscallSerializeWrite, "serialize-write");
+	sysDefineSyscall (syscallNumber2String, "number->string");
+	sysDefineSyscall (syscallWrite, "write");
+	sysDefineSyscall (syscallDisplay, "display");
+	sysDefineSyscall (syscallVector, "vector");
+	sysDefineSyscall (syscallMakeVector, "make-vector");
+	sysDefineSyscall (syscallRandom, "random");
+	sysDefineSyscall (syscallEquals, "=");
+	sysDefineSyscall (syscallEqP, "eq?");
+	sysDefineSyscall (syscallStringEqualsP, "string=?");
+	sysDefineSyscall (syscallNotEquals, "!=");
+	sysDefineSyscall (syscallLessThan, "<");
+	sysDefineSyscall (syscallLessEqualThan, "<=");
+	sysDefineSyscall (syscallGreaterThan, ">");
+	sysDefineSyscall (syscallGreaterEqualThan, ">=");
+	sysDefineSyscall (syscallAdd, "+");
+	sysDefineSyscall (syscallMul, "*");
+	sysDefineSyscall (syscallDiv, "/");
+	sysDefineSyscall (syscallLogAnd, "logand");
+	sysDefineSyscall (syscallSqrt, "sqrt");
+	sysDefineSyscall (syscallRemainder, "remainder");
+	sysDefineSyscall (syscallModulo, "modulo");
+	sysDefineSyscall (syscallSub, "-");
+	sysDefineSyscall (syscallTime, "time");
+	sysDefineSyscall (syscallUTime, "utime");
+	sysDefineSyscall (syscallSleep, "sleep");
+	sysDefineSyscall (syscallTID, "tid");
+	sysDefineSyscall (osUnthread, "unthread");
+	sysDefineSyscall (syscallOpenSocket, "open-socket");
+	sysDefineSyscall (syscallOpenStream, "open-stream");
+	sysDefineSyscall (syscallOpenFile, "open-file");
+	sysDefineSyscall (syscallOpenNewFile, "open-new-file");
+	sysDefineSyscall (syscallClose, "close");
+	sysDefineSyscall (syscallRecv, "recv");
+	sysDefineSyscall (syscallReadChar, "read-char");
+	sysDefineSyscall (syscallUnreadChar, "unread-char");
+	sysDefineSyscall (syscallReadString, "read-string");
+	sysDefineSyscall (syscallSend, "send");
+	sysDefineSyscall (syscallSeek, "seek");
+	sysDefineSyscall (syscallTerminalSize, "terminal-size");
+	sysDefineSyscall (syscallStringRef, "string-ref");
+	sysDefineSyscall (syscallStringSetB, "string-set!");
+	sysDefineSyscall (syscallVectorLength, "vector-length");
+	sysDefineSyscall (syscallDebugDumpAll, "dump-heap");
+	sysDefineSyscall (syscallGarbageCollect, "garbage-collect");
+	sysDefineSyscall (syscallDisassemble, "disassemble");
+	sysDefineSyscall (syscallOpenSemaphore, "open-semaphore");
+	sysDefineSyscall (syscallCloseSemaphore, "close-semaphore");
+	sysDefineSyscall (syscallSemaphoreDown, "semaphore-down");
+	sysDefineSyscall (syscallSemaphoreUp, "semaphore-up");
+	sysDefineSyscall (syscallSignal, "signal");
+	sysDefineSyscall (syscallToggleDebug, "toggle-debug");
 
 	/* Create the standard I/O port object */
 	r1=(Obj)0; /* Descriptor */
 	objNewSymbol ((Str)"stdin", 5);  r2=r3=r0; /* Address and port */
 	r4 = sopen; /* State */
-	objNewPort(); wscmDefine("stdin");
+	objNewPort(); sysDefine("stdin");
 
 	r1=(Obj)1;
 	objNewSymbol ((Str)"stdout", 6);  r2=r3=r0;
 	r4 = sopen;
-	objNewPort ();  wscmDefine("stdout");
+	objNewPort ();  sysDefine("stdout");
 
 	r1=(Obj)2;
 	objNewSymbol ((Str)"stderr", 6);
 	r2=r3=r0;
 	r4 = sopen;
-	objNewPort(); wscmDefine("stderr");
+	objNewPort(); sysDefine("stderr");
 
 	/* For fun assign symbol 'characters the internal character vector. */
-	r0=characters; wscmDefine("characters");
-	r0=staticIntegers; wscmDefine("integers");
-	r0=rsymbols; wscmDefine("symbols");
-	wscmCreateRead();  wscmDefine("read");
-	wscmCreateRepl();  wscmDefine("repl2");
-	r0=eof; wscmDefine("#eof");
-	objNewInt(42); wscmDefine ("y"); /* It's always nice to have x and y defined with useful values */
-	objNewInt(69); wscmDefine ("x");
+	r0=characters; sysDefine("characters");
+	r0=staticIntegers; sysDefine("integers");
+	r0=rsymbols; sysDefine("symbols");
+	wscmCreateRead();  sysDefine("read");
+	wscmCreateRepl();  sysDefine("repl2");
+	r0=eof; sysDefine("#eof");
+	objNewInt(42); sysDefine ("y"); /* It's always nice to have x and y defined with useful values */
+	objNewInt(69); sysDefine ("x");
 
 	/* Signal handler vector */
 	i=32;
 	objNewVector(i);
 	while (i--) { memVectorSet(r0, i, null); }
-	wscmDefine("SIGNALHANDLERS");
+	sysDefine("SIGNALHANDLERS");
 
 	DBEND();
 }
@@ -1971,7 +1998,7 @@ void wscmBindArgs (Num argc, char *argv[]) {
 		objNewString((u8*)argv[i], strlen(argv[i]));
 		memVectorSet(r1, i, r0);
 	}
-	r0=r1; wscmDefine ("argv"); 
+	r0=r1; sysDefine ("argv"); 
 	DBEND();
 }
 

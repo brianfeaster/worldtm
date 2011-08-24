@@ -2,6 +2,7 @@
 #include "debug.h"
 #include <stdlib.h>
 #include <unistd.h>
+#include <string.h>
 #include <assert.h>
 #include "os.h"
 #include "sys.h"
@@ -189,15 +190,18 @@ void osScheduleBlocked (void) {
 
 		if (r1 == sreadblocked) {
 			DB("dealing with a read blocked thread");
-			r1 = memStackObject(osThreadStack(r5), 1l);
-			r2 = memStackObject(osThreadStack(r5), 2l);
-			r3 = memStackObject(osThreadStack(r5), 3l);
-			r4 = memStackObject(osThreadStack(r5), 4l);
+			r1 = memStackObject(osThreadStack(r5), 1l); /* port */
+			r2 = memStackObject(osThreadStack(r5), 2l); /* timeout */
+			r3 = memStackObject(osThreadStack(r5), 3l); /* buffer */
+			r4 = memStackObject(osThreadStack(r5), 4l); /* count */
 			sysRecv();
 			timedOut = (r2!=false) && (*(Int*)r2 <= sysTime());
 			if (r0 != false || timedOut) {
 				/* If timed out but partial read, return the partial string */
-				if (r0==false && timedOut && 0<(Num)r4) objNewString(r3, (Num)r4);
+				if (r0==false && timedOut && 0<(Num)r4) {
+					objNewString(NULL, (Num)r4);
+   				memcpy(r0, r3, (Num)r4);
+				}
 				/* Set thread's return value (r0 register top of stack) with
 			   	newly-read string or #f if it has timed out. */
 				memStackSet(osThreadStack(r5), 0, r0);

@@ -902,10 +902,12 @@
     ((string=? "britania" talkInput)  ((avatar 'jump) 1 3456 2751))))))
 
 ; Sex and the City episode recommender
-(define SexEpisodes ())
-(load "satc.scm") ; defines SexEpisodes
+(define SexEpisodes #f)
+(cond ((open-file "satc.scm" 1) => load))
+; (load "satc.scm") ; defines SexEpisodes
 
 (define (satc . args)
+ (if SexEpisodes
  (let ((index #f))
   (if (null? args)
     (set! index (random (vector-length SexEpisodes)))
@@ -918,7 +920,7 @@
             (else
              (set! index (+ e (vector-ref #(0 12 30 48 66 74) s)))))))
   (if index (let ((d (vector-ref SexEpisodes index)))
-    (tankTalk  "(s " (car d) " e " (cadr d) ") " (caddr d) "\r\n" (car (cdddr d)))))))
+    (tankTalk  "(s " (car d) " e " (cadr d) ") " (caddr d) "\r\n" (car (cdddr d))))))))
 
 ; Display the same string repeatedly with colors of increasing inensity.
 (define (fancyDisplay c s)
