@@ -198,7 +198,7 @@ void objNewVector (Num len) {
 /* Create uninitialized vector in r0 of length imm:r1
 */
 void objNewVector1 (void) {
-   r0 = memNewVector(TVECTOR, (LengthType)r1);
+   r0 = memNewVector(TVECTOR, (Length)r1);
 }
 
 void objNewPort (void) {
@@ -213,6 +213,10 @@ void objNewPort (void) {
 
 int objPortDescriptor (Obj p) {
 	return (int)(Int)(memVectorObject(p, 0));
+}
+
+Obj objPortState (Obj p) {
+	return memVectorObject(p, 3);
 }
 
 /*

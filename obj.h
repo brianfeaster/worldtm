@@ -73,6 +73,7 @@ void objNewVector1 ();
 
 void objNewPort (void);
 int objPortDescriptor (Obj p);
+Obj objPortState (Obj p);
 
 /* Object operations
  */

@@ -13,10 +13,8 @@
 #include "asm.h"
 #include "vm.h"
 #include "mem.h"
-/* Functions related to compiling scheme expressions into
-   virtual machine code blocks
-
-   TODO This compiler module is not reentrant.
+/* Functions related to compiling scheme expressions
+   into virtual machine code blocks.  Not reentrant.
 */
 
 
@@ -149,7 +147,7 @@ void compTGELookup (void) {
 		printf ("ERROR: Unbound symbol:");
 		objDump(r1, stdout);
 		r0 = r1;
-		// TODO  Kill thread, stop machine, return to monitor/shell?
+		/* TODO  Kill thread, stop machine, return to monitor/shell? */
 	} else {
 		DB("SYS    found in tge @ opcode %x", (Num)rip-4);
 		/* Specialization optimization.  Muate code that originally called
@@ -2163,9 +2161,9 @@ void compCallcc (Num flags) {
 
 
 /* Compile expression.
-   expr (r18) -> Expression to compile.
-   asmstack (r1a) -> Stack the emitted opcodes are pushed onto.
-   env (rc6) -> Pseudo environment
+   expr (r15) -> Expression to compile.
+   asmstack (r16) -> Stack the emitted opcodes are pushed onto.
+   env (r1c) -> Pseudo environment
 	An expression is either a symbol, syntax, combination or self evaluating.
 */
 Num compExpression (Num flags) {
@@ -2228,7 +2226,7 @@ Num compExpression (Num flags) {
 
 
 /* Compile expression.
-   r18 -> Expression we're compiling.
+   r15 -> Expression we're compiling.
    r0  <- Resuling code object (vector of VM opcodes).
 */
 Num compCompile (void) {
@@ -2236,7 +2234,9 @@ Num compCompile (void) {
 	DBBEG();
 
 	CompError = 0; /* Clear error flag. */
-	//renv = rtge;   /* Force evaluation in the global environment */
+
+	/* Force evaluation in the global environment */
+	/* renv = rtge; */
 
    /* Start emitting code.  Keep track of original expression for debugging. */
 	asmAsm (
@@ -2259,7 +2259,7 @@ void compInitialize (void) {
  static Num shouldInitialize=1;
 	DBBEG();
 	if (shouldInitialize) {
-		DB("  Activating module...");
+		DB("Activating module...");
 		shouldInitialize=0;
 		sysInitialize ();
 		asmInitialize ();
@@ -2274,7 +2274,7 @@ void compInitialize (void) {
 		memObjStringSet("Not enough arguments to closure");
 		memObjStringSet("Too many arguments to function");
 	} else {
-		DB("  Module already activated");
+		DB("Module already activated");
 	}
 	DBEND();
 }

@@ -44,7 +44,7 @@ void displayStringR1 (void) {
 /* A machine language program that outputs to a buffer some strings and numbers.
 */
 void fancyHelloWorld (void) {
- LengthType codeSize;
+ Length codeSize;
  char *baseString;
  /* Registers holding runable code objects */
  #define helloWorldSub r10

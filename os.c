@@ -123,7 +123,8 @@ void osNewThread (void) {
 	memVectorSet(r0, 0, r1);
 	objDoublyLinkedListInsert (rrunning, r0); /* Insert new thread before current thread */
 
-	objNewInt((Int)tid);
+	//objNewInt((Int)tid);
+	r0 = r1; /* Return thread descriptor */
 done:
 	DBEND("  =>  tid:"NUM, tid);
 } /* osNewThread */
@@ -148,7 +149,8 @@ void osScheduleSleeping (void) {
 		   sleeping.  It will be reactivated by the VM module upon return.
 
 		   BF TODO does this even matter?  The only way this scheduler is
-		   called is after the timer interrupts the VM */
+		   called is after the timer interrupts the VM.  Oh but what if the
+		   code block ends or unthread is called?  */
 		ualarm(0,0);
 		usleep((useconds_t)wakeupTime*1000);
 
@@ -353,7 +355,6 @@ void osScheduler (void) {
 	if (rrunning==rready) rrunning=objDoublyLinkedListNext(rready);
 	if (rrunning==rready) fprintf (stderr, "ERROR: deal with this!");
 
-	//wscmSigAlarmReset(); /* Enable scheduler's interrupt timer. */
 	osRun();
 
 	DBEND("  =>"NUM, osThreadId(rrunning));
@@ -361,7 +362,7 @@ void osScheduler (void) {
 
 
 void osUnthread (void) {
-	DBBEG(" <= "NUM, osThreadId(rrunning));
+	DBBEG("  thread ID "NUM, osThreadId(rrunning));
 	/* Remove from thread vector table. */
 	memVectorSet(rthreads, (Num)osThreadId(rrunning), null);
 	/* Decrement thread count. */
@@ -498,15 +499,15 @@ void osSpawnSignalHandler(void) {
 			vmPush(r0); /* Save state */
 			vmPush(r1);
 			vmPush(r2);
-				r1=signalhandlers;  sysTGEFind(); r0=car(r0); /* Consider vector of signalhandlers. */
-				r1 = memVectorObject(r0, i);
-				r0 = car(r1);
-				/* Hack:  replace inital opcode with NOP since closure obj
-				   code expects the closure to be passed in via r0 as well.
-				   TODO: BF: IS THIS STILL REQUIRD? */
-//TODO		memVectorSet(r0, 3, NOP);
-//TODO		memVectorSet(r0, 4, NOP);
+			vmPush(r3);
+				r1 = signalhandlers;  sysTGEFind(); r0=car(r0); /* Consider vector of signalhandlers. */
+				r3 = memVectorObject(r0, i); /* Consider the closure */
+				r0 = car(r3);
 				osNewThread();
+				/* Set the new thread's r0 register to the closure object as
+				   this is expected state during a procedure application */
+				memStackSet(osThreadDescStack(r0), 0, r3);
+			r3=vmPop();
 			r2=vmPop();
 			r1=vmPop();
 			r0=vmPop();
