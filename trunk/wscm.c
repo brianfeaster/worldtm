@@ -860,7 +860,7 @@ void syscallOpenFile (void) {
 
 	if (false == r0 && !silent) {
 		r1=0;
-		len = sprintf(buff, "Unable to open existing file \""STR"\".  ["INT":"STR"]", r2, errno, strerror(errno));
+		len = sprintf(buff, "Unable to open file \""STR"\".  ["INT":"STR"]", r2, errno, strerror(errno));
 		assert(len<0x1000);
 		wscmError(buff);
 	}
@@ -1981,7 +1981,8 @@ void wscmStringReadEvalPrintLoop (void) {
   (close FILE:SCM.SCM)\
   (send \"\r\nbye.\r\n\" stdout))");
 	yyparse(); /* Use the internal parser */
-	rexpr=r0; compCompile();
+	rexpr = r0;
+	compCompile();
 	osNewThread(); /* Create a new thread */
 	osScheduler();
 	vmRun();
