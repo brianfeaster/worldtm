@@ -94,24 +94,26 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Column_object
+;;
 ;;  Somewhat compact group of objects in one dimension.  Compressed
 ;;  by including all values within a range with the objects below and above
 ;;  the range the first and last values in the vector.
 ;;
-;;  Z coordinate   -2 -1  0  1  2| 3  4  5  6  7| 8  9 10 11
-;;                ---------------+--------------+-------------
-;;                  0  0  0  0  0| 0  5  7  4  9| 9  9  9  9
-;;       Implied bottom objects  | Real objects | Implied top objects
-;;                               |              |
-;;    Internal Vector data    #(2  0  5  7  4  9)
+;;  Z coordinate   -2 -1  0  1  2 |3  4  5  6  7| 8  9 10 11
+;;                ----------------+--------------+---------------
+;;                  0  0  0  0  0 |0  5  7  4  9| 9  9  9  9
+;;         Implied bottom objects |Real objects | Implied top objects
+;;              coumnHeightBottom^|             |^columnHeightTop
+;;                            #(2  0  5  7  4  9)
+;;                           Internal Vector Object
 ;;
 ;;  Is stored as #(2 0 5 7 4 9) where the first value in the vector is the
 ;;  position of the first default object. The lower and upper default object
 ;;  are stored in the 2nd and last position. The position of the top most
 ;;  default object is derived by adding the vector length to the first vector
 ;;  value.
-;;
-; Create a column given an initial height and a stack of cells
+
+; Create a column given an initial "default bottom" height and a stack of cells
 (define (columnMake bottomHeight . cells)
   (letrec ((len (length cells))
            (col (make-vector (+ len 1))))
@@ -242,16 +244,17 @@
      (lambda (y x)
        (vector-vector-set! field (+ y fieldy) (+ x fieldx)
           (vector-copy (vector-vector-ref cellAry y x))))))
-  (define (reset defaultColumn)
+  (define (reset columnMaker)
     (loop2 0 size 0 size (lambda (y x)
-      (vector-vector-set! field y x defaultColumn))))
+      (vector-vector-set! field y x (columnMaker)))))
   (define (setField newField) ; TODO debugging
     (set! field newField)
     (WinChatDisplay "\r\nOK vector-length " (vector-length newField)))
   ; MAIN
   ; Initialize the field with a default column
   ;(WinChatDisplay "\r\nInitializing field...")
-  (reset (columnMake 0 cellXX cellAIR)) ; Initialize the canvas with a bogus cell and height to speed up initializing
+  (reset (lambda () (columnMake 0 (vector-random (vector 4 20)) cellAIR))) ; Initialize the canvas with a bogus cell and height to speed up initializing
+  ;(reset (lambda () (columnMake 0 (vector-random (vector cellXX cellxx)) cellAIR))) ; Initialize the canvas with a bogus cell and height to speed up initializing
   self) ; Field
 
 
@@ -289,7 +292,8 @@
             (vector-set! c 0 (if (cellValidIndex? celli)
                                  (illuminate (cellGlyph (cellRef celli)) (+ SUN i)) ; A cell's glyph
                                  (((anEntityDB 'get) celli) 'glyph))) ; An entity's glyph
-            (vector-set! c 1 t))))))
+            (vector-set! c 1 t)))))
+)
   ; Consider the canvas cell at this position which is the #(glyph height illumination) vector
   ;(define (ccell y x) (vector-vector-ref canvas (modulo y size) (modulo x size)))
   (define (glyph y x)
@@ -332,8 +336,8 @@
      (heightSet y x z)))
   ; MAIN
   ;(WinChatDisplay "\r\nInitializing canvas...")
-  ; Initialize the canvas
-  (resetArray 10 (cellGlyph (cellRef cellxx)))
+  (resetArray 10 (cellGlyph (cellRef cellxx))) ; Initialize the canvas.  Must be called to finalize field array
+  (resetArray 10)
   self) ; Canvas
 
 
@@ -445,7 +449,7 @@
     (let ((by (/ my MapBlockSize))
           (bx (/ mx MapBlockSize)))
       (vector-vector-set! blockDesc (modulo by blockDescSize) (modulo bx blockDescSize) (cons by bx))))
-  (define (inBlockInField? my mx)
+  (define (inBlockInField? my mx) ; TODO this is failing at startup before map agent sends maps
     (let ((by (/ my MapBlockSize))
           (bx (/ mx MapBlockSize)))
       (equal? (cons by bx)

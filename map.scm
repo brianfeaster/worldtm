@@ -7,15 +7,7 @@
 ;;   Incomming_IPC_messages
 ;;   Start_everything
 ;;
-;; Mapping from Ultima4 map file byte index to (y x) World[tm] coordinates.
-;;  y = (+ (modulo (/ i 32) 32) (* (/ i 8192) 32))
-;;  x = (+ (modulo i 32) (* (modulo (/ i 1024) 8) 32))
-;; Mapping from World[tm] (y x) corrdinates to Ultima4 map file byte index.
-;; i = (+ (modulo x 32) (* (/ x 32) 1024) (* (modulo y 32) 32) (* (/ y 32) 8192))
-;;
-;; Lord British's castle (108 86)
-;;
-(define HUB-PORT 7155)
+(define HUB-PORT 8155)
 (define DNA 17749)
 (define MYNAME "MAP AGENT")
 (define ActivityTime (time)) ; Used for the idle time with the 'who' expression
@@ -138,20 +130,33 @@
 (define MapRangeSize (* MapBlockCount MapBlockSize)) ; For now resulting blocok range size is 96x96
 (define MapBoundsSize (/ MapBlockSize 1)) ; Distance from the edge the valid range is
 
-; The Ultima4 map file is 8x8 blocks of 32x32 cells
-; so create a simpler 256x256 array of cell numbers.
+; The Ultima4 map file is an an 8x8 grid of     +----+----+----.  A MAP is  (256x256)
+; blocks containing 32x32 cells.  Create a      | B0 | B1 | B2    a GRID of (8x8)
+; simpler 256x256 array of cell numbers.        +----+----+----.  BLOCKS    (32x32)
+;                                               | B8 | B9 | B10
+;                                                    .    . 
+; Mapping from Ultima4 map file byte index to (y x) World[tm] coordinates.
+;   y = (+ (modulo (/ i 32) 32) (* (/ i 8192) 32))
+;   x = (+ (modulo i 32) (* (modulo (/ i 1024) 8) 32))
+; Mapping from World[tm] (y x) corrdinates to Ultima4 map file byte index.
+;   i = (+ (modulo x 32) (* (/ x 32) 1024) (* (modulo y 32) 32) (* (/ y 32) 8192))
+; Lord British's castle (108 86)
 (define U4MapVector
  (let ((fd (open-file "ultima4.map"))
        (vec (make-vector 65536)))
   (let ~ ((i 0))
-     (if (= i 65536) (begin
-       (close fd)
-       vec) ; Return the vector
-     (begin
+     (if (= i 65536)
+      (begin
+        (close fd)
+        vec) ; Return the filled vector
+      (begin
         (vector-set! vec
-                 (+ (* 256 (+ (modulo (/ i 32) 32) (* (/ i 8192) 32)))
-                    (+ (modulo i 32) (* (modulo (/ i 1024) 8) 32)))
-                 (+ 0 (read-char #f fd))) ; Hack to convert char to integer
+             (+ (* 256
+                   (+ (modulo (/ i 32) 32) ; Y-pos in a block (0-31)
+                      (* (/ i 8192) 32)))  ; Y-pos in the map at each block boundary (0, 32, 64, 96,...)
+                (+ (modulo i 32)           ; X-pos in a block (0-31)
+                   (* (modulo (/ i 1024) 8) 32))); X-pos in the map at each block boundary (0, 32, 64, 96,...)
+             (char->integer (read-char #f fd)))
         (~ (+ i 1)))))))
 
 ; Return cell number from U4 map

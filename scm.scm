@@ -17,6 +17,10 @@
 (define sdisplay display)
 (define swrite write)
 
+; Shorter aliases
+(define gc garbage-collect)
+(define db debugger)
+
 ;;;;;;;;;;;;;;;;;;;;
 ; display_section
 (define (display-list-serialize-list o r)
@@ -502,18 +506,22 @@
           (^2 (- (caddr v1)
                  (caddr v2))))))
 
-;(define (eval-string s) (eval (read-string s)))
-
+; TODO close file. Tail-call optimize.
 (define (load file)
- (if (string? file) (load (open-file file 'silent))
- (if (not (port? file)) (displayl "*load error*")
- (let ((scmLoadExpr (read file)))
-   (if (eof-object? scmLoadExpr)
-       (close file)
-       (begin (eval scmLoadExpr)
-              (load file)))))))
-
-(define db debugger) ; Because typing (debugger) gets repetitive.
+ ; Convert file to port if a string
+ (if (string? file)
+   (let ((fp (open-file file )))
+     (if (port? fp)
+         (load fp)
+         (error "Can't load file" file)))
+ (if (not (port? file))
+     (error "Can't load argument" file)
+     (let ~ ((expr ())
+             (lastVal ()))
+       (if (eof-object? expr)
+         lastVal ; Load returns value of last expression
+         (~ (read file)
+            (eval expr)))))))
 
 ; Default error handlers for all thread IDs:  Shutdown the entire machine.
 ; It is a function of one argument because exception handler could be a
@@ -549,7 +557,6 @@
       (display (eval scmReplExpr))
       (or (eof-object? scmReplExpr) (scmRepl~)))))
 
-(define gc garbage-collect)
 
 (define (signal-set num func)
  (vector-set! SIGNALHANDLERS num func)
