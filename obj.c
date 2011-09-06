@@ -198,7 +198,9 @@ void objNewVector (Num len) {
 /* Create uninitialized vector in r0 of length imm:r1
 */
 void objNewVector1 (void) {
+	DBBEG(" len="INT, (Int)r1);
    r0 = memNewVector(TVECTOR, (Length)r1);
+	DBEND();
 }
 
 void objNewPort (void) {
@@ -310,7 +312,8 @@ void objListToVector (void) {
 	}
 }
 
-
+/* Motivation.
+*/
 void objDumpR (Obj o, FILE *stream, Num islist) {
  Num i;
  char *c;

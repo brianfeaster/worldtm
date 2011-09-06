@@ -46,8 +46,9 @@
    "A bound variable gets a value stored in it's location"
 */
 
+extern Num garbageCollectionCount;
 void syscallDebugger (void);
-void debugDumpThreadInfo (void);
+void osDebugDumpThreadInfo (void);
 
 
 
@@ -56,67 +57,6 @@ void debugDumpThreadInfo (void);
 *******************************************************************************/
 #define DEBUG DEBUG_ALL|0
 #define DB_DESC "WSCM_USEFUL"
-
-void wscmDumpEnv (void) {
-	sysDumpEnv(renv);
-	r0 = null;
-}
-
-/* Check that r1, argument stack count, is between the argument count range.
-*/
-Int wscmAssertArgumentCount (Num count, const char *functionName) {
- Num i;
-	if (count == (Num)r1) return 0;
-	/* Dump error and syscall/arguments. */
-	if (count==1)
-		fprintf(stderr, "\r\nERROR: Expecting 1 argument (%s",functionName);
-	else
-		fprintf(stderr, "\r\nERROR: Expecting "NUM" arguments (%s",count,functionName);
-	for (i=0; i<(Num)r1; i++) {
-		fprintf(stderr, " ");
-		sysWrite(memStackObject(rstack,(Num)r1-i-1), stderr);
-	}
-	fprintf(stderr, ")\r\n");
-	/* Pop args from stack. */
-	while (r1--) vmPop();
-	r0 = false;
-	return -1;
-}
-
-Int wscmAssertArgumentCountRange (Num min, Num max, const char *functionName) {
- Num i;
-	if (min <= (Num)r1 && (Num)r1 <= max) return 0;
-	/* Dump error and syscall/arguments. */
-	fprintf(stderr, "\r\nERROR: Expecting "NUM" to "NUM" arguments (%s",min,max,functionName);
-	for (i=0; i<(Num)r1; i++) {
-		fprintf(stderr, " ");
-		sysWrite(memStackObject(rstack,(Num)r1-i-1), stderr);
-	}
-	fprintf(stderr, ")\r\n");
-	/* Pop args from stack. */
-	while (r1--) vmPop();
-	r0 = false;
-	return -1;
-}
-
-Int wscmAssertArgumentCountMin (Num min, const char *functionName) {
- Num i;
-	if (min <= (Num)r1) return 0;
-	/* Dump error and syscall/arguments. */
-	if (min == 1)
-		fprintf(stderr, "\r\nERROR: Expecting at least "NUM" argument ("STR, min, functionName);
-	else
-		fprintf(stderr, "\r\nERROR: Expecting at least "NUM" arguments ("STR, min, functionName);
-	for (i=0; i<(Num)r1; i++) {
-		fprintf(stderr, " ");
-		sysWrite(memStackObject(rstack,(Num)r1-i-1), stderr);
-	}
-	fprintf(stderr, ")\r\n");
-	/* Pop args from stack. */
-	while (r1--) vmPop();
-	r0 = false;
-	return -1;
-}
 
 /* Pop stack operand arguments into a new list.
    Given   r1 operand count
@@ -133,11 +73,28 @@ void wscmStackToList (void) {
 /* Replace current continuation with error handler function/continuation which
    must be defined in the global environment in the ERRORS vector indexed by
    thread ID.
-   r0 <= Useful expression to print
+   r0 <= Useful string (object or C) to include along with stack args
+   r1 <= stack argument count
+   r1f<= stack of arguments
 */
-void wscmException (void) {
+void wscmException (Obj str) {
 	DBBEG();
-	r3 = r0; /* The message expression */
+
+	/* Force str to a scheme string object if not already */
+	if (!memIsObjectValid(str)) {
+		objNewString(str, strlen(str));
+		r3 = r0;
+	} else {
+		if (TSTRING != memObjectType(str)) assert(!"str not a STRING object");
+		r3 = str;
+	}
+	
+	/* Attach stack arguments to message expression */
+	wscmStackToList();
+	r2 = r0;
+	r1 = r3;
+	objCons12();
+	r3 = r0;
 
 	/* Lookup ERRORS binding in TGE.
 	   TODO this should be a static object and global symbol */
@@ -154,7 +111,7 @@ void wscmException (void) {
 
 	/* Consider the ERROR vector from TGE binding then consider the closure */
 	r0 = car(r0);
-	r0 = memVectorObject(r0, (Num)osThreadId(rrunning));
+	r0 = memVectorObject(r0, *(Num*)osThreadId(rrunning));
 
 	/* r0 needs to remain the closure when a code block is first run since the
 	   called code expects to find a lexical enviroment in the closure in r0.
@@ -168,20 +125,116 @@ void wscmException (void) {
 	DBEND();
 }
 
-/* stack <= argument objects
-      r1 <= argument count immediate
+/*    r1 <= immedate count of register arguments
      msg <= message C string
-	r0 => (Info expression) object
+	    r0 => (Info expression) object
 */
-void wscmError (char *msg) {
+void wscmError (Num regArgs, char const *msg) {
 	DBBEG();
+
+	/* Push back args to stack */
+	assert(regArgs < 4);
+	if (0 == regArgs) { } else
+	if (1 == regArgs) { vmPush(r1); } else
+	if (2 == regArgs) { vmPush(r1); vmPush(r2); } else
+	if (3 == regArgs) { vmPush(r1); vmPush(r2); vmPush(r3); }
+
+	/* Update stack argument count */
+	r1 = (Obj)(regArgs);
+
 	/* Create ("error message" arguments...) object */
-	wscmStackToList();  r2 = r0;
-	objNewString((Str)msg, strlen(msg));  r1 = r0;
-	objCons12();
-	wscmException();
+	wscmException((Obj)msg);
 	DBEND();
 }
+
+
+/* Verify function stack argument count in immediate:r1
+*/
+Int wscmAssertArgCount0 (char const *funcName) {
+	if (0 == (Num)r1) return 0;
+	fprintf(stderr, "\r\nWSCM-ASSERT::Expect 0 argument");
+	/* Create ("error message" arguments...) object */
+	wscmException((Obj)funcName);
+	return -1;
+}
+
+Int wscmAssertArgCount1 (char const *funcName) {
+	if (1 == (Num)r1) return 0;
+	fprintf(stderr, "\r\nWSCM-ASSERT::Expect 1 argument");
+	/* Create ("error message" arguments...) object */
+	wscmException((Obj)funcName);
+	return -1;
+}
+
+Int wscmAssertArgCount2 (char const *funcName) {
+	if (2 == (Num)r1) return 0;
+	fprintf(stderr, "\r\nWSCM-ASSERT::Expect 2 arguments");
+	/* Create ("error message" arguments...) object */
+	wscmException((Obj)funcName);
+	return -1;
+}
+
+Int wscmAssertArgCount3 (char const *funcName) {
+	if (3 == (Num)r1) return 0;
+	fprintf(stderr, "\r\nWSCM-ASSERT::Expect 3 arguments");
+	/* Create ("error message" arguments...) object */
+	wscmException((Obj)funcName);
+	return -1;
+}
+
+Int wscmAssertArgCountRange0To1 (char const *funcName) {
+	if ((0 == (Num)r1) || (1 == (Num)r1)) return 0;
+	fprintf(stderr, "\r\nWSCM-ASSERT::Expect 0 or 1 arguments");
+	/* Create ("error message" arguments...) object */
+	wscmException((Obj)funcName);
+	return -1;
+}
+
+Int wscmAssertArgCountRange1To2 (char const *funcName) {
+	if ((1 == (Num)r1) || (2 == (Num)r1)) return 0;
+	fprintf(stderr, "\r\nWSCM-ASSERT::Expect 1 or 2 arguments");
+	/* Create ("error message" arguments...) object */
+	wscmException((Obj)funcName);
+	return -1;
+}
+
+Int wscmAssertArgCount1OrMore (char const *funcName) {
+	if (1 <= (Num)r1) return 0;
+	fprintf(stderr, "\r\nWSCM-ASSERT::Expect 1 or more arguments");
+	/* Create ("error message" arguments...) object */
+	wscmException((Obj)funcName);
+	return -1;
+}
+
+
+/* Check object's type matches.  Requires the argument index and current count
+   of arguments popped from stack into registers as they are displayed in the
+   error message.
+*/
+Int wscmAssertArgType (Type t1, Obj o, Num arg, Num argCount, char const *funcName) {
+	if (t1 == memObjectType(o)) return 0;
+	fprintf(stderr, "\r\nWSCM-ASSERT::Expect '"STR"' type for argument "NUM, memTypeString(t1), arg);
+	wscmError(argCount, funcName);
+	return -1;
+}
+
+Int wscmAssertArgType2 (Type t1, Type t2, Obj o, Num arg, Num argCount, char const *funcName) {
+	if (t1 == memObjectType(o) || t2 == memObjectType(o)) return 0;
+	fprintf(stderr, "\r\nWSCM-ASSERT::Expect '"STR"' or '"STR"' type for argument "NUM,
+		memTypeString(t1), memTypeString(t2), arg);
+	wscmError(argCount, funcName);
+	return -1;
+}
+
+/* Special case assert returns false, skipping error/exception call
+*/
+Int wscmAssertArgType3NoException (Num arg, Type t1, Type t2, Type t3, Obj o) {
+	if (t1 == memObjectType(o) || t2 == memObjectType(o) || t3 == memObjectType(o)) return 0;
+	fprintf(stderr, "\r\nWSCM-ASSERT::Expect '"STR"', '"STR"' or '"STR"' type for argument "NUM,
+		memTypeString(t1), memTypeString(t2), memTypeString(t3), arg);
+	return -1;
+}
+
 
 #undef DB_DESC
 #undef DEBUG
@@ -294,43 +347,43 @@ void wscmOpenLocalStream (void) {
 #define DEBUG DEBUG_ALL|0
 #define DB_DESC "WSCM_SYSCALL "
 
-void syscallError (void) {
-	wscmStackToList();
-	wscmException();
+/* This can do anything.  I change it mainly for debugging and prototyping. */
+void syscallFun (void) {
+	while ((Num)r1--) sysWrite(vmPop(), stdout);
+	osDebugDumpThreadInfo ();
+	memDebugDumpHeapHeaders(stderr);
+	r0 = true;
 }
 
+void syscallError (void) {
+	wscmException((Obj)"User Error");
+}
+
+void wscmDumpEnv (void) {
+	sysDumpEnv(renv);
+	r0 = null;
+}
 
 void syscallQuit (void) {
 	if ((Num)r1==1) exit(*(int*)vmPop());
 	else exit(0);
 }
 
-
-/* This can do anything.  I change it mainly for debugging and prototyping. */
-extern Num garbageCollectionCount;
-void sysFun (void) {
-	debugDumpThreadInfo ();
-	memDebugDumpHeapHeaders(stderr);
-}
-
-
 void syscallDumpThreads (void) {
 	sysWrite(rthreads, stderr); /* TODO make this pretty */
 }
 
-
 void syscallString (void) {
  Num totalLen=0, s=0, len;
- Type t;
 	DBBEG();
 	/* Verify each arg is a string and sum the lengths */
 	while (s < (Int)r1) {
 		r0 = memStackObject(rstack, s++);
-		t = memObjectType(r0);
-		if (TSTRING != t && TNULLSTR != t && TCHAR != t) {
-			wscmError("String received non-string");
+		if (wscmAssertArgType3NoException((Num)r1 - s + 1, TSTRING, TCHAR, TNULLSTR, r0)) {
+			wscmException((Obj)__func__);
 			goto ret;
 		}
+
 		totalLen += memObjectLength(r0);
 	}
 	/* New string is built in reverse.  Even works if
@@ -346,61 +399,72 @@ void syscallString (void) {
 
 void syscallMakeString (void) {
  Num len;
- Chr filChar=' ';
 	DBBEG();
-	if (wscmAssertArgumentCountRange(1, 2, __func__)) goto ret;
+	if (wscmAssertArgCountRange1To2(__func__)) goto ret;
 
-	/* Fill character if specified. */
-	if (2 == (Num)r1) filChar = *(Chr*)vmPop();
+	if (2 == (Num)r1) {
+		/* Expression has a fill character */
+		r2 = vmPop(); /* Fill char */
+		r1 = vmPop(); /* New length */
 
-	/* Create string of passed length. */
-	objNewString(NULL, len=*(Num*)vmPop());
+		if (wscmAssertArgType (TINTEGER, r1, 1, 2, __func__) ||
+			 wscmAssertArgType (TCHAR,    r2, 2, 2, __func__)) goto ret;
 
-	/* Fill string if filChar character specified. */
-	if (2 == (Num)r1)  while (len--) ((Chr*)r0)[len]=filChar;
+		len = *(Num*)r1;
+		objNewString(NULL, len);
+		while (len--) ((Chr*)r0)[len] = *(Chr*)r2;
+	} else {
+		/* Expression has no fill character */
+		len = *(Num*)(r1 = vmPop());
+
+		if (wscmAssertArgType (TINTEGER, r1, 1, 1, __func__)) goto ret;
+
+		objNewString(NULL, len=*(Num*)r1);
+	}
+
 ret:
 	DBEND();
 }
 
 void syscallSubString (void) {
- Num end, start;
+ Num start, end;
 	DBBEG();
-	if (wscmAssertArgumentCount(3, __func__)) goto ret;
-	end   = *(Num*)(r3=vmPop());
-	start = *(Num*)(r2=vmPop());
+	if (wscmAssertArgCount3(__func__)) goto ret;
+
+	r3 = vmPop();
+	r2 = vmPop();
 	r1 = vmPop();
-	if (start < end) {
-		if (TSTRING == memObjectType(r1)) {
-			DB("positive len and string");
-			objNewString(NULL, end-start);
-			memcpy(r0, r1+start, end-start);
-		} else {
-			DB("not a string");
-			vmPush(r1);
-			vmPush(r2);
-			vmPush(r3);
-			r1 = (Obj)3;
-			wscmError("Substring first argument not a string");
-		}
-	} else if (end==start) {
-		DB("0 len");
-		r0=nullstr;
+
+	if (wscmAssertArgType (TSTRING,  r1, 1, 3, __func__) ||
+	    wscmAssertArgType (TINTEGER, r2, 2, 3, __func__) ||
+	    wscmAssertArgType (TINTEGER, r3, 3, 3, __func__)) goto ret;
+
+	end   = *(Num*)r3;
+	start = *(Num*)r2;
+
+	if ((start < end) && (end <= memObjectLength(r1))) {
+		DB("Creating substring object");
+		objNewString(NULL, end-start);
+		memcpy(r0, r1+start, end-start);
+	} else if (end == start) {
+		DB("Zero len");
+		r0 = nullstr;
 	} else {
-		DB("negative len");
-		vmPush(r1);
-		vmPush(r2); /* Push back args and specify error message */
-		vmPush(r3);
-		r1 = (Obj)3;
-		wscmError("Substring Invalid range");
+		DB("invalid range");
+		wscmError(3, "Substring range invalid");
 	}
+
 ret:
 	DBEND();
 }
 
 void syscallStringLength (void) {
 	DBBEG();
-	if (wscmAssertArgumentCount(1, __func__)) return;
-	objNewInt((Int)memObjectLength(vmPop()));
+	if (wscmAssertArgCount1(__func__)) goto ret;
+	r1 = vmPop();
+	//if (wscmAssertArgType(TSTRING, r1, 1, 1, __func__)) goto ret;
+	objNewInt((Int)memObjectLength(r1));
+ret:
 	DBEND();
 }
 
@@ -413,11 +477,11 @@ void syscallSerializeDisplay (void) {
  static u8 buff[8192];
  Int ret;
 	DBBEG();
-	if (wscmAssertArgumentCount(1, __func__)) return;
+	if (wscmAssertArgCount1(__func__)) goto ret;
 	r0 = vmPop();
 	if ((Num)r0 < 0x100000l) {
 		ret = sprintf((char*)buff, "#"OBJ, (Num)r0);
-		assert(0<ret);
+		assert(0 < ret);
 		objNewString(buff, (Num)ret);
 	} else switch (memObjectType(r0)) {
 		case TSTRING : 
@@ -448,6 +512,7 @@ void syscallSerializeDisplay (void) {
 			objNewString(buff, (Num)ret);
 			break;
 	}
+ret:
 	DBEND();
 }
 
@@ -457,7 +522,7 @@ void syscallSerializeWrite (void) {
  Int ret;
  Num len, i;
 	DBBEG();
-	if (wscmAssertArgumentCount(1, __func__)) return;
+	if (wscmAssertArgCount1(__func__)) goto ret;
 	r0 = vmPop();
 	if ((Num)r0 < 0x100000l) {
 		ret = sprintf((char*)buff, "#"HEX, (Num)r0);
@@ -520,6 +585,7 @@ void syscallSerializeWrite (void) {
 			objNewString(buff, (Num)ret);
 			break;
 	}
+ret:
 	DBEND();
 }
 
@@ -527,10 +593,11 @@ void syscallNumber2String (void) {
  Int num;
  Num base;
 	DBBEG();
-	if (wscmAssertArgumentCountRange(1, 2, __func__)) return;
+	if (wscmAssertArgCountRange1To2(__func__)) goto ret;
 	base = (Num)r1==2 ? *(Num*)vmPop() : 10; /* Default base is 10. */
 	num = *(Int*)vmPop();
 	sysSerializeInteger (num, base);
+ret:
 	DBEND();
 }
 
@@ -539,18 +606,15 @@ void syscallNumber2String (void) {
 void syscallWrite (void) {
  Int fd=1;
  FILE *stream=NULL;
-
 	DBBEG();
-
-	if (wscmAssertArgumentCountRange(1, 2, __func__)) return;
+	if (wscmAssertArgCountRange1To2(__func__)) goto ret;
 	if ((Int)r1==2) fd=*(Int*)vmPop(); /* File descriptor. */
-
 	if (fd==1) stream = stdout;
 	if (fd==2) stream = stderr;
 	assert(NULL != stream);
 
 	sysWrite(r0=vmPop(), stream);
-
+ret:
 	DBEND();
 }
 
@@ -559,7 +623,7 @@ void syscallDisplay (void) {
  FILE *stream=NULL;
 	DBBEG();
 
-	if (wscmAssertArgumentCountRange(1, 2, __func__)) return;
+	if (wscmAssertArgCountRange1To2(__func__)) goto ret;
 	if ((Int)r1==2) fd=*(Int*)vmPop(); /* Descriptor. */
 
 	if (fd==1) stream = stdout;
@@ -567,7 +631,7 @@ void syscallDisplay (void) {
 	assert(NULL != stream);
 
 	sysDisplay(r0=vmPop(), stream);
-
+ret:
 	DBEND();
 }
 
@@ -583,53 +647,91 @@ void syscallVector (void) {
 }
 
 void syscallMakeVector (void) {
- Int len;
+ Num len;
 	DBBEG();
-	if (wscmAssertArgumentCountRange(1, 2, __func__)) return;
-	r3 = (2==(Num)r1) ? vmPop() : null; /* Fill object */
-	r2 = vmPop(); /* length */
-	len = *(Int*)r2;
-	if (0 < len) {
-		objNewVector((Num)len);
-		while (len--) memVectorSet(r0, (Num)len, r3);
-	} else if (0 == len) {
-		r0=nullvec;
+	if (wscmAssertArgCountRange1To2(__func__)) goto ret;
+	if (1 == (Num)r1) {
+		r1 = vmPop(); /* length */
+		if (wscmAssertArgType (TINTEGER, r1, 1, 1, __func__)) goto ret;
+		len = *(Num*)r1;
+		if (0 < len) {
+			objNewVector(len);
+			while (len--) memVectorSet(r0, len, r2);
+		} else if (0 == len) {
+			r0 = nullvec;
+		} else {
+			wscmError(1, "make-vector invalid size");
+		}
 	} else {
-		/* Push back args for error message */
-		vmPush(r2);
-		if (2==(Num)r1) vmPush(r3);
-		wscmError("make-vector invalid size");
+		r2 = vmPop(); /* Fill object */
+		r1 = vmPop(); /* length */
+		if (wscmAssertArgType (TINTEGER, r1, 1, 2, __func__)) goto ret;
+		len = *(Num*)r1;
+		if (0 < len) {
+			objNewVector(len);
+			while (len--) memVectorSet(r0, len, r2);
+		} else if (0 == len) {
+			r0 = nullvec;
+		} else {
+			wscmError(2, "make-vector invalid size");
+		}
 	}
+ret:
 	DBEND();
 }
 
 void syscallRandom (void) {
 	DBBEG();
-	if (wscmAssertArgumentCountRange(0, 1, __func__)) return;
+	if (wscmAssertArgCountRange0To1(__func__)) goto ret;
 	if ((Int)r1 == 1)
 		objNewInt(random() % *(Int*)vmPop());
 	else
 		objNewInt(random());
-	DBEND();
-}
-
-/* Numerical equivalence. */
-void syscallEquals (void) {
-	DBBEG();
-	if (wscmAssertArgumentCount(2, __func__)) return;
-	r1=vmPop();
-	r0=vmPop();
-	r0 = TINTEGER == memObjectType(r0)
-	     && TINTEGER == memObjectType(r1)
-	     && *(Int*)r0 == *(Int*)r1
-	     ? true : false;
+ret:
 	DBEND();
 }
 
 void syscallEqP (void) {
 	DBBEG();
-	if (wscmAssertArgumentCount(2, __func__)) goto ret;
+	if (wscmAssertArgCount2(__func__)) goto ret;
 	r0 = (vmPop() == vmPop()) ? true : false;
+ret:
+	DBEND();
+}
+
+/* Numerical equivalence. Returns false if either are not integers. */
+void syscallEquals (void) {
+	DBBEG();
+	if (wscmAssertArgCount2(__func__)) goto ret;
+	r2 = vmPop();
+	r1 = vmPop();
+	r0 = TINTEGER == memObjectType(r1)
+	     && TINTEGER == memObjectType(r2)
+	     && *(Int*)r1 == *(Int*)r2
+		? true : false;
+	/*
+	if (wscmAssertArgType(TINTEGER, r1, 1, 2, __func__) ||
+	    wscmAssertArgType(TINTEGER, r2, 2, 2, __func__)) goto ret;
+	r0 = *(Int*)r1 == *(Int*)r2 ? true : true;
+	*/
+ret:
+	DBEND();
+}
+
+void syscallNotEquals (void) {
+	DBBEG();
+	if (wscmAssertArgCount2(__func__)) goto ret;
+	r2 = vmPop();
+	r1 = vmPop();
+	r0 = TINTEGER == memObjectType(r1)
+	     && TINTEGER == memObjectType(r2)
+	     && *(Int*)r1 == *(Int*)r2
+		? false : true;
+	/*
+	if (wscmAssertArgType(TINTEGER, r1, 1, 2, __func__) ||
+	    wscmAssertArgType(TINTEGER, r2, 2, 2, __func__)) goto ret;
+	r0 = *(Int*)r1 == *(Int*)r2 ? false : true;
+	*/
 ret:
 	DBEND();
 }
@@ -637,62 +739,56 @@ ret:
 void syscallStringEqualsP (void) {
  Num len;
 	DBBEG();
-	if (wscmAssertArgumentCount(2, __func__)) return;
-	r1=vmPop();  r0=vmPop();
+	if (wscmAssertArgCount2(__func__)) goto ret;
+	r1 = vmPop();
+	r0 = vmPop();
 	r0 = TSTRING == memObjectType(r0)
 	     && TSTRING == memObjectType(r1)
 	     && memObjectLength(r0) == (len=memObjectLength(r1))
 	     && !strncmp (r0, r1, len) ? true : false;
-	DBEND();
-}
-
-void syscallNotEquals (void) {
- Int a, b;
-	DBBEG();
-	if (wscmAssertArgumentCount(2, __func__)) return;
-	r1=vmPop();
-	a = *(Int*)r1;
-	r2=vmPop();
-	b = *(Int*)r2;
-	r0 = (a != b) ? true : false;
+ret:
 	DBEND();
 }
 
 void syscallLessThan (void) {
 	DBBEG();
-	if (wscmAssertArgumentCount(2, __func__)) return;
+	if (wscmAssertArgCount2(__func__)) goto ret;
 	r0 = (*(Int*)vmPop() > *(Int*)vmPop()) ? true : false;
+ret:
 	DBEND();
 }
 
 void syscallLessEqualThan (void) {
 	DBBEG();
-	if (wscmAssertArgumentCount(2, __func__)) return;
+	if (wscmAssertArgCount2(__func__)) goto ret;
 	r0 = (*(Int*)vmPop() >= *(Int*)vmPop()) ? true : false;
+ret:
 	DBEND();
 }
 
 void syscallGreaterThan (void) {
 	DBBEG();
-	if (wscmAssertArgumentCount(2, __func__)) return;
+	if (wscmAssertArgCount2(__func__)) goto ret;
 	r1 = vmPop();
 	r0 = vmPop();
 	if (TREAL == memObjectType(r0) && TREAL == memObjectType(r1))
 		r0 = (*(Real*)r1 < *(Real*)r0) ? true : false;
 	else
 		r0 = (*(Int*)r1 < *(Int*)r0) ? true : false;
+ret:
 	DBEND();
 }
 
 void syscallGreaterEqualThan (void) {
 	DBBEG();
-	if (wscmAssertArgumentCount(2, __func__)) return;
+	if (wscmAssertArgCount2(__func__)) goto ret;
 	r1 = vmPop();
 	r0 = vmPop();
 	if (TREAL == memObjectType(r0) && TREAL == memObjectType(r1))
 		r0 = (*(Real*)r1 <= *(Real*)r0) ? true : false;
 	else
 		r0 = (*(Int*)r1 <= *(Int*)r0) ? true : false;
+ret:
 	DBEND();
 }
 
@@ -726,34 +822,37 @@ void syscallDiv (void) {
 void syscallLogAnd (void) {
  Int a, b;
 	DBBEG();
-	if (wscmAssertArgumentCount(2, __func__)) return;
+	if (wscmAssertArgCount2(__func__)) goto ret;
 	a = *(Int*)vmPop();
 	b = *(Int*)vmPop();
 	objNewInt(a&b);
+ret:
 	DBEND();
 }
 
 void syscallSqrt (void) {
 	DBBEG();
-	if (wscmAssertArgumentCountRange(1, 1, __func__)) return;
+	if (wscmAssertArgCount1(__func__)) goto ret;
 	objNewInt((Int)sqrt((double)*(Int*)vmPop()));
+ret:
 	DBEND();
 }
 
 void syscallRemainder (void) {
  Int a, b;
 	DBBEG();
-	if (wscmAssertArgumentCount(2, __func__)) return;
+	if (wscmAssertArgCount2(__func__)) goto ret;
 	b = *(Int*)vmPop();
 	a = *(Int*)vmPop();
 	objNewInt(a%b);
+ret:
 	DBEND();
 }
 
 void syscallModulo (void) {
  Int a, b;
 	DBBEG();
-	if (wscmAssertArgumentCount(2, __func__)) return;
+	if (wscmAssertArgCount2(__func__)) goto ret;
 	b = *(Int*)vmPop();
 	a = *(Int*)vmPop();
 	/* If one argument is negative. */
@@ -761,71 +860,79 @@ void syscallModulo (void) {
 		objNewInt((b+a%b)%b);
 	else
 		objNewInt(a%b);
+ret:
 	DBEND();
 }
 
 void syscallSub (void) {
  Int sum=0;
 	DBBEG();
-	if (wscmAssertArgumentCountMin(1, __func__)) return;
-	if (1==(Int)r1) objNewInt(-*(Int*)vmPop());
+	if (wscmAssertArgCount1OrMore(__func__)) goto ret;
+	if (1 == (Int)r1)
+		sum = -*(Int*)vmPop();
 	else {
-		while (--r1) {sum += *(Int*)vmPop(); }
+		while (--r1) sum += *(Int*)vmPop();
 		sum = *(Int*)vmPop() - sum;
-		objNewInt(sum);
 	}
+	objNewInt(sum);
+ret:
 	DBEND();
 }
 
 void syscallSleep (void) {
 	DBBEG();
-	if (wscmAssertArgumentCount(1, __func__)) return;
+	if (wscmAssertArgCount1(__func__)) goto ret;
 	osSleepThread();
+ret:
 	DBEND();
 }
 
 /* Return thread ID. */
 void syscallTID (void) {
 	DBBEG();
-	if (wscmAssertArgumentCount(0, __func__)) return;
-	objNewInt((Int)osThreadId(rrunning));
+	if (wscmAssertArgCount0(__func__)) goto ret;
+	r0 = osThreadId(rrunning);
+ret:
 	DBEND();
 }
 
+
 void syscallOpenSocket (void) {
 	DBBEG();
+
+	if (wscmAssertArgCountRange1To2(__func__)) goto ret;
+
 	if (1 == (Int)r1) {
-		if (memObjectType(r1=vmPop()) != TINTEGER) {
-			vmPush(r1); /* Push invalid object */
-			r1 = (Obj)1;
-			wscmError("Invalid argument to syscall open-socket");
-		} else {
-			sysOpenLocalSocket(); /* pass in port via r1 */
+		r1 = vmPop();
+		if (wscmAssertArgType (TINTEGER, r1, 1, 1, __func__)) goto ret;
+		sysOpenLocalSocket(); /* pass in port via r1 */
+		if (memObjectType(r0) == TPORT) {
 			/* Create and set the socket's "close" finalizer */
-			r1=r0;
+			r1 = r0;
 			r0 = memNewFinalizer();
 			memVectorSet(r0, 0, wscmSocketFinalizer);
 			memVectorSet(r0, 1, r1);
 			memVectorSet(r1, 5, r0);
-			r0=r1;
+			r0 = r1; /* Return the port in r0 */
 		}
 	} else if (2 == (Int)r1) {
-		sysOpenRemoteSocket();
-	} else {
-		wscmError("Invalid arguments to open-socket:");
+		r1 = vmPop();
+		r2 = vmPop();
+		if (wscmAssertArgType (TSTRING,  r2, 1, 2, __func__) ||
+		    wscmAssertArgType (TINTEGER, r1, 2, 2, __func__)) goto ret;
+		sysOpenRemoteSocket(); /* pass in port via r1, host via r2 */
 	}
+ret:
 	DBEND();
 }
 
 void syscallOpenStream (void) {
 	DBBEG();
-	if (wscmAssertArgumentCount(1, __func__)) goto ret;
+	if (wscmAssertArgCount1(__func__)) goto ret;
 
 	r1 = vmPop();
 	if (memObjectType(r1) != TPORT) {
-		vmPush(r1);
-		r1=(Obj)1;
-		wscmError("Invalid arguments to open-stream:");
+		wscmError(1, "Invalid arguments to open-stream:");
 		goto ret;
 	}
 
@@ -836,9 +943,7 @@ void syscallOpenStream (void) {
 	else if (objPortState(r1) == sclosed)
 		r0=eof;
 	else {
-		vmPush(r1);
-		r1 = (Obj)1;
-		wscmError("Invalid port state to open-stream");
+		wscmError(1, "Invalid port state to open-stream");
 	}
  ret:
 	DBEND();
@@ -849,7 +954,7 @@ void syscallOpenFile (void) {
  Int len;
  char buff[0x1000];
 	DBBEG();
-	if (wscmAssertArgumentCountRange(1, 2, __func__)) goto ret;
+	if (wscmAssertArgCountRange1To2(__func__)) goto ret;
 
 	if ((Num)r1==2) { /* An extra arg forces a silent sysOpenFile() call */
 		vmPop();
@@ -859,10 +964,9 @@ void syscallOpenFile (void) {
 	sysOpenFile(O_RDWR, S_IRUSR|S_IWUSR, silent); /* r1 contains filename object */
 
 	if (false == r0 && !silent) {
-		r1=0;
 		len = sprintf(buff, "Unable to open file \""STR"\".  ["INT":"STR"]", r2, errno, strerror(errno));
 		assert(len<0x1000);
-		wscmError(buff);
+		wscmError(0, buff);
 	}
 ret:
 	DBEND();
@@ -873,23 +977,20 @@ void syscallOpenNewFile (void) {
  Int len;
  char buff[4096];
 	DBBEG();
-	if (wscmAssertArgumentCountRange(1, 2, __func__)) {
-		r0 = eof;
-	} else {
-		if ((Num)r1==2) { /* If an extra argis passed, make it a silent call */
-			vmPop();
-			silent=1;
-		}
-		r1 = vmPop();
-		sysOpenFile(O_CREAT|O_TRUNC|O_RDWR, S_IRUSR|S_IWUSR, silent);
-
-		if (false == r0 && !silent) {
-			r1=0;
-			len = sprintf(buff, "Unable to open new file \""STR"\".  \"("INT")"STR"\"", r2, errno, strerror(errno));
-			assert(len<4095);
-			wscmError(buff);
-		}
+	if (wscmAssertArgCountRange1To2(__func__)) goto ret;
+	if ((Num)r1==2) { /* If an extra argis passed, make it a silent call */
+		vmPop();
+		silent=1;
 	}
+	r1 = vmPop();
+	sysOpenFile(O_CREAT|O_TRUNC|O_RDWR, S_IRUSR|S_IWUSR, silent);
+
+	if (false == r0 && !silent) {
+		len = sprintf(buff, "Unable to open new file \""STR"\".  \"("INT")"STR"\"", r2, errno, strerror(errno));
+		assert(len<4095);
+		wscmError(0, buff);
+	}
+ret:
 	DBEND();
 }
 
@@ -944,7 +1045,7 @@ void syscallRecv (void) {
 
 void syscallReadChar (void) {
 	DBBEG();
-	if (wscmAssertArgumentCount(2, __func__)) return;
+	if (wscmAssertArgCount2(__func__)) goto ret;
 	r1=vmPop(); /* Port object */
 	r2=vmPop(); /* Timout */
 	if (memObjectType(r1) != TSOCKET
@@ -956,12 +1057,13 @@ void syscallReadChar (void) {
 		r3=null;  /* tells recv that we just want a character. */
 		wscmRecvBlock();
 	}
+ret:
 	DBEND();
 }
 
 void syscallUnreadChar (void) {
 	DBBEG();
-	if (wscmAssertArgumentCount(2, __func__)) return;
+	if (wscmAssertArgCount2(__func__)) goto ret;
 	r1=vmPop(); /* Port. */
 	r0=vmPop(); /* Character. */
 	if (memObjectType(r1) != TSOCKET && memObjectType(r1) != TPORT) {
@@ -974,6 +1076,7 @@ void syscallUnreadChar (void) {
 		r0 = eof;
 	} else
 		memVectorSet(r1, 4, r0);
+ret:
 	DBEND();
 }
 
@@ -982,10 +1085,11 @@ void syscallUnreadChar (void) {
 */
 void syscallReadString (void) {
 	DBBEG();
-	if (wscmAssertArgumentCountRange(1, 1, __func__)) return;
+	if (wscmAssertArgCount1(__func__)) goto ret;
 	r1=vmPop(); /* String to parse. */
 	yy_scan_bytes(r1, memObjectLength(r1));
 	yyparse();
+ret:
 	DBEND();
 }
 
@@ -994,7 +1098,7 @@ void syscallReadString (void) {
 */
 void syscallSend (void) {
 	DBBEG();
-	if (wscmAssertArgumentCountRange(2, 2, __func__)) return;
+	if (wscmAssertArgCount2(__func__)) goto ret;
 	/* r1 gets port object. */
 	r1=vmPop();
 	/* r2 gets string object. */
@@ -1013,18 +1117,20 @@ void syscallSend (void) {
 			osScheduler();
 		}
 	}
+ret:
 	DBEND();
 }
 
 void syscallSeek (void) {
  int fd, offset, whence;
 	DBBEG();
-	if (wscmAssertArgumentCount(3, __func__)) return;
+	if (wscmAssertArgCount3(__func__)) goto ret;
 	whence = *(int*)vmPop(); /* Whence */
 	assert(whence==SEEK_SET || whence==SEEK_CUR || whence==SEEK_END);
 	offset = *(int*)vmPop(); /* Offset */
 	fd=*(int*)vmPop(); /* Descriptor. */
 	lseek(fd, offset, whence);
+ret:
 	DBEND();
 }
 
@@ -1045,12 +1151,13 @@ void syscallStringRef (void) {
  Int offset;
  Obj o;
 	DBBEG();
-	if (wscmAssertArgumentCount(2, __func__)) return;
+	if (wscmAssertArgCount2(__func__)) goto ret;
 	offset = *(Int*)vmPop();
 	o=vmPop();
 	/* A (negative? offset) implies (absolute offset) from end. */
 	if (offset < 0) offset = (Int)memObjectLength(o)+offset;
 	r0 = memVectorObject(characters, *((Chr*)o+offset));
+ret:
 	DBEND();
 }
 
@@ -1059,7 +1166,7 @@ void syscallStringSetB (void) {
  Int offset;
  Chr ch;
 	DBBEG();
-	if (wscmAssertArgumentCount(3, __func__)) return;
+	if (wscmAssertArgCount3(__func__)) goto ret;
 	ch = *(Chr*)vmPop();
 	offset=*(Int*)vmPop();
 	strObj = vmPop();
@@ -1067,14 +1174,16 @@ void syscallStringSetB (void) {
 	if (offset < 0) offset = (Int)memObjectLength(strObj)+offset;
 	assert(0<=offset);
 	memArraySet(strObj, (Num)offset, ch);
+ret:
 	DBEND();
 }
 
 void syscallVectorLength (void) {
 	DBBEG();
-	if (wscmAssertArgumentCount(1, __func__)) return;
+	if (wscmAssertArgCount1(__func__)) goto ret;
 	r0 = vmPop();
 	objNewInt(r0==nullvec?0:(Int)memObjectLength(r0));
+ret:
 	DBEND();
 }
 
@@ -1153,12 +1262,16 @@ void syscallDisassemble (void) {
 /* Semaphores are just immediate numbers.
 */
 void syscallOpenSemaphore (void) {
-	if (wscmAssertArgumentCount(1, __func__)) return;
+	DBBEG();
+	if (wscmAssertArgCount1(__func__)) goto ret;
 	osOpenSemaphore();
+ret:
+	DBEND();
 }
 
 void syscallCloseSemaphore (void) {
-	if (wscmAssertArgumentCount(1, __func__)) return;
+	DBBEG();
+	if (wscmAssertArgCount1(__func__)) goto ret;
 	r0 = vmPop();
 	if (memVectorObject(r0,0)==false) /* TODO this vector-ref should be abstracted using semaphore accessors */
 		r0 = false; /* Semaphore already closed so return failure */
@@ -1167,27 +1280,29 @@ void syscallCloseSemaphore (void) {
 		osUnblockSemaphoreBlocked(r0, 1); /* 1 means unblock all threads on this semaphore */
 		r0 = true;
 	}
+ret:
+	DBEND();
 }
 
 void syscallSemaphoreDown (void) {
 	DBBEG();
-	if (wscmAssertArgumentCountRange(1, 1, __func__)) return;
+	if (wscmAssertArgCount1(__func__)) goto ret;
 	r1 = vmPop();
 	sysSemaphoreDown();
 	if (r0 == r1) {
 		/* Block thread on this semaphore.  Semaphore remains in r1. */
-		DB ("Blocking thread "NUM" on semaphore value "NUM, osThreadId(rrunning), *(Int*)r1);
+		DB ("Blocking thread "NUM" on semaphore value "NUM, *(Num*)osThreadId(rrunning), *(Int*)r1);
 		osUnRun();
 		osMoveToQueue(rrunning, rblocked, ssemaphore); /* TODO create a separate semaphore blocked queue */
 		osScheduler();
 	}
-
+ret:
 	DBEND();
 }
 
 void syscallSemaphoreUp (void) {
 	DBBEG();
-	if (wscmAssertArgumentCountRange(1, 1, __func__)) return;
+	if (wscmAssertArgCount1(__func__)) goto ret;
 	r1 = vmPop();
 	sysSemaphoreUp();
 	if (r0 == r1) {
@@ -1196,22 +1311,25 @@ void syscallSemaphoreUp (void) {
 	   	of the blocked threads can be awakened. */
 		osUnblockSemaphoreBlocked(r1, 0);
 	}
+ret:
 	DBEND();
 }
 
 void syscallTime (void) {
  struct timeval tv;
 	DBBEG();
-	if (wscmAssertArgumentCountRange(0, 0, __func__)) return;
+	if (wscmAssertArgCount0(__func__)) goto ret;
 	gettimeofday(&tv, NULL);
 	objNewInt(tv.tv_sec);
+ret:
 	DBEND();
 }
 
 void syscallUTime (void) {
 	DBBEG();
-	if (wscmAssertArgumentCountRange(0, 0, __func__)) return;
+	if (wscmAssertArgCount0(__func__)) goto ret;
 	objNewInt(sysTime());
+ret:
 	DBEND();
 }
 
@@ -1360,7 +1478,7 @@ void wscmSignalHandler (int sig) {
    The signal handler will always be the wscmSignalHandler().  See above. */
 void syscallSignal (void) {
 	DBBEG();
-	if (wscmAssertArgumentCount(1, __func__)) goto ret;
+	if (wscmAssertArgCount1(__func__)) goto ret;
 	r0 = vmPop();
 	signal(*(int*)r0, wscmSignalHandler); /* Have to cast to an uint64 to int32 */
 ret:
@@ -1789,15 +1907,14 @@ void wscmInitialize (void) {
 	r1=r0;  r2=null;  objCons12();  renv=rtge=r0;
 
 	/* Bind usefull values r2=value r1=symbol. */
+	sysDefineSyscall (syscallFun, "fun");
 	sysDefineSyscall (syscallError, "error");
-	sysDefineSyscall (syscallQuit, "quit");
-	sysDefineSyscall (sysFun, "fun");
 	sysDefineSyscall (wscmDumpEnv, "env");
-	sysDefineSyscall (sysDumpTGE, "tge");
-	sysDefineSyscall (syscallDebugger, "debugger");
+	sysDefineSyscall (syscallQuit, "quit");
 	sysDefineSyscall (syscallDumpThreads, "dump-threads");
 	sysDefineSyscall (syscallString, "string");
 	sysDefineSyscall (syscallMakeString, "make-string");
+	sysDefineSyscall (syscallDebugger, "debugger");
 	sysDefineSyscall (syscallSubString, "substring");
 	sysDefineSyscall (syscallStringLength, "string-length");
 	sysDefineSyscall (syscallSerializeDisplay, "serialize-display");
@@ -1808,10 +1925,10 @@ void wscmInitialize (void) {
 	sysDefineSyscall (syscallVector, "vector");
 	sysDefineSyscall (syscallMakeVector, "make-vector");
 	sysDefineSyscall (syscallRandom, "random");
-	sysDefineSyscall (syscallEquals, "=");
 	sysDefineSyscall (syscallEqP, "eq?");
-	sysDefineSyscall (syscallStringEqualsP, "string=?");
+	sysDefineSyscall (syscallEquals, "=");
 	sysDefineSyscall (syscallNotEquals, "!=");
+	sysDefineSyscall (syscallStringEqualsP, "string=?");
 	sysDefineSyscall (syscallLessThan, "<");
 	sysDefineSyscall (syscallLessEqualThan, "<=");
 	sysDefineSyscall (syscallGreaterThan, ">");
@@ -1853,6 +1970,7 @@ void wscmInitialize (void) {
 	sysDefineSyscall (syscallSemaphoreUp, "semaphore-up");
 	sysDefineSyscall (syscallSignal, "signal");
 	sysDefineSyscall (syscallToggleDebug, "toggle-debug");
+	sysDefineSyscall (sysDumpTGE, "tge");
 
 	/* Create the standard I/O port object */
 	r1=(Obj)0; /* Descriptor */

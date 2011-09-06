@@ -1,13 +1,20 @@
 #ifndef _MEM_H
 #define _MEM_H
-/* Automatic compacting object heap system
+#include "globals.h"
+/*
+  Descriptors
+  Object_creation
+  Garbage_collector
+  Debugging_aids
+  External_calls
+
+   Automatic compacting object heap system
    Allows one to create one of two basic automatically memory managed heap
    objects:  An "array" of bytes and a "vector" of arrays and vectors.  The
    module will automatically reclaim unused memory when necessary so no implicit
    removal of objects are required.  Currently, a generational bi-heap collector
    is implemented.
 */ 
-#include "globals.h"
 
 
 /* Byte count of a Linux virtual memory block and the resolution of mmap.
@@ -19,7 +26,6 @@
 #define ObjSize sizeof(Obj)
 
 
-
 /* An object's 'type' and length type.  They are unioned to form a descriptor.
    For the type, only the lower byte used so it can be used as a token in the
    scanner.  */
@@ -28,10 +34,19 @@ typedef Num Type;       /* Highest byte of descriptor */
 typedef Num Length; /* Remaining bytes of descriptor */
 
 
+
+/* Descriptors */
+Descriptor memObjectDescriptor (Obj o);
+Type memObjectType   (Obj obj);
+Num  memObjectLength (Obj obj);
+
+Num memIsObjectBaseArray (Obj o);
 Num memArrayLengthToObjectSize  (Length length);
 Num memVectorLengthToObjectSize  (Length length);
 
 
+
+/* Object_creation */
 
 /* Object Creators that return new objects in the new young/heap */
 Obj memNewStatic      (Type t, Length byteLength);
@@ -58,29 +73,20 @@ Obj  memStackPop  (Obj stack);
 
 
 
-/* Object selectors.  */
-Descriptor memObjectDescriptor (Obj o);
-Type memObjectType   (Obj obj);
-Num  memObjectLength (Obj obj);
-Num  memStackLength  (Obj obj);
-
 u8   memArrayObject  (Obj obj, Num offset);
 Obj  memVectorObject (Obj obj, Num offset);
 Obj  memStackObject  (Obj obj, Num topOffset);
-
-/* Stack manipulation on r1f */
-void memPush (Obj o);
-Obj  memPop  (void);
+Num  memStackLength  (Obj obj);
 
 
 
-/* Force heap to be collected */
+/* Garbage_collector */
 extern Num GarbageCollectionMode;
 void memGarbageCollect ();
 
 
 
-/* Debugging aids */
+/* Debugging_aids */
 void memDebugDumpHeapHeaders (FILE *stream);
 void memDebugDumpObject (Obj o, FILE *stream);
 void memDebugDumpStaticHeap (FILE *stream);
@@ -92,8 +98,6 @@ void memValidateObject (Obj o);
 void memValidateHeapStructures (void);
 Str memTypeString (Type t);
 
-
-
 /* Mechanism to associate a C pointer address with a string.  A macro is
    provided to associate a pointer addresses and its string representation.
    char* must be the type (instead of my Str type) due to how the preprocessor
@@ -104,6 +108,7 @@ void memObjStringRegister (Obj obj, Str str);
 
 
 
+/* External_calls */
 /* This must be called before usage of this library.  Two functions are passed
    (or NULL for either) and are called before and after every GC.
    It sets up the various heaps.  These include static, old and current the

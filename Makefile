@@ -15,15 +15,14 @@ LDFLAGS = -lm
 # -lm       Math library (probably trig functions).
 # -lcrypto  Crypto library for md5sum hash function.
 
-MEMTOBJS  = memt.o                                     mem.o
-VMTOBJS   = vmt.o                                 vm.o mem.o
-ASMTOBJS  = asmt.o                          asm.o vm.o mem.o
-OBJTOBJS  = objt.o                    obj.o       vm.o mem.o
-SYSTOBJS  = syst.o              sys.o obj.o       vm.o mem.o
-OSTOBJS   =  ost.o         os.o sys.o obj.o       vm.o mem.o
+MEMTOBJS  =  memt.o                                    mem.o
+VMTOBJS   =   vmt.o                               vm.o mem.o
+ASMTOBJS  =  asmt.o                         asm.o vm.o mem.o
+OBJTOBJS  =  objt.o                   obj.o       vm.o mem.o
+SYSTOBJS  =  syst.o             sys.o obj.o       vm.o mem.o
+OSTOBJS   =   ost.o        os.o sys.o obj.o       vm.o mem.o
 COMPTOBJS = compt.o comp.o os.o sys.o obj.o asm.o vm.o mem.o
 WSCMTOBJS = wscmt.o comp.o os.o sys.o obj.o asm.o vm.o mem.o
-
 WSCMOBJS  =  wscm.o comp.o os.o sys.o obj.o asm.o vm.o mem.o
 
 wscm: $(WSCMOBJS)

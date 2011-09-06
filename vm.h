@@ -4,7 +4,7 @@
 #include <stdio.h>
 #include "globals.h"
 
-#define TCODE 0x87l
+#define TCODE 0xefl
 
 /* Global virtual machine register aliases */
 #define rblocked   r10 /* WSCM: I/O and Semaphore blocked threads */
@@ -14,7 +14,7 @@
 #define rready     r14 /* WSCM: Thread list */
 
 #define rexpr      r15 /* WSCM: Expression being compiled */
-#define rasmstack  r16 /* VM: Opcode stack where machine code is emitted */
+#define rasmstack  r16 /* ASM,COMP: Opcode stack where machine code is emitted (ribloc in new compiler) */
 #define rsymbols   r17 /* OBJ: Symbol table used by scanner and OS */
 
 #define rtge       r18 /* WSCM: Global environment */
@@ -53,8 +53,7 @@ extern void *NOP,
      *MV20, *MV23, *MV30, *MV51C, *MV518,
      *MV50, *MV1C0, *MV1C18,
      *MV61, *MV72,
-     *LDI00, *LDI02, *LDI05, *LDI01C, *LDI11, *LDI20, *LDI22, *LDI50, *LDI1C0, *LDI11C,
-     *LDI40,
+     *LDI00, *LDI02, *LDI01C, *LDI11, *LDI20, *LDI22, *LDI50, *LDI1C0, *LDI11C,
      *LD012,
      *STI01, *STI01C, *STI21, *STI20, *STI30, *STI40, *STI50,
      *ST012, *ST201,

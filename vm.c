@@ -71,6 +71,7 @@ Func vmInterruptHandler = NULL;
 
 void vmProcessInterrupt (void) {
 	DBBEG("  rcode:"OBJ" rip:"OBJ, rcode, rip);
+	assert (vmInterrupt);
 	assert (vmInterruptHandler);
 	vmInterrupt=0;
 	vmRunRestore();
@@ -89,8 +90,7 @@ void *NOP,
      *MV20, *MV23, *MV30, *MV51C, *MV518,
      *MV50, *MV1C0, *MV1C18,
      *MV61, *MV72,
-     *LDI00, *LDI02, *LDI05, *LDI01C, *LDI11, *LDI20, *LDI22, *LDI50, *LDI1C0, *LDI11C,
-     *LDI40,
+     *LDI00, *LDI02, *LDI01C, *LDI11, *LDI20, *LDI22, *LDI50, *LDI1C0, *LDI11C,
      *LD012,
      *STI01, *STI01C, *STI21, *STI20, *STI30, *STI40, *STI50,
      *ST012, *ST201,
@@ -122,8 +122,8 @@ void vmVm (Int cmd) {
 		MV1C0=&&mv1c0; MV1C18=&&mv1c18;
 		MV61=&&mv61;   MV72=&&mv72;
 
-		LDI00=&&ldi00;   LDI02=&&ldi02;   LDI05=&&ldi05;  LDI01C=&&ldi01c; LDI11=&&ldi11;
-      LDI11C=&&ldi11c; LDI20=&&ldi20;  LDI22=&&ldi22;   LDI40=&&ldi40;
+		LDI00=&&ldi00;   LDI02=&&ldi02;   LDI01C=&&ldi01c; LDI11=&&ldi11;
+      LDI11C=&&ldi11c; LDI20=&&ldi20;  LDI22=&&ldi22;
       LDI50=&&ldi50;   LDI1C0=&&ldi1c0;
 
       LD012=&&ld012; STI01=&&sti01; STI01C=&&sti01c; STI20=&&sti20;
@@ -162,9 +162,9 @@ void vmVm (Int cmd) {
 		memObjStringSet(MV30); memObjStringSet(MV51C); memObjStringSet(MV518);
 		memObjStringSet(MV50);
 		memObjStringSet(MV1C0); memObjStringSet(MV1C18); memObjStringSet(MV61); memObjStringSet(MV72);
-		memObjStringSet(LDI00); memObjStringSet(LDI02); memObjStringSet(LDI05); memObjStringSet(LDI01C);
+		memObjStringSet(LDI00); memObjStringSet(LDI02); memObjStringSet(LDI01C);
 		memObjStringSet(LDI11); memObjStringSet(LDI11C); memObjStringSet(LDI20); memObjStringSet(LDI22);
-		memObjStringSet(LDI40); memObjStringSet(LDI50); memObjStringSet(LDI1C0);
+		memObjStringSet(LDI50); memObjStringSet(LDI1C0);
 		memObjStringSet(LD012);
 		memObjStringSet(STI01); memObjStringSet(STI01C); memObjStringSet(STI20); memObjStringSet(STI21);
 		memObjStringSet(STI30); memObjStringSet(STI40); memObjStringSet(STI50); memObjStringSet(ST012);
@@ -249,9 +249,6 @@ void vmVm (Int cmd) {
 	ldi02: OPDB("ldi02");
 	r0=memVectorObject(r2, *(Num*)(rip+=8));//*((Obj*)r2 + *(Num*)(rip+=8));
 	goto **(void**)(rip+=8);
-	ldi05: OPDB("ldi05");
-	r0=memVectorObject(r5, *(Num*)(rip+=8));//*((Obj*)r5 + *(Num*)(rip+=8));
-	goto **(void**)(rip+=8);
 	ldi01c: OPDB("ldi01c");
 	r0=memVectorObject(r1c, *(Num*)(rip+=8));//*((Obj*)r1c + *(Num*)(rip+=8));
 	goto **(void**)(rip+=8);
@@ -268,9 +265,6 @@ void vmVm (Int cmd) {
 	ldi22: OPDB("ldi22");
 	r2=//memVectorObject(r2, *(Num*)(rip+=8));
 		*((Obj*)r2 + *(Num*)(rip+=8));
-	goto **(void**)(rip+=8);
-	ldi40: OPDB("ldi40");
-	r4=memVectorObject(r0, *(Num*)(rip+=8));//*((Obj*)r0 + *(Num*)(rip+=8));
 	goto **(void**)(rip+=8);
 	ldi50: OPDB("ldi50");
 	r5=memVectorObject(r0, *(Num*)(rip+=8));//*((Obj*)r0 + *(Num*)(rip+=8));
@@ -574,8 +568,9 @@ void vmRun (void) {
  */
 void vmObjectDumperDefault (Obj o, FILE *stream) {
  static Str p;
-	fprintf (stream, HEX, o);
+	fprintf (stream, "#<"HEX, o);
 	if ((p = memObjString(o))) fprintf (stream, ":%s", p);
+	fprintf (stream, ">");
 }
 
 void (* vmObjectDumper)(Obj o, FILE *stream) = vmObjectDumperDefault;
@@ -627,13 +622,11 @@ void vmDebugDumpCode (Obj c, FILE *stream) {
 		else if (*i==MV72) {fprintf(stream, "mv_7_2 ");}
 		else if (*i==LDI00) {fprintf(stream, "ldi_0_0 "); vmObjectDumper(*++i, stream);}
 		else if (*i==LDI02) {fprintf(stream, "ldi_0_2 "); vmObjectDumper(*++i, stream);}
-		else if (*i==LDI05) {fprintf(stream, "ldi_0_5 "); vmObjectDumper(*++i, stream);}
 		else if (*i==LDI01C){fprintf(stream, "ldi_0_1c "); vmObjectDumper(*++i, stream);}
 		else if (*i==LDI11) {fprintf(stream, "ldi_1_1 "); vmObjectDumper(*++i, stream);}
 		else if (*i==LDI11C){fprintf(stream, "ldi_1_1c "); vmObjectDumper(*++i, stream);}
 		else if (*i==LDI20) {fprintf(stream, "ldi_2_0 "); vmObjectDumper(*++i, stream);}
 		else if (*i==LDI22) {fprintf(stream, "ldi_2_2 "); vmObjectDumper(*++i, stream);}
-		else if (*i==LDI40) {fprintf(stream, "ldi_4_0 "); vmObjectDumper(*++i, stream);}
 		else if (*i==LDI50) {fprintf(stream, "ldi_5_0 "); vmObjectDumper(*++i, stream);}
 		else if (*i==LDI1C0){fprintf(stream, "ldi_1c_0 "); vmObjectDumper(*++i, stream);}
 		else if (*i==LD012) {fprintf(stream, "ld0_1_2");}
@@ -700,7 +693,7 @@ void vmDebugDumpCode (Obj c, FILE *stream) {
 		else if (*i==SYS0)  {fprintf (stream, "sys_0 ");}
 		else if (*i==QUIT)  {fprintf (stream, "quit ");}
 		else {
-			fprintf(stream, HEX" = ", *i);
+			//fprintf(stream, HEX" = ", *i);
 			vmObjectDumper(*i, stream);
 		}
 		i++;
@@ -736,15 +729,12 @@ void vmInitialize (Func interruptHandler, void(*vmObjDumper)(Obj, FILE*)) {
 		memRegisterType (TCODE, "code");
 		DB("Initialize opcode values");
 		vmVm(VM_INIT); /* Opcode values are really C goto addresses */
-		//DB("Activate periodic timer and its signal handler");
-		//signal(SIGALRM, vmSigAlarmHandler); /* Start the interrupt schedule timer. */
-		//vmSigAlarmReset();
 	} else {
 		DB("  Module already activated");
 	}
 
 	if (interruptHandler) {
-		DB("  Setting interruptHandler callback function");
+		DB("  Setting interrupt handler callback function");
 		assert(!vmInterruptHandler);
 		vmInterruptHandler = interruptHandler; /* sys.c:sysSchedule()  */
 	}

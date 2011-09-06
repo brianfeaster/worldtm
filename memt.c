@@ -40,15 +40,6 @@ Num memtVerifyHeapLengths (Num staticLen, Num oldLen, Num youngLen, Num newLen) 
 
 
 
-/* Pass a pre-garbage collection callback.
-*/
-Num GarbageCollectCalled=0;
-void memtPreGarbageCollect (void) {
-	GarbageCollectCalled=1;
-}
-
-
-
 /* Verify expected variable sizes
 */
 void memtSizeof (void) {
@@ -106,6 +97,7 @@ void memtObjectSize (void) {
 	assert(memVectorLengthToObjectSize(1)==16);
 	assert(memVectorLengthToObjectSize(2)==24);
 }
+
 
 
 /* Create some objects and push/pop them to the stack.
@@ -196,6 +188,28 @@ void memtFinalizer (void) {
 
 
 
+/* Verify a pointer survives a garbage collection and
+   still points to the same location in the object */
+void memtPointer (void) {
+	r1 = memNewArray(TINTEGER, 4);
+	*(Int*)r1 = 0xfedcba98;
+
+	r0 = memNewPointer();
+	memVectorSet(r0, 1, r1); /* The object being pointed at */
+	memVectorSet(r0, 0, r1+3); /* Pointer inside of object */
+
+	memGarbageCollect();
+
+	assert(((Obj*)r0)[0] == r1+3);
+	assert(((Obj*)r0)[1] == r1);
+
+	r0 = r1 = 0;
+	GarbageCollectionMode = 1;
+	memGarbageCollect();
+}
+
+
+
 /* Verify a large array and large vector object can be created and collected.
 */
 void memtNewLargeVectorObject (void) {
@@ -224,6 +238,14 @@ void memtNewLargeVectorObject (void) {
 /* Allocate a simple object repeatedly until the garbage collector is triggered.
    One object should exist after collecting.
 */
+
+/* Pre-garbage collection callback.  Must be registred with memInitialize.
+*/
+Num GarbageCollectCalled=0;
+void memtPreGarbageCollect (void) {
+	GarbageCollectCalled=1;
+}
+
 void memtAutomaticGarbageCollect (void) {
 	/* Called 0x40000 times */
 	for (GarbageCollectCalled=0; !GarbageCollectCalled ; memNewArray(TSYMBOL, 8));
@@ -259,11 +281,11 @@ int main (int argc, char *argv[]) {
 
 	r1f = memNewStack(); /* Create the stack for the machine */
 
-	memRegisterType(TSYMBOL, "sym");
+	memRegisterType(TSYMBOL,  "sym");
 	memRegisterType(TINTEGER, "int");
-	memRegisterType(TPAIR, "pair");
-	memRegisterType(TSTRING, "str");
-	memRegisterType(TVECTOR, "vec");
+	memRegisterType(TPAIR,    "pair");
+	memRegisterType(TSTRING,  "str");
+	memRegisterType(TVECTOR,  "vec");
 	memObjStringSet(callbackFinalizerFunction);
 
 	TEST(memtSizeof);
@@ -271,6 +293,7 @@ int main (int argc, char *argv[]) {
 	TEST(memtObjectSize);
 	TEST(memtVerifyObjectCreationAndCollection);
 	TEST(memtFinalizer);
+	TEST(memtPointer);
 	TEST(memtNewLargeVectorObject);
 	TEST(memtAutomaticGarbageCollect);
 

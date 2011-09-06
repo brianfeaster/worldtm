@@ -96,7 +96,7 @@
 
  (define (createHub)
    (set! HubSocket (open-socket HubPort))
-   (if (eof-object? HubSocket)
+   (if (not (port? HubSocket))
      ; Open a connection to existing hub port.  Eventually the threads
      ; handling I/O to the hub will close or fail and createHub will
      ; be called again.

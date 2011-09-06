@@ -51,7 +51,7 @@ void yyparse (void);
 /* Environment */
 void sysTGEFind (void);
 void sysTGEBind (void);
-Int sysEnvFind (void);
+Num sysEnvFind (void);
 void sysEnvGet (void);
 void sysDefine (char* sym);
 void sysDefineSyscall (Func function, char* symbol);

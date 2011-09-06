@@ -321,7 +321,7 @@
        (gputc (vector-ref desc 1) (vector-ref desc 0) gy gx)))
    (define (putchar c)
      (if needToScroll (begin (set! needToScroll #f) (return) (newline)))
-     (if (!= TCURSOR-VISIBLE CURSOR-VISIBLE) (tcursor-visible))
+     (if (not (eq? TCURSOR-VISIBLE CURSOR-VISIBLE)) (tcursor-visible))
      (if (eq? c NEWLINE) (newline)
      (if (eq? c RETURN) (return)
      (if (eq? c CHAR-CTRL-G) (display c)

@@ -1,5 +1,8 @@
 #define DEBUG 0
 #define DB_DESC "MEM"
+#define DEBUG_ASSERT 1
+#define DEBUG_ASSERT_STACK 0
+#define VALIDATE_HEAP 0
 #include "debug.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -10,10 +13,6 @@
 #include <assert.h>
 #include <errno.h>
 #include "mem.h"
-#define DEBUG_ASSERT 0
-#define DEBUG_ASSERT_STACK 0
-#define VALIDATE_HEAP 0
-
 /*
   Type_stuff
   Descriptors
@@ -60,6 +59,16 @@
   Normalized
 */
 
+
+
+/* Internal types which are registered during initialization */
+#define TSEMAPHORE     0xfbl
+#define TFINALIZER     0xfcl
+#define TPOINTER       0xfdl
+#define TSTACK         0xfel
+#define TSHADOW        0xffl
+
+
 void memGarbageCollectInternal (Descriptor desc, Num byteSize);
 Num memHeapLength (Num heapIndex);
 void memError (void);
@@ -71,11 +80,10 @@ void memError (void);
 
  Object types are defined by 8 bits.  The valid range/count for the core
    types are as follows (all values in hex):
-     arrays   00...7f  80
-     vector   80...ef  70
-     internal f0...ff  10
+     arrays   00...7f / 80
+     vector   80...ef / 70
+     internal f0...ff / 10
 *******************************************************************************/
-
 #define TMAXARRAY     0x7fl
 #define TMAXVECTOR    0xefl
 #define TMAXINTERNAL  0xffl
@@ -90,8 +98,15 @@ void memRegisterInternalType (Type type, char *description) {
 	DBBEG();
 	assert(strlen(description)<=8);
 	DB("Type type="HEX"  char *description="STR, type, description);
-	assert(type <= TMAXINTERNAL); /* Only arrays and vector can be created externally */
-	assert(memTypeDB[type].description == NULL); /* Object types can't be redefined */
+
+	assert(type <= TMAXINTERNAL);
+
+	/* Object types can't be redefined */
+	if (memTypeDB[type].description != NULL) {
+		fprintf (stderr, "Trying to register type "NUM":"STR" but assigned to "STR, type, description, memTypeDB[type].description);
+		exit(-1);
+	}
+
 	memTypeDB[type].description = (Str)description;
 	DBEND();
 }
@@ -103,13 +118,6 @@ void memDebugDumpAllTypes(void) {
 		if (TMAXARRAY==i || TMAXVECTOR==i) printf ("\n");
 	}
 }
-
-/* Internal types which are registered during initialization */
-#define TSEMAPHORE     0xfbl
-#define TFINALIZER     0xfcl
-#define TPOINTER       0xfdl
-#define TSTACK         0xfel
-#define TSHADOW        0xffl
 
 
 
@@ -535,7 +543,7 @@ void memArraySet (Obj obj, Num offset, u8 item) {
 
 void memVectorSet (Obj obj, Num offset, Obj item) {
 	#if DEBUG_ASSERT
-	if (!memIsObjectValid(obj)) {
+	if (!memIsObjectValid(obj) && !memIsObjectInHeap(&heapNew, obj)) {
 		printf ("ERROR memVectorSet(obj "OBJ" offset "NUM" item "OBJ") Invalid object.",
 		    obj, offset, item);
 		memError();
@@ -700,7 +708,7 @@ Obj *MemRootSet[MemRootSetCountMax];
    at. A pointer is a vector whos first element is a void* and the second
    element is the object the void* should be pointing somewhere inside of. */
 Num memPointerOffset (Obj obj) {
-	return (Num)((Obj*)memVectorObject(obj, 0) - (Obj*)memVectorObject(obj, 1));
+	return (Num)(memVectorObject(obj, 0) - memVectorObject(obj, 1));
 }
 
 
@@ -816,7 +824,7 @@ void memCopyHeapObjectsToHeapNew (Heap *heap) {
 				/* Update pointer object's index pointer.  This should even work
 				   if the object is in an old heap and a young GC is being
 				   performed.*/
-				memVectorSet(newObj, 0, (Obj*)memVectorObject(newObj, 1)+len);
+				memVectorSet(newObj, 0, (Obj)memVectorObject(newObj, 1)+len);
 			} else if (memIsObjectStack(newObj)) {
 				for (i=0; i<memStackLength(newObj); i++) {
 					DB("  Stack in old heap   location "HEX"/"HEX" "OBJ, i, memStackLength(newObj), (Obj*)newObj+i+1);
@@ -1037,62 +1045,82 @@ void memDebugDumpHeapHeaders (FILE *stream) {
 	fprintf (stream, "\n");
 }
 
+/* Generic object to string dumper.
+   #<11112222f000 y  int:02 0004  (61 62 63 64) "abcd">
+   #<11112222f010 y pair:02 0002 #(11112222f000 11112222f010)>
+*/
 void memDebugDumpObject (Obj o, FILE *stream) {
  Int i, fdState;
  Str s;
  Obj obj;
+ Chr c;
 
-	fcntl (0, F_SETFL, (fdState=fcntl(0, F_GETFL, 0))&~O_NONBLOCK);
+	/* Always expect a stream */
+	assert(stream);
+	/* Temporarily disable non-blocking mode on the I/O channel.  Affects both input/output. */
+	fdState = fcntl(0, F_GETFL, 0);
+	fcntl (0, F_SETFL, fdState&~O_NONBLOCK);
 
-	if (!memIsObjectValid(o) && !memIsObjectInHeap(&heapNew, o)) {
-		fprintf(stream, NL "???" OBJ, o);
-	}
+	/* The object's address  "#<XXXXXXXXXXXX" */
+	fprintf(stream, "#<"OBJ, o);
 
-	if (stream == NULL) stream=stderr;
-
-	/* Dump the object's address and descriptor information.
-	   7fe8f5f44610 81 PAIR      2 #(7fe8f5f445f0 7fe8f5f44600) */
-	fprintf (stream, "\n%c "OBJ" "HEX02"%-5s"HEX4,
-		memIsObjectInHeap(&heapStatic, o)?'s':
-			memIsObjectInHeap(&heapOld, o)?'o':
-				memIsObjectInHeap(&heap, o)?'y':
-					memIsObjectInHeap(&heapNew, o)?'n':'?',
-		o, memObjectType(o), memTypeString(memObjectType(o)), memObjectLength(o));
-
-	/* Some objects are just an instance of the descriptor
-	   such as #f and #() they have no content. */
- 	if (!memObjectLength(o)) {
-		fprintf(stderr, " EMPTY");
-	} else if (!memIsObjectBaseArray(o)) { // Vector
-		if (memIsObjectPointer(o)) {
-			fprintf (stream, " "OBJ" -> "OBJ, ((Obj*)o)[0], ((Obj*)o)[1]);
-		} else if (memIsObjectStack(o)) {
-			fprintf (stream, " ["HEX" | ", memStackLength(o));
-			for (i=0; i<memStackLength(o); i++) {
-				fprintf (stream, HEX" ", ((Obj*)o)[i+1]);
-			}
-			fprintf (stream, "]");
-		} else if (memIsObjectShadow(o)) {
-			fprintf (stream, " *"OBJ"", *(Obj*)o);
-		} else if (memIsObjectFinalizer(o)) {
-			fprintf (stream, " ("HEX":"STR" . "OBJ")", ((Obj*)o)[0], memObjString(((Obj*)o)[0]), ((Obj*)o)[1]);
-
-
-		} else {
+	/* If object is in any valid heap, display the object's meta data and actual content */
+	if (memIsObjectValid(o) || memIsObjectInHeap(&heapNew, o)) {
+		/* The object's metadata  " H TYPE:XX XXXX" */
+		fprintf (stream, " "CHR" "STR":"HEX02" "HEX04" ",
+			memIsObjectInHeap(&heapStatic, o)?'s':
+				memIsObjectInHeap(&heapOld, o)?'o':
+					memIsObjectInHeap(&heap, o)?'y':
+						memIsObjectInHeap(&heapNew, o)?'n':'?',
+			memTypeString(memObjectType(o)),
+			memObjectType(o),
+			memObjectLength(o));
+			
+ 		if (!memObjectLength(o)) {
+			/* Some objects are just an instance of the descriptor such as #f and #() they have no content. */
+			fprintf(stderr, "EMPTY");
+		} else if (memIsObjectBaseArray(o)) {
+			/* Array's contents generically dumped */
 			for (i=0; i<memObjectLength(o); i++) {
-				obj = ((Obj*)o)[i];
-				fprintf (stream, "%s"HEX, ((i==0)?"#(":" "), obj);
-				s = memObjString(obj); /* Internal pointer address */
-				if (s) fprintf (stream, ":%s", s);
+				fprintf (stream, "%s%x", i==0?"(":" ", ((u8*)o)[i]);
 			}
-			fprintf (stream, ")");
+			fprintf (stream, ") \"");
+			for (i=0; i<memObjectLength(o); i++) {
+				c = ((Chr*)o)[i];
+				fprintf (stream, CHR, ((32<=c && c<=126) || (161<=c && c<=255)) ? c : 0xb7);
+			}
+			fprintf (stream, "\"");
+		} else {
+			if (memIsObjectFinalizer(o)) {
+				/* Finalizer */
+				fprintf (stream, "#("HEX":"STR" . "OBJ")", ((Obj*)o)[0], memObjString(((Obj*)o)[0]), ((Obj*)o)[1]);
+			} else if (memIsObjectPointer(o)) {
+				/* Pointer */
+				fprintf (stream, OBJ" "OBJ"["NUM"]",((Obj*)o)[0], ((Obj*)o)[1], ((Obj*)o)[0] - ((Obj*)o)[1]);
+			} else if (memIsObjectStack(o)) {
+				/* Stack */
+				fprintf (stream, "["HEX04" | ", memStackLength(o));
+				for (i=0; i<memStackLength(o); i++) {
+					fprintf (stream, OBJ" ", ((Obj*)o)[i+1]);
+				}
+				fprintf (stream, "]");
+			} else if (memIsObjectShadow(o)) {
+				/* Shadow */
+				fprintf (stream, "*"OBJ"", *(Obj*)o);
+			} else {
+				/* Vector's contents generically dumped */
+				for (i=0; i<memObjectLength(o); i++) {
+					obj = ((Obj*)o)[i];
+					fprintf (stream, "%s"OBJ, ((i==0)?"#(":" "), obj);
+					s = memObjString(obj); /* Internal pointer address */
+					if (s) fprintf (stream, ":%s", s);
+				}
+				fprintf (stream, ")");
+			}
 		}
-	} else { // Array
-		for (i=0; i<memObjectLength(o); i++) {
-			fprintf (stream, " %s%x", i==0?"(":"", ((u8*)o)[i]);
-		}
-		fprintf (stream, ")");
 	}
+
+	fprintf (stream, ">");
 
 	fcntl (0, F_SETFL, fdState);
 }
@@ -1103,6 +1131,7 @@ void memDebugDumpStaticHeap (FILE *stream) {
 	if (stream == NULL) stream=stderr;
 	o = heapStatic.start + DescSize;
 	while (o<heapStatic.next) {
+		fprintf (stream, "\n");
 		memDebugDumpObject (o, stream);
 		o += memObjectSize(o);
 	}
@@ -1113,6 +1142,7 @@ void memDebugDumpOldHeap (FILE *stream) {
 	if (stream == NULL) stream=stderr;
 	o = heapOld.start + DescSize;
 	while (o<heapOld.next) {
+		fprintf (stream, "\n");
 		memDebugDumpObject (o, stream);
 		o += memObjectSize(o);
 	}
@@ -1123,6 +1153,7 @@ void memDebugDumpYoungHeap (FILE *stream) {
 	if (stream == NULL) stream=stderr;
 	o = heap.start + DescSize;
 	while (o<heap.next) {
+		fprintf (stream, "\n");
 		memDebugDumpObject (o, stream);
 		o += memObjectSize(o);
 	}
@@ -1133,6 +1164,7 @@ void memDebugDumpNewHeap (FILE *stream) {
 	if (stream == NULL) stream=stderr;
 	o = heapNew.start + DescSize;
 	while (o<heapNew.next) {
+		fprintf (stream, "\n");
 		memDebugDumpObject (o, stream);
 		o += memObjectSize(o);
 	}
@@ -1227,7 +1259,7 @@ void memValidateObject (Obj o) {
 	}
 	if (!valid) {
 		fprintf (stderr, "\nERROR memValidateObject() found bad object:"OBJ NL, o);
-		memDebugDumpObject (o, NULL);
+		memDebugDumpObject (o, stderr);
 	}
 	DBEND();
 }
@@ -1336,11 +1368,11 @@ void memInitialize (Func preGC, Func postGC) {
 		DB("Activating module...");
 		shouldInitialize=0;
 		DB("Register the internal object types");
-		memRegisterInternalType(TSEMAPHORE, "semaphr");
-		memRegisterInternalType(TFINALIZER, "finalal");
-		memRegisterInternalType(TPOINTER, "pointer");
-		memRegisterInternalType(TSTACK, "stack");
-		memRegisterInternalType(TSHADOW, "shadow");
+		memRegisterInternalType(TSEMAPHORE,"SEM");
+		memRegisterInternalType(TFINALIZER,"FIN");
+		memRegisterInternalType(TPOINTER,  "PTR");
+		memRegisterInternalType(TSTACK,    "STK");
+		memRegisterInternalType(TSHADOW,   "SHDW");
 		DB("Create heaps");
 		memInitializeHeap  (&heapStatic, HEAP_STATIC_BLOCK_COUNT);
 		memInitializeHeap  (&heap, HEAP_BLOCK_COUNT);

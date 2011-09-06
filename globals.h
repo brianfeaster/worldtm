@@ -65,6 +65,7 @@ typedef void (*Func2) (Obj a, Obj b);
 #define HEX2     "%2lx"
 #define HEX4     "%4lx"
 #define HEX02   "%02lX"
+#define HEX03   "%03lx"
 #define HEX04   "%04lx"
 #define HEX016 "%016lx"
 
