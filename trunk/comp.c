@@ -161,7 +161,7 @@ void compTGELookup (void) {
 }
 
 void compVariableReference (Num flags) {
- Int ret, depth;
+ Num ret, depth;
 	DBBEG();
 	DBE objDump(rexpr, stderr);
 	r1 = rexpr;
@@ -298,7 +298,7 @@ void compTGEMutate (void) {
 
 
 void compSetb (Num flags) {
- Int ret, depth;
+ Num ret, depth;
 	DBBEG();
 	rexpr = cdr(rexpr); /* Skip 'set! symbol. */
 	vmPush(car(rexpr)); /* Save symbol. */
@@ -1545,19 +1545,20 @@ void compThread (void) {
 	vmPush(rasmstack); /* Save code stack. */
 
 	/* Create new emit-code stack. */
-	r0=memNewStack();
-	rasmstack=r0;
+	rasmstack = memNewStack();
 
 	/* Compile parameter passed to thread emitting the unthread syscall
 	   as the last opcode. */
 	compBegin(0);
 	asm(SYSI); asm(osUnthread);
-	asmNewCode();
+	asmNewCode(); /* new code object returned in r0 */
 
-	rasmstack=vmPop(); /* Restore code stack. */
+	rasmstack = vmPop(); /* Restore code stack. */
 
-	asm(MVI0); asm(r0);
-	asm(SYSI); asm(osNewThread);
+	asmAsm(
+		MVI0, r0,
+		SYSI, osNewThread, /* the osNewThread syscall returns thread ID integer object */
+		END);
 
 	DBEND("  => ");
 	DBE objDump(r0, stderr);

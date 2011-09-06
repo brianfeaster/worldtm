@@ -31,8 +31,8 @@ void networkLocalClientServerConnection (void) {
 	assert(saccepting == memVectorObject(r5, 3));
 
 	//printf("\nOpening connecting socket: ");
-	objNewString((Str)"localhost", 9); vmPush(r0);
-	objNewInt(8080); vmPush(r0);
+	objNewString((Str)"localhost", 9); r2 = r0;
+	objNewInt(8080); r1 = r0;
 	sysOpenRemoteSocket();
 	r6=r0;
 	//objDump(r6, stdout);

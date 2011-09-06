@@ -71,7 +71,7 @@ void osRemoveThread (Obj t) {
 
 	Requires: r0 code block
 	Mutates: r0 r1 r2
-	Returns: r0 thread id
+	Returns: r0 thread descriptor
 */
 void osNewThread (void) {
  Num tid;
@@ -81,7 +81,7 @@ void osNewThread (void) {
 	   is the count so index range is 1 to MAX_THREADS inclusive. */
 	for (tid=1; memVectorObject(rthreads, tid) != null; ++tid)
 		if (MAX_THREADS <= tid) {
-			fprintf (stderr, "WARNING: sysNewThread: Too many rthreads.");
+			fprintf (stderr, "WARNING: osNewThread: Too many rthreads.");
 			r0 = false;
 			goto done;
 		}
@@ -106,10 +106,11 @@ void osNewThread (void) {
 	memStackPush(r2, 0);   /* Initial r1. */
 	memStackPush(r2, 0);   /* Initial r0. */
 
+	objNewInt((Int)tid); r1 = r0; /* ID as an integer object */
 	/* Create thread descriptor #( #<stack> tid 'state) and add to thread table vector */
 	osNewThreadDescriptor();
 	memVectorSet(r0, 0, r2);      /* Set stack */
-	memVectorSet(r0, 1, (Obj)tid); /* Set id */
+	memVectorSet(r0, 1, r1); /* Set id */
 	memVectorSet(r0, 2, sready);  /* Set 'ready' state */
 
 	/* Add thread descriptor to thread table vector and increment count */
@@ -118,13 +119,13 @@ void osNewThread (void) {
 
 	/* Create new doubly linked list queue element for this thread descriptor and
 	   insert into the ready queue before the current running thread */
-	r1=r0; /* Thread descriptor */
+	r2 = r1; /* Thread ID */
+	r1 = r0; /* Thread descriptor */
 	objNewDoublyLinkedListNode();
 	memVectorSet(r0, 0, r1);
 	objDoublyLinkedListInsert (rrunning, r0); /* Insert new thread before current thread */
 
-	//objNewInt((Int)tid);
-	r0 = r1; /* Return thread descriptor */
+	r0 = r2; /* Return thread ID */
 done:
 	DBEND("  =>  tid:"NUM, tid);
 } /* osNewThread */
@@ -186,7 +187,7 @@ void osScheduleBlocked (void) {
 	/* For each doubly linked list node of blocked threads... */
 	r5=objDoublyLinkedListNext(rblocked);
 	while (r5!=rblocked) {
-	DB("considering blocked thread "NUM, osThreadId(r5));
+	DB("considering blocked thread "NUM, *(Num*)osThreadId(r5));
 		/* Consider status in the descriptor of this thread. */
 		r1 = osThreadState(r5);
 
@@ -294,7 +295,7 @@ void osScheduleBlocked (void) {
 
 /* Make running thread ready for the VM.  Pop all the saved registers. */
 void osRun (void) {
-	DBBEG(" tid="INT, osThreadId(rrunning));
+	DBBEG(" tid="INT, *(Num*)osThreadId(rrunning));
 	if (osThreadState(rrunning) != sready) {
 		fprintf (stderr, "WARNING: osRun: Should be 'ready' thread but is ");
 		sysDisplay(osThreadState(rrunning), stderr);
@@ -324,7 +325,7 @@ void osRun (void) {
 
 void osScheduler (void) {
 	DBBEG();
-//	DBE debugDumpThreadInfo();
+//	DBE osDebugDumpThreadInfo();
 	if (!osIsQueueEmpty(rsleeping)) osScheduleSleeping();
 	if (!osIsQueueEmpty(rblocked)) osScheduleBlocked();
 	while (osIsQueueEmpty(rready)) {
@@ -357,14 +358,14 @@ void osScheduler (void) {
 
 	osRun();
 
-	DBEND("  =>"NUM, osThreadId(rrunning));
+	DBEND("  =>"NUM, *(Num*)osThreadId(rrunning));
 } /* osScheduler */
 
 
 void osUnthread (void) {
-	DBBEG("  thread ID "NUM, osThreadId(rrunning));
+	DBBEG("  thread ID "NUM, *(Num*)osThreadId(rrunning));
 	/* Remove from thread vector table. */
-	memVectorSet(rthreads, (Num)osThreadId(rrunning), null);
+	memVectorSet(rthreads, *(Num*)osThreadId(rrunning), null);
 	/* Decrement thread count. */
 	memVectorSet(rthreads, 0, osThreadCount()-1); /* TODO Race condition? */
 	osRemoveThread(rrunning);
@@ -463,7 +464,7 @@ void osUnblockSemaphoreBlocked (Obj sem, Num all) {
 			DBE sysWrite(sem, stderr);
 			DBE sysWrite(semaphore, stderr);
 			if (semaphore == sem) {
-				DB("unblocking thread tid:"NUM, osThreadId(r4));
+				DB("unblocking thread tid:"NUM, *(Num*)osThreadId(r4));
 				/* Set thread's return value (r0 register which is found at the top of the thread's stack)
 				   to #t if another thread down'ed the semaphore and #f if close-semaphore called. */
 				memStackSet(osThreadStack(r4), 0, all?false:true);
@@ -516,18 +517,20 @@ void osSpawnSignalHandler(void) {
 	DBEND();
 }
 
-void debugDumpThreadInfo (void) {
+void osDebugDumpThreadInfo (void) {
  Obj node;
 	DBBEG();
+	fprintf (stderr, "\n-- THREAD INFO --------");
 	for(node = objDoublyLinkedListNext(rblocked); node != rblocked; node=objDoublyLinkedListNext(node)) {
-		fprintf (stderr, "      blocked "NUM"\n", osThreadId(node));
+		fprintf (stderr, "\nblocked "NUM, *(Num*)osThreadId(node));
 	}
 	for(node = objDoublyLinkedListNext(rsleeping); node != rsleeping; node=objDoublyLinkedListNext(node)) {
-		fprintf (stderr, "      sleeping "NUM"\n", osThreadId(node));
+		fprintf (stderr, "\nsleeping "NUM, *(Num*)osThreadId(node));
 	}
 	for(node = objDoublyLinkedListNext(rready); node != rready; node=objDoublyLinkedListNext(node)) {
-		fprintf (stderr, "      ready "NUM" %s\n", osThreadId(node), rrunning==rready?"running":"");
+		fprintf (stderr, "\nready "NUM" %s", *(Num*)osThreadId(node), rrunning==rready?"running":"");
 	}
+	fprintf (stderr, "\n-- thread info --------");
 	DBEND();
 }
 

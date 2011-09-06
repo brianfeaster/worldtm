@@ -201,7 +201,6 @@
           (equal? (car l1) (car l2))
           (equal? (cdr l1) (cdr l2)))))
 
-(define (meq? a b)         (eq? a b))
 (define (neq? a b)    (not (eq? a b)))
 (define (neqv? a b)   (not (eqv? a b)))
 (define (nequal? a b) (not (equal? a b)))
@@ -545,7 +544,7 @@
     ; point with 'msg' assigned the error/info list
     (if (eq? WELCOME-MESSAGE msg) (display WELCOME-MESSAGE)
       (begin
-        (display "ERROR::")
+        (display "\r\nREPL-ERROR::")
         (if (pair? msg)
             (begin (display (car msg))
                    (or (null? (cdr msg)) (displayl " " (cdr msg))))
