@@ -1,0 +1,3504 @@
+Sun Aug 29 08:43:59 PDT 2004
+
+Added killall primitive which kills all threads but the current running
+thread.  Sexy.  Should be powerfull yet simple enough to make restarting world
+without forcing people to reconnect.
+
+
+
+Tue Aug 31 16:08:49 PDT 2004
+
+Write dumped (1 . 2) as (1.2) so added the two spaces to the output routine.
+Write is supposed to emit an external representation of the internal object
+which that definitely didn't do (wrote a pair of integers as a list containing
+one float).
+
+
+
+Wed Sep 15 19:07:00 PDT 2004
+
+Trying to track down what appears to be a mmap leak.  All new calls to mmap
+result in a starting address greater than the previous.  You'd think it would
+recycle lower address ranges when they became available?  This occurs on k9
+but not my local machine.  Weird.  Onwards with the GC implementation.
+
+The generational collector will have two heaps, old and young.  The first
+step in its development will be to have objects created on the young heap as
+usual but GC's will always occur on both the old and young heap into a new
+old heap.  New object creation will the continue on the young heap again.
+
+Thinking:  After old/young collected into new, new should be compressed to fit
+and renamed to old.  An empty young should then be created and used for new
+object allocation.  What size?  Interesting.
+
+
+
+Thu Sep 16 11:06:22 PDT 2004
+
+First step successfull.  GC'ing the old/young into an old heap and allocating
+on a young heap seems to work.  Next stage is to gc into a new young heap.
+I'll have to keep track of old heap mutation and merge those objects with the
+root set.  The next stage will be to optimize the book keeping of old heap
+mutation.
+
+
+
+Mon Sep 20 18:43:10 PDT 2004
+
+Bug bothered me for a few days.  I hate them.  I didn't make the new heap as
+big as the old heap + young heap.  Bugs during intermediary steps are even
+more annoying as the code will be ditched eventually.
+
+
+
+Tue Sep 21 09:51:01 PDT 2004
+
+I'm not munmap/mmap'ing the young heap every time but rather just resetting
+the next pointer to start.  This resulted in the heap having random data which
+broke the new stack code (assumed the stack count would be 0) and new vector
+code (which assumed contents would be the #<0> zero object).  Realized the bug
+last night before bed and verified by clearing out the heap after resetting it.
+Fix is to set the stack count explicityly to 0 on creation and vector contents
+to null.
+
+So I've been tweaking mem.h a bit which means compiling with mem.c will break.
+The only change I've made so far is implement a few macros as true function
+calls.  That should be easy to patch for mem.c though.
+
+
+
+Wed Sep 22 19:40:20 PDT 2004
+
+I think the uninitialized vector bug is showing itself again only this time
+it's from code in scm.c creating vectors for environments that aren't being
+filled in time.  Turns out to be the .args part of the args vector.  I was
+using the assumed 0 value as meaning there were no .args variables to bind.
+It's now set explicitly to null and check for not null in the env_extend code.
+
+
+
+Sun Sep 26 19:37:52 PDT 2004
+
+Replaced some of the internal compilation values with immediate values which
+is now supported in printing and gc functions.  Immediate values are those
+object pointers less than 0x10000.  I COULD up this, but I'd like to stay
+quasi-portable.  Some architectures might not have the strange memory
+arrangement.  A 1 meg (0x100000) might be better?  Not sure if I want to
+support immediate values in math functions.  Maybe when I upgrade the scheme
+compiler and virtual machine.
+
+-- New compiler ideas ---------------------------------------------------------
+
+(+ x y 2 z)
+Compile this expression given a certain environment.  LookUp opcode will
+already have variable reference compliled.  Resulting program:
+#<CODE
+  ENV 1 2   ; Load env 1 up and 2th var into r0
+  ENVR1 3 4 ; Load env 3 up and 4th var into r1
+  ADDR1     ; Add r1 into r0
+  ADDIMM 2  ; add immediate into r0
+  ENVR1 0 1 ; Load env into r1
+  ADDR1>    ; add r1 into r0
+
+
+((lambda (x . y) (* x x)) 5)
+Remembering the function is extended each time.  Returns a 'closure' object
+which is applied.
+
+#<CODE
+  LDP0 5 ; Load parameter register 0 with 5
+  LD   #<CLOSURE #<PARENT ENVIRONMENT> (x) y ((* x x))> ; Load acc with this.
+  CALL 1>; Call this object with one parameter.
+
+
+-- Environment Extending ideas ------------------------------------------------
+
+
+
+Thu Oct  7 21:51:22 PDT 2004
+
+Saw the light and implemented a symbol table.  I'm not sure if it's any faster,
+but tweaking the eq? primitive a bit seems to have sped things up a touch.
+Symbol equivalence is now just pointer equivalence.  Strings are still
+strncmp'ed.  Did run into trouble with the static symbols needing to also
+insert the objects into the hash table.  Also moved the intern function from
+the parser to the obj_new_symbol area of code.  Forgot that the compiler also
+creates and uses symbols.
+
+The symbol table is a fixed hash table that linearly searches for available
+spots when collision occurs.  The hash table is a modified PJW.  I initialized
+the return value with the first character, but didn't skip over it.  Basically
+the first character is used twice in the algorithm.  This was becaused I
+noticed single letter symbols created a dense region that I didn't like.  All
+symbols are stored in a vector in an internal register.  This is going to be
+one of many optimizations issues to deal with in the generational collector.
+
+
+
+Fri Oct  8 08:00:35 PDT 2004
+
+Term is "open ended hash tables."  There might be a bug in the interner where
+the string check after a hash hit doesn't first check that the string lengths
+are the same.  It could happen that a string of one character is GC'ed over
+a strings with 2 characters resulting in an illegal match.  IE  "a" gets GC'ed
+to "a"b  which matches "ab".  Realized this after waking up this morning.
+
+
+
+Sat Oct  9 12:09:16 PDT 2004
+
+Played around more with the hashing algorithm.  I found a discrepency in the
+symbol table generated by wscheme and that I was creating in perl to identify
+good hash table sizes.  Specifically with the probing index i=(++i==2029)?0:i
+I didn't prioritize the equivalence check with parenthesis and I belive
+was assigning 'i' before the '== 2029'.
+
+Currently all collisions are requiring only a single probe increment using
+the current World code as a symbol pool with a total of 35 collided symbol in
+all.   The heap size also turned out to be prime (2029) but close to 2048 so
+go figure.  I've read that being near a power of two is discouraged.
+
+
+
+Mon Oct 18 11:44:31 PDT 2004
+
+Weird.  Found legacy display code that dumped 'opcode' and 'syntax' objects:
+//  case TSYNTAX : write(op, function_desc(a), strlen(function_desc(a))); break;
+//  case TOPCODE : write(op, function_desc(a), strlen(function_desc(a))); break;
+Although phased out long ago, I'll be needing disassemble abilities when
+displaying internal compiled programs.
+
+
+
+Thu Nov  4 12:22:01 PST 2004
+
+Currently working on integrating the VM into the existing vm/primitive code
+base.  Big mess as vm is not seeing memory and object code.  Need to rethink
+abstraction and consider smp.
+
+Since I'm wanting some primitives to be more liek syntatic constructs, like
+mathematical operators, I'm wondering how to handle the mutation of them in
+code.  (+ 1 x) would be compiled into code that at the machine level created
+a new object with value x + 1.  So probably something like look up x's value
+and add 1 to it, returning a new object.  But what would (define + ...) do?
+Probably at that point replace the internal translation primitive into whatever
+is defined.  Any existing code that used + won't change but any code after
+will.  What would (define (+ x y) (+ x y)) do?  since it's (define x (lambda (x
+y) (+ x y))), it should be fine.  What would ((lambda (f) (f x y)) +) do?
+
+
+
+Mon Nov 22 14:46:05 PST 2004
+
+Spending time in the byte code compiler and virtual machine.  Going back and
+forth working out compiler specifics and trying out the best implementation
+in the VM.  Example:  How do I deal with compiled procedure blocks?  Do I call
+the blocks and save state automatically or by hand with basic VM opcodes?  For
+now implemented jal, j and ret.  JAL will save the current ip on the stack
+(currently the block and immediate offset (hopefully the offset a value the GC
+will ignore)).  J just adjusted the ip to the new block's first insturction.
+RET will restore the ip from the two values on the stack.  This will facilitate
+tail call optimizations.
+
+
+
+Thu Dec  2 20:14:22 PST 2004
+
+Want to work on the application of functions which means environment extending
+which means environments.  TGE is a list of pairs (value . name).  This should
+result in simple double references to load binding values.  Seems before I
+needed an extra addition since bindings were (name . value) so I had to inc
+the first referenced pointer value.  I understand now a lot of the stuff I did
+in 104b mainly with the shadowing of local stack variables in registers.  Doing
+this in compiled VM code would result in just single references of variable
+values.  For local bindings, I should probably have some sort of vector table
+indexing the bindings in question for 'fast' tripple references?  *shrug*
+
+Wonder if compiler lexical closures will be any more difficult with dynamic
+closures.  Will think about further.
+
+
+
+Tue Dec  7 22:58:46 PST 2004
+
+Figuring out how to setup the VM instruction to handle dynamic operator types
+is taking a while.  I'd like to keep things clean but at the same time really
+simple since theoverhead of checking for each procedure application will cut
+into performance (I'm assuming).  I guess operator's will evaluate to either:
+code blocks, C functions, continuations or things that shouldn't be applied.
+
+Found a paper online that discusses VM's with extensible opcodes, as I'm doing
+to a degree.  Rather I'm just relying on the sys call that transfers control
+to a C function.  In essence I am sort of implementing new opcodes on the fly
+as they have full control of the VM>
+
+ldi 402b5188 ; operand 1
+push
+ldi 402b5194 ; operand 2
+push
+ldi 402b5028 ; operator
+ld r1 2      ; set operand count.
+;; What do I do here?
+sysi 08056b77 2 ; Call primitive and maybe increments ip to skip next inst
+jal             ; Jump and link to code.
+
+Could wrap bound syscalls inside of code blocks:
+
+sysi sysFunction 2
+ret
+
+so that a jal always occurs...for now.  Perhaps a jal will itself check for
+a block or C function addres.  If that's the case then the pushing/popping
+would be avoided for syscalls.
+
+
+
+Sat Dec 11 08:10:43 PST 2004
+
+Implementing a branch on type instruction.  Will be used to dispatch on
+object type.
+
+
+
+Mon Dec 13 00:36:38 PST 2004
+
+So all resolved operators in a combination will have to be VM code blocks.  I'm
+going to get rid of the concept of a closure that had explicit data
+respresenting the argument list, environment and compiled code.  Instead it will
+be all compiled code that sets-up/extends the environment as well as compiled
+code.  We'll see where this goes.  This also forces system calls (direct calls
+to C functions) to be wrapped around VM code block.  Just a simple SYSI and RET.
+
+Not sure if I'm going to change the way environment are represented.  I like the
+ability of implementing dynamically bound closures.  Expensive entities as they
+disallow a lot of static-only optimizations.  I could optimize dynamic closures
+by keeping track of them with respect to compiled code/environments.  Will think
+about it later.
+
+Global Environment: TGE ----> ((5 . x) (#<CODE> . f) (#<CODE> . +) ...)
+                              ^
+                              |
+Local Environment:  ENV -> #( | (x y)  3 4)
+                           ^  
+                            \ 
+Local Environment: ENV -> #( \ (st sy z) "hello" 'hello ('rest 1 2 'args))
+
+Advantages to this arrangement:  Global binding optimization trivial.  Simple
+lookup of symbols through environments.  Simple compiling of resolved non-global
+symbols as depth/offset pair.  Will optimize to LD, LDLD, LDLDLD or programmed
+indirect LD loop with vector-ref index of value in environment.  Sort of do this
+now anyways.  Good design I suppose.  Also, environment extending only creates
+a single vector (possibly pairs for .var arg element).
+
+
+
+Fri Dec 17 01:32:32 PST 2004
+
+Could object being a pointer into an arbitrary vector element (versus the head
+of an object) be easily GCed?
+
+Want to simplify the memory module.  It currently supports an internalized
+stack pointer.  I'd like to move this and any other run time pointer to the
+object abstraction or something higher up.  I think the garbage collector should
+really just need to deal with scheme objects proper and the head nodes
+registers.
+
+Remembering object creation path:
+
+1> new_64BitInteger(5);
+2> new_object (NUMBER_DESCRIPTOR,      NUMBER_OBJECT_LENGTHH);
+   == new_object (00000001 0..0 00001000, 0..0 1000);
+
+3>         [00001000]
+   acc---> [   ?    ]
+           [   ?    ]
+
+1> new_pair()
+2> new_object(PAIR_DESCRIPTOR, PAIR_LENGTH)
+   == new_object (10000001 0..0 00000100, 0..0 0100);
+
+3>         [00001000]
+   acc---> [   ?    ]
+           [   ?    ]
+
+Thinking that passing (desc, size) where (desc&mask == size) is pointless since
+optmizing all these static values would result in passing just desc and masking
+out the size more efficient perhaps.
+
+
+Whoa.  Found this comment at the top of mem.h:  "To keep your code correct,
+ each object variable must be registered."  This was an old restriction for the
+mark/sweep collector.  It was part of my 'incorrect' solution that allowed me
+to use C variables.
+
+
+
+Sat Dec 18 17:29:38 PST 2004
+
+TODO:  replace yylen incrementing logic with pointer subtraction when returning
+       parsed token.  No need to incrment a pointer and a counter.
+
+
+
+Sun Dec 19 14:33:21 PST 2004
+
+Completley rewriting memory module.  There is absolutley no preprocessor
+directives used, besides the required header inclusion operators.  Everything
+is more functional.  The static nature of things will be realized, hopefully,
+by the optimizing compiler.
+
+A few changes include a very tight group of functions used to actually use
+the garbage collected object system.  There exist two classes, arrays and
+vectors.  From these two classes, any number of types can be defined.  A few
+reserved types include the stack vector, pointer vector and finalizer array.
+Any one of these objects can be created on an uncollected static heap.  The
+only functions given are type and object creaters, object accessors and
+mutators and the garbage collector itself.
+
+Thinking that perhaps sub-classes should just go in separate heaps.
+Finalizers, stacks and pointers could then be dealt with during GC rather than
+also during all the other basic housekeeping that occurs during module use.
+
+
+
+Mon Dec 20 15:41:41 PST 2004
+
+Finalizers will not be a class but rather a one of a kind type like stacks,
+pointers and shadows.  Now there is but two classes to deal with and a few
+special cases.  When called, how and what is passed though?  Hmmm.  I need
+a way of IDing them and associating with them runtime data.
+
+GC details:
+
+Normally will want to move live objects from young to new using registers and
+mutated-old as the root set:  memObjectCopy(Heap new, Obj youngObject)
+
+Sometimes will move old and young objects into a new heap:
+memObjectCopy(Heap new & old, Obj youngObject)
+
+
+
+Tue Dec 21 20:56:20 PST 2004
+
+Need to think how I'm going to work out simple logic to handle both
+generational and non-generational collections.  Copying objects around from one
+heap or the other or both might be tricky.  Break time.
+
+
+
+Sat Dec 25 20:51:58 PST 2004
+
+Test every function.  Black box testing versus white box testing.  Black
+box is when you don't know, thus don't test?, the behavior of the code but
+what the results are.  Unit test (fast) versus functional test (entire system).
+
+OLD    YOUNG    NEW
+[]     [1234]   -       first time around, fill young
+[]     [1234]   [234 ]  gc into new
+(234)  (    )   -       move to old
+(234)  (abcd)   -       fill young
+(234)  (abcd)   (abcd)  gc into new
+(234)  (cd  )   -       move to young again
+
+
+
+Thu Jan  6 01:58:37 PST 2005
+
+Tracked a bug down for a few hours.  Silly me, forgot to keep track of stacks
+in the old heap during a young collection.  Think I'll keep them forever on
+the MutatedOldObjects list for now.
+
+
+
+Thu Jan  6 19:58:16 PST 2005
+
+MutatedOldObjects must not include objects pointing to objects in the old heap.
+Mutating a static object with a young object might be an issue.  Think about
+this.
+
+How to deal with stacks.  Don't want to treat them like normal mutable objects
+as they'll always be mutated.  Assuming a single threaded machine I'd just
+regard it as a 'static' object and include it in the root set.  I could have a
+stack area dedicated to all stack objects but as I plan to implement a 1000
+thread web server I'd like to see unused threads live in the old heap.  I need
+to get stuff down on paper.
+
+
+
+Sat Jan  8 15:00:08 PST 2005
+
+Think will allow only one stack to be pushed/popped.  Was considering
+comingling pointer objects with vector somehow but that would complicated the
+GC.  Unless I separated the mem module up into a module that just handles
+vectors and arrays with other object implementations as well as the GC.  Maybe
+just do like I did in the last memory module and have just one stack per
+memory object that can be pushed/popped onto but have other unusable stacks
+exisiting on the heaps.
+
+Mem.c is getting more complicated espeically with computing the root set in
+a generational setting.  It's simple when you have registers.  Now I have
+to keep track of mutated old objects and stacks in the old generation.
+
+Decided to get rid of, for now, all the special old heap mutation code.
+Instead I'll just scan the old heap ever GC.  At least I won't be copying
+things every time.  This will take care of old heap mutation, stacks and
+pointer mutations.  Finalizers might be tricky in that it might be the case
+that a finalizer is created before/after a complete GC.
+
+
+
+Sun Jan 23 10:18:18 PST 2005
+
+So the exiciting part is here:  The optimizing compiler.  Right now it's less
+optimizing and more just emit something correct.  The VM and instruction set is
+being developed along side.
+
+Sum expression:
+
+ Naive method is to eval each subexpression then syscall plus with the
+ parameter count which hopefully maches the function argument specification.
+ Better method is to keep a running sum somehow.  Opcode difference:
+
+ (+ 1 2 3)
+ Syscall method:
+   push:1 push:2  push:3 sys:+ pop:r1    pop:r2  add:r1r2 pop:r2 addr1r2 ret
+ Inlined method:
+   push:1 setr2:2 pop:r1 add   move:r1r0 setr2:3 add
+
+
+
+Fri Jan 28 02:20:26 PST 2005
+
+I don't like that vm.h needs obj.h to work.  Currently working on the scheme
+expression compiler.  Got + and * to compile somewhat OK.  Working currently
+on closures which I'm hoping can just be code blocks that are called which
+will themselves.  Combinations will also figure out a sys type versus code
+type and do the right thing (sysi or jal).
+
+
+
+Sat Jan 29 23:27:20 PST 2005
+
+As an expression is compiled, a pseudo environment will be passed around which
+will basically be the structure of runtime environment without the binding
+values of course.  I guess I can use the env register (r1c) and push/pop
+it's correct value accordingly.  Three types of variables exist:  global,
+free and bound.  Global vars are compiled into a "load binding" sort of a 
+(car binding) or *ptr if you will.  Bound vars will index a vector representing
+a local vector of bindings.  Perhaps these could be compiled into just register
+references if it can be proved that no dynamically bound expression will be
+evaluated thus capturing that current environment.  Perhaps a
+reverse-compile[tm] would counter this?  Free variables will be the most tricky
+and easily compiled during the existance of a block.  Was thinking in the past
+of tying that in with the GC which would compile free variables lookup's to
+global-like "load binding" opcode.
+
+Make adder example:
+(define make-adder
+(lambda (i) (lambda (x) (+ i x))))
+((make-adder 5) 9) =>
+ extend (x)  ; Env created  #(   #(TGE (i.5))   (x.9)   )
+ set r1 0
+ lookup 1  1 ; go up one environment and use the first binding's value
+             ; This instruction can be compiled into a LD BINDING_OBJECT
+ add r1 r0
+ local  1    ; consider the 1st binding in the local env.  Really a
+             ; (car (vector-ref env 1))
+ move r0 r1
+ return
+
+Unbound variables must be assumed to be undefined globals.  A compiler warning
+should present this situation.  I guess it could go ahead and compile it as a
+"LD binding_object" where the object is a special type?  Maybe compile it into
+a new code block that explains the warning and if resolved tweaks the original
+code into "LD correct_binding_object".  How fun.
+
+
+
+Mon Jan 31 01:22:20 PST 2005
+
+Woops.  Messing up stack while trying to save state.  Currently JAL is saving
+the code and ip offset on the stack right in front of the parameters I'm
+trying to pass to the code block in question.  Grrr.  JAL should do what it's
+supposed to which is write it's values to a register not the stack.
+
+
+
+Mon Jan 31 22:56:35 PST 2005
+
+Abstraction thoughts:  Want mem.c to be independent.  Want vm.c to rely and
+use mem.c.  This is because it needs a stack...although I could just give it
+a pointer var that should be initialized beforehand and is dealt with correctly
+pre/post GC by the obj.c module.  Hmmm.
+
+(vector-ref v i) =>
+ r1 <= *bindind_of_v
+ r0 <= *binding_of_i
+ r0 <= *(r1 + *r0);
+
+
+
+Tue Feb  1 21:55:49 PST 2005
+
+Realized that my current wscm compileris emitting code that won't work since
+the SET r0 #<INTEGER OBJECT> which is initially 0 will never reset.  Never
+saw the bug cause I've only run compiled code once.  If I ever completed
+closure code it would have surfaced.  Considering making the virtual machine
+object aware.
+
+ (* z (+ x y 1 2)) =>   3 + *x + *y;
+   SET r1 3
+   SYSI newInteger   ; Create a new number object.  Would like to do this in
+   LD #<BINDING x>
+   ADD r1 r0
+   LD #<BINDING x>
+   ADD r1 r0         ; Notices that the return value is a mathematical expr.
+   LD #<BINDING z>   ; and continues to mutate the returned sum.
+   MUL r1 r0
+   RET
+
+Perhaps the obj.c module should extend the virtual machine with a few registers
+that will act as general purpose arithmatic and function argument passing.
+This way I can emit opcodes that do things with 64 bit values then when done
+or need to pass around as persistent object convert them to heap based objects.
+
+
+
+Wed Feb  2 19:06:04 PST 2005
+
+Realized that ld needs an offset value and will probably be RISK like in that
+it'll add an immediate or register's immediate value with the register pointer
+before referencing.
+
+
+
+Thu Feb  3 01:26:52 PST 2005
+
+Tweaked the VM a bit to contain more MIPS like opcodes.  Still unsure how to
+structure the vm and obj modules with respect to one another.  For sure they
+both are based on the meme module.  The obj module might be phased out and
+merged with the wscm module I think.  Possibly wscm might become more an OS
+module and a compiler module *shrug*.
+
+
+
+Thu Feb  3 21:47:02 PST 2005
+
+The memory module will present an interface allowing for the creation and use
+of arrays of bytes and vectors of pointers as well as a few other hopefully
+usefull primitives including a stack, pointer, finalizer pointer and static
+non-collected arrays of bytes.
+
+The virtual machine interface will extend the memory module.  It will present
+the user with registers, garbage collected arrays and vectors and the ability
+to execute 'code' that's aware only of the basic memory module primitives
+(vectors and arrays).
+
+The object module will present an interface faciliting object creation.  The
+objects converened will be the scheme primitives and their muator and
+accessors.  The code object will be abstracted as well including an
+intermediate code stack where opcodes will be pushed/popped until ultimatly
+copied into a fixed length 'code' object.  The stack object will be mainly
+used by the vm and OS.
+
+
+
+Sat Feb  5 01:20:53 PST 2005
+
+Realize a problem with this 'new' method of object creation that expects the
+integer/real/c-string-addr to be in r1.  If a memNewObject fails, it could
+be the case that a well crafted number could fool the GC causing horrible
+results.  Grr.  Why did I do this to begin with?  Oh, to allow system calls
+in the VM to create objects as well.  Weird predicament.
+
+
+
+Sat Feb  5 11:15:37 PST 2005
+
+Want to be able to translate (+ 1 x (foo)) into:
+ Create new accumulating number object initialized to 1
+ Evaluate (foo) and accumulate its value
+ Lookup x and accumulate its value.
+ return
+So I guess New object calls should expect the values to be referenced by r1.
+ void objNewInteger (void) {
+    memNewArray(TINTEGER, sizeof(s30));
+    *(s32*)r0 = *(s32*)r1;
+ }
+Resulting in the assembly: 
+ MVI $1 #<INTEGER 1>
+ SYSI objNewInteger    ; Create new integer object in $1.
+ LDI $0 #<BINDING foo> ; Lookup foo and call...
+ JAL $0                ; ...hopefully foo is a code object.
+ ADD $1 $0             ; Mutate int object in $1 with obj values in $1 and $2.
+ LDI $0 #<BINDING x>   ; Lookup value of x
+ ADD $1 $0
+ MV $0 $1              ; Return value always in $0
+ RET
+
+
+
+Thu Feb 10 02:51:49 PST 2005
+
+I know better than to use local C vars to point at objects.  Bug in the VM
+where the instruction poitner is a C var and has the code object move during
+a syscall.
+
+
+
+Thu Feb 10 23:04:05 PST 2005
+
+Using registers as VM pointers.  The only case so far is the ip (register 1b)
+which initially constains an immediate offset that becomes the actual address
+in the code obect of the current instruction.  The pre/post GC function will
+massage it accordingly.
+
+
+
+Sat Feb 12 16:11:43 PST 2005
+
+When looking up a symbol during compilation and it's not found, I'm wondering
+if a fake binding should be set in TGE or if a syscall to find it and then
+recompile the code should be implemented?  Both are 4 code words in length.
+
+MVI $0 <binding>    vs.     MVI $0 <symbol>
+LDI $0 $0 #0                SYSI   <lookUp>
+
+Error catching could be handled by the lookUp function.
+
+That works.  I'm on a roll.  If was pretty trivial to implment once I
+realized the trouble I was having was that branch offset are relative.  Next
+to continue with local environment creation and searching.
+
+Currently a bug where a recursive function get stuck returning to someplace
+infintely.  I think it's a bad jal/ret register setup.  Probably in the
+emit lambda code.
+
+
+
+Sun Feb 13 02:19:53 PST 2005
+
+Using another register as a compiler state bit flag.  For now the only use
+I'm toying with is keeping track of tail and non-tail optimizing contexts.
+The compiled combination needs to know if it should jal or just j to the
+resulting code block.  Works well.  Save the flag bit on entering/leaving
+the compileLambda and compileBegin functions.  Will probably merge them and
+rely on macros to expand begin expressions into immediatley called lambda
+expressions.
+
+Initial speed tests using the following code result in this version being twice
+as fast as the currently running wscheme on k9.
+
+ (define x 0)
+ (define f (lambda ()
+    (if (= x 10000000) x (begin (write x "\r") (define x (+ x 1)) (f)))))
+
+   10.5s vs 4.5  -- looping 100000 times
+   105s  vs 52s  -- looping 1000000 times 
+   49    vs 26   -- looping 10000000 times without writing x
+
+Seems outputing is a tad bit slower in this version *shrug*.  It fell below
+twice as fast in the last case.  Could have been my rudimentary timing methods
+(listening to clock ticks and typing date in another window as fast as I could.
+
+Adding bounds check to memStackPush only added one second to the wall-clock
+running time of the 3rd test program.
+
+
+
+Mon Feb 14 14:40:16 PST 2005
+
+What used to be wscmDefine is now wscmTGEBind.  I think I finally understand
+r5rs's explanation of symbols, locations and values.  One bind's a symbol to
+a location that can contain a value or have a value assigned/set.  Voila.  One
+doesn't bind a value to a symbol which as  been my erroneous semantic
+description all along.
+
+
+
+Fri Feb 18 02:57:10 PST 2005
+
+Had to remember the problems I had before with compiled lambda expressiosn
+and what they must do at runtime.  I had originally compiled what I thought
+was acceptable inlined lambda/closure code.  But that didn't allow dynamically
+generated closures so I had to instead emit code that generated a closure.
+A closure is just a pair (code . env) that is dispatched on my just jumping
+to the code.  The closure itself is kept in r0 and is used by the code block
+to extend it's environment using the closure's stored environment.  Overall
+simple and straightforward.
+
+Currently have a bug (probably ran up against this before) where the tail call
+jump (rather than a jal) doesn't allow the following "pop env" to occur.  I'm
+going to have to extend the jump and link paradigm to saving not just the
+code/instruction offset but the current environment as well.  Going to sleep
+on it and see if there's a way around it (I doubt it).
+
+
+
+Sun Feb 20 13:37:08 PST 2005
+
+Bug cropped up from intial code that used tge rather than the enclosed
+environment in r2 when 'extending' a function with no formals.  Currently
+thinking I should work on optimizing the emitted vm code.  With regard to
+mathematical expressions, I'd like to minimize pushing/popping of the
+accumulating value.  To faciliate this I'll add to the set of compiling
+'flags' in-use register.  Any compiler function that emits vm code that
+uses them will emit push/pop at the right times.  Maybe it could be smart
+enough to emit opcodes that are based on unused opcodes.
+
+Took a peek at the compiled assembly that gcc spits out (gcc -S) specifically
+wscmAtomParse that switch()'s on a scanned token type.  So far the token
+type has been a byte.  Even without optimizations, gcc compiled the switch
+statement into a jump table.  Very nice.  When I changed the token type
+to an unsigned long, the jump table was replaced with a binary search scan
+for the proper jump location.  Nice but not nice enough.  I then 'switch()'ed
+on the type shifted right 24 as well as 'case'ed on constant values shifted 24.
+GCC accepted that and emitted once again a jump table:
+
+ switch (token>>24) {
+    case TINTEGER>>24 : ...
+    ...
+ }
+
+So I plan to implement types as high-byte valued types.  This will allow the
+construction of object descriptors to be just a bitwise 'or' of the type and
+size.  Seems to work OK.  Don't notice any performance benefit.
+
+ (define f (lambda (i) (if (= i 0) 0 (f (+ i -1)))))   (f 10000000)  (quit)
+   old: 44.41     new: 29.72
+ (define f (lambda (i) ([displayl,write] i "\r")
+                       (if (= i 0) 0 (f (+ i -1)))))   (f 10000000)  (quit)
+   old:  9.65     new:  5.15
+
+New version seems to be more efficient with output as it has concistently
+done better when outputting the count value in my test programs.
+
+Going to optimize bound-variable reference (local variables) lookups.  Possibly
+another good time for specialization.  In this case replace the environment
+lookup syscall with a (car (vector-ref env)) opcode equivalent:
+ LDI $0 [$16 + 5]
+ LDI $0 [$0 + 0]
+
+Results:
+ (define f (lambda (i) (if (= i 0) 0 (f (+ i -1)))))   (f 10000000)  (quit)
+ int fun (int x) { if (x==0) return 0; else return fun (x - 1); }
+ int main (void) { fun (10000000); }
+   old: 44.41s    new: 25.30s    guile: 46.7s    C: 0.15s
+
+Going to perform compile-time binding lookup.  I plan to pass around, during
+the compile phase, pseudo environments.  I should be able to get away with
+using the functions formals list IE:
+
+       +-> (TGE (1.x) (2.y) (#<syscall>.quit))
+       |
+  +-> (| . (y))
+  |
+ (| . (x y z))
+
+During compilation of variable references, a helper function will return
+the traversal depth and offset.  This will be compiled into a bunch of
+ LDI $0 $16 0 ~\
+ LDI $0 $0  0   > depth
+ ...          _/
+ LDI $0 $0  offset
+
+Or in the case of a global environment binding:
+ MVI $0 binding
+ LDI $0 $0 0
+
+A non-existant variable will be assumed to exist in the global environment and
+the specializeable syscall will be used instead.
+
+
+
+Mon Feb 21 02:17:57 PST 2005
+
+--OLD COMMENTS--------
+   /* Revert env after returning from function.  Optimize for
+      functions of 0 operands. */
+   //emit(LDLD); asm(&env); /* Copy parent env to r0. */
+   //asm(ST); asm(&env);   /* Save back into env.  I hope this works? */
+
+I believe local environments don't need the the variable bound.  A variables
+bound location is computed at compile time and unused after that.  I'm keeping
+it around for the all important 'macro' syntax which will support dynamic
+closures and run-time variable resolving.
+
+Fixed bug:  Didn't optimize the compilers psueudo environment when dealing with
+empty formals list.  This caused the compiler to think there were extra
+chains of environments when doing compile time searches for variables.  The
+result it seemed was a smashed global environment.
+
+
+
+Mon Feb 21 20:57:16 PST 2005
+
+I used my obscure byte2string function.  Works well.
+
+
+
+Tue Feb 22 13:10:15 PST 2005
+
+Added some simple 10ms interrupt handling code.  Prepended to each flow control
+opcode implmementation a check and branch to the interrupt handler:
+
+  sysi: if (interrupt) vmInterruptHandler();
+  DB("sysi");
+  ip+=8;
+  (*(void(**)(void))(ip-4))();
+  goto **(void**)ip;
+
+Also altered the way local environments are created and thus how variables
+are referenced in assembly.  Local env: ( {parent} (formals) val1 val2 ...)
+
+BENCHMARK:
+ (define r (lambda (i) (if (= i 0) 0 (r (+ i -1)))))   (r 10000000)
+ NEW: 23.87   OLD: 43.88   GUILE: 45.25
+
+
+
+Thu Feb 24 09:37:21 PST 2005
+
+Realizing that vm() is going to be called only once.  Basically if quit is
+ever called it should return and the entire program should stop.  Otherwise
+what's happening is interrupts are calling external functions to switch
+code contexts or OS functions like sleep, unthread and I/O.
+
+BENCHMARK: Using the 'build' system of (gcc (cat *h *c)).  Doesn't seem to
+matter that I optimized push/pop using an explicit pointer.
+ NEW-make: 21.19s
+
+Using the build system and not 'optimizing' push/pop with a pointer:
+ NEW-build: 20.34s
+
+I'm thinking gcc is optimizing the stack pushing/pushing:
+  *++(*(Obj**)stkObj)=item
+And my explicit attempt at optimization is incurring a performance hit when
+synchronizing the local stack poitner with the stack objects pointer.  Remember
+stack objects are vectors with the virst address being the address of the top
+most element in the stack.  The garbage collector only deals with the objects
+in the vector representing the valid stack.
+
+Non-build system with no stack optimization:
+ NEW 23.56
+
+
+
+Thu Feb 24 19:52:11 PST 2005
+
+#<SOCKET>     #<PORT>     #<STREAM>
+(open-socket) (open-file) (open-string)
+
+(read-char) (read) (write-char) (write) (display)
+(peek-char) (char-ready?) (eof-object?)
+
+
+
+Fri Feb 25 00:36:57 PST 2005
+
+I think an issue with syscalls specifically a call to sleep which results
+in interrupt like behavior without the pointer synchronization calls that
+should occur (like with all branches to the interrupt handler.)
+
+
+
+Fri Feb 25 11:18:52 PST 2005
+
+That was the problem.  Weird how I realized it was a vm problem almost
+instantly after staring at the wscm file for hours.  Solution was to call
+the pre/pst garbage collect function before and after the C call to 'system'
+function.
+
+Starvation.  I was removing threads from the ready queue right after the
+running pointer and inserting waking queues to the front of the ready queue.
+This was causing a starvation effect with the last thread in the ready queue.
+It was always being skipped over (I think).  Threads added to the ready queue
+are now inserted right after the running pointer.
+
+After getting simple threads with sleep support implemented with a background
+thread running that increments a count value in the xterm's title bar every 100ms:  NEW-MAKE: 26.2
+
+BENCHMARK:  NEW-make: 25.88   NEW-build: 21.83   OLD: 43.77
+
+
+The build binary crashes when I tried the same benchmark.  Bummer.
+
+
+
+Sat Feb 26 15:20:26 PST 2005
+
+Re-implementing debugging facility.
+
+Don't like that the scheduler must call vm's interrupt reset function.  Kind
+of breaking coupling?
+
+
+
+Sun Feb 27 23:30:57 PST 2005
+
+Found a werid bug that caused the make build binary to crash.  Seems the
+newThread function wasn't getting the initial tge environment pushed onto the
+new stack.  Quantum behavior caused it to work when I put the the right number
+of wscmWrite's around the offending code.  I still don't know why but when
+I changed the casting that occurs when the NewStack function initializes the
+first word in the stack (which should be a pointer to itself) it worked ok:
+
+    *(u32*)r0 = (u32)r0;   ->    *(Obj*)r0 = (Obj)r0;
+
+Will look into it more and maybe compile on k9 (updated gcc?).
+
+
+
+Wed Mar  2 22:19:14 PST 2005
+
+Going to maybe forgo r5rs macros in favor of a 'macro' operator that'll
+evaluate the expression as is (in the TGE) then pass the resulting expression
+to the compiler.
+
+(define let (macro (bindings . body)
+ `((lambda ,(map car bindings) body) (map cdr bindings))))
+
+
+
+Thu Mar  3 23:57:27 PST 2005
+
+Moved environment extend code from a syscall to assembled VM code.  The result
+is as follows (make build in both cases using 10M loop program):
+
+ Sys-call: 22.49sec   Asm: 28.89sec   Asm{hard-coded one-arg extend}: 25.57
+ Asm{normal make}: 32.57sec
+
+Although slower, I'm trying to implment as little as I possibly can as sys-
+calls.  Since I plan to emit native assembly eventually.
+
+
+
+Sun Mar  6 19:24:48 PST 2005
+
+Implemented blocking IO threads.  Well when reading a fd at least.  Current
+benchmark (10M loop):  Major overhead with the inlined (non syscall)
+environment extending code emitted with each lambda body.
+
+ make-build: 33.92
+
+
+
+Mon Mar  7 09:05:03 PST 2005
+
+In the middle of implenting blocking socket listener/accepters.  [sleep]
+(open-socket 8000) Will always return a port but will block on read/write
+until a connectionis made and input/output is available.  #eof signals it'll
+never open up.
+
+Works fine.  Lots of error conditions that'll upset wscm.  In the mean time
+moving forward with read/write-string blocking.  Plan on storing a buffer,
+desired number of chars and file descriptor on the blocked thread's stack
+(r0-r2).
+
+ (let ((s (open-socket 8000)))
+   (read-string 4 s) ; Blocks here => "helo" or #eof
+   (write-string "there" s)) ; Blocks here => ? or #eof
+
+ (define (read-char . s) (apply read-string (cons 1 s)))
+
+
+
+Wed Mar  9 00:57:33 PST 2005
+
+Mental notes:  Will compile unmutable primitive expressions two ways.  The
+first as optimized inline assembly.  The 2nd as a standard call to a primitive
+or closure.  I'll allow unmutable globals to be shadowed by local bound
+variables.  This I think would be a good tradeoff.  Haven't come up with a
+good mechanism that'll give, say set-car!, this dual identiy.  AT one point
+I considered having just one method of calling primitives and closures by
+wrapping primitives around closures.  Will think about in the future more.
+In the mean time I'm moving forward with socket and file I/O and correct
+thread scheduling.  Once working and most primitives re-instated as well as the
+macro dynamic-closure extension I'll be ready to upload to k9.  Modification
+of the VM and compiler can then resume.  I just want to get the new version
+up and running so I can get a new World system running on various machines.
+
+
+
+Thu Mar 10 19:44:10 PST 2005
+
+While trying to implement display as a scheme program based on 'serialize'
+and 'send' I found out that some inlined optimization was causing bad code
+to be emitted.  wscmCompileCombination emits code that saves the environment
+and link register and restores it just before the tail call code by emitted
+it before and after every expression in a block and then 'popping' the
+instructions in between that would be redundant.  This was causing some
+branches to loose their instruction targets.
+
+That wasn't the problem.  It was my use of the TAILCALL flag.  I had to
+clean up compileBegin and compileLambdaBody so that it saved the flags,
+disabled the TAILCALL flag, then reinstated flags for the last expression
+only.  What I was doing before was setting/unsetting it thus loosing the
+TAILCALL state.  Realized the problem sort of and verified by adding a harmless
+statement at the end of the begin blocks.  This caused the last statement to
+not be a wrongfully tail-optimized function call.  Otherwise the behavior I
+was seeing was some code in my display function being skipped like the final
+')' never being emitted.
+
+Code that filled the local environment with argument values was an emitted
+loop:
+      asm(ADDI1);  asm(-1);
+      asm(BEQI1); asm(1); asm(6*4);
+      asm(POP2);
+      asm(ST201); // *(r0 + (int)r1) = r2
+      asm(ADDI1); asm(-1);
+      asm(BRA); asm(-9*4);
+
+Now it's emitting the unrolled equivalent:
+      r3++;
+      while (r3--) {
+         asm(POP2);
+         asm(STI20); asm(r3+2);
+      }
+
+Woops.  One more TAILCALL bug.  Rather than reinstate the flags for the tail
+called expression, I needed to set the tailcall flag THEN reinstate the
+original flag register.  I'll get it eventually.
+
+
+ BENCHMARK: make-build: 31.34
+
+More TAILCALL bugs this time when implementing map.  Some code that calls
+wscmCompileExpression() needs to reset the TAILCALL flag like cons and car.
+Also if on the test expression which I will go and fix now.  There's actually
+more spots to deal with this like in define, set! and vector-ref.  I think
+this would be a good time to move the state passing into the C realm.
+
+
+
+Thu Mar 17 18:52:55 PST 2005
+
+Socket reads are blocking threads perfectly it would seem.  Opening always
+returns, and read blocks only when a byte count is specified.  Simple.
+Embarrassingly it would seem something I did a while back made the compiler
+emit bad code.  Looks like the saved environment is getting of sink.  Removing
+a function call from a tail position fixed it.  Probably something off after
+recoding the compile flag mechanism as C parameters.
+
+Small bug in CompileSetb seems some code I copied from VariableReference wasn't
+changed from a load to a store so a set! to a bound variable wasn't occuring.
+
+Another bug this time with:
+
+(define q
+((lambda (f i)
+     (set! f (lambda () (sleep 1000) (set! i (+ i 1))  (f)  ) )
+     (thread (f))
+     (lambda () i))
+ () 0))
+
+(define l (lambda () (sleep 500) (disp (q)) (return) (l)))
+(l)
+
+Trying to test out threads.  Was crashing wscheme when i put the sleeps in.
+Didn't crash when i turned on debugging.  Narrowed it down to DeBug statements
+in CompileBegin that when commented out (even with DB disabled) worked fine.
+Weird.  Randomly have wscmNewThread returning in r0 the thread id number object
+which got rid of the problem.  This blows.
+a
+
+
+
+Sun Mar 27 00:29:21 PST 2005
+
+Other bugs cropped up but fixed themselves.  Gave a bunch of new error checking
+features to the memory module.  Hacked in let and named-let in the compiler.
+Need to implement a parser as VM code then I can start porting over world or
+maybe creating it over from scratch?  Not sure about dynamic bindings.  I'll
+implement those later I guess.
+
+
+
+Mon Mar 28 14:18:11 PST 2005
+
+Changed sockets so that open-socket blocks the thread until a connection is
+established.  This seemed good in theory but when it had issues when I needed
+to scan a range of ports.  I can't easily discover an open port, without
+sleeping tricks, until a remote connection is established.  When open-socket
+didn't block but read/write did it created messy code.  I couldn't establish
+a connection without reading/writing a byte first.  It really seems like I
+need one more function in between connecting and IO.  Perhaps if the kernel
+had a background thread that massaged and monitored socket descriptors.  That
+would allow open-socket to be asynchronous but would require another function
+to cause a block until a connection was made.
+
+
+
+Tue Mar 29 16:55:47 PST 2005
+
+Chat with nate:
+
+i'll tell you how it works
+Telneting to port 7154 spawns a world process
+su world and ssh world@dv8.org run a script that ummm spawn a world process as well
+actually su and ssh and telnet all run the same script as user world
+just like old times
+Now this world process tries to open up a stream socket starting from port 7155 on up
+it's a listener socket...it waits for incomming connections
+Once that is done it then tries to open up a connection to any existing ports starting at 7155
+skipping it's own port of course
+This results in each world process creating a bidirctional socket to every other world process
+so anything that a process gets from stdin is sent to each one of it's socket connections
+nice
+the downside is you get a polynomial explosion of socket connections
+each new process creates n-1 more connections
+in order to correct (or eliminate) that condition, why not generate a repeater sconnection?
+2 reasons:  1> test wscheme networking  2> no single poitn of failure
+also the fact that we can connect directly to our process is a nice feature I think
+allows every process to itself be a server shoudl it choose
+in essence if someone wanted to be a repeater they could
+one of many underlying themese:  true peer to peer network
+nothing relies an anything else
+should be interesting when say 20 people connect
+especially with THIS interface :p)
+hehe well i've been working on the internal parser...very close to completion hopefully tonight
+that means i'll be able to send expressions and not just bytes
+which means i can start porting over stuff
+i'm tryig to come up with a UI that'll ummmm help guide yea right
+a UI that will prevent the users from expecting or desiring umm hard to explain
+so You know how people watned scroll back?
+sure
+Well imagine if the UI was 'upside down'  the map was at the bottom, the input line at the top and the text area scrolled down
+I'm thinking it would be less likely for people to say " i want to scroll back""
+Oh I don't think so...
+scrollback and timestamp are big on the wanted features list, as far as I know.
+Yup...cause people want to idle on irc.
+although I attempted to 'simulate reality' reality still influenced the users expectation
+Antoher idea was no text area, just text ballons above people's avatars
+In anycase i'm not wasting most of my life trying to implement some gimiky IRC
+so i'm pushing myself to come up #not-irc, if you will :)
+yeah
+Irc works great and it can easily be 'hooked' into World[tm].  That should be the goal for my trying to adapt to those wanting just another irc
+
+
+
+oh you mean the email I shot off just now?
+yea
+they'd get on and demand like answer to their homework or beg for ops
+then get made call everyone lamer, get klines and /quit
+get mad
+ahh the good ol days
+i agree i have conflicing desires
+BUT i found msyelf spending too much time making it like {irc/aim/your-chat-pgoram-of-choice}
+which was really lame casue well there's irc and aim and your-chat-program-of-choice
+i'm not good at being nice about taking steps back
+so i did the only thing that at least works for me
+hit the reset button
+the disruption was sudden and harsh, but within days people found a place to be  happy with their chat needs
+i hope irc ocntinues to be used for that.  a gateway will be created for the world I hope to continue building untainted by the tangental needs
+feel free to past into irc :)
+irc an daim will be just another 'client' for World
+ thomught
+shoudl work out yes/no?
+I
+
+a world untainted by tangential needs eh?
+
+who knwos what i was tyring to say
+tengential needs that could be satiated by other means?
+mthyi sb ad for not
+tso you think whatever you come up with next will free you from constructive criticism by your peers? hi s
+i love criticism, i hope they love my responses jsut as much...i need to make sure i have a publicially accessable design document to alway srefer too
+otherwise my constantly changing focus might consufe *cough* will confuse people
+nate> /who *
+nate ... online
+brian .. online
+___well it just sounded like you got tired of feedback deemed negative by your emotional attachment to your creation.
+Whatever the case, i really didnt' feel like I was able to provide what peopel wanted
+i knew people wanted at least an IRC behaving client
+ and <3
+just use set!
+heh
+and what about turkeys?
+
+a state of mind
+i think it'll work out with people back in IRC and a world gateway
+that'll free me to keep on with the experimentalness of world
+Well just don't confuse your motives for this mass reset. I don't believe you just got tired of offering a chat program... and I also don't believe you were affected by the users...and pricde people with a consistent UI and client
+in this case irc and aim
+nad possibly web as nate and I have been playing with today
+I just think you saw a better implementation and the only way to accomplish it was to start at sqauare one.
+sure, well my mind isn't able to cope iwth much
+i had to reset
+i wouldn't be able tohandle the feedback either
+as it's an incrmenetal process
+i think it worked out for the better
+is not eveyrone satifisfied with their online communcation needs now?
+eveni joshua is able to partake in the community
+hahhe's
+got his black and white client
+world, as it was, was ummmm impeeding progress both socially and umm scientifically
+how am I doing explaining myself?
+orgot 33mmaking itup as I go along {:
+is there any other way?
+hell no!!!!!!!!!!!!!!!!!!!!!!!!!MUTHA FUCKA!
+did you s?e that?
+yes.
+hahhaa
+
+well, I definitely realize that emotions got raised  to a level where they're ...
+um uncomfortable ... but for the future of world development *(this is nate btw)
+it's probably best to make sure the errorchecking, garbage collection, socket implementation etc...
+are a solid foundation to work from
+
+Well i'm making sure it's not all in myhands anymore
+peopel will run their own process and have controll of it's behavio
+You know, everyone was fine until people started getting confrontational about silly things. My name was black. Big fucking deal! deal with it or logout. You haSOMEONE ENTERS WORLD.                                                           tarted. Sure...and like i always said it was a client issue...not hard to tweak your screen or terminfo
+i was never tooo ummm non-ummm providing
+if i saw a solution to someones problem I brought it to their attention
+if there was nosolution i tried to provide, if not immediately eventually
+subconsciously worked on things and made provisions for people
+dammit i made  it black
+:o(
+
+
+i'm on my laptop at home
+first time world has been multiple machines
+you are all privy to this special moement
+braek out the champagne
+who suggested this?
+SOMEONE ENTERS WORLD.
+
+hawt
+SOMEONE ENTERS WORLD.
+boo
+SOMEONE ENTERS WORLD.
+hi
+SOMEONE ENTERS WORLD.
+mhoo
+ello
+two processes on my laptop
+both talk to everyone on k9
+trippy
+donedone
+somethithnga impossible with a file based IPC
+yeah
+glad I kicked you all off
+       *cough* glad I booted ALL YOU TRAITORS OFF!
+OMG I made you guys traitors!
+now someone give me ops on #not-world
+are you IN #not-world?
+no
+oh ... i see your joke now
+and >> Nate suggested it
+
+
+
+Thu Mar 31 13:53:53 PST 2005
+
+Took a few days to get an internal parser up and running.  Tricky implementing
+it totally in machine language.  Doing so prevents the need for a C based
+parser, but having an easy to understand C based parser and scheme based might
+be a good choice also.
+
+Currently working on eval.  I'm brain dead now so another time.  Not sure how
+to implement it.  It will probably have to be a combination of syscalls and
+compiled expression syntax.
+
+Eval and read working well.  Need to implement ungetc with all sockets.  The
+parser just throws away chars it needs to unget.  So for now it can only parse
+(blah ).  My implementation of ungetc will make char-ready trivial as I'll just
+be able to verify there's a char in the ungetc position.
+
+Overall I'm concerned about the lack of error checking and handling.  A few
+syscall and compiler functions check for proper types and formal parameter
+counts.  There's no mechanism for graceful exit of threads though.
+
+
+
+Mon Apr  4 01:08:45 PDT 2005
+
+I need to formalize what should happen when parsing from a file and socket.
+Obviously reading a socket should block but a file MIGHT have stuff added
+later on.  Perhaps I should keep file I/O simple this time.  I was considering
+leaving out file I/O and relying totally on sockets for I/O.  But i'd sill
+have to implement long term storage somewhere.  A DB?
+
+Want to be able to treat a string and file descriptor as a stream.
+
+
+
+Mon Apr  4 13:46:14 PDT 2005
+
+Need to implement character push-back on ports.  Wondering if I should comingle
+strings and character handling when it comes to ports.  Have a recv and
+read-char perhaps.
+
+
+
+Thu Apr 14 00:58:53 PDT 2005
+
+World maps 2d XxY grid of Z vectors:
+
+#( #( #( #( Top most cell is first index in Z vectors.  To render just first
+3  3  1  1) element of each y,x coordinate.
+3  1  1)
+1  1)
+1)
+-- Building -------------
+    ++++++++++
+  //++......++
+//##++......++
+####++......++
+[]##++++++++++
+##//######//
+//##[]##//
+    Sh
+
+-- Tree -----------------
+    **
+  ******
+  //**
+//   Sh
+
+
+
+Sun Apr 17 01:16:59 PDT 2005
+
+So map rendering will occur in stages and be handled by various threads mainly.
+At the lowest level will be a canvas that is preiodically rendered to a
+viewport/the terminal.  The canvas will be a very simple data structure
+allowing fast and efficient stream of characters out to the terminal.  Since
+the canvas will represent a small area of the entire map, it will need to also
+handle small changes easily like avatar/entity movements and upates.  IE:
+an entity moves causing a change in the map area causing a change on the canvas
+causing a change to the viewport/terminal.
+
+Will this be helpfull when non-cell sized areas are updated?  I'm thinking
+specifically light sources.  A light soure will have it's lit area move around
+requiring an area on the map to be updated and thus the canvas.
+
+
+
+Sun Apr 17 19:40:02 PDT 2005
+
+Currently have code for viewport rendering, canvas and cell-maps.  Cell maps
+are 2d vectors of vectors of cells.  The cells represent all the cells along
+the z-axis line at a y,x location in the general world space.  Not sure what
+to call the 3x3 cache of maps.  For now MapCache but maybe workspace or
+something.
+
+
+
+Thu Apr 21 02:06:48 PDT 2005
+
+Thought I was being slick by rendering glyphs to the canvas but that ruined
+animated glyphs.  Duh.
+
+
+
+Fri Sep  9 00:52:54 PDT 2005
+
+What's weird about write not blocking is when it fails and wscheme assumes
+it doesn't it'll just hang (in the case of my threaded IPC evaluator) or
+silently go on having parsed bad data.  I'd like to see the existing code
+catch it before I implement threaded blocking output.
+
+
+
+Mon Sep 12 22:09:31 PDT 2005
+
+Implemented an assembly module.  For now all it handles apart from the
+original vm module assembler are 'labels' and 'address'.  The former are
+branch address and the later place holders for branch opcode address offset
+locations in the byte code.
+
+   BNE 10 ADDR "skip"
+   MV10
+   LABEL "skip" ADDI1 1
+
+The values used for labels and address just need to be the same numeric
+constant.  I chose to use use C strings that take advantge of string tables
+during compilation so are pretty much guaranteed to be the same value.
+
+The method current makes a single pass over the assembly emitting vm
+instructions.  It keeps track of the labes and address in two separate lists.
+It then passes over the addresses, finds the matching label and updates the vm
+code offset value for the instruction.
+
+I might make it pass twice over the assembly so that the resulting code object
+doesn't have empty bytes as a result of just making its size the same as the
+assembly stack count.  This would also remove the addresses list.
+
+
+
+Wed Sep 14 21:02:56 PDT 2005
+
+Now that the assembler module can resolve branch addresses and labels, I'm
+considering handling the loading of registers from data within the program:
+   MV1616 ADDR "data"
+   DATA "data" 69
+
+
+Fri Sep 16 01:32:46 PDT 2005
+
+Need to implement load.
+
+
+
+Sat Sep 17 17:47:10 PDT 2005
+
+Sort of implemented load as a scheme defined function.  Which means it must
+be loaded first.  Messy.
+
+Would like to come up with a tricky way of checking if a value is between
+a particular range in as few RISC opcodes as possible.  Maybe something
+bit-twiddling.  Hmmm.
+
+Given: l<h, m
+Return: l<=m && m<=h
+ge a m l
+le b m h  
+and a b
+
+Axiom:  h-l + m-h == m-l    [l    ]m[    h]
+
+Subtract l from m and h: (m-l < h-l)
+sub a m l
+sub b h l
+le  a a b
+
+Subtract (h-m) from h:
+
+
+
+Wed Sep 21 02:40:13 PDT 2005
+
+And and or syntax primitives pretty trivial to implement.
+
+
+
+Sun Oct  9 16:27:46 PDT 2005
+
+To stir things up going to implement process queues as doubly linked lists.
+Just to stir things ups.
+
+When moving threads around the three queues, the scheduler will need to make
+sure not to skip over queues in bad ways or think it's looking at a runable
+thread after moving or removing ready threads.
+
+
+
+Tue Oct 18 19:45:08 PDT 2005
+
+It's not trivial to implement the special form quote expression.  It needs
+to make sure the expression is of the form (quote . {list}).
+
+
+
+Wed Oct 19 00:23:17 PDT 2005
+
+The simple peer to peer code now includes a semaphore with each bi-directional
+socket.  Small 'bug' initially that resulted in semaphores on closed sockets
+not being relases.  close-semaphore to the rescue.  For some reason I like
+implementing objects as ports including semaphores:
+
+(close-semaphore (open-semaphore 1))
+
+
+
+Sat Oct 22 20:22:13 PDT 2005
+
+I created three threads that dump an equal length string to stdout.  A
+starvation issue still exists in the scheduler.  When I shorten the string
+lengts to around 5 or less the starvation issues disappears.  It must have
+something to do with the I/O blocking of threads.
+
+
+
+Sun Dec  4 18:47:12 PST 2005
+[Terminal] <-- [Windows] <-- [Map, Info, Text, Dialog Boxes]
+
+
+
+Sat Dec 17 16:35:08 PST 2005
+
+make build ; time wscm l.scm [10M loop] => user 34.30sec
+
+
+
+Wed Jan 11 20:36:04 PST 2006
+
+I'd like to keep the 3dness of the map:
+
+                    [][][][][][]
+Inside  ()()()()    []********[] Outside on roof.
+        ()Sh        []Sh******[]
+        ()  _-()    []****-_**[]
+        ()()()()    []********[]
+                    [][][][][][]
+When under a cell, find cells attached to the one above and make those and
+all above them invisible.
+
+
+
+Sat Jan 14 22:55:00 PST 2006
+
+DOORS:   Closed     Open
+        [][]--[]  [][]| []
+        []    []  []    []
+        []    []  []    []
+        |     []  _     []
+        [][][][]  [][][][]
+
+THE RENDERING PIPELINE
+
+    map*---->  field   --->  canvas ----> viewport
+               entities*___7 lights ___/ 
+                             cells  __/ 
+Maps are nicely stored groups of cells.
+Field's are groups of modulo-cached[tm] maps
+Entites are active objects like avatars or missles.
+The canvas is the projected and visible (top) cells.
+Lights along with the cells give the actual characters to render.
+Viewport is what is actually written escape codes and characters.
+
+
+Fri Feb 10 01:37:39 PST 2006
+
+Columns of cells will include the starting height of the first cell.  All
+potential cells below and obove the explicit cell set will be the bottom
+and top most cell.  Example group of cells starting at Z coordinate 10
+and ending at 14.
+
+   #(10 1 2 2 3 0)
+
+This becomes logically: 1 1 1 1 1 1 1 1 1 1 1 2 2 3 0 0 0 0 0 ...
+
+
+
+Thu Apr 20 22:47:16 PDT 2006
+
+Would like to optimize tail calls a bit more by just mutating local vars
+with the new values and jumping.  The body of (\ (x) (display x) (loop (+ x 1)))
+ becomes:
+
+0000 ldi$5$0 #<1>
+0002 mvi$0 ()
+0004 blti$1 1 0015
+0007 beqi$1 1 001b
+000a mv$3$0
+000b pop$2
+000c sysi 8060600
+000e addi$1 -1
+0010 bnei$1 1 000a
+0013 bra 001b
+0015 push$0
+0016 addi$1 1
+0018 bnei$1 1 0015
+001b push$0
+001c addi$1 3
+001e sysi objNewVector1()
+0020 sti$5$0 #<0>
+0022 mvi$3 (x . (() . ()))
+0024 sti$3$0 #<1>
+0026 pop$2
+0027 sti$2$0 #<3>
+0029 pop$2
+002a sti$2$0 #<2>
+002c mv$16$0
+002d push$1d
+002e push$1e
+002f push$15
+0030 ldi$0$16 #<2>
+0032 push$0
+0033 mvi$0 (#CLOSURE<CODE:402c9b44 ENV:402ad7e0> . display)
+0035 ldi$0$0 #<0>
+0037 mvi$1 #<1>
+0039 brti$0 88000000 0043
+003c brti$0 83000000 0048
+003f sysi 8064c00
+0041 bra 004b
+0043 ldi$0$0 #<0>
+0045 sys$0
+0046 bra 004b
+0048 ldi$2$0 #<0>
+004a jal$2
+004b pop$15
+004c pop$1e
+004d pop$1d
+004e mvi$1 1
+0050 sysi 8060090
+0052 mv$1$0
+0053 push$1
+0054 ldi$0$16 #<2>
+0056 pop$1
+0057 add$1$0
+0058 mv$0$1
+0059 push$0
+005a mvi$1 loop
+005c sysi 8064cc0
+005e mvi$1 #<1>
+0060 brti$0 88000000 0069
+0063 brti$0 83000000 006d
+0066 sysi 80635b0
+0068 ret
+0069 ldi$0$0 #<0>
+006b sys$0
+006c ret
+006d ldi$2$0 #<0> ; Check if current code block is new one.
+006f j$2
+0070 ret#405394e0
+
+
+
+Fri Apr 28 07:25:43 PDT 2006
+
+THE RENDERING PIPELINE
+
+    map*----->  field  -->  canvas ----> viewport
+ entities*_/                lights ___/ 
+                            cells  __/ 
+
+Back space is lame or at least not very elegant.  Having to cursor back, draw
+draw over then cursor back again is ugly.  What if you could switch the
+direction of the cursor's movement?
+forward:   h   he  hel  hell
+        ^   ^    ^    ^     ^
+backwards:hel  he   h    
+             ^   ^   ^  ^
+forwards:a
+          ^
+
+
+Thu May 11 23:35:44 PDT 2006
+
+In the middle of working on ipc.scm.  It will abstract the real-time
+IPC connections between World processes.  It will favor a client server star
+topology but will easily switch to peer-to-peer should the server be
+nonexistant.  The server will always exist on a fixed port (7155).  Peers
+will have 7156 and on to listen to any incomming connection and will only
+connect to peers on ports lower than itself.  All messages a peer recevies
+will be forwarded to each of it's peers or parent.
+
+In the middle of debugging spawn communicator.
+
+
+
+Sat May 13 22:58:57 PDT 2006
+
+How to deal with errors?  Reinstate a stored continuation?  Kill thread?
+Internally pass an 'error' object that will eventually be caught (exception?).
+An error can occur during runtime or compiling (also mostly at runtime).
+
+
+
+Thu May 18 23:00:40 PDT 2006
+
+Adding call/cc.
+
+
+
+Sat May 20 23:55:00 PDT 2006
+
+Adding call/cc.
+
+
+
+Tue May 30 11:54:06 PDT 2006
+
+[7155]--o[7156]--o[7157]
+
+[7155]-----------o[7157] 7156 disconnects
+
+[7155]-----------o[7157] disconnects and 7156 assumes that port
+
+[7155]-----------o[7157] 7156 connects
+      \--o[7156]        
+
+The problem here is current when a socket connection is made, the listener
+dies and must be recreated.  There's a chance another process will take that
+port thus invalidating the requirement that parents are of a lower socket:
+
+[7155 new]    [7157]o-----[7158 was 7155]
+          [7156]o-------/
+
+I guessi it's time to desimplify my socket implementation so that sockets
+retain their listeners indefinitely.
+
+
+
+Sat Jun  3 23:28:37 PDT 2006
+
+Internet sockets streams will be created with two functions:  open-socket
+and open-stream.  The first will create a socket object which will be passed
+to open-stream.  This will actually block until a connection is made and
+return a port object.
+
+
+
+Sun Jun  4 02:33:35 PDT 2006
+
+Strange output bug:
+
+ <k8to> :(+ 2147483647 1)
+ <World> -./,),(-*,(
+
+Seems the absolute value of MININT doesn't really exist so C just silently
+does nothing.  The result was my algorithm for converting a number to any
+base string (serializeInteger) broke and spitout strange characters.
+
+
+
+Tue Jun 13 22:57:37 PDT 2006
+
+IPC needs to be double checked for correctness but at least the p2p graph
+can form and stay consistent.  Specifically there are three threads that
+need to be synchronized or simplified.   World works again.
+
+The error handling needs to be worked on more.  Currently it just calls
+a continuation in TGE.  It should resolve whichever error is in the env
+path.
+
+
+
+Tue Jul  4 01:17:47 PDT 2006
+
+Don't want to add special error handling to each compilation function.
+Pondering a pattern matching implementation.  Either the pattern and pattern
+elements are returned (in a list?) or error.  Error handler will be generic
+for syntatic forms.  Currently special forms are special cases in the compiler
+but would like to make them environment objects like primitives, closures and
+any other applicable object.
+
+(car x)              + (car ?)        =>  (x)
+? (lambda (x) (* x x)) + (lambda * *) =>  ((x) (* x x))
+(rem whatever here)  + (rem *)        =>  (whatever here)
+(+ 1 2 3)            + (+ ? *)        =>  (1 (2 3))
+
+Want to be able to parse the following:
+() x (x) (x y) (x y . z)
+
+(define [() s (s . ()) (s . *) (s * . s)]
+
+Am really parsing trees:  (s . [* () s])
+
+
+Fri Nov 28 08:51:49 PST 2008
+
+Recently added vector bounds checking at the assembly level.  Trying to track
+down a crash that occurs when windows are toggling while other windows are
+printing.  I don't get much information from the normal debugger or dumps.
+I plan to add to every compiled code block the originating scheme expression.
+
+
+
+Fri Nov 28 22:01:44 PST 2008
+
+This window bug is a pain.  When I hit ctrl-l to refresh the screen and quickly
+move, I can get the map window to render incorrectly.  Seems somehow when
+I refresh a window and also try and draw to it things get out of whack.
+Specifically the window's idea of where the cursor is.  This seems so because
+the map window will start to scroll what it's drawing.
+
+There's a lot of mutation going on in the window class.  I should localize
+it.  Specifically not set! the cursor position everywhere.  Instead each
+function should keep a copy for itself then set it at the end.
+
+
+
+Sun Jun  6 00:17:53 EDT 2010
+code r1c  retcode r1e  stack r1f
+
+call memDebugDumpHeapHeaders(0)
+call wscmWrite(r1f, 0, 1)
+call vmDebugDumpCode(r1c, stdout)
+call sysDumpCallStackCode()
+
+call memDebugDumpYoungHeap(0)
+call vmDebugDumpCode(r1c)
+call vmDebugDumpCode(r1e)
+
+450/8 = 8a
+1358/8 = 26b
+370/8 = 6e
+
+ip =0x7ffff539bb48
+(define (field-ref z y x)...)
+((column elements) (set! column (field-column y x)) (set! elements (columnRef column z)) (if (pair? elements) (car elements) elements))
+
+rip=0x7ffff509ca10
+((top) (canvasCellSet! y x (cell-ref (field-ref top y x))) (canvasCellHeightSet! y x top))
+
+stack=0x7ffff4fc7720
+Stack 0 8200000000000007 7ffff4fdc850
+Stack 1 85000000000000ab 7ffff4fdc2f0
+Stack 2 0000000000000000 000000000450
+Stack 3 8200000000000007 7ffff4fdc850
+Stack 4 85000000000000ab 7ffff4fdc2f0
+Stack 5 0000000000000000 000000000450
+Stack 6 0a00000000000008 7ffff500fa90
+Stack 7 0a00000000000008 7ffff500fa80
+Stack 8 8200000000000007 7ffff4fdc850
+Stack 9 85000000000000ab 7ffff4fdc2f0
+Stack 10 0000000000000000 000000000450
+Stack 11 8200000000000004 7ffff4fdbab0
+Stack 12 8500000000000292 7ffff4fda618
+Stack 13 0000000000000000 000000001358
+Stack 14 8200000000000004 7ffff4fda5f0
+Stack 15 8500000000000020 7ffff4fda4e8
+Stack 16 0000000000000000 0000000000d0
+Stack 17 0000000000000000 000000000000
+Stack 18 0000000000000000 000000000000
+Stack 19 0000000000000000 000000000000
+
+0x7ffff4fdc2f0=
+((z y x cell) (field-set! z y x cell) (canvasRender y x) (viewportRender y x))
+r0 (code object) should be 7ffff5018128
+but r0 is 7ffff5ef0880
+
+Wed Jun  9 00:55:57 EDT 2010
+
+The random World startup crash I first need to identify and create a test that
+repeats the issue so a regtest can be created.
+
+7ffff7407008[3]=7ffff5fab410
+7ffff5fab410 0a INTEGER   8 (7f 0 0 0 0 0 0 0)
+
+0xd8/8=1b
+0xac0/8=158
+
+
+Sun Jun 27 19:18:40 EDT 2010
+
+PROBLEM POINTER
+7ffff5fab410
+
+YOUNG HEAP
+7ffff7407008 82 VECTOR    4 #(7ffff531a1e8 7ffff531a1f8 7ffff534a2b8 7ffff5fab410)
+7ffff7407030 83 CLOSURE   2 #(7ffff53170b0 7ffff52ef310)
+7ffff7407048 82 VECTOR    4 #(7ffff52ef310 7ffff534a400 7ffff7407008 7ffff7ff6008)
+7ffff7407070 82 VECTOR    7 #(7ffff53543b0 7ffff53d8d00 7ffff7407008 7ffff534a418 7ffff5314798 7ffff534a428 7ffff7ff6008)
+7ffff74070b0 83 CLOSURE   2 #(7ffff53d8d18 7ffff7407070)
+7ffff74070c8 82 VECTOR    3 #(7ffff7407070 7ffff55df458 7ffff74070e8)
+7ffff74070e8 83 CLOSURE   2 #(7ffff55df470 7ffff74070c8)
+7ffff7407100 82 VECTOR    5 #(7ffff74070c8 7ffff55f02c0 7ffff534a418 7ffff534a428 7ffff7ff6008)
+7ffff7407130 0a INTEGER   8 (4 0 0 0 0 0 0 0)
+7ffff7407140 0a INTEGER   8 (3 0 0 0 0 0 0 0)
+7ffff7407150 0a INTEGER   8 (1 0 0 0 0 0 0 0)
+7ffff7407160 0a INTEGER   8 (1 0 0 0 0 0 0 0)
+
+
+
+Sat Jul  3 15:57:10 EDT 2010
+
+Functions now exist for debugging code block and the stack.  What needs to
+happen is automatic dumps of the stacks, threads, blocks and VM structures
+and stored locally.
+
+World will crash when user is idle and cell animation is enabled.  Currently
+water is the only animated cell.  After a while a C segmentation fault
+occurs duing a syscall to sysNotEquals.  Something is corrupting the stack
+which is expected to have the arguments to != passed.  The NewThread C
+function clobbers register 2 which I didn't save during the periodic
+schedule call function.  We'll see what happens.
+
+Something is corrupting at least registers R1 and R2 with immediate values.
+In this case 0x7e and 0x2 respectively.  I have a feeling it's with parsing
+and I/O scheduling.
+
+CURRENT BLOCK                           TERMINAL:gputc
+Stack 2 850000000000023f  7ffff4c78e60  WINDOW:PUTCHAR first let block
+Stack 5 8500000000000242  7ffff4c1b3d8  WINDOW:PUTCHAR
+Stack 8 85000000000002fc  7ffff4bfb5b0  WORLD:WinMapPutGlyph 
+Stack 11 8500000000000194 7ffff4c11100  WORLD::viewportReset first let block
+Stack 14 85000000000001ae 7ffff4c10358  WORLD::viewportReset
+Stack 17 850000000000009d 7ffff4c0fe48  WORLD:cell animation thread
+
+
+
+Fri Jul  9 20:05:34 EDT 2010
+
+call memDebugDumpYoungHeap(stdout)
+call memDebugDumpHeapHeaders(0)
+call sysDumpCallStackCode()
+call vmDebugDumpCode(r1c, stdout)
+
+call vmDebugDumpCode(r1e, stdout)
+call memRbuFDump()
+call wscmDumpEnv(r16)
+call wscmWrite(r1f, 0, 1)
+call wscmDumpTGE()
+
+
+
+Sun Jul 11 20:23:04 EDT 2010
+
+Improved dumps of the stack which now include each pushed code string and
+their environment chain.  I have narrowed down the current World idle crash
+issue to a courrupted vector.  Specifically the CANVAS global variable's
+vector of vectors is becomming corrupt which results in invalid object
+pointers being passed to map rendering functions eventually.
+
+I believe the issue is either with the garbage collector or atom mutators.
+
+   [ Glitter as presented by Alex on Facebook .~.*.`~;`*'~ `.'*~` ]
+
+After a full garbage collection the CANVAS vector seems to be corrupt.
+I need to verify it is indeed after a full collection.  I'll verify using
+the new internal ring buffer debug mechanism.
+
+
+
+Mon Jul 12 10:45:16 EDT 2010
+
+The corruption is occuring during a regular (young only) garbage collection.
+I will verify the CANVAS object before and after each GC now.
+
+
+
+Wed Jul 14 03:25:24 EDT 2010
+
+Nothing was wrong with wscheme.  The issue was a conditional that queried
+time directly in the test expression then called time again in the consequent
+expression.
+
+The byproduct of the debugging are decent environment dumps.  One call will
+dump the current environment, caller environment then the remaining
+environments pushed to the stack excluding the global environment.
+
+
+
+Fri Jul 16 00:34:32 EDT 2010
+
+Program received signal SIGPIPE, Broken pipe.
+0x00007ffff78c9c20 in __write_nocancel () from /lib/libc.so.6
+(gdb) bt
+#0  0x00007ffff78c9c20 in __write_nocancel () from /lib/libc.so.6
+#1  0x0000000000403e22 in wscmSend () at sys.c:841
+#2  0x0000000000408f30 in sysSend () at sys.c:1990
+#3  0x000000000040fa3d in vmVm (cmd=18) at vm.c:510
+#4  0x000000000040145b in main (argc=2, argv=0x7fffffffe658) at wscm.c:101
+
+This occurs to the world instance who's avatar is moving when another world
+process quits.
+
+
+
+Sun Jul 18 12:36:12 EDT 2010
+
+I noticed continuations were broken.  I use them as exception calls during
+runtime errors such as car/cdring a non-pair.  When calling heap dumps I
+noticed partial output and strange crashes.  I narrowed it down to fprintf
+failing due to this errno value 11 "Resource temporarily unavailable."  If I
+skip the call to disable I/O blocking:
+
+   fcntl (0, F_SETFL, fcntl(0, F_GETFL)|O_NONBLOCK);
+
+then the heap dumps work correctly.  My assumption was this unblocked the input
+file descriptor, not the output or error output descriptor.
+
+
+
+Thu Jul 22 03:12:35 EDT 2010
+
+* Crash when trying to evaluate "Buttons" in World.
+* Resizing the screen during login will result in an object dump but won't crash.
+
+I'm getting a segfault in a call to memStackObject.  The stack is located in
+the old heap.  Dumping the old heap reveals many unused space which shows up as
+multiple "7ffff46b3ff0 00 BASEARRAY   0SIMPLETON" objects.
+
+
+Loading times for initializing canvas and loading map
+2 and 8 seconds.
+1 and 4 seconds.
+
+Attempting to increase efficiency by cached a few integers before runtime.
+
+
+
+Fri Jul 23 11:35:33 EDT 2010
+
+Crashed when writing the Buttons object to World's console window due to an
+insufficient stack size.
+
+
+
+Sat Jul 24 10:51:03 EDT 2010
+
+The Terminal code doesn't handle the bottom right corner very well.  Native
+terminal scrolling can occur.  The bottom right corner position needs to be
+handled specificially by the Terminal object.
+
+
+
+Mon Aug  2 16:48:59 EDT 2010
+
+Currently the field size is the same size as the canvas.  I've yet to implement
+a dynamic field and canvas or a map abstraction.
+
+
+
+Fri Aug  6 02:52:22 EDT 2010
+
+ * Create I/O that supports both file descriptors and FILE pointers.
+ * Continue working on star toplogy IPC.
+ * Ultima town-detailed map.
+ * Map cache
+ * Cats that change talk color.
+
+
+
+Tue Aug 24 03:16:02 EDT 2010
+
+Map Agent.  Rendering hierarchy:  ultima.map -> field -> canvas -> viewport.
+
+The viewport is constantly being painted using the cells from the canvas
+structure which is a 2d vector of visible cells.  The visible cells are taken
+from the field structure which is a 4d vector of cells.  The field will be
+broken up into sections that will be individually loaded if the avatar
+moves out of bounds of the field area.  For now the field will be sectioned
+into quarters.
+
+
+
+Fri Aug 27 02:44:09 EDT 2010
+
+Glyph colors are treated in some cases as separate foreground and background
+colors.  Eventually I'd like to handle 256 color escape sequences.  Not sure
+if how I should encapsulate the color and if I should separate foreground and
+background colors.
+
+Currently working on refactoring glyphs and color atributes for window objects,
+entities and maps.  Colors were originally just 7 bit numbers.  256 color mode
+escape sequences allow 256 unique color values for both foreground and
+background.
+
+
+
+Wed Sep  8 02:04:27 EDT 2010
+
+Lord Neko nothing dead
+Lord Neko how about a zombie
+Lord Neko i'm reworking the IPC
+Lord Neko star topology
+Lord Neko then a map server/agent
+Lord Neko then map lighting
+Lord Neko then some NPCs
+Lord Neko i need to get this all in by code complete
+Lord Neko and unit tests
+Lord Neko and regtests
+Lord Neko and IBM keeps calling at 6am
+WORLD Richard is present in world
+WORLD Guest is present in world
+Lord Neko hacker!
+Lord Neko my name is Lord Hacker
+Lord Hacker bow to my ping flood
+alwaysScroll #f
+WORLD Guest says *All Worldlians Want to Be Borned*
+WORLD Guest exits
+Lord Hacker oh dang
+Lord Hacker crazy hackers
+Lord Hacker Lord Lowerd
+Lord Hacker word
+Richard so, are you going to use a ray-tracer for the map lighting?
+Richard gaah... resized the termnal again!
+Lord Hacker no it'll be distanc from light source
+Lord Hacker simple fornow
+Lord Hacker although since there aren't that many pixels anyways itshouldn't take that much
+Lord Hacker ok i'll add "window history" to the todo list
+
+
+
+Thu Sep  9 14:53:23 EDT 2010
+
+oO "Citigroup Inc. (NYSE:C) has raised its price target on Altera Corp. (NASDAQ:ALTR) Thursday, from $34 to $36."
+ *drool*
+Brian yea i saw that this morning
+Brian hopefully before the end of hte ear
+Brian long term capital gains DRoOl
+Brian working on chat history buffer
+Brian just 4u
+Brian *wink wink*
+Brian i'm not sure if I should extend the window class or augment it
+Brian i'm thinking the window should support both direct character drawing and "cooked" line processing
+Brian maybe even go so far as to support editor like functionality
+Brian insert line, delete line, scroll window, append/del char
+Brian i'm liking this idea
+
+
+
+Mon Sep 13 13:24:28 EDT 2010
+
+block 54 43
+block 54 44
+block 55 43
+block 55 44
+block 53 42
+block 53 43
+block 54 42
+
+Initial blocks loaded when World starts up.  Should only be four but the
+calculation to determine which blocks to load doesn't consider the
+
+
+
+Wed Sep 15 01:00:14 EDT 2010
+
+Rewriting the IPC module with properly abstracted queues and a better organized
+class.  Each IPC node will once again have a listener socket but it will close
+the connection after reading one expression.  This will be used by agent
+processes that need to efficiently send expressions to individual processes.
+
+
+
+Fri Sep 17 01:46:45 EDT 2010
+
+I need to fix file I/O before I start work on the map agent.
+
+I replaced open syscall with open-file and open-new-file.  Both open the file
+read/write.  I still need to fix the scheme atom serializer as it will crash
+wscheme with a stack overflow if the object is to large.
+
+
+
+Sat Sep 18 22:46:33 EDT 2010
+
+Remove deep recursive behavior of puts for the window puts classes.  It still
+crashes due to apply overflowing the stack when i attempt to stringify all the
+sub strings that display->string creates.
+
+TODO: The TAILCALL bitfield is unsigned but should be Num.
+
+World crashes when :(saySystem '(0)) is evaluted at the talk prompt.
+
+I think I need to add these to  wscmError (I forget what the 1st instruction
+loading r5 is for and why i need to ignore it when calling the continuation.
+   memVectorSet(code, 3, NOP); memVectorSet(code, 4, NOP);
+
+Actually I just needed to clean up the sysIllegalOperator and wscmError
+functions.  They now behave correctly and will collect the operator and operand
+values and send them as a list to the global error handler.  Each thread ID
+has its own error handler closure stored in the global ERROR vector.  It is
+usually mutated from within a continuation call.  The default error handler
+behavior is to display the operator/operand list and quit.
+
+
+
+Mon Sep 20 00:59:38 EDT 2010
+
+Wonder if the agent or peer should determine when a field block should be
+updated.  Should the agent keep track of all avatars and keep their current
+blocks cached as well?
+
+
+
+Mon Sep 20 18:56:03 EDT 2010
+
+I should first remove all user map related code dealing with content generation
+and move it to the map agent.  I should get a better sense of what behavior
+belongs where hopefully.  Should the passing of map data be synchronized with
+field block sizes or generic so both peer and agent can work with independent
+map block sizes?
+
+
+
+Tue Sep 21 12:41:30 EDT 2010
+
+Add a public semaphore to window objects.  This should get rid of display errors
+caused by preempted mid-escape sequence.
+
+World crashes evaluating (cellGlyph 'blah) where the argument should be an
+integer.
+
+
+
+Thu Sep 23 11:28:16 EDT 2010
+
+Die should remove entities from the local DB.
+
+
+
+Sun Sep 26 21:02:51 EDT 2010
+
+The map agent is able to send field block changes to peers.  It now needs to
+keep track of all blocks cached by each peer and send the changes needed
+as the peer walks around the map.  This code is in world.scm already running
+as the temporary Ultima4 map code.
+
+
+
+Mon Sep 27 11:27:12 EDT 2010
+
+The block and field code is highly coupled.  I'm currently trying to give the
+map agent control of block logic.  I'm hoping the peer will just have to deal
+with updating field content and being away of the overall field dimension and
+location.
+
+
+
+Tue Sep 28 19:59:55 EDT 2010
+
+Turns out the field size is arbitrary and only matched the canvas size because
+I pre-rendered an initial map (on a torus).  I currently have the the field
+size at 256x256.  The map agent happily sends whatever blocks it thinks the
+peer needs at the time.
+
+When the map receives an initial 'entity' call, it currently creates a local
+entity object.  After that it will just update the object.  It should also
+send map blocks to the peer.  How to determine which blocks to send?  Trivial
+if the block count is odd such as 3x3 for exmaple.  Just send the current block
+and 8 surrounding blocks.  Anything larger than that doesn't matter as long
+as the block is somewhere in th emiddle.  A 2x2 is a bit more tricky.  I'll just
+stick to 3x3 for now.
+
+Instead of 'field blocks' the map agent will deal with 'map blocks'.  Maps will
+be like fields in that they are composed of cell columns.
+
+
+
+Thu Sep 30 20:51:25 EDT 2010
+
+I altered the IPC object a few weeks ago to a star topology.  I also added a
+private one-read-only listener port to each IPC instance.  I finally got
+around to implementing a preliminary map agent.  It listenes to the usual
+IPC stream and evaluates world expressions such as move and identify.  It
+currently send a bunch of initial map blocks to newly connected peers.  It
+was very slow going and the resulting rendered blocks were out of order.
+I started poking around and making chages in the C code implementing networking
+and alterd the 'backlog' parameter passed to listen().  Upping the value from
+0 to 10 resulted in an expected fast passing of map blocks from the map agent
+to the client.
+
+TODO  Research what the backlog paremeter is all about.
+
+
+
+Sat Oct  2 23:08:26 EDT 2010
+
+Implementing hardware scrolling.  It does so if the window is larger than one
+row, within the terminal boundaries and the same width.  BUG:  It doesn't check
+if another window is obstructing it.
+
+Windows need to know if they are completely visible or not.  Transparency
+complicates the algorithm.  Since I'll be making a lot of changes to the window
+object I should first support new window ordering.  Window visibility might
+become a side effect of such development.
+
+
+
+Mon Oct  4 01:28:57 EDT 2010
+
+While updating the windowMask, enough information (last and new visible window)
+exists to determine which windows to increment and/or decrement the visible
+count for.  Part of what was needed for determining if a window is completely
+visible for native terminal scrolling.
+
+
+
+Wed Oct  6 00:59:14 EDT 2010
+
+Added a keyboard handler that will read characters and special keys' escape
+sequences as symbols.  Currently the arrow keys are parsed and send 'up 'down
+'left and 'right symbols to whatever calls getKey.
+
+If escape is pressed it will wait indefinitely for the following #\[ character.
+This needs to be resolved.
+
+The next fix should be escape sequence printing issues.
+
+
+
+Wed Oct  6 16:55:03 EDT 2010
+
+The map agent currently sends map blocks to peers as soon as they enter the
+region.  It needs to now send map blocks before they are visible.  The
+prototype map code would keep track of all the working map blocks as
+coordinates and use the set of blocks to determine the next set of blocks.
+It was overly complicated.
+
+Keeping track of the entire range (the upper-left coordinate) might be easier.
+When the entity is out of bounds, a new range will be chosen based on the
+previous range and new blocks determined to send.
+
+
+
+Fri Oct  8 01:14:18 EDT 2010
+
+Map agent basics completed.  Updating peers with map blocks works as well
+as various values of map block size and count.
+
+
+
+Thu Oct 14 15:52:45 EDT 2010
+
+I believe the world map rendering issue is a result of multiple threads being
+blocked on a "send" call.  This is the only plac I don't have preemption in
+place.
+
+I examined a typescript capture of World output replacing escape with newlines.
+I noticed "25h" was breaking the cursor movement escape sequences.  I added a
+semaphore call to the tcursor-visible method.  It no longer breaks cursor
+movement strings in World.
+
+Can make World crash by enabling animation, walk-forever and resizing the
+window repeatedly.  The invalid vector reference is with the window DESC
+vector.
+
+
+
+Fri Oct 15 21:24:02 EDT 2010
+
+Fix for the map window resize crash is to add a semaphore call so that adjusting
+the window size doesn't occur during a window rendering.
+
+Currently addressing the avatar's movement lagginess noticable when the avatar
+moves a lot in a large map window. The map window keeps up with the avatar's
+current location but the avatar itself catches up more slowly.
+
+It looks like the map window is refreshed as the avatar movement catches up.
+An avatar movement button first sets the avatar's position then sends the
+expression to the IPC.
+
+
+
+Tue Oct 19 00:41:35 EDT 2010
+
+Working on map mutation now.  MoveCell doesn't work as expected when trying to
+move a default cell to another location.  The original columns seems to remain
+intact with the desired cell being copied to the new column as expected.
+
+What does it mean to move a cell in between cells in a column?  Replace it with
+air, water or something near by?  Collapse the column?  Copy the cell?
+
+,, oo ,, -> ,,    oo,,
+xx xx xx    xx xx xx
+
+
+
+Thu Oct 21 02:56:46 EDT 2010
+
+The map agent was crashing when trying to open a remote direct peer connection
+and when trying to open a map file.  Turns out the unix process was running
+out of file descriptors.  I explicitly close ports in the map agent code.  The
+garbage collector should finalize these objects which is a possible bug.  The
+workaround now is to close unused ports.
+
+
+
+Fri Oct 22 03:39:03 EDT 2010
+
+Examing /proc/pid/fd, I can readily identify open file descriptors and the
+files or ports they represent.  World scheme doesn't close loaded files.
+
+Canvas rendering currently shows the top most cell in a column.  I plan to
+determine the height of the closest cell above the avatar.  This height will be
+the initial height to start scanning down the column for the first visible
+cell.  This should be a good initial method of revealing the inside of rooms or
+dungeon innards.  The dungeon that someone designed many years ago in an early
+version of World will finally render correctly.
+
+
+
+Thu Oct 28 02:32:14 EDT 2010
+
+Implementing pacman.  The map agent needs to save mutated map cells now.  Tank
+will put your avatar into pacman mode, like march mode, which will randomly
+walk a maze.  From there dots will be implemented as well as the ability to
+replenish the dots once they've all be consumed.  A pacman agent might be in
+order.
+
+
+
+Thu Oct 28 20:09:36 EDT 2010
+
+I was worried about race conditions when sending map changes while someone
+edits or moves cells around.  What I do is send to everyone, if no map agent
+exists, the cell mutation expression.  Otherwise I send the message privately
+to the map agent's listener port (finally coming in handy again).  It will
+process the change then propagate the change to everyone else.  This creates
+a write barrier between peers.
+
+
+
+Sun Oct 31 17:35:01 EDT 2010
+
+Duplicate entities are ending up in the field array.  One way is to change the
+avatar's name while moving among other cases.
+
+
+
+Mon Nov  1 16:42:22 EDT 2010
+
+Avatar ghosting fixed but the the avatar's glyph doesn't change unless moved.
+
+Ghosting still occurs when animation is on, the avatar is moving and the name
+is changed.  The animated viewport function doesn't modify objects so it must
+be a race condition caused by the delay the function call causes.
+
+
+
+Tue Nov  2 20:01:44 EDT 2010
+
+Animation loop -> viewportReset -> lock
+                                -> mutate Port* global variables
+                                -> canvasGlyph
+                                -> viewportPlot 
+                                -> unlock
+March loop -> sleep
+           -> walk -> avatar.faceDir
+                   -> avatar.gpsLook
+                   -> walkDetails  -> avatar.walk
+                                   -> ipc.write (move DNA avatar.zyx) skipped
+                                   -> (moveCell DNA oldloc newloc #f)
+changeName -> avatar.setname
+           -> avatar.setglyph
+           -> ipc.write (entity DNA avatar.name avatar.glyph)
+
+entity -> (entitiesSet dna args)
+       -> moveEntity dna entity.gps -> entitiesGet
+                                    -> moveCell dna oldloc newloc #f
+                                    -> entity.setLoc
+
+The collision is when a name change eventually calls moveCell and setLoc both
+also called while the marching loop is active.
+
+An entity update can come in the form of a move or entity expression.  In the
+case of a name or glyph change the avatar's current location should be
+rerendered.  If a location is included the avatar should be moved.  Stray
+avatar cells need to be prevented by making avatar map moves thread safe.
+
+
+
+Thu Nov  4 20:35:37 EDT 2010
+
+Having difficulty creating an elegant entity abstraction.  The entity class
+is simple and so is the IPC message but I'm unable to land a simple message
+system to initialize and update entities across peers.
+
+
+
+Sun Nov  7 01:46:41 EDT 2010
+
+The cell column model is lacking in simplicity or at least the usage of it is.
+When moving a cell, the method is unable to move properly delete the last cell
+in a column's list of cells.
+
+
+
+Sun Nov  7 13:27:29 EST 2010
+
+Canvas mutation needs to be thread safe.  As does moving since pacman and
+walking/falling both rely on the avatar's current direction which is changed
+by both flows.
+
+* Develop walking kitty code for an abstracted entity object.
+
+
+
+Tue Nov  9 03:48:54 EST 2010
+
+Bug in the compiler when compiling not expressions.  When compiling not's
+parameter expression, the TAILCALL flag was not unset.  The resulting
+emitted code would be incorrect if the not expression was the last one in
+the block as the resulting assembly would return after the not's paremeter
+instructions thus skipping the actual not assembled opcodes.
+
+* Plan on adding a new pacman state to the wrepl loop.
+* Refactor movement values to cardinal polar.
+
+Movement control implemented for the pacman hack.  What's needed now are
+ghosts but there is no decent NPC abstraction.  It should handle IPC commands
+and keep some map state.  In a nutshell it should implement most of what's in
+world.scm.  The next big project then is to distill an avatar abstraction.
+
+
+
+Thu Nov 11 03:52:47 EST 2010
+
+The IPC should accept a queue object which new incoming messages will add
+objects to along with the other peer streams and local queue.
+
+
+
+Sun Nov 14 01:13:13 EST 2010
+
+Implementing pong.  Paddles should be multi-celled avatars.
+
+IPC object should by default start with no direct reader but be able to generate
+new readers as needed.  These will be accessed for received IPC messages.   The
+IPC object will continue to be used as the only source for IPC message writes.
+
+
+
+Tue Nov 16 05:32:45 EST 2010
+
+* Multi-celled avatars
+* Abstract entity and IPC handler
+
+
+
+Thu Nov 18 21:44:20 EST 2010
+
+I homogenized entity rendering but when I duplicate an entity's cell in a
+3x3 grid it's unable to move as it is attempting to move into an enitity/
+itself triggering a force command instead of a move.
+
+For now I'd like the actual avatar cell to be solid and the rest ethereal.
+
+
+
+Sun Nov 21 04:07:54 EST 2010
+
+There's no reason why I can't utilize the local field to temporarily remove the
+avatar cells and check for collision with other entities or solid cells.  I
+check other cells filtering the avatar from the cell list at each checked
+coordinate.
+
+
+
+Tue Nov 23 23:42:58 EST 2010
+
+Canvas rendering does not refresh entitites.
+
+
+
+Tue Nov 30 21:14:42 EST 2010
+
+I plan on just implementing bigGlyph rather than that and a small glyph for entities.
+
+
+
+Thu Dec  2 16:31:31 EST 2010
+
+How to implement effect such as explosions?
+
+If pong is disabled then enabled fast enough, then the last thread doesn't get
+a chance to notice the power toggling and continues to run along with the new
+thread.  The pong implementation is a hack anyways and needs to be redesigned.
+
+
+
+Sun Dec 12 23:21:07 EST 2010
+
+Replace glyph's in entities and avatars with sprites.  Glyphs will be a 1x1
+sprite from now on.
+
+
+
+Wed Dec 29 04:57:19 EST 2010
+
+Entities are represented as sprites now.  For pong to work the ball needs to be
+controlled and shared with other peers.
+
+Split up map rendering into cell/sprite del and add.  This way I can create a
+new call that deletes a entity's sprite from the map (field/canvas) then add the
+entity's new sprite to the map.
+
+
+
+Sun Jan  2 00:10:39 EST 2011
+
+Sprite needs to be updated properly for peers, not just local client, during
+update and quitting.
+
+
+
+Tue Jan  4 00:49:47 EST 2011
+
+I want to bring back the glyph variable for entities.  This will be used as the
+default sprite as well as a generic icon for reprenting the avatar outside of
+the map.
+
+
+
+Tue Jan  4 14:19:09 EST 2011
+
+Adding a color variable to the avatar object.
+
+
+
+Mon Jan 17 00:53:05 EST 2011
+
+Initially mouse strings were handled like button presses.  This was dirty as I
+inserted the mouse coordinates as numbers in the key queue.  Now mouse events
+are a separate mechanism but are scanned during keyboard escape string scanning.
+Mouse events are stored in their own queue.  A mouse event loop thread
+dispatches each stored mouse event to the registered handlers based on the
+window id.  If no action handler exists the mouse event is ignored.
+
+The first mouse handler is a palette chooser.  It's a window with all 256 colors
+plus a recently selected color list.  The last choosen color is reprsented in
+decimal hex and example usages as foreground, background and combinations of
+white and black text.
+
+Interaction is strictly with the mouse.  I'd like the keyboard to be used as
+well so I need to create an event dispatcher mechanism for keyboard input.  This
+means windows will be able to steal keyboard input rather than the keyboard
+routing determining what to do with keypresses.
+
+Current use case:
+
+User logs in and starts off in command mode.  Can immediately walk around using
+keyboard, arrows or mouse.  Button t activates talk mode.  Can type and talk and
+can move but only with mouse clicks.
+
+Button C, in command mode, activates palette window to choose new avatar and
+talk color with mouse.  User can still swtich between talk and cmd mode.
+
+Possible use case:
+
+User logs in and starts off in modified comand mode.  Arrow keys and mouse move
+avatar while other buttons are used for talking.  If talk line is not empty
+then cursor keys will navigate/edit the talk input line.
+
+Tab or escape will exit talk mode.  The talk input line will disappear.  Buttons
+used for avatar motion, actions and other environment interactions.  Text
+scrollback navigation would be one example.
+
+End of use cases.
+
+The talk input line should be the model of how any focused window should behave.
+Some keys should be allowed to pass through to other threads or handlers.
+This includes the map window, palette window, and the pacman/pong functions.
+
+Currently each keyboard handler deals with altering the repl state.  So while
+talking, hitting escape will force the repl call the cmd handler after each
+keypress rather than the talk handler.  This needs to be reimplemented.
+
+Hitting keys should result in the proper window or method receving the key.
+A sieve of handlers might be in order here.  Those handlers on the top of the
+stack get first dibs on the key otherwise they are passed down to the previous
+handler.
+
+
+
+Mon Jan 17 18:10:07 EST 2011
+
+Wondering if I should merge the mouse and keyboard event loops into one stdio
+handler.  Currently key presses are just queued up but mouse events are
+dispatched.
+
+Hitting escape should time out during escape sequence parsing.
+
+
+
+Tue Jan 18 14:28:53 EST 2011
+
+Read should be given a timeout to return nothing if no characters are available
+from the stream.  This would make implementing escape sequences trivial.
+Currently hitting escape halts the key parser as it waits for the next possible
+escape sequence character.
+
+
+
+Mon Jan 24 01:51:55 EST 2011
+
+Received a notification from Linode that my CPU was pegged due to three runaway
+world processes.  I'm guessing a port scanner found the telnet ports and sent
+something that confused the scanner.  Just a guess.
+
+
+
+Thu Jan 27 02:04:02 EST 2011
++---------------+
+|WSCM syscalls  |
++---------------+
++---------------+
+| VM  module    |
++---------------+
++---------------+
+| MEM module    |
++---------------+
++----------+
+|C syscalls|
++----------+
+
+
+
+Sat Jan 29 14:47:20 EST 2011
+
+7fb9bfa6c498 82 VECTOR   50#(4225f3 8 4225ef 1a 422119 2a 422bea 30 4225d1...
+7fb9bfa6c720 82 VECTOR   50#(4225f3 13 4225ef 16 422119 1c 422bea 2c 4225d1...
+
+When compiling World scheme from the all-files-concatenated file, some internal
+pointers exceeded the presumed top memory limit.  This will change in the future
+and is dirty.  I upped the value to #x430000.
+
+Since world needs more entities, I need to distill the bare minimum
+functionality from world.scm and abstract an entity class.  The user's avatar
+will then exstend this.  New entities can then be created separate from the
+avatar in its own thread.  It eventually will not be bound to the process it is
+instantiated on.  Migratable threads will be another big project and preferably
+an internal World Scheme mechanism.
+
+A World avatar is comprised of map caching, message handling and rendering.
+Rendering is only needed for the user.  Map caching is required as it is the
+entity's view of the universe.  Message handling is required as it is the basis
+for an entity's behavior.  This needs to tie into the IPC at all times.
+
+Another strange concatenated compilation bug.  This time I belive it's due to
+the #define of r1f which redefines any occurance of stack with r1f.  This is
+probably clobbering local variable symbol's "stack".  I never really like the
+preprocessor and this is one situation where it can break this unusal style of
+compilation.
+
+
+
+Mon Jan 31 14:56:08 EST 2011
+
+Unable to determine the cause of the bug.  Comparing the -O2 and -O2 optimized
+preprocessor output doesn't reveal any preprocessing issues. Comparing i-code
+output is a headache.  I'll just trace the offending executable.
+
+
+
+Thu Feb  3 19:05:45 EST 2011
+
+The bug was a bad cut/paste when I added an extra register peek of the stack in
+wscmScheduleBlocked for the call to wscmRecv.  The scheduling code which checks
+if characters are ready or not for the thread to run again.
+
+Continuing to implement timeout-reads.  So far the syscall and scheduler handles
+the extra arguments to wscmRecv.
+
+
+
+Mon Feb  7 20:17:51 EST 2011
+
+Error conditions to catch:
+
+ * compVectorVectorRef needs argument count checks.
+ * (make-vector-vector 20) halts with a cryptic message ERROR::(9a30b 9a30b)
+ * (define (Class)
+     (define (column) ...)
+     (define (fun)
+       (letrec ((column (column))) ; Since letrec, call to column is really a
+         ...)))                    ; call to undefined letrec var.
+   In this case report an error with a clear description of the environment the 
+   variable lives.  Currently it defaults to null.
+
+
+
+Fri Feb 11 02:41:42 EST 2011
+
+Refactoring the viewport code into a Viewport object will be a lot of work as
+all viewport related code is scattered around.  Character walking, screen
+resizing, auto-refreshing, etc.
+
+
+
+Thu Feb 17 00:07:20 EST 2011
+
+Implementing a dynamic scoped function "macro" is not trivial.  I can't just
+use existing lambda compilation code since it includes some optimizing
+functionality.  Emitted lambda code will replace the variable lookup call
+with environment traversal and indexing.  If the variable is unfound it
+assumes a global variable and run-time optimization/JIT.
+
+A lexical closure inherits the compilable constraints of a dynamic closure.
+
+
+
+Fri Feb 18 02:34:31 EST 2011
+
+Yea so how does (macro () (lambda () ...)) compile?  Looks like macro taints
+everything below it.
+
+
+
+Sat Feb 19 19:41:20 EST 2011
+
+Disabled cirularized.  Moved to the Map object.
+
+
+
+Mon Feb 21 18:20:25 EST 2011
+
+i've refactored map code now to refactor entity and interprocess communication
+code IPC i noticed all IPC calls are related to entities so i'm combining them
+into one object eventually I want to be able to "create new entity" then give
+it instructions on how to behave in the world i don't want to have to worry
+about rendering, IPC and other details pacman ghosts are the first milestone.
+
+
+
+Tue Feb 22 21:43:42 EST 2011
+
+Ported all IPC calls that are for map rendering to the Map object.  Initial
+attempts at creating a 2nd map window hovered over the initial starting
+position failed.
+
+(define myMap2 (Map 256 ipc))
+(thread (sleep 5000)
+ ((myMap2 'fieldReset) (columnMake 0 cellXX cellAIR))
+ ((myMap2 'canvasReset) 100 glyphXX)
+ ((myMap2 'viewportReset) 3456 2751)
+ ((myMap2 'viewportRender) 3456 2751))
+
+
+
+Fri Feb 25 20:37:06 EST 2011
+
+Added a catch in emitted lambda body assembly for too many passed arguments.
+This revealed a long time bug in the map agent code which was incorrectly
+created a new "system" entity.
+
+
+
+Sat Feb 26 17:04:04 EST 2011
+
+The refactored Avatar entity can instantiate new avatars now.  I'm able to
+spawn 4 ghosts at start-up and push them around in the map.
+
+
+Mon Feb 28 23:38:34 EST 2011
+
+Enabling -Wconversion results in many warnings.  I currently have no methodology
+to handle system calls that return and accept both signed and unsigned ints.
+
+
+
+Tue Mar  1 21:28:26 EST 2011
+
+Conversion methodology is to use Num types (which are 64bit unsigned longs) for
+situations that do not warrant negative values.  This is most places in the
+code.  The only problem are the areas that call C libraries that return int
+or shorts.  These are annoying.  Many seem to have be converted to use size_t
+and ssize_t which are equivalent in my typdefs Num and Int (64bit unsigned long
+and signed long).  In cases where pointer arithmatic or library calls conflict,
+I cast to the appropriate types.
+
+I realized I made the IPC mechanism safer by filtering expressions that the Map
+and Avatar objects read from the IPC.  Only those commands it expects to read
+are evaluated.
+
+
+
+Wed Mar  2 21:42:51 EST 2011
+
+Moved keyboard and mouse handler code to the Terminal class.
+
+
+
+Thu Mar  3 20:59:00 EST 2011
+
+Was sending expressions for evaluation through the IPC.  This meant when I sent
+an avatar's (z y x) coordinate, it had to be sent as a quoted list.  Since
+objects parse IPC expressions now, I can now send data as is.  In the case of
+"entity" messages, tha tmeans the expression
+(entity 1234567 7156 "NAME" (1 5000 5001)).
+
+
+
+Tue Mar  8 00:53:22 EST 2011
+
+Why not implement all classes in Wscheme as macros instead of lambdas?  More
+consistent?
+
+
+
+Wed Mar  9 15:16:36 EST 2011
+
+Which comes first, the map or the avatar?
+
+When creating other entities, they won't necessarily have a map object.  I'm
+debating whether I should have just avatars handle incoming IPC communication.
+
+
+
+Thu Mar 10 15:11:03 EST 2011
+
+The map agent, which is various functions in map.scm, needs to be refactored
+into an entity class.  This, along with pacman ghosts, pong balls, kitties and
+puppies, should be a good set of avatars to drive the development of the best
+entity base class.
+
+The boxInput no longer works with the current event driven keyboard methdology.
+(getKey) only works when there are no other key dispatchers as the getKey
+disptacher is on the bottom.  Ohhh, my dispatch mechanism, which is a stack of
+keyboard event call back functions, breaks if the callback function, which is
+function called from the Terminal object keyboard reader loop, tries to create
+a new getKey function.  In my example, the boxInput function is called from the
+handler which is the same system thread as the Terminal keyboard reader.  It
+then creates a new handler then immediatley starts caling the new getKey
+function which calls the QueueGet which never returns since the keyboard won't
+be read and the queue added to.
+
+The solution, after perusing X11 tutorials on the web, is to register queues
+rather than call back functions.  This will prevent the "system" thread from
+ending up under the control of the uers's code.
+
+I need to do the same for mouse events.
+
+[ ] Reread http://www.ibm.com/developerworks/linux/library/l-posix3/index.html
+and see if these would replace the double semaphore implementation of
+queues.
+
+
+
+Fri Mar 11 16:36:14 EST 2011
+
+I've completed the refactoring of map and avatar code into two uber objects. I'd
+like now to be able to extend an entity or simplified avatar object to create
+autonomous avatars.  Since they'll need their own map data, I'll probably have
+to make changes to how avatar and map objects interact with one another.
+
+Before sleeping lastnight, I considered each Avatar having its own field object
+which is then passed to a new map object's constructor.  This means that the
+Avatar object must handle cell and entity IPC messages.
+
+The map object will be externally controlled.  It won't listen to incoming IPC
+messages.
+
+Instantiating a avatar will crash sometimes due to an invalid entity.  Something
+to debug later.
+
+A simple entity should not require a canvas or viewport or even an EntityDB.  It
+only needs to be aware of its surroundings so it can navigate the map
+correctly.  So it should be able to keep track of cell and entity movements.
+It needs to be able to send/receive voices/sounds.  It should respond to force
+expressions from the IPC and the object itself should allow calls to its walk
+and talk functions.
+
+The avatar object makes a lot of calls into the Map object to mutate the field.
+These calls should be made directly so a map-less avatar can still function with
+just a field object and entityDB object.
+
+
+
+Sat Mar 12 19:37:52 EST 2011
+
+Another way would be to allow simpler map objects for simpler avatars.  So now
+the map object will be the only object the avatar communicates with.  Calls to
+the field or entity DB will be through the map object.  This seems cleaner but
+I'm not sure how I'll implement a simpler map object for autonomous entities.
+
+This is working better.  I can spawn a NOVIEWPORT avatar now, push it around
+and make it talk.  Milestone reached!
+
+
+
+Mon Mar 14 18:40:53 EDT 2011
+
+The reason I'm seeing ghost glyphs when walking around is because the IPC is
+receiving a field block which is being shared by all the entity Map objects.
+When receiving the field block, Field.updateColumnsIPC should make a copy of
+each column before updating the field array.
+
+I'm able to pass an expression to an avatar which calls a macro which calls
+walk.  (define m (macro () (walk 0)))   (kat '(m))  (avatar '(m))
+This causes both the kat and user's avatar to walk right.  I plan on
+implementing a pacman ghost and pong ball algorithm this way.
+
+Reimplementing the pong and other fake hacked entities is straightforward.
+Pacman ghosts are next.  After that fixing avatar movement when a non-trivial
+sized sprite is specified.
+
+
+
+Tue Mar 15 16:02:34 EDT 2011
+
+I've yet to implement whisper and yell.  That's next.
+
+The voice handler is a native method in within the Avatar object.  This will be
+a good candidate for an abstract method for implementing a framework for an
+even more generic base abstract Avatar class.
+
+When screaming, characters should be seen in uppercase and whispering all
+lowercase when both typing and "hearing" the text from other.  I originally did
+this to prevent people from always yelling.  Whispering is in all lowercase as
+well, within parenthesis for the same reason.
+
+Pacman ghosts want to climb the walls and on top of each other.  I will add a
+toggle to this "step up" behavior in the Avatar class.
+
+
+
+Fri Mar 18 02:00:08 EDT 2011
+
+Implemented the aif primitive.  It's similar to cond's => special form.  Usage
+is (if predicate function) where function is applied to the value of predicate
+if it's true.  Otherwise false is returned.  I did this so that compiling cond
+internally would just be a matter of transforming the cond expression in to
+an equivalent block of ifs and aifs and then compiled.
+
+(cond ((p1 e1)             (if p1 (begin e1)
+       (p2 => e2)           (aif p2 e2
+       (p3 e3 f3)            (if p3 (begin e3 f3) ; AIF DOESN'T SUPPORT AN ELSE CLAUSE 
+       (else e4 f4 ...)))     (begin e4 f4 ...))))
+
+Looks like aif needs to handle an else clause.  I might as well just implement
+cond with the => special form and not implement aif at all. 
+
+
+
+Wed Mar 23 23:44:43 EDT 2011
+
+Cond is implemented as a combination if/aif/or/begin tree.  Aif can be used
+with the symbol =>.  It is like if except if the test is true, it is passed
+to the true clause which must be a function of one argument.  Other wise
+the false clause is evaluated normally.  (=> 42 list 99) evaluates to (42).
+
+Currently stuck on how to implement an avatar/process shutdown.  I want to be
+able to selectivly kill avatars but also shutdown the entire process such that
+all avatars elegantly report themselves as well as update the user's map
+nicely.  Two cases:
+
+One: Explicit and forced shutdown of an avatar ((kat 'die)).  This will
+send out an IPC message and set the local bool 'alive' to false.  The IPC reader
+thread will then clean up local objects and terminate.
+
+Two: Set global variable SHUTDOWN to true.  This triggers each avatar IPC thread
+to send an IPC message but it continues to read the IPC and act on messages.  It
+is expected that the World Scheme process will terminate soon so there is no
+need for threads to release resources.  The user's avatar object also has enough
+time to receive the 'die' messages from its threads to update the map before
+halting.
+
+
+
+Thu Mar 24 18:43:13 EDT 2011
+
+I'm always running into trouble with the avatar's base class member var 'dir'.
+It's supposed to represent the direction the avatar is facing but it's also
+used for motion including falling and climbing.  So after moving, the avatar is
+always facing down.
+
+I think I'll differentiate between where an avatar is facing and looking.  Look
+and face methods will mutate dirLook dirFace.
+
+In either case, I don't feel the current methodology is very clean.
+I implemented an Avatar macro to fill an area:
+
+ (cond ((begin (look 2) (!= (lookAt) cell))
+        (walk 2)
+        (buttonSetCell cell)
+        (sleep 200)
+        (fillgrid)) ...
+
+
+[ ] Is the Entity avatar/sprite IPC mechanism and storage model clean between
+world and map sessions?
+
+
+
+Fri Mar 25 17:41:09 EDT 2011
+
+[x] If a signal occurs which would halt the process, does it get stuck calling
+boxBool?  Yes.  Added a switch to force shutdown to exit without asking.
+
+I'm unable to implement a simple box that waits for either a moues or keypress.
+The terminal getKey function is blocking.
+
+[ ] read-char should handle (read-char) (read-char stdin) (read-char 500)
+
+[x] Terminal object Window list should be a vector and the window ID should be
+the vector offset, not list length.
+
+
+
+Sat Mar 26 23:17:10 EDT 2011
+
+Both keyboard and mouse interface are simply Queues.  This way the same queue
+can be registered for both the window mouse vector event handler and keyboard
+eventstack handler.
+
+
+
+Sun Mar 27 19:57:38 EDT 2011
+
+The map server needs to be rewritten.  It's a hacked entity and map manager.  It
+doesn't handle more than one entity per port very well as it continuously sends
+map data to each entity as they move.
+
+[ ] Refactor map agent.
+
+
+
+Mon Mar 28 16:02:19 EDT 2011
+
+World Scheme needs to be more strict with the use of define.  It's a binding
+command, not just set!, with its own semantics for creating new variables in
+TGE and new blocks.
+
+[/] When compiling define, compDefine() will assign to the env register the tge
+register.  This forces all explicit defines to be top level defines.  I should
+also add an error check.
+
+After the map agent is refactored and caching maps for avatars more efficiently,
+the IRC agent should be able to connect and spawn avatars for every visible user
+in the channel.  This should be interesting.
+
+
+
+Tue Mar 29 21:29:03 EDT 2011
+
+[x] The entity instance in the map module should keep track of the actual map
+data for each entity.  Each map block should also be accessed through a primary
+cache, before the map files, that all entities will access map data through.
+This will be one of the main functions of the map agent: to cache file map data.
+
+[ ] The other thing to do is for the clients to convert the cell numbers into actual
+cells.  Faster rendering?
+
+[x] The map agent and same-process avatars still do not differentiate who the
+mapUpdateColumns is for.  Each avatar instance will honor the message resulting
+in invalid field blocks.
+
+[x] Map updating and rendering does not honor the field boundaries.  Field
+boundary conditions need to be added to the rendering pipeline.
+
+
+
+Wed Mar 30 18:20:19 EDT 2011
+
+[x] As a matter of security, I'm still seeing World class and object
+environments extended from the REPL loop environment.  I'm trying to force all
+define expressions evaluated through eval, and thus load and wscm startup, to be
+so in the global environment.  I'm not sure where and why this isn't working.
+Fixed.  See notebook.
+                       (both of these buggy?)
+Map.moveObject -> map.moveCell -> Map.delCell -> Canvas.render & Viewport.render
+                               -> Map.addCell
+               -> map.moveEntitySprite -> Field.delete
+                                          Field.add
+                                          Canvas.Render
+                                          Viewport.Render
+
+Overall issue:  The Field and Canvas have no map coordinate state.  They only
+know how to deal with their own data, modulo the field size.  Nothing currently
+keeps track of the map coordinate of the field/canvas.  The viewport does.
+Should the map keep track of which field blocks it has (given by the map agent)?
+
+
+
+Fri Apr  1 00:55:38 EDT 2011
+
+The map object now keeps track of loaded blocks and checks if a cell to be
+rendered is for an actual cached map block in the field.
+
+
+
+Sat Apr  2 18:40:57 EDT 2011
+ Coordinate Nomenclature
+    (zm ym xm)
+    (yBlock xBlock)           (blockY blockX)
+    (yField xField)           (fieldY fieldX)
+    (yBlockField xBlockField)
+
+
+
+Sun Apr 10 16:08:04 EDT 2011
+
+I'd like to rethink my limited OOP implementation as I don't see an easy way of
+implementing virtual functions or constructors/destructors.  Currently the class
+objects are closures with local defines of vars and methods and the closure's
+body. The body is essentially the object's constructor who's return value is a
+method which evaluates an expression in the local environment.  This method is
+the actual object.  Inheritence is make-shift and involves either inlining or
+passing in a macro (dynamic bound closure) which, when evaluated in the parent
+class, becomes the child class by way of the dynamically extended environment.
+The object returned is an eval function that evaluates expressions passed in the
+child environment.
+
+An overall OOP mechanism should be in place to manage the creation of the
+closure hierarchy and the evaluation of the constructor in the proper child
+class environment.
+
+
+
+Thu Apr 14 23:51:14 EDT 2011
+
+I like being able to instantiate an object and have it immedieatly come to
+life.  The avatar object, for example, will being communicating with the IPC
+and handle incoming messages.  I'd like to extend Avatar objects into an IPC
+entity.  It should immediately being communicating with the IPC but it should
+have its own message handlers called instead of the avatar base class'.  I'm not
+sure I'd want access to the base classes's overridden methods but it would be
+useful.  This means the event handler should be a macro or defined as such so
+that its lexical scope is the derived child class's environment.
+
+
+
+Tue Apr 19 03:16:59 EDT 2011
+
+Child class functions will pass a stack of themselves down to the parent class
+which will have a mechanism to instantiate each child class in the proper
+extended environment hierarchy.
+
+
+
+Sat Apr 23 01:12:03 EDT 2011
+
+Create useragent.scm ircagent.scm mapagent.scm.
+
+Coupling between map and avatar objects is still annoyingly high.  The map
+expectes an avatar to be associated with it so it can handle debug messages,
+map resizing, and filter map IPC messages meant for a specific entity.
+
+
+
+Thu Apr 28 02:35:07 EDT 2011
+
+High coupling is preventing the smooth refactoring of map and avatar classes to
+world.scm and everything else into user.scm.
+
+
+
+Sun May  1 18:30:24 EDT 2011
+
+Continuing hidden surface removal by adding more intelligence to cells revaled
+instead of updating the entire canvas.  It will also handle new incoming map
+blocks.  The canvas object currently keeps track of each rendered cell and its
+height.  This is initiallized to an "outside" view where the top-most cell is
+chosen.  A new bitfield will be added representing the cells that were recently
+updated relative to the avatar's visibility height.
+
+State:  (1) Avatar above topmost cell (outside), render top most cell everywhere
+        (2) Avatar under a cell (inside), render connected cells at this height,
+            top-most everywhere else.
+
+Transition:
+2->1 clear all state 2 bits.
+1->2 recursively paint new mask ceiling height locations
+2->2 recursively paint new mask ceiling height locations, reset previous
+     heights, if any in the mask, to top
+
+A list of last painted heights can be cached
+
+Initial  Walks right
+0000     under an awning
+0000     0011
+0000     0011
+0000     0011
+         0011
+
+
+
+Tue May  3 22:43:19 EDT 2011
+
+Smart ceiling removal has been postponed.  For now all incoming map blocks are
+rendered with the current height value.
+
+Lighting is the new focus.  Computing every point of a circle is required.  I
+will adapt the line walking 'lineWalks' algorithm.
+
+
+
+Thu May  5 22:49:39 EDT 2011
+
+sysNewSymbol() is not object friendly.  It passes the string pointer in r5 to
+objNewSymbol() which expects a pointer to a string .  This has the unfortunate
+condition that the string r5 references could move if the new object call
+forces a garbage collection.  The passed string pointer is then invalid.  I
+need to go through and make sure this specific code issues is resolved.
+
+Not trivial since objNewSymbol() might return an existing symbol in the symbol
+table.  This does not require the string to be copied.  The workaround is to
+make it more multi-purpose.  It gets a new flag signaling if the str should be
+copied and return a bool signalling that the symbol exists in the symbol table.
+
+
+
+Sat May 14 02:49:12 EDT 2011
+
+Lighting will be based on ambient and cached modifiable light value stored in
+the canvas object array.  The light values will be dynamically updated by light
+sources in the field.  Light sources will need to be found quickly when
+rendering new map blocks.
+
+
+
+Sat May 28 19:41:32 EDT 2011
+
+The canvas should cache modified field glyphs based on ambient and direct light
+sources.  I added a hack into the viewport renderer but this added extra
+complexity to what's supposed to be a fast window rendering object.  The
+complexity for cell illumination will occur in the canvas object.
+
+
+
+Fri Jun 10 00:44:41 EDT 2011
+[ ] Verify map agent can host an IRC agent.
+[ ] Should there be a viewport-less map class?
+
+
+
+Mon Jun 27 02:25:05 EDT 2011
+
+Adding a check in the compiler that will prevent defines from appearing anywhere
+but at the top level or beginning of a body.  Required adding a new flag
+NODEFINES set in the recursive call to compExpression in compLambdaBody and
+checked for in the compDefine.
+
+The bug I'm trying to catch, missing closing parenthesis in an OO block's
+method, will still crash due to an #eof being parsed since the entire structure
+is thrown off at that point.  For now I'll leave this alone since the desired
+result, not necessarily the desired behavior, is met which is to error and halt.
+
+
+
+Mon Jun 27 19:24:48 EDT 2011
+
+Fixed finalizer objects: #(internalCFunction(Obj) parentObject)
+
+The callback function will be called by the garbage collector when it becomes
+an unreferenced objects.  The parent object will be passed to the C function.
+If it exists in an old generation, it will take longer for them to be finalized
+since complete old garbage collections occur less often than young heap
+collections.
+
+I had to fix finalizers so that I could complete the semaphore implementation
+which had to be explicitly "closed" after usage.
+
+I need to also fix ports so they are automatically closed after being collected.
+
+Realized that both sysClose and the close finalizer should check first that the
+port object is not closed.  Otherwise it could be used to close new ports opened
+on the same internal descriptor number.
+
+[ ] Think about semaphores garbage collected while other threads are waiting on
+them.  Is this even possible?
+
+
+
+Tue Jun 28 03:48:55 EDT 2011
+
+Semaphores should not be stored in a global vector.  This will prevent the
+semaphore from ever becoming garbage unless close-semaphore is called.  It will
+keep track of threads waiting on it.  Currently the schedule must scan all
+blocked threads for any waiting on this semaphore.
+
+Is there a problem implementing semaphore counters as mutable internal integers?
+The old implementation was a global vector of semaphores which, when incremented
+or decremented, would be replaced with a new scheme number object.
+
+
+
+Thu Jun 30 06:04:40 EDT 2011
+
+Ahh, since semaphore counters were returned as values, they could not be
+mutated so new number objects were always created.  Since semaphore calls now
+return #t or #f, this is moot.
+
+
+
+Sun Jul  3 18:07:47 EDT 2011
+
+Time to abstract thread queue operations behind doubly linked lists.  I'm not
+sure if they should live in the obj or sys module.  I decided on the obj module.
+I debated whether there should be a head node for doubly linked lists.  A head
+node could point to an arbitrary node in the dllist.  But what does one do if
+they all get deleted?
+
+A scheme defined signal handler will be handled in the scheduler.
+
+
+
+Wed Jul  6 03:09:33 EDT 2011
+
+Cleaning up debug message facility.  The scheduler doesn't handle interrupt
+spawned threads very well.  I need to rethink the structure and order of the
+scheduler and thread creation.  Threads can be spawned from another thread
+or via an interrupt handler.
+
+
+
+Fri Jul  8 00:33:20 EDT 2011
+
+While implementing agents, I have been including simple movement logic in a
+threaded loop "inside" the entity class.  The thread tends to keep running
+even during or after a shutdown causing the World Scheme process to crash.
+Separate threaded entity logic needs to be abstracted better to handle proper
+and improper process termination.  It would be better to handle the worst case.
+
+Perhaps these hacks are just that.  The entities and their threds should stick
+to the IPC mechanism and not try and communicate directly with each other at
+World Scheme environment level.  They are living and working in kernel space
+when they should be in their own protected user space.
+
+
+The entity DB should be non-mutating.  Entities will be returned whole.
+
+
+
+Wed Jul 20 13:23:18 EDT 2011
+
+There are still instances where world code doesn't handle the case of a non-
+existant entity in the EntityDB.
+
+
+
+Tue Aug 16 00:55:47 EDT 2011
+
+Do I reimplement the compiler now or continue to clean it up.
+
+
+
+Tue Aug 16 13:06:09 EDT 2011
+
+open-socket and open-stream need a timeout.
+
+Global registers are a virtual machine concept.  The mem module should just
+provide a mechanism for registering root set object pointers.
+
+Moving register definitions to the VM module.  The mem module will return newly
+allocated array and vector objects from the corresponding new functions.
+
+[mem]-[vm]-[obj]- - - sys op comp wscm
+
+[ ] New unit test to verify a file can be created, written, read, reopened,
+silently and non-silently.  Inadvertantly deleted some map files after removing
+the ability for the open file syscall to take a 2nd parameter forcing silent
+operation.  It must have returned a value signalling the file didn't exist
+causing the map agent to creae a new map and overwrite the old one.  It
+probably should have thrown an exception or halted the thread.
+
+
+
+Wed Aug 17 16:40:04 EDT 2011
+
+Rendering during World login needs to be cleaned up.  The map doesn't refresh
+the avatar properly after logging in.
+
+I like the standard error reporting mechanism library.  I'll recreate it in
+wscheme as a way of passing more info with runtime exceptions.
+
+If the compiler can prove a syscall will never change, a direct call to the sys
+function should be compiled in.  Currently syscalls, in the wscm module, check
+the argument count then perform the task or call the sys function in the sys
+module which performs the work on the object.
+
+
+
+Thu Aug 18 13:06:02 EDT 2011
+
+[X] objNewString accepts a string pointer but there are calls made to it that
+pass an object register pointer.  This may point to a garbage collected address
+causing a crash.
+
+
+
+Sat Aug 20 17:27:38 EDT 2011
+
+World behaves erratically when files don't exist during a load or open-file.
+An error/exception should be given and execution halted.  The sys function
+should return #f instead of #eof.  The system call should raise the exception
+and create the error message.
+
+
+
+Sun Aug 21 13:59:02 EDT 2011
+
+[X] Error/exception handling.  With a regular interactive REPL, errors should
+restart the REPL.  If a scheme script is evaluated directly, it should enter
+the debugger and/or quit.
+
+
+
+Tue Aug 23 20:13:18 EDT 2011
+
+[ ] I'm using the word "serialize" when I should be using the term toString.
+
+
+
+Wed Sep  7 01:19:51 EDT 2011
+
+Rewriting the compiler.  Adding an intermediate graph stage.
