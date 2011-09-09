@@ -781,7 +781,7 @@
                    (<= mx ex) (< ex (+ mx blockSize)))
             (moveObject (e 'dna)  (e 'z) ey ex  (e 'z) ey ex  #f))))
         ((myEntityDB 'getAll)))
-      (or NOVIEWPORT
+      (or NOVIEWPORT (begin
         ; Probe for fire cells in this new incoming block and
         ; increment the light source radius in the canvas.
         (loop blockSize (lambda (y)
@@ -791,7 +791,7 @@
         ; Render map block
         (loop2 fy (+ fy blockSize)
                fx (+ fx blockSize)
-               (lambda (y x) (canvasRender ceiling y x))))))))
+               (lambda (y x) (canvasRender ceiling y x)))))))))
  ; Update one or more of an entity's attribute: dna port name glyph z y x
   (define (IPCentity dna . args)
     (let ((entity ((myEntityDB 'get) dna)))
