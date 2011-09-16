@@ -3502,3 +3502,56 @@ Tue Aug 23 20:13:18 EDT 2011
 Wed Sep  7 01:19:51 EDT 2011
 
 Rewriting the compiler.  Adding an intermediate graph stage.
+
+
+
+Sat Sep 10 14:26:26 EDT 2011
+
+Some igraph optimizations to perform initially:
+
+I'm not optimizing out NOP iblocks so there are consecutive jumps to jumps in
+emitted code blocks.
+
+7FC1D7BF7CA8*0000 mvi_0 #<7fc1d87a4040>
+7FC1D7BF7CB8 0002 brti_0 0 0009
+7FC1D7BF7CD0 0005 mvi_0 #<7fc1d87add10>
+7FC1D7BF7CE0 0007 bra 000d               +-> --+
+7FC1D7BF7CF0 0009 mvi_0 #<7fc1d87add20>  |     |
+7FC1D7BF7D00 000b bra 0007             --+     |
+7FC1D7BF7D10 000d push_0                     <-+
+
+
+[ ] memIsObjectValid() should just check a lower and upper memory bound or even
+((ptr - minAddr) < max Addr).  The module will require an invariant verifying
+heap and non-heap objects (C function pointers, strings, VM goto addresses)
+don't overlap.  In general I've noticed C static pointers exist below new heap
+regions on this IA64 architecture.
+
+
+
+Fri Sep 16 00:29:29 EDT 2011
+
+I enhanced the assembler to accept generic opcodes, fields and pointers.
+
+   L1 = ccAsmLabelNew();
+   L2 = ccAsmLabelNew();
+   ccAsm (
+      MVI, R1, (Obj)20,
+   LABEL, L1,
+      MVI, R0, (Obj)20,
+   LABEL, L2,
+      SYSI, ccDumpStringR0,
+      ADDI, R0, -1l,
+      BNEI, R0, 0l, L2,
+      SYSI, ccDumpNewline,
+      ADDI, R1, -1l,
+      BNEI, R1, 0l, L1
+      QUIT);
+   ccGenerateIGgraphWithPushedIBlocks();
+   ccAssembleIGraph();
+
+A function returns new values which represent label values.  Notice L1 and L2.
+Another finalizes the igraph construction process and the 3rd compiles the
+igraph into a code object for running in the VM.
+
+Wondering if I should merge GenerateIGraph with ccAsm.

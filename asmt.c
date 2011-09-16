@@ -29,36 +29,39 @@ int myTest (void) {
  Num programOutputStringCompare;
 	setbuf(stdout, NULL);
 
-	memObjStringSet (asmtDisplayString);
-	memObjStringSet (asmtDisplayInteger);
-	memObjStringSet (asmtDisplayNewline);
-	memObjStringSet (asmtVmDebugDumpCode);
-	memObjStringSet (welcomemsg);
+	memPointerRegister (asmtDisplayString);
+	memPointerRegister (asmtDisplayInteger);
+	memPointerRegister (asmtDisplayNewline);
+	memPointerRegister (asmtVmDebugDumpCode);
+	memPointerRegister (welcomemsg);
 
 	/* Create the assembly.
 	*/
 	asmAsm(
-		SYSI, asmtDisplayNewline,
-		MVI1, welcomemsg, SYSI, asmtDisplayString,
-		SYSI, asmtDisplayNewline,
-		MVI0, 0l,
+		vmSYSI, asmtDisplayNewline,
+		vmMVI1, welcomemsg,
+		vmSYSI, asmtDisplayString,
+		vmSYSI, asmtDisplayNewline,
+		vmMVI0, 0l,
 	LABEL, "main",
-		MV10,
+		vmMV10,
 	LABEL, "loop",
-		SYSI, asmtDisplayInteger,
-		PUSH1,
-			MVI1, " ", SYSI, asmtDisplayString, /* Space */
-		POP1,
-		ADDI1, 1l,
-		BEQI1, 10l, ADDR, "loopdone",
-		BRA, ADDR, "loop",
+		vmSYSI, asmtDisplayInteger,
+		vmPUSH1,
+			vmMVI1, " ",
+			vmSYSI, asmtDisplayString, /* Space */
+		vmPOP1,
+		vmADDI1, 1l,
+		vmBEQI1, 10l, ADDR, "loopdone",
+		vmBRA, ADDR, "loop",
 	LABEL, "loopdone",
-		MVI1, "\r\n", SYSI, asmtDisplayString,
-		ADDI0, 1l,
-		BNEI0, 10l, ADDR, "main",
+		vmMVI1, "\r\n",
+		vmSYSI, asmtDisplayString,
+		vmADDI0, 1l,
+		vmBNEI0, 10l, ADDR, "main",
 	LABEL, "done",
-		SYSI, asmtVmDebugDumpCode,
-		QUIT,
+		vmSYSI, asmtVmDebugDumpCode,
+		vmQUIT,
 		END
 	);
 

@@ -47,24 +47,24 @@ Obj vmPop (void);
 
 /* Virtual machine instruction opcodes.  Really just C goto addresses.
 */
-extern void *NOP,
-     *MVI0, *MVI1, *MVI2, *MVI3, *MVI4, *MVI5, *MVI6, *MVI7,
-     *MV01, *MV02, *MV03, *MV04, *MV07, *MV01E, *MV10, *MV13,
-     *MV20, *MV23, *MV30, *MV51C, *MV518,
-     *MV50, *MV1C0, *MV1C18,
-     *MV61, *MV72,
-     *LDI00, *LDI02, *LDI01C, *LDI11, *LDI20, *LDI22, *LDI50, *LDI1C0, *LDI11C,
-     *LD012,
-     *STI01, *STI01C, *STI21, *STI20, *STI30, *STI40, *STI50,
-     *ST012, *ST201,
-     *PUSH0, *PUSH1, *PUSH2, *PUSH3, *PUSH4, *PUSH5, *PUSH7, *PUSH19,
-     *PUSH1A, *PUSH1B,
-     *POP0,  *POP1,  *POP2,  *POP3,  *POP4,  *POP7, *POP19, *POP1A,  *POP1B,
-     *ADDI0, *ADDI1, *ADD10, *MUL10,
-     *BLTI1,
-     *BEQI0, *BEQI1, *BEQI7, *BNEI0, *BNEI1, *BNEI5, *BRTI0, *BNTI0, *BRA,
-     *J0, *J2, *JAL0, *JAL2, *RET,
-     *SYSI, *SYS0, *QUIT;
+extern void *vmNOP,
+     *vmMVI0, *vmMVI1, *vmMVI2, *vmMVI3, *vmMVI4, *vmMVI5, *vmMVI6, *vmMVI7,
+     *vmMV01, *vmMV02, *vmMV03, *vmMV04, *vmMV07, *vmMV01E, *vmMV10, *vmMV13,
+     *vmMV20, *vmMV23, *vmMV30, *vmMV51C, *vmMV518,
+     *vmMV50, *vmMV1C0, *vmMV1C18,
+     *vmMV61, *vmMV72,
+     *vmLDI00, *vmLDI02, *vmLDI01C, *vmLDI11, *vmLDI20, *vmLDI22, *vmLDI50, *vmLDI1C0, *vmLDI11C,
+     *vmLD012,
+     *vmSTI01, *vmSTI01C, *vmSTI21, *vmSTI20, *vmSTI30, *vmSTI40, *vmSTI50,
+     *vmST012, *vmST201,
+     *vmPUSH0, *vmPUSH1, *vmPUSH2, *vmPUSH3, *vmPUSH4, *vmPUSH5, *vmPUSH7, *vmPUSH19,
+     *vmPUSH1A, *vmPUSH1B,
+     *vmPOP0,  *vmPOP1,  *vmPOP2,  *vmPOP3,  *vmPOP4,  *vmPOP7, *vmPOP19, *vmPOP1A,  *vmPOP1B,
+     *vmADDI0, *vmADDI1, *vmADD10, *vmMUL10,
+     *vmBLTI1,
+     *vmBEQI0, *vmBEQI1, *vmBEQI7, *vmBNEI0, *vmBNEI1, *vmBNEI5, *vmBRTI0, *vmBNTI0, *vmBRA,
+     *vmJ0, *vmJ2, *vmJAL0, *vmJAL2, *vmRET,
+     *vmSYSI, *vmSYS0, *vmQUIT;
 
 extern Int vmInterrupt;
 

@@ -14,7 +14,7 @@
    transformation is undone and rip reverted to an immediate index value when
    a SYS opcode is performed or the interrupt handler called.  */
 
-/* Debg dump the current opcode
+/* Debug dump the current opcode
 */
 #define OPDB(s,...) DBE fprintf(stderr,"\n"OBJ":"HEX" " s, rcode, ((Obj*)rip-(Obj*)rcode), ##__VA_ARGS__)
 //#define OPDB(s) DBE fprintf(stderr,"\n"OBJ":"HEX" " s, rcode+8*((Obj*)rip-(Obj*)rcode), ((Obj*)rip-(Obj*)rcode))
@@ -84,24 +84,24 @@ void vmProcessInterrupt (void) {
 /* Virtual Machine
 */
 
-void *NOP,
-     *MVI0, *MVI1, *MVI2, *MVI3, *MVI4, *MVI5, *MVI6, *MVI7,
-     *MV01, *MV02, *MV03, *MV04, *MV07, *MV01E, *MV10, *MV13,
-     *MV20, *MV23, *MV30, *MV51C, *MV518,
-     *MV50, *MV1C0, *MV1C18,
-     *MV61, *MV72,
-     *LDI00, *LDI02, *LDI01C, *LDI11, *LDI20, *LDI22, *LDI50, *LDI1C0, *LDI11C,
-     *LD012,
-     *STI01, *STI01C, *STI21, *STI20, *STI30, *STI40, *STI50,
-     *ST012, *ST201,
-     *PUSH0, *PUSH1, *PUSH2, *PUSH3, *PUSH4, *PUSH5, *PUSH7, *PUSH19,
-     *PUSH1A, *PUSH1B,
-     *POP0,  *POP1,  *POP2,  *POP3,  *POP4,  *POP7, *POP19, *POP1A,  *POP1B,
-     *ADDI0, *ADDI1, *ADD10, *MUL10,
-     *BLTI1,
-     *BEQI0, *BEQI1, *BEQI7, *BNEI0, *BNEI1, *BNEI5, *BRTI0, *BNTI0, *BRA,
-     *J0, *J2, *JAL0, *JAL2, *RET,
-     *SYSI, *SYS0, *QUIT;
+void *vmNOP,
+     *vmMVI0, *vmMVI1, *vmMVI2, *vmMVI3, *vmMVI4, *vmMVI5, *vmMVI6, *vmMVI7,
+     *vmMV01, *vmMV02, *vmMV03, *vmMV04, *vmMV07, *vmMV01E, *vmMV10, *vmMV13,
+     *vmMV20, *vmMV23, *vmMV30, *vmMV51C, *vmMV518,
+     *vmMV50, *vmMV1C0, *vmMV1C18,
+     *vmMV61, *vmMV72,
+     *vmLDI00, *vmLDI02, *vmLDI01C, *vmLDI11, *vmLDI20, *vmLDI22, *vmLDI50, *vmLDI1C0, *vmLDI11C,
+     *vmLD012,
+     *vmSTI01, *vmSTI01C, *vmSTI21, *vmSTI20, *vmSTI30, *vmSTI40, *vmSTI50,
+     *vmST012, *vmST201,
+     *vmPUSH0, *vmPUSH1, *vmPUSH2, *vmPUSH3, *vmPUSH4, *vmPUSH5, *vmPUSH7, *vmPUSH19,
+     *vmPUSH1A, *vmPUSH1B,
+     *vmPOP0,  *vmPOP1,  *vmPOP2,  *vmPOP3,  *vmPOP4,  *vmPOP7, *vmPOP19, *vmPOP1A,  *vmPOP1B,
+     *vmADDI0, *vmADDI1, *vmADD10, *vmMUL10,
+     *vmBLTI1,
+     *vmBEQI0, *vmBEQI1, *vmBEQI7, *vmBNEI0, *vmBNEI1, *vmBNEI5, *vmBRTI0, *vmBNTI0, *vmBRA,
+     *vmJ0, *vmJ2, *vmJAL0, *vmJAL2, *vmRET,
+     *vmSYSI, *vmSYS0, *vmQUIT;
 
 #define VM_INIT 0
 #define VM_RUN  1
@@ -111,83 +111,83 @@ void vmVm (Int cmd) {
 		this function. */
 	if (cmd == VM_INIT) {
 		DBBEG("Initializing opcode values");
-		NOP=&&nop;
+		vmNOP=&&nop;
 
-		MVI0=&&mvi0;   MVI1=&&mvi1;   MVI2=&&mvi2;  MVI3=&&mvi3; MVI4=&&mvi4;
-		MVI5=&&mvi5;   MVI6=&&mvi6;   MVI7=&&mvi7;
-		MV01=&&mv01;   MV02=&&mv02;   MV03=&&mv03;  MV04=&&mv04; MV07=&&mv07;
-		MV01E=&&mv01e;
-		MV10=&&mv10;   MV13=&&mv13;  MV20=&&mv20;   MV23=&&mv23;
-		MV30=&&mv30;   MV51C=&&mv51c; MV518=&&mv518; MV50=&&mv50;
-		MV1C0=&&mv1c0; MV1C18=&&mv1c18;
-		MV61=&&mv61;   MV72=&&mv72;
+		vmMVI0=&&mvi0;   vmMVI1=&&mvi1;   vmMVI2=&&mvi2;  vmMVI3=&&mvi3; vmMVI4=&&mvi4;
+		vmMVI5=&&mvi5;   vmMVI6=&&mvi6;   vmMVI7=&&mvi7;
+		vmMV01=&&mv01;   vmMV02=&&mv02;   vmMV03=&&mv03;  vmMV04=&&mv04; vmMV07=&&mv07;
+		vmMV01E=&&mv01e;
+		vmMV10=&&mv10;   vmMV13=&&mv13;  vmMV20=&&mv20;   vmMV23=&&mv23;
+		vmMV30=&&mv30;   vmMV51C=&&mv51c; vmMV518=&&mv518; vmMV50=&&mv50;
+		vmMV1C0=&&mv1c0; vmMV1C18=&&mv1c18;
+		vmMV61=&&mv61;   vmMV72=&&mv72;
 
-		LDI00=&&ldi00;   LDI02=&&ldi02;   LDI01C=&&ldi01c; LDI11=&&ldi11;
-      LDI11C=&&ldi11c; LDI20=&&ldi20;  LDI22=&&ldi22;
-      LDI50=&&ldi50;   LDI1C0=&&ldi1c0;
+		vmLDI00=&&ldi00;   vmLDI02=&&ldi02;   vmLDI01C=&&ldi01c; vmLDI11=&&ldi11;
+      vmLDI11C=&&ldi11c; vmLDI20=&&ldi20;  vmLDI22=&&ldi22;
+      vmLDI50=&&ldi50;   vmLDI1C0=&&ldi1c0;
 
-      LD012=&&ld012; STI01=&&sti01; STI01C=&&sti01c; STI20=&&sti20;
-      STI21=&&sti21;
-      STI30=&&sti30; STI40=&&sti40; STI50=&&sti50; ST012=&&st012;
-      ST201=&&st201;
+      vmLD012=&&ld012; vmSTI01=&&sti01; vmSTI01C=&&sti01c; vmSTI20=&&sti20;
+      vmSTI21=&&sti21;
+      vmSTI30=&&sti30; vmSTI40=&&sti40; vmSTI50=&&sti50; vmST012=&&st012;
+      vmST201=&&st201;
 
-		PUSH0=&&push0; PUSH1=&&push1;   PUSH2=&&push2;   PUSH3=&&push3;
-		PUSH4=&&push4; PUSH5=&&push5;   PUSH7=&&push7;   PUSH19=&&push19;
-      PUSH1A=&&push1a; PUSH1B=&&push1b;
+		vmPUSH0=&&push0; vmPUSH1=&&push1;   vmPUSH2=&&push2;   vmPUSH3=&&push3;
+		vmPUSH4=&&push4; vmPUSH5=&&push5;   vmPUSH7=&&push7;   vmPUSH19=&&push19;
+      vmPUSH1A=&&push1a; vmPUSH1B=&&push1b;
 
-		POP0=&&pop0;    POP1=&&pop1;   POP2=&&pop2;   POP3=&&pop3;  POP4=&&pop4;  POP7=&&pop7;
-		POP19=&&pop19;  POP1A=&&pop1a; POP1B=&&pop1b;
+		vmPOP0=&&pop0;    vmPOP1=&&pop1;   vmPOP2=&&pop2;   vmPOP3=&&pop3;  vmPOP4=&&pop4;  vmPOP7=&&pop7;
+		vmPOP19=&&pop19;  vmPOP1A=&&pop1a; vmPOP1B=&&pop1b;
 
-		ADDI0=&&addi0; ADDI1=&&addi1; ADD10=&&add10; MUL10=&&mul10;
+		vmADDI0=&&addi0; vmADDI1=&&addi1; vmADD10=&&add10; vmMUL10=&&mul10;
 
-		BLTI1=&&blti1;
-		BEQI0=&&beqi0; BEQI1=&&beqi1; BEQI7=&&beqi7;
-		BNEI0=&&bnei0; BNEI1=&&bnei1; BNEI5=&&bnei5;
-		BRTI0=&&brti0; BNTI0=&&bnti0;
-		BRA=&&bra;
+		vmBLTI1=&&blti1;
+		vmBEQI0=&&beqi0; vmBEQI1=&&beqi1; vmBEQI7=&&beqi7;
+		vmBNEI0=&&bnei0; vmBNEI1=&&bnei1; vmBNEI5=&&bnei5;
+		vmBRTI0=&&brti0; vmBNTI0=&&bnti0;
+		vmBRA=&&bra;
 
-		J0=&&j0;      J2=&&j2;
-		JAL0=&&jal0;  JAL2=&&jal2;
-		RET=&&ret;
+		vmJ0=&&j0;      vmJ2=&&j2;
+		vmJAL0=&&jal0;  vmJAL2=&&jal2;
+		vmRET=&&ret;
 
-		SYSI=&&sysi;   SYS0=&&sys0;   QUIT=&&quit;
+		vmSYSI=&&sysi;   vmSYS0=&&sys0;   vmQUIT=&&quit;
 
 		//TODO move this to the module that handles object dumps
-		memObjStringSet(NOP);
-		memObjStringSet(MVI0); memObjStringSet(MVI1); memObjStringSet(MVI2); memObjStringSet(MVI3);
-		memObjStringSet(MVI4); memObjStringSet(MVI5); memObjStringSet(MVI6); memObjStringSet(MVI7);
-		memObjStringSet(MV01); memObjStringSet(MV02); memObjStringSet(MV03); memObjStringSet(MV04);
-		memObjStringSet(MV07); memObjStringSet(MV01E); memObjStringSet(MV10);
-		memObjStringSet(MV13); memObjStringSet(MV20); memObjStringSet(MV23);
-		memObjStringSet(MV30); memObjStringSet(MV51C); memObjStringSet(MV518);
-		memObjStringSet(MV50);
-		memObjStringSet(MV1C0); memObjStringSet(MV1C18); memObjStringSet(MV61); memObjStringSet(MV72);
-		memObjStringSet(LDI00); memObjStringSet(LDI02); memObjStringSet(LDI01C);
-		memObjStringSet(LDI11); memObjStringSet(LDI11C); memObjStringSet(LDI20); memObjStringSet(LDI22);
-		memObjStringSet(LDI50); memObjStringSet(LDI1C0);
-		memObjStringSet(LD012);
-		memObjStringSet(STI01); memObjStringSet(STI01C); memObjStringSet(STI20); memObjStringSet(STI21);
-		memObjStringSet(STI30); memObjStringSet(STI40); memObjStringSet(STI50); memObjStringSet(ST012);
-		memObjStringSet(ST201);
-		memObjStringSet(PUSH0); memObjStringSet(PUSH1); memObjStringSet(PUSH2); memObjStringSet(PUSH3);
-		memObjStringSet(PUSH4); memObjStringSet(PUSH5); memObjStringSet(PUSH7); memObjStringSet(PUSH19);
-		memObjStringSet(PUSH1A); memObjStringSet(PUSH1B);
-		memObjStringSet(POP0); memObjStringSet(POP1); memObjStringSet(POP2); memObjStringSet(POP3);
-		memObjStringSet(POP4); memObjStringSet(POP7); memObjStringSet(POP19);
-		memObjStringSet(POP1A); memObjStringSet(POP1B);
-		memObjStringSet(ADDI0); memObjStringSet(ADDI1); memObjStringSet(ADD10);
-		memObjStringSet(MUL10);
-		memObjStringSet(BLTI1);
-		memObjStringSet(BEQI0); memObjStringSet(BEQI1); memObjStringSet(BEQI7);
-		memObjStringSet(BNEI0); memObjStringSet(BNEI1); memObjStringSet(BNEI5);
-		memObjStringSet(BRTI0);
-		memObjStringSet(BNTI0);
-		memObjStringSet(BRA);
-		memObjStringSet(J0); memObjStringSet(J2);
-		memObjStringSet(JAL0); memObjStringSet(JAL2);
-		memObjStringSet(RET);
-		memObjStringSet(SYSI); memObjStringSet(SYS0);
-		memObjStringSet(QUIT);
+		memPointerRegister(vmNOP);
+		memPointerRegister(vmMVI0); memPointerRegister(vmMVI1); memPointerRegister(vmMVI2); memPointerRegister(vmMVI3);
+		memPointerRegister(vmMVI4); memPointerRegister(vmMVI5); memPointerRegister(vmMVI6); memPointerRegister(vmMVI7);
+		memPointerRegister(vmMV01); memPointerRegister(vmMV02); memPointerRegister(vmMV03); memPointerRegister(vmMV04);
+		memPointerRegister(vmMV07); memPointerRegister(vmMV01E); memPointerRegister(vmMV10);
+		memPointerRegister(vmMV13); memPointerRegister(vmMV20); memPointerRegister(vmMV23);
+		memPointerRegister(vmMV30); memPointerRegister(vmMV51C); memPointerRegister(vmMV518);
+		memPointerRegister(vmMV50);
+		memPointerRegister(vmMV1C0); memPointerRegister(vmMV1C18); memPointerRegister(vmMV61); memPointerRegister(vmMV72);
+		memPointerRegister(vmLDI00); memPointerRegister(vmLDI02); memPointerRegister(vmLDI01C);
+		memPointerRegister(vmLDI11); memPointerRegister(vmLDI11C); memPointerRegister(vmLDI20); memPointerRegister(vmLDI22);
+		memPointerRegister(vmLDI50); memPointerRegister(vmLDI1C0);
+		memPointerRegister(vmLD012);
+		memPointerRegister(vmSTI01); memPointerRegister(vmSTI01C); memPointerRegister(vmSTI20); memPointerRegister(vmSTI21);
+		memPointerRegister(vmSTI30); memPointerRegister(vmSTI40); memPointerRegister(vmSTI50); memPointerRegister(vmST012);
+		memPointerRegister(vmST201);
+		memPointerRegister(vmPUSH0); memPointerRegister(vmPUSH1); memPointerRegister(vmPUSH2); memPointerRegister(vmPUSH3);
+		memPointerRegister(vmPUSH4); memPointerRegister(vmPUSH5); memPointerRegister(vmPUSH7); memPointerRegister(vmPUSH19);
+		memPointerRegister(vmPUSH1A); memPointerRegister(vmPUSH1B);
+		memPointerRegister(vmPOP0); memPointerRegister(vmPOP1); memPointerRegister(vmPOP2); memPointerRegister(vmPOP3);
+		memPointerRegister(vmPOP4); memPointerRegister(vmPOP7); memPointerRegister(vmPOP19);
+		memPointerRegister(vmPOP1A); memPointerRegister(vmPOP1B);
+		memPointerRegister(vmADDI0); memPointerRegister(vmADDI1); memPointerRegister(vmADD10);
+		memPointerRegister(vmMUL10);
+		memPointerRegister(vmBLTI1);
+		memPointerRegister(vmBEQI0); memPointerRegister(vmBEQI1); memPointerRegister(vmBEQI7);
+		memPointerRegister(vmBNEI0); memPointerRegister(vmBNEI1); memPointerRegister(vmBNEI5);
+		memPointerRegister(vmBRTI0);
+		memPointerRegister(vmBNTI0);
+		memPointerRegister(vmBRA);
+		memPointerRegister(vmJ0); memPointerRegister(vmJ2);
+		memPointerRegister(vmJAL0); memPointerRegister(vmJAL2);
+		memPointerRegister(vmRET);
+		memPointerRegister(vmSYSI); memPointerRegister(vmSYS0);
+		memPointerRegister(vmQUIT);
 
 		DBEND();
 		return;
@@ -464,7 +464,7 @@ void vmVm (Int cmd) {
 
 	/* Jump to immediate 2 if r0's type not equal to immediate 1. */
 	bnti0: OPDB("bnti0");
-	if (((Num)r0<0x100000) || (memObjectType(r0))!=*(Num*)(rip+=8)) {
+	if (((Num)r0<0x430000) || (memObjectType(r0))!=*(Num*)(rip+=8)) {
 		rip += 8l;
 		rip += *(Int*)rip;
 		rip += 8l;
@@ -569,7 +569,7 @@ void vmRun (void) {
 void vmObjectDumperDefault (Obj o, FILE *stream) {
  static Str p;
 	fprintf (stream, "#<"HEX, o);
-	if ((p = memObjString(o))) fprintf (stream, ":%s", p);
+	if ((p = memPointerString(o))) fprintf (stream, ":%s", p);
 	fprintf (stream, ">");
 }
 
@@ -593,105 +593,105 @@ void vmDebugDumpCode (Obj c, FILE *stream) {
 			i,
 			(i==rip || lineNumber==(Num)rip)?"*":" ",
 			lineNumber);
-		if (*i == NOP)      {fprintf(stream, "nop");}
-		else if (*i==MVI0)  {fprintf(stream, "mvi_0 "); vmObjectDumper(*++i, stream);}
-		else if (*i==MVI1)  {fprintf(stream, "mvi_1 "); vmObjectDumper(*++i, stream);}
-		else if (*i==MVI2)  {fprintf(stream, "mvi_2 "); vmObjectDumper(*++i, stream);}
-		else if (*i==MVI3)  {fprintf(stream, "mvi_3 "); vmObjectDumper(*++i, stream);}
-		else if (*i==MVI4)  {fprintf(stream, "mvi_4 "); vmObjectDumper(*++i, stream);}
-		else if (*i==MVI5)  {fprintf(stream, "mvi_5 "); vmObjectDumper(*++i, stream);}
-		else if (*i==MVI6)  {fprintf(stream, "mvi_6 "); vmObjectDumper(*++i, stream);}
-		else if (*i==MVI7)  {fprintf(stream, "mvi_7 "); vmObjectDumper(*++i, stream);}
-		else if (*i==MV01)  {fprintf(stream, "mv_0_1 ");}
-		else if (*i==MV02)  {fprintf(stream, "mv_0_2 ");}
-		else if (*i==MV03)  {fprintf(stream, "mv_0_3 ");}
-		else if (*i==MV04)  {fprintf(stream, "mv_0_4 ");}
-		else if (*i==MV07)  {fprintf(stream, "mv_0_7 ");}
-		else if (*i==MV01E) {fprintf(stream, "mv_0_1e ");}
-		else if (*i==MV10)  {fprintf(stream, "mv_1_0 ");}
-		else if (*i==MV13)  {fprintf(stream, "mv_1_3 ");}
-		else if (*i==MV20)  {fprintf(stream, "mv_2_0 ");}
-		else if (*i==MV23)  {fprintf(stream, "mv_2_3 ");}
-		else if (*i==MV30)  {fprintf(stream, "mv_3_0 ");}
-		else if (*i==MV50)  {fprintf(stream, "mv_5_0 ");}
-		else if (*i==MV51C) {fprintf(stream, "mv_5_1c ");}
-		else if (*i==MV518) {fprintf(stream, "mv_5_18 ");}
-		else if (*i==MV1C0) {fprintf(stream, "mv_1c_0 ");}
-		else if (*i==MV1C18) {fprintf(stream, "mv_1c_18 ");}
-		else if (*i==MV61) {fprintf(stream, "mv_6_1 ");}
-		else if (*i==MV72) {fprintf(stream, "mv_7_2 ");}
-		else if (*i==LDI00) {fprintf(stream, "ldi_0_0 "); vmObjectDumper(*++i, stream);}
-		else if (*i==LDI02) {fprintf(stream, "ldi_0_2 "); vmObjectDumper(*++i, stream);}
-		else if (*i==LDI01C){fprintf(stream, "ldi_0_1c "); vmObjectDumper(*++i, stream);}
-		else if (*i==LDI11) {fprintf(stream, "ldi_1_1 "); vmObjectDumper(*++i, stream);}
-		else if (*i==LDI11C){fprintf(stream, "ldi_1_1c "); vmObjectDumper(*++i, stream);}
-		else if (*i==LDI20) {fprintf(stream, "ldi_2_0 "); vmObjectDumper(*++i, stream);}
-		else if (*i==LDI22) {fprintf(stream, "ldi_2_2 "); vmObjectDumper(*++i, stream);}
-		else if (*i==LDI50) {fprintf(stream, "ldi_5_0 "); vmObjectDumper(*++i, stream);}
-		else if (*i==LDI1C0){fprintf(stream, "ldi_1c_0 "); vmObjectDumper(*++i, stream);}
-		else if (*i==LD012) {fprintf(stream, "ld0_1_2");}
-		else if (*i==STI01) {fprintf(stream, "sti_0_1 "); vmObjectDumper(*++i, stream);}
-		else if (*i==STI01C){fprintf(stream, "sti_0_1c "); vmObjectDumper(*++i, stream);}
-		else if (*i==STI20) {fprintf(stream, "sti_2_0 "); vmObjectDumper(*++i, stream);}
-		else if (*i==STI21) {fprintf(stream, "sti_2_1 "); vmObjectDumper(*++i, stream);}
-		else if (*i==STI30) {fprintf(stream, "sti_3_0 "); vmObjectDumper(*++i, stream);}
-		else if (*i==STI40) {fprintf(stream, "sti_4_0 "); vmObjectDumper(*++i, stream);}
-		else if (*i==STI50) {fprintf(stream, "sti_5_0 "); vmObjectDumper(*++i, stream);}
-		else if (*i==ST012) {fprintf(stream, "st_0_1_2 ");}
-		else if (*i==ST201) {fprintf(stream, "st_2_0_1 ");}
-		else if (*i==PUSH0) {fprintf(stream, "push_0 ");}
-		else if (*i==PUSH1) {fprintf(stream, "push_1 ");}
-		else if (*i==PUSH2) {fprintf(stream, "push_2 ");}
-		else if (*i==PUSH3) {fprintf(stream, "push_3 ");}
-		else if (*i==PUSH4) {fprintf(stream, "push_4 ");}
-		else if (*i==PUSH5) {fprintf(stream, "push_5 ");}
-		else if (*i==PUSH7) {fprintf(stream, "push_7 ");}
-		else if (*i==PUSH19){fprintf(stream, "push_19 ");}
-		else if (*i==PUSH1A){fprintf(stream, "push_1a ");}
-		else if (*i==PUSH1B){fprintf(stream, "push_1b ");}
-		else if (*i==POP0)  {fprintf(stream, "pop_0 ");}
-		else if (*i==POP1)  {fprintf(stream, "pop_1 ");}
-		else if (*i==POP2)  {fprintf(stream, "pop_2 ");}
-		else if (*i==POP3)  {fprintf(stream, "pop_3 ");}
-		else if (*i==POP4)  {fprintf(stream, "pop_4 ");}
-		else if (*i==POP7)  {fprintf(stream, "pop_7 ");}
-		else if (*i==POP19) {fprintf(stream, "pop_19 ");}
-		else if (*i==POP1A) {fprintf(stream, "pop_1a ");}
-		else if (*i==POP1B) {fprintf(stream, "pop_1b ");}
-		else if (*i==ADDI0) {fprintf(stream, "addi_0 %d", *(i+1)); i++; }
-		else if (*i==ADDI1) {fprintf(stream, "addi_1 %d", *(i+1)); i++; }
-		else if (*i==ADD10) {fprintf(stream, "add_1_0 "); }
-		else if (*i==MUL10) {fprintf(stream, "mul_1_0 "); }
-		else if (*i==BLTI1) {fprintf(stream, "blti_1 %x %04x",
+		if      (*i==vmNOP)   {fprintf(stream, "nop");}
+		else if (*i==vmMVI0)  {fprintf(stream, "mvi_0 "); vmObjectDumper(*++i, stream);}
+		else if (*i==vmMVI1)  {fprintf(stream, "mvi_1 "); vmObjectDumper(*++i, stream);}
+		else if (*i==vmMVI2)  {fprintf(stream, "mvi_2 "); vmObjectDumper(*++i, stream);}
+		else if (*i==vmMVI3)  {fprintf(stream, "mvi_3 "); vmObjectDumper(*++i, stream);}
+		else if (*i==vmMVI4)  {fprintf(stream, "mvi_4 "); vmObjectDumper(*++i, stream);}
+		else if (*i==vmMVI5)  {fprintf(stream, "mvi_5 "); vmObjectDumper(*++i, stream);}
+		else if (*i==vmMVI6)  {fprintf(stream, "mvi_6 "); vmObjectDumper(*++i, stream);}
+		else if (*i==vmMVI7)  {fprintf(stream, "mvi_7 "); vmObjectDumper(*++i, stream);}
+		else if (*i==vmMV01)  {fprintf(stream, "mv_0_1 ");}
+		else if (*i==vmMV02)  {fprintf(stream, "mv_0_2 ");}
+		else if (*i==vmMV03)  {fprintf(stream, "mv_0_3 ");}
+		else if (*i==vmMV04)  {fprintf(stream, "mv_0_4 ");}
+		else if (*i==vmMV07)  {fprintf(stream, "mv_0_7 ");}
+		else if (*i==vmMV01E) {fprintf(stream, "mv_0_1e ");}
+		else if (*i==vmMV10)  {fprintf(stream, "mv_1_0 ");}
+		else if (*i==vmMV13)  {fprintf(stream, "mv_1_3 ");}
+		else if (*i==vmMV20)  {fprintf(stream, "mv_2_0 ");}
+		else if (*i==vmMV23)  {fprintf(stream, "mv_2_3 ");}
+		else if (*i==vmMV30)  {fprintf(stream, "mv_3_0 ");}
+		else if (*i==vmMV50)  {fprintf(stream, "mv_5_0 ");}
+		else if (*i==vmMV51C) {fprintf(stream, "mv_5_1c ");}
+		else if (*i==vmMV518) {fprintf(stream, "mv_5_18 ");}
+		else if (*i==vmMV1C0) {fprintf(stream, "mv_1c_0 ");}
+		else if (*i==vmMV1C18) {fprintf(stream, "mv_1c_18 ");}
+		else if (*i==vmMV61) {fprintf(stream, "mv_6_1 ");}
+		else if (*i==vmMV72) {fprintf(stream, "mv_7_2 ");}
+		else if (*i==vmLDI00) {fprintf(stream, "ldi_0_0 "); vmObjectDumper(*++i, stream);}
+		else if (*i==vmLDI02) {fprintf(stream, "ldi_0_2 "); vmObjectDumper(*++i, stream);}
+		else if (*i==vmLDI01C){fprintf(stream, "ldi_0_1c "); vmObjectDumper(*++i, stream);}
+		else if (*i==vmLDI11) {fprintf(stream, "ldi_1_1 "); vmObjectDumper(*++i, stream);}
+		else if (*i==vmLDI11C){fprintf(stream, "ldi_1_1c "); vmObjectDumper(*++i, stream);}
+		else if (*i==vmLDI20) {fprintf(stream, "ldi_2_0 "); vmObjectDumper(*++i, stream);}
+		else if (*i==vmLDI22) {fprintf(stream, "ldi_2_2 "); vmObjectDumper(*++i, stream);}
+		else if (*i==vmLDI50) {fprintf(stream, "ldi_5_0 "); vmObjectDumper(*++i, stream);}
+		else if (*i==vmLDI1C0){fprintf(stream, "ldi_1c_0 "); vmObjectDumper(*++i, stream);}
+		else if (*i==vmLD012) {fprintf(stream, "ld0_1_2");}
+		else if (*i==vmSTI01) {fprintf(stream, "sti_0_1 "); vmObjectDumper(*++i, stream);}
+		else if (*i==vmSTI01C){fprintf(stream, "sti_0_1c "); vmObjectDumper(*++i, stream);}
+		else if (*i==vmSTI20) {fprintf(stream, "sti_2_0 "); vmObjectDumper(*++i, stream);}
+		else if (*i==vmSTI21) {fprintf(stream, "sti_2_1 "); vmObjectDumper(*++i, stream);}
+		else if (*i==vmSTI30) {fprintf(stream, "sti_3_0 "); vmObjectDumper(*++i, stream);}
+		else if (*i==vmSTI40) {fprintf(stream, "sti_4_0 "); vmObjectDumper(*++i, stream);}
+		else if (*i==vmSTI50) {fprintf(stream, "sti_5_0 "); vmObjectDumper(*++i, stream);}
+		else if (*i==vmST012) {fprintf(stream, "st_0_1_2 ");}
+		else if (*i==vmST201) {fprintf(stream, "st_2_0_1 ");}
+		else if (*i==vmPUSH0) {fprintf(stream, "push_0 ");}
+		else if (*i==vmPUSH1) {fprintf(stream, "push_1 ");}
+		else if (*i==vmPUSH2) {fprintf(stream, "push_2 ");}
+		else if (*i==vmPUSH3) {fprintf(stream, "push_3 ");}
+		else if (*i==vmPUSH4) {fprintf(stream, "push_4 ");}
+		else if (*i==vmPUSH5) {fprintf(stream, "push_5 ");}
+		else if (*i==vmPUSH7) {fprintf(stream, "push_7 ");}
+		else if (*i==vmPUSH19){fprintf(stream, "push_19 ");}
+		else if (*i==vmPUSH1A){fprintf(stream, "push_1a ");}
+		else if (*i==vmPUSH1B){fprintf(stream, "push_1b ");}
+		else if (*i==vmPOP0)  {fprintf(stream, "pop_0 ");}
+		else if (*i==vmPOP1)  {fprintf(stream, "pop_1 ");}
+		else if (*i==vmPOP2)  {fprintf(stream, "pop_2 ");}
+		else if (*i==vmPOP3)  {fprintf(stream, "pop_3 ");}
+		else if (*i==vmPOP4)  {fprintf(stream, "pop_4 ");}
+		else if (*i==vmPOP7)  {fprintf(stream, "pop_7 ");}
+		else if (*i==vmPOP19) {fprintf(stream, "pop_19 ");}
+		else if (*i==vmPOP1A) {fprintf(stream, "pop_1a ");}
+		else if (*i==vmPOP1B) {fprintf(stream, "pop_1b ");}
+		else if (*i==vmADDI0) {fprintf(stream, "addi_0 %d", *(i+1)); i++; }
+		else if (*i==vmADDI1) {fprintf(stream, "addi_1 %d", *(i+1)); i++; }
+		else if (*i==vmADD10) {fprintf(stream, "add_1_0 "); }
+		else if (*i==vmMUL10) {fprintf(stream, "mul_1_0 "); }
+		else if (*i==vmBLTI1) {fprintf(stream, "blti_1 %x %04x",
 									 *(i+1), 3+i-(Obj*)c+(Int)*(i+2)/8); i+=2;}
-		else if (*i==BEQI0) {fprintf(stream, "beqi_0 %x %04x",
+		else if (*i==vmBEQI0) {fprintf(stream, "beqi_0 %x %04x",
 									 *(i+1), 3+i-(Obj*)c+(Int)*(i+2)/8); i+=2;}
-		else if (*i==BEQI1) {fprintf(stream, "beqi_1 %x %04x",
+		else if (*i==vmBEQI1) {fprintf(stream, "beqi_1 %x %04x",
 									 *(i+1), 3+i-(Obj*)c+(Int)*(i+2)/8); i+=2;}
-		else if (*i==BEQI7) {fprintf(stream, "beqi_7 %x %04x",
+		else if (*i==vmBEQI7) {fprintf(stream, "beqi_7 %x %04x",
 									 *(i+1), 3+i-(Obj*)c+(Int)*(i+2)/8); i+=2;}
-		else if (*i==BNEI0) {fprintf(stream, "bnei_0 %x %04x",
+		else if (*i==vmBNEI0) {fprintf(stream, "bnei_0 %x %04x",
 									 *(i+1), 3+i-(Obj*)c+(Int)*(i+2)/8); i+=2;}
-		else if (*i==BNEI1) {fprintf(stream, "bnei_1 %x %04x",
+		else if (*i==vmBNEI1) {fprintf(stream, "bnei_1 %x %04x",
 									 *(i+1), 3+i-(Obj*)c+(Int)*(i+2)/8); i+=2;}
-		else if (*i==BNEI5) {fprintf(stream, "bnei_5 ");
+		else if (*i==vmBNEI5) {fprintf(stream, "bnei_5 ");
 									vmObjectDumper(*(i+1), stream);
 									fprintf(stream, " %04x", 3+i-(Obj*)c+(Int)*(i+2)/8);
 									i+=2;}
-		else if (*i==BRTI0) {fprintf (stream, "brti_0 %x %04x",
+		else if (*i==vmBRTI0) {fprintf (stream, "brti_0 %x %04x",
 									 *(i+1), 3+i-(Obj*)c+(Int)*(i+2)/8); i+=2;}
-		else if (*i==BNTI0) {fprintf (stream, "bnti_0 %08x %04x",
+		else if (*i==vmBNTI0) {fprintf (stream, "bnti_0 %08x %04x",
 									 *(i+1), 3+i-(Obj*)c+(Int)*(i+2)/8); i+=2;}
-		else if (*i==BRA)   {fprintf (stream, "bra %04x",
+		else if (*i==vmBRA)   {fprintf (stream, "bra %04x",
 									 2+i-(Obj*)c+(Int)*(i+1)/8); i++;}
-		else if (*i==J0)    {fprintf (stream, "j_0 ");}
-		else if (*i==J2)    {fprintf (stream, "j_2 ");}
-		else if (*i==JAL0)  {fprintf (stream, "jal_0 ");}
-		else if (*i==JAL2)  {fprintf (stream, "jal_2 ");}
-		else if (*i==RET)   {fprintf (stream, "ret ");}
-		else if (*i==SYSI)  {fprintf (stream, "sysi "); vmObjectDumper(*++i, stream);}
-		else if (*i==SYS0)  {fprintf (stream, "sys_0 ");}
-		else if (*i==QUIT)  {fprintf (stream, "quit ");}
+		else if (*i==vmJ0)    {fprintf (stream, "j_0 ");}
+		else if (*i==vmJ2)    {fprintf (stream, "j_2 ");}
+		else if (*i==vmJAL0)  {fprintf (stream, "jal_0 ");}
+		else if (*i==vmJAL2)  {fprintf (stream, "jal_2 ");}
+		else if (*i==vmRET)   {fprintf (stream, "ret ");}
+		else if (*i==vmSYSI)  {fprintf (stream, "sysi "); vmObjectDumper(*++i, stream);}
+		else if (*i==vmSYS0)  {fprintf (stream, "sys_0 ");}
+		else if (*i==vmQUIT)  {fprintf (stream, "quit ");}
 		else {
 			//fprintf(stream, HEX" = ", *i);
 			vmObjectDumper(*i, stream);
@@ -715,18 +715,18 @@ void vmInitialize (Func interruptHandler, void(*vmObjDumper)(Obj, FILE*)) {
 		shouldInitialize=0;
 		memInitialize(0, 0);
 		DB("Create 'registers'");
-		memRegisterRoot(r0);  memRegisterRoot(r1);  memRegisterRoot(r2);  memRegisterRoot(r3);
-		memRegisterRoot(r4);  memRegisterRoot(r5);  memRegisterRoot(r6);  memRegisterRoot(r7);
-		memRegisterRoot(r8);  memRegisterRoot(r9);  memRegisterRoot(ra);  memRegisterRoot(rb);
-		memRegisterRoot(rc);  memRegisterRoot(rd);  memRegisterRoot(re);  memRegisterRoot(rf);
-		memRegisterRoot(r10); memRegisterRoot(r11); memRegisterRoot(r12); memRegisterRoot(r13);
-		memRegisterRoot(r14); memRegisterRoot(r15); memRegisterRoot(r16); memRegisterRoot(r17);
-		memRegisterRoot(r18); memRegisterRoot(r19); memRegisterRoot(r1a); memRegisterRoot(r1b);
-		memRegisterRoot(r1c); memRegisterRoot(r1d); memRegisterRoot(r1e); memRegisterRoot(r1f);
+		memRootSetRegister(r0);  memRootSetRegister(r1);  memRootSetRegister(r2);  memRootSetRegister(r3);
+		memRootSetRegister(r4);  memRootSetRegister(r5);  memRootSetRegister(r6);  memRootSetRegister(r7);
+		memRootSetRegister(r8);  memRootSetRegister(r9);  memRootSetRegister(ra);  memRootSetRegister(rb);
+		memRootSetRegister(rc);  memRootSetRegister(rd);  memRootSetRegister(re);  memRootSetRegister(rf);
+		memRootSetRegister(r10); memRootSetRegister(r11); memRootSetRegister(r12); memRootSetRegister(r13);
+		memRootSetRegister(r14); memRootSetRegister(r15); memRootSetRegister(r16); memRootSetRegister(r17);
+		memRootSetRegister(r18); memRootSetRegister(r19); memRootSetRegister(r1a); memRootSetRegister(r1b);
+		memRootSetRegister(r1c); memRootSetRegister(r1d); memRootSetRegister(r1e); memRootSetRegister(r1f);
 		DB("Create the stack");
 		r1f = memNewStack();
 		DB("Register the internal object types");
-		memRegisterType (TCODE, "code");
+		memTypeRegisterString (TCODE, "code");
 		DB("Initialize opcode values");
 		vmVm(VM_INIT); /* Opcode values are really C goto addresses */
 	} else {

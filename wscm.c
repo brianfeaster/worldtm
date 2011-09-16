@@ -1418,7 +1418,7 @@ void syscallDebugger (void) {
 	   if (cmd=='w') {
 			Obj arg;
 			scanf("%lx", &arg);
-			if (memObjString(arg)) printf ((char*)memObjString(arg));
+			if (memPointerString(arg)) printf ((char*)memPointerString(arg));
 			else sysWrite(arg, stderr);
 		}
 		if (cmd=='R') done=1;
@@ -1545,203 +1545,203 @@ void wscmCreateRead (void) {
 	DBBEG();
 	objNewString((Str)"Parser",6); /* Label */
 	asmAsm (
-		BRA, 8l,
+		vmBRA, 8l,
 		r0, /* Label */
-		MVI4, 0l,             /* r4 <- Initial state. */
-		MVI6, 0l,             /* r6 <- initial yylength. */
+		vmMVI4, 0l,             /* r4 <- Initial state. */
+		vmMVI6, 0l,             /* r6 <- initial yylength. */
 	LABEL, "scan",
 		/* Call recv block to read one char */
-		MVI2, false, /* tell recv to not timeout */
-		MVI3, null, /* tell recv that we want a character */
-		PUSH4,
-			SYSI, wscmRecvBlock, /* Syscall to read char. */
-		POP4,
-		MV30,                     /* move char to r3 */
-		MVI0, 0l, /* Initialize final state to 0.  Will return 0 when still in non-final state. */
-		SYSI, wscmSysTransition, /* Syscall to get next state. */
-		BEQI0, 0l, ADDR, "scan",
+		vmMVI2, false, /* tell recv to not timeout */
+		vmMVI3, null, /* tell recv that we want a character */
+		vmPUSH4,
+			vmSYSI, wscmRecvBlock, /* Syscall to read char. */
+		vmPOP4,
+		vmMV30,                     /* move char to r3 */
+		vmMVI0, 0l, /* Initialize final state to 0.  Will return 0 when still in non-final state. */
+		vmSYSI, wscmSysTransition, /* Syscall to get next state. */
+		vmBEQI0, 0l, ADDR, "scan",
 		/* close paren? */
-		BNEI0, SCLOSEPAREN, ADDR, "dot",
-		MVI0, null,
-		RET,
+		vmBNEI0, SCLOSEPAREN, ADDR, "dot",
+		vmMVI0, null,
+		vmRET,
 	LABEL, "dot",
 		/* dot? */
-		BNEI0, SDOT, ADDR, "eof",
-		PUSH7, PUSH1A, PUSH1B, /* Recurse on this fn (parser) with isList set. */
-		MVI7, 1l,
-		MV01E,
-		JAL0,
-		POP1B, POP1A, POP7,
-		LDI00, 0l, /* Only want the car of the list we just parsed. */
-		RET,
+		vmBNEI0, SDOT, ADDR, "eof",
+		vmPUSH7, vmPUSH1A, vmPUSH1B, /* Recurse on this fn (parser) with isList set. */
+		vmMVI7, 1l,
+		vmMV01E,
+		vmJAL0,
+		vmPOP1B, vmPOP1A, vmPOP7,
+		vmLDI00, 0l, /* Only want the car of the list we just parsed. */
+		vmRET,
 		/* eof? */
 	LABEL, "eof",
-		BNEI0, SEOF, ADDR, "vector",
-		MVI0, eof,
-		RET,
+		vmBNEI0, SEOF, ADDR, "vector",
+		vmMVI0, eof,
+		vmRET,
 		/* vector? */
 	LABEL, "vector",
-		BNEI0, SVECTOR, ADDR, "quote",
-		PUSH7, PUSH1A, PUSH1B, /* Recursive call with isList set */
-		MVI7, 1l,
-		MV01E,
-		JAL0,
-		POP1B, POP1A, POP7,
-		PUSH1, /* Save r1 since objListToVector requires r1. */
-		MV10,
-		SYSI, objListToVector,
-		POP1,  /* Restore r1. */
-		BRA, ADDR, "done",
+		vmBNEI0, SVECTOR, ADDR, "quote",
+		vmPUSH7, vmPUSH1A, vmPUSH1B, /* Recursive call with isList set */
+		vmMVI7, 1l,
+		vmMV01E,
+		vmJAL0,
+		vmPOP1B, vmPOP1A, vmPOP7,
+		vmPUSH1, /* Save r1 since objListToVector requires r1. */
+		vmMV10,
+		vmSYSI, objListToVector,
+		vmPOP1,  /* Restore r1. */
+		vmBRA, ADDR, "done",
 		/* quote? */
 	LABEL, "quote",
-		BNEI0, SQUOTE, ADDR, "unquotesplicing",
-		PUSH7, PUSH1A, PUSH1B,
-		MVI7, 0l,
-		MV01E,
-		JAL0,
-		POP1B, POP1A, POP7,
-		PUSH1, PUSH2, /* Save r1 and r2 */
-			MV10,           /* Car object. */
-			MVI2, null,/* Cdr object. */
-			SYSI, objCons12,
-			MVI1, squote,/* Car object. */
-			MV20,            /* Cdr object. */
-			SYSI, objCons12,
-		POP2, POP1,   /* Restore r1 and r2 */
-		BRA, ADDR, "done",
+		vmBNEI0, SQUOTE, ADDR, "unquotesplicing",
+		vmPUSH7, vmPUSH1A, vmPUSH1B,
+		vmMVI7, 0l,
+		vmMV01E,
+		vmJAL0,
+		vmPOP1B, vmPOP1A, vmPOP7,
+		vmPUSH1, vmPUSH2, /* Save r1 and r2 */
+			vmMV10,           /* Car object. */
+			vmMVI2, null,/* Cdr object. */
+			vmSYSI, objCons12,
+			vmMVI1, squote,/* Car object. */
+			vmMV20,            /* Cdr object. */
+			vmSYSI, objCons12,
+		vmPOP2, vmPOP1,   /* Restore r1 and r2 */
+		vmBRA, ADDR, "done",
 		/* unquote-splicing? */
 	LABEL, "unquotesplicing",
-		BNEI0, SUNQUOTESPLICING, ADDR, "unquote",
-		PUSH7, PUSH1A, PUSH1B,
-		MVI7, 0l,
-		MV01E,
-		JAL0,
-		POP1B, POP1A, POP7,
-		PUSH1, PUSH2, /* Save r1 and r2 */
-			MV10,           /* Car object. */
-			MVI2, null,/* Cdr object. */
-			SYSI, objCons12,
-			MVI1, sunquotesplicing,/* Car object. */
-			MV20,            /* Cdr object. */
-			SYSI, objCons12,
-		POP2, POP1,   /* Restore r1 and r2 */
-		BRA, ADDR, "done",
+		vmBNEI0, SUNQUOTESPLICING, ADDR, "unquote",
+		vmPUSH7, vmPUSH1A, vmPUSH1B,
+		vmMVI7, 0l,
+		vmMV01E,
+		vmJAL0,
+		vmPOP1B, vmPOP1A, vmPOP7,
+		vmPUSH1, vmPUSH2, /* Save r1 and r2 */
+			vmMV10,           /* Car object. */
+			vmMVI2, null,/* Cdr object. */
+			vmSYSI, objCons12,
+			vmMVI1, sunquotesplicing,/* Car object. */
+			vmMV20,            /* Cdr object. */
+			vmSYSI, objCons12,
+		vmPOP2, vmPOP1,   /* Restore r1 and r2 */
+		vmBRA, ADDR, "done",
 		/* unquote? */
 	LABEL, "unquote",
-		BNEI0, SUNQUOTE, ADDR, "quasiquote",
-		PUSH7, PUSH1A, PUSH1B,
-		MVI7, 0l,
-		MV01E,
-		JAL0,
-		POP1B, POP1A, POP7,
-		PUSH1, PUSH2, /* Save r1 and r2 */
-			MV10,            /* Car object. */
-			MVI2, null,      /* Cdr object. */
-			SYSI, objCons12,
-			MVI1, sunquote,  /* Car object. */
-			MV20,            /* Cdr object. */
-			SYSI, objCons12,
-		POP2, POP1,   /* Restore r1 and r2 */
-		BRA, ADDR, "done",
+		vmBNEI0, SUNQUOTE, ADDR, "quasiquote",
+		vmPUSH7, vmPUSH1A, vmPUSH1B,
+		vmMVI7, 0l,
+		vmMV01E,
+		vmJAL0,
+		vmPOP1B, vmPOP1A, vmPOP7,
+		vmPUSH1, vmPUSH2, /* Save r1 and r2 */
+			vmMV10,            /* Car object. */
+			vmMVI2, null,      /* Cdr object. */
+			vmSYSI, objCons12,
+			vmMVI1, sunquote,  /* Car object. */
+			vmMV20,            /* Cdr object. */
+			vmSYSI, objCons12,
+		vmPOP2, vmPOP1,   /* Restore r1 and r2 */
+		vmBRA, ADDR, "done",
 		/* quasiquote? */
 	LABEL, "quasiquote",
-		BNEI0, SQUASIQUOTE, ADDR, "openparen",
-		PUSH7, PUSH1A, PUSH1B,
-		MVI7, 0l,
-		MV01E,
-		JAL0,
-		POP1B, POP1A, POP7,
-		PUSH1, PUSH2, /* Save r1 and r2 */
-			MV10,             /* Car object. */
-			MVI2, null,       /* Cdr object. */
-			SYSI, objCons12,
-			MVI1, squasiquote,/* Car object. */
-			MV20,             /* Cdr object. */
-			SYSI, objCons12,
-		POP2, POP1,   /* Restore r1 and r2 */
-		BRA, ADDR, "done",
+		vmBNEI0, SQUASIQUOTE, ADDR, "openparen",
+		vmPUSH7, vmPUSH1A, vmPUSH1B,
+		vmMVI7, 0l,
+		vmMV01E,
+		vmJAL0,
+		vmPOP1B, vmPOP1A, vmPOP7,
+		vmPUSH1, vmPUSH2, /* Save r1 and r2 */
+			vmMV10,             /* Car object. */
+			vmMVI2, null,       /* Cdr object. */
+			vmSYSI, objCons12,
+			vmMVI1, squasiquote,/* Car object. */
+			vmMV20,             /* Cdr object. */
+			vmSYSI, objCons12,
+		vmPOP2, vmPOP1,   /* Restore r1 and r2 */
+		vmBRA, ADDR, "done",
 		/* open paren? */
 	LABEL, "openparen",
-		BNEI0, SOPENPAREN, ADDR, "character",
-		PUSH7, PUSH1A, PUSH1B, /* Recursive call with isList set */
-		MVI7, 1l,
-		MV01E,
-		JAL0,
-		POP1B, POP1A, POP7,
-		BRA, ADDR, "done",
+		vmBNEI0, SOPENPAREN, ADDR, "character",
+		vmPUSH7, vmPUSH1A, vmPUSH1B, /* Recursive call with isList set */
+		vmMVI7, 1l,
+		vmMV01E,
+		vmJAL0,
+		vmPOP1B, vmPOP1A, vmPOP7,
+		vmBRA, ADDR, "done",
 		/* character? */
 	LABEL, "character",
-		BNEI0, SCHARACTER, ADDR, "symbol",
-		SYSI, sysNewCharacter,
-		BRA, ADDR, "done",
+		vmBNEI0, SCHARACTER, ADDR, "symbol",
+		vmSYSI, sysNewCharacter,
+		vmBRA, ADDR, "done",
 		/* symbol? */
 	LABEL, "symbol",
-		BNEI0, SSYMBOL, ADDR, "string",
-		SYSI, sysNewSymbol,
-		BRA, ADDR, "done",
+		vmBNEI0, SSYMBOL, ADDR, "string",
+		vmSYSI, sysNewSymbol,
+		vmBRA, ADDR, "done",
 		/* string? */
 	LABEL, "string",
-		BNEI0, SSTRING, ADDR, "integer",
-		SYSI, sysNewString,
-		BRA, ADDR, "done",
+		vmBNEI0, SSTRING, ADDR, "integer",
+		vmSYSI, sysNewString,
+		vmBRA, ADDR, "done",
 		/* integer? */
 	LABEL, "integer",
-		BNEI0, SINTEGER, ADDR, "real",
-		SYSI, sysNewInteger,
-		BRA, ADDR, "done",
+		vmBNEI0, SINTEGER, ADDR, "real",
+		vmSYSI, sysNewInteger,
+		vmBRA, ADDR, "done",
 		/* real? */
 	LABEL, "real",
-		BNEI0, SREAL, ADDR, "oct",
-		SYSI, sysNewReal,
-		BRA, ADDR, "done",
+		vmBNEI0, SREAL, ADDR, "oct",
+		vmSYSI, sysNewReal,
+		vmBRA, ADDR, "done",
 		/* oct number? */
 	LABEL, "oct",
-		BNEI0, SOCT, ADDR, "hex",
-		SYSI, sysNewOct,
-		BRA, ADDR, "done",
+		vmBNEI0, SOCT, ADDR, "hex",
+		vmSYSI, sysNewOct,
+		vmBRA, ADDR, "done",
 		/* hex number? */
 	LABEL, "hex",
-		BNEI0, SHEX, ADDR, "binary",
-		SYSI, sysNewHex,
-		BRA, ADDR, "done",
+		vmBNEI0, SHEX, ADDR, "binary",
+		vmSYSI, sysNewHex,
+		vmBRA, ADDR, "done",
 		/* binary number? */
 	LABEL, "binary",
-		BNEI0, SBINARY, ADDR, "false",
-		SYSI, sysNewBinary,
-		BRA, ADDR, "done",
+		vmBNEI0, SBINARY, ADDR, "false",
+		vmSYSI, sysNewBinary,
+		vmBRA, ADDR, "done",
 		/* false? */
 	LABEL, "false",
-		BNEI0, SFALSE, ADDR, "true",
-		MVI0, false,
-		BRA, ADDR, "done",
+		vmBNEI0, SFALSE, ADDR, "true",
+		vmMVI0, false,
+		vmBRA, ADDR, "done",
 		/* true? */
 	LABEL, "true",
-		BNEI0, STRUE, ADDR, "default",
-		MVI0, true,
-		BRA, ADDR, "done",
+		vmBNEI0, STRUE, ADDR, "default",
+		vmMVI0, true,
+		vmBRA, ADDR, "done",
 		/* default to null? */
 	LABEL, "default",
-		MVI0, null,
+		vmMVI0, null,
 
 		/* List context?  If so recurse and contruct pair. */
 	LABEL, "done",
-		BEQI7, 0l, ADDR, "ret",
-		PUSH0, /* Save object just parsed. */
-		PUSH1A, PUSH1B, /* Recurse. */
-		MV01E, /* r0 <- code register*/
-		JAL0,
-		POP1B, POP1A,
+		vmBEQI7, 0l, ADDR, "ret",
+		vmPUSH0, /* Save object just parsed. */
+		vmPUSH1A, vmPUSH1B, /* Recurse. */
+		vmMV01E, /* r0 <- code register*/
+		vmJAL0,
+		vmPOP1B, vmPOP1A,
 		/* Create pair from top of stack and just parsed object.  Since we need
 		   r1 and r2 do a little pushing and moving of objects. */
-		POP3, /* Restore object previously parsed. */
-		PUSH1, PUSH2, /* Save r1 and r2 */
-		MV13, /* Car object. */
-		MV20, /* Cdr object. */
-		SYSI, objCons12,
-		POP2, POP1,   /* Restore r1 and r2 */
+		vmPOP3, /* Restore object previously parsed. */
+		vmPUSH1, vmPUSH2, /* Save r1 and r2 */
+		vmMV13, /* Car object. */
+		vmMV20, /* Cdr object. */
+		vmSYSI, objCons12,
+		vmPOP2, vmPOP1,   /* Restore r1 and r2 */
 	
 	LABEL, "ret",
-		RET,
+		vmRET,
 		END
 	);
 	asmCompileAsmstack(0);
@@ -1773,21 +1773,21 @@ void wscmCreateRead (void) {
 	r2=r0;
 	objNewString((Str)"ParserMain",10); /* Label */
 	asmAsm (
-		BRA, 8l,
+		vmBRA, 8l,
 		r0, /* Label */
-		MVI1, r2, /* The string buffer.  Lives in r5. */
-		SYSI, objCopyString,
-		MV50,
+		vmMVI1, r2, /* The string buffer.  Lives in r5. */
+		vmSYSI, objCopyString,
+		vmMV50,
 		/* Initialize boolean to 'not parsing a list'. */
-		MVI7, 0l,
+		vmMVI7, 0l,
 		/* r1 gets port object from the required parameter to read.  (read portObject). */
-		POP1,
+		vmPOP1,
 		/* Call parser. */
-		MVI0, r1,  /* Insert code block object directly via r1 from above. */
-		PUSH1A, PUSH1B, PUSH19,
-		JAL0,
-		POP19, POP1B, POP1A,
-		RET,
+		vmMVI0, r1,  /* Insert code block object directly via r1 from above. */
+		vmPUSH1A, vmPUSH1B, vmPUSH19,
+		vmJAL0,
+		vmPOP19, vmPOP1B, vmPOP1A,
+		vmRET,
 		END
 	);
 	asmCompileAsmstack(0);
@@ -1806,44 +1806,44 @@ void wscmCreateRepl (void) {
 	objNewString ((Str)"bye\n", 4);  r5=r0;
 	objNewString ((Str)"Entering repl2\n", 14);  r6=r0;
 	asmAsm (
-		MVI0, r6, /* "Entering REPL\n" */
-		PUSH0,
-		MVI1, 1l,
-		SYSI, syscallDisplay,
+		vmMVI0, r6, /* "Entering REPL\n" */
+		vmPUSH0,
+		vmMVI1, 1l,
+		vmSYSI, syscallDisplay,
 		/* Display prompt. */
 		LABEL, "repl",
-		MVI0, r2, // Prompt
-		PUSH0,
-		MVI1, 1l,
-		SYSI, syscallDisplay,
+		vmMVI0, r2, // Prompt
+		vmPUSH0,
+		vmMVI1, 1l,
+		vmSYSI, syscallDisplay,
 		/* Call read. */
-		PUSH1A, PUSH1B, PUSH19,
-		MVI0, r3, // in
-		LDI00, 0l,
-		PUSH0,
-		MVI0, r4, // read wscmCreateRead
-		JAL0,
-		POP19, POP1B, POP1A,
+		vmPUSH1A, vmPUSH1B, vmPUSH19,
+		vmMVI0, r3, // in
+		vmLDI00, 0l,
+		vmPUSH0,
+		vmMVI0, r4, // read wscmCreateRead
+		vmJAL0,
+		vmPOP19, vmPOP1B, vmPOP1A,
 		/* Done if an #eof parsed. */
-		BRTI0, TEOF, ADDR, "done",
+		vmBRTI0, TEOF, ADDR, "done",
 		/* Compile expression. */
-		SYSI, compSysCompile,
+		vmSYSI, compSysCompile,
 		/* Run code. */
-		PUSH1A, PUSH1B, PUSH19,
-		JAL0,
-		POP19, POP1B, POP1A,
+		vmPUSH1A, vmPUSH1B, vmPUSH19,
+		vmJAL0,
+		vmPOP19, vmPOP1B, vmPOP1A,
 		/* (display ...) */
-		PUSH0,
-		MVI1, 1l,
-		SYSI, syscallDisplay,
-		BRA, ADDR, "repl",
+		vmPUSH0,
+		vmMVI1, 1l,
+		vmSYSI, syscallDisplay,
+		vmBRA, ADDR, "repl",
 		LABEL, "done",
-		MVI0, r5, /* Bye message. */
-		PUSH0,
-		MVI1, 1l,
-		SYSI, syscallDisplay,
+		vmMVI0, r5, /* Bye message. */
+		vmPUSH0,
+		vmMVI1, 1l,
+		vmSYSI, syscallDisplay,
 		//RET,
-		SYSI, osUnthread,
+		vmSYSI, osUnthread,
 		END
 	);
 	asmCompileAsmstack(0);
@@ -1861,18 +1861,18 @@ void wscmInitialize (void) {
 
 	/* Register objects and pointer addresses with their
 	   C source names for object debug dumps. */
-	memObjStringSet(sysNewClosure1Env);
-	memObjStringSet(objNewVector1);
-	memObjStringSet(wscmRecvBlock);
-	memObjStringSet(wscmSysTransition);
-	memObjStringSet(objListToVector);
-	memObjStringSet(objCons12);
-	memObjStringSet(objCopyString);
-	memObjStringSet(objCons23);
-	memObjStringSet(osNewThread);
-	memObjStringSet(objCopyInteger);
-	memObjStringSet(sysEnvGet);
-	memObjStringSet(wscmSocketFinalizer);
+	memPointerString(sysNewClosure1Env);
+	memPointerString(objNewVector1);
+	memPointerString(wscmRecvBlock);
+	memPointerString(wscmSysTransition);
+	memPointerString(objListToVector);
+	memPointerString(objCons12);
+	memPointerString(objCopyString);
+	memPointerString(objCons23);
+	memPointerString(osNewThread);
+	memPointerString(objCopyInteger);
+	memPointerString(sysEnvGet);
+	memPointerString(wscmSocketFinalizer);
 
 	/* Create empty thread vector.  All active threads are assigned a number
 	   1-1024 and stored here for easy constant time lookup.  The first entry
