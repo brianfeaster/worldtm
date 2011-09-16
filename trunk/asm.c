@@ -45,12 +45,12 @@ void asmSkipRedundantPopsAndPushes (Num opcodeStart) {
 	opcodeWrite = opcodeStart+1l;
 	for (i=opcodeWrite; i<opcodeEnd+6; i++) {
 		printf ("looking "INT"\r\n", i);
-		if (POP19 == memVectorObject(rasmstack, i) &&
-		    POP1B == memVectorObject(rasmstack, i+1) &&
-		    POP1A == memVectorObject(rasmstack, i+2) &&
-		    PUSH1A == memVectorObject(rasmstack, i+3) &&
-		    PUSH1B == memVectorObject(rasmstack, i+4) &&
-		    PUSH19 == memVectorObject(rasmstack, i+5)) {
+		if (vmPOP19 == memVectorObject(rasmstack, i) &&
+		    vmPOP1B == memVectorObject(rasmstack, i+1) &&
+		    vmPOP1A == memVectorObject(rasmstack, i+2) &&
+		    vmPUSH1A == memVectorObject(rasmstack, i+3) &&
+		    vmPUSH1B == memVectorObject(rasmstack, i+4) &&
+		    vmPUSH19 == memVectorObject(rasmstack, i+5)) {
 			i += 6;
 			fprintf (stderr, "\r\nFound it at "INT"\r\n", opcodeWrite);
 			vmDebugDumpCode(rasmstack, stderr);

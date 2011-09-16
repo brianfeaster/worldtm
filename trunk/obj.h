@@ -66,6 +66,7 @@ void objNewSymbol  (Str str, Num len);
 void objNewSymbolR5R6 (void); /* Like objNewSymbol only 'str'/'len' are in r5/r6 */
 void objNewSymbolStatic (char *s);
 void objNewSyscall (Func f);
+void objCons10   (void); /* New pair using r1 and r0 */
 void objCons12   (void); /* New pair using r1 and r2 */
 void objCons23   (void);
 void objNewDoublyLinkedListNode (void); /* Doubly linked list node.  #(item prev next) */

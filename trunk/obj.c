@@ -2,6 +2,7 @@
 #define DB_DESC "OBJ "
 #include "debug.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <unistd.h>
 #include <string.h> /* memcpy */
 #include <assert.h>
@@ -173,11 +174,20 @@ void objNewSyscall (Func f) {
 	memVectorSet(r0, 0, f);
 }
 
+void objCons10 (void) {
+ Obj o;
+   o = memNewVector(TPAIR, 2);
+	memVectorSet(o, 0, r1);
+	memVectorSet(o, 1, r0);
+	r0 = o;
+}
+
 void objCons12 (void) {
    r0 = memNewVector(TPAIR, 2);
 	memVectorSet(r0, 0, r1);
 	memVectorSet(r0, 1, r2);
 }
+
 void objCons23 (void) {
    r0 = memNewVector(TPAIR, 2);
 	memVectorSet(r0, 0, r2);
@@ -319,8 +329,13 @@ void objDumpR (Obj o, FILE *stream, Num islist) {
  char *c;
  Str s;
 
-	if ((Num)o < 0x100000) {
-		fprintf(stream, "#<%x>", o);
+	if (-0x430000 < (Int)o && (Int)o < 0x430000) {
+		fprintf(stream, "#<");
+		if ((Int)o < 0l)
+			fprintf(stream, "-"HEX, labs((Int)o));
+		else
+			fprintf(stream, HEX, o);
+		fprintf(stream, ">");
 		return;
 	}
 
@@ -412,7 +427,7 @@ void objDumpR (Obj o, FILE *stream, Num islist) {
 				fprintf(stream, HEX, o);
 			}
 			/* Dump the object description. */
-			s = memObjString(o);
+			s = memPointerString(o);
 			if (s) {
 				fwrite (":", 1, 1, stream);
 				fwrite (s, 1, strlen((char*)s), stream);
@@ -436,24 +451,24 @@ void objInitialize (void) {
 		vmInitialize(0, 0);
 		memInitialize(0, 0);
 		DB("Register the internal object types");
-		memRegisterType(TFALSE, "false");
-		memRegisterType(TTRUE, "true");
-		memRegisterType(TNULL, "null");
-		memRegisterType(TNULLVEC, "nullvec");
-		memRegisterType(TNULLSTR, "nullstr");
-		memRegisterType(TEOF, "eof");
-		memRegisterType(TCHAR, "chr");
-		memRegisterType(TSTRING, "str");
-		memRegisterType(TSYMBOL, "symb");
-		memRegisterType(TINTEGER, "int");
-		memRegisterType(TREAL, "real");
-		memRegisterType(TPAIR, "pair");
-		memRegisterType(TVECTOR, "vector");
-		memRegisterType(TCLOSURE, "closure");
-		memRegisterType(TCONTINUATION, "contin");
-		memRegisterType(TPORT, "port");
-		memRegisterType(TSOCKET, "socket");
-		memRegisterType(TSYSCALL, "syscall");
+		memTypeRegisterString(TFALSE, "false");
+		memTypeRegisterString(TTRUE, "true");
+		memTypeRegisterString(TNULL, "null");
+		memTypeRegisterString(TNULLVEC, "nullvec");
+		memTypeRegisterString(TNULLSTR, "nullstr");
+		memTypeRegisterString(TEOF, "eof");
+		memTypeRegisterString(TCHAR, "chr");
+		memTypeRegisterString(TSTRING, "str");
+		memTypeRegisterString(TSYMBOL, "symb");
+		memTypeRegisterString(TINTEGER, "int");
+		memTypeRegisterString(TREAL, "real");
+		memTypeRegisterString(TPAIR, "pair");
+		memTypeRegisterString(TVECTOR, "vector");
+		memTypeRegisterString(TCLOSURE, "closure");
+		memTypeRegisterString(TCONTINUATION, "contin");
+		memTypeRegisterString(TPORT, "port");
+		memTypeRegisterString(TSOCKET, "socket");
+		memTypeRegisterString(TSYSCALL, "syscall");
 
 		/* These primitive types are also external (display) strings. */
 		null = memNewStatic(TNULL, 2);         memcpy(null, "()", 2);

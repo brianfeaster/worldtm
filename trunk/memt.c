@@ -272,21 +272,21 @@ int main (int argc, char *argv[]) {
 
 	/* Register root set object.  These are the "registers" or
 	   machine's global variables */
-	memRegisterRoot(r0);
-	memRegisterRoot(r1);
-	memRegisterRoot(r2);
-	memRegisterRoot(r3);
-	memRegisterRoot(r4);
-	memRegisterRoot(r1f);
+	memRootSetRegister(r0);
+	memRootSetRegister(r1);
+	memRootSetRegister(r2);
+	memRootSetRegister(r3);
+	memRootSetRegister(r4);
+	memRootSetRegister(r1f);
 
 	r1f = memNewStack(); /* Create the stack for the machine */
 
-	memRegisterType(TSYMBOL,  "sym");
-	memRegisterType(TINTEGER, "int");
-	memRegisterType(TPAIR,    "pair");
-	memRegisterType(TSTRING,  "str");
-	memRegisterType(TVECTOR,  "vec");
-	memObjStringSet(callbackFinalizerFunction);
+	memTypeRegisterString(TSYMBOL,  "sym");
+	memTypeRegisterString(TINTEGER, "int");
+	memTypeRegisterString(TPAIR,    "pair");
+	memTypeRegisterString(TSTRING,  "str");
+	memTypeRegisterString(TVECTOR,  "vec");
+	memPointerRegister(callbackFinalizerFunction);
 
 	TEST(memtSizeof);
 	TEST(memtMmap);

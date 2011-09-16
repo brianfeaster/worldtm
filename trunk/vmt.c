@@ -54,14 +54,14 @@ void fancyHelloWorld (void) {
 
 	/* Dump "hello world" to stdout */
 	Obj helloWorld[] = {
-		PUSH1,
-		MVI0, displayStringR1,
-		MVI1, "Hello,",
-		SYS0,
-		MVI1, "World[tm]!",
-		SYS0,
-		POP1,
-		RET };
+		vmPUSH1,
+		vmMVI0, displayStringR1,
+		vmMVI1, "Hello,",
+		vmSYS0,
+		vmMVI1, "World[tm]!",
+		vmSYS0,
+		vmPOP1,
+		vmRET };
 
 	codeSize = sizeof(helloWorld);
    r0 = memNewVector(TCODE, codeSize/8);
@@ -69,25 +69,25 @@ void fancyHelloWorld (void) {
 	memcpy(helloWorldSub, helloWorld, codeSize);
 
 	Obj printNumbers[] = {
-		SYSI, displayIntegerR1,
-		BEQI1, (Obj)0, (Obj)(2*8),  /* Return if r1==0 */
-		BRA, (Obj)(1*8),
-		RET,
+		vmSYSI, displayIntegerR1,
+		vmBEQI1, (Obj)0, (Obj)(2*8),  /* Return if r1==0 */
+		vmBRA, (Obj)(1*8),
+		vmRET,
 
-		PUSH1A,              /* Save return address */
-		PUSH1B,
+		vmPUSH1A,              /* Save return address */
+		vmPUSH1B,
 
-		MVI0, helloWorldSub,
-		JAL0,
-		MV01,               /* r1-- */
-		ADDI0, (Obj)-1,
-		MV10,
-		MV01E, // Or load address of printNumbersSub (r11) then index ptr:  MVI0, &printNumbersSub, LDI00, 0,
-		JAL0,
+		vmMVI0, helloWorldSub,
+		vmJAL0,
+		vmMV01,               /* r1-- */
+		vmADDI0, (Obj)-1,
+		vmMV10,
+		vmMV01E, // Or load address of printNumbersSub (r11) then index ptr:  MVI0, &printNumbersSub, LDI00, 0,
+		vmJAL0,
 
-		POP1B,               /* Restore return address */
-		POP1A,
-		RET };
+		vmPOP1B,               /* Restore return address */
+		vmPOP1A,
+		vmRET };
 
 	codeSize = sizeof(printNumbers);
    r0 = memNewVector(TCODE, codeSize/8);
@@ -95,27 +95,27 @@ void fancyHelloWorld (void) {
 	memcpy(printNumbersSub, printNumbers, codeSize);
 
 	Obj mainCode[] = {
-		MVI3,  0, /* Outer loop counter */
-		MVI1, (Obj)3,
-		MVI0, printNumbersSub,
-		JAL0,
+		vmMVI3,  0, /* Outer loop counter */
+		vmMVI1, (Obj)3,
+		vmMVI0, printNumbersSub,
+		vmJAL0,
 
-		MVI2, (Obj)0, /* Inner loop counter */
-		MV02,        /* loop0 */
-		MV10,
-		SYSI, displayIntegerR1, /* print r2 */
-		MV02, /* Add 1 to r2 */
-		ADDI0,  (Obj)1,
-		MV20,
-		BNEI0,  (Obj)0x5,  (Obj)(-11*8),  /* BNEI r0 0x8000 loop0 */
+		vmMVI2, (Obj)0, /* Inner loop counter */
+		vmMV02,        /* loop0 */
+		vmMV10,
+		vmSYSI, displayIntegerR1, /* print r2 */
+		vmMV02, /* Add 1 to r2 */
+		vmADDI0,  (Obj)1,
+		vmMV20,
+		vmBNEI0,  (Obj)0x5,  (Obj)(-11*8),  /* BNEI r0 0x8000 loop0 */
 
-		MVI1, "\n",
-		SYSI, displayStringR1,
-		MV03, /* Add 1 to r3 */
-		ADDI0, (Obj)1,
-		MV30,
-		BNEI0,  (Obj)3, (Obj)(-29*8), /* BRA to instruction 0 in this code block. */
-		QUIT };
+		vmMVI1, "\n",
+		vmSYSI, displayStringR1,
+		vmMV03, /* Add 1 to r3 */
+		vmADDI0, (Obj)1,
+		vmMV30,
+		vmBNEI0,  (Obj)3, (Obj)(-29*8), /* BRA to instruction 0 in this code block. */
+		vmQUIT };
 
 	codeSize = sizeof(mainCode);
    r0 = memNewVector(TCODE, codeSize/8);
@@ -153,24 +153,24 @@ void testScheduler (void) {
 	vmtSigAlarmReset();
 
 	Obj prog[] = {
-		MVI5, 0l, /* Clear r5 for incrementing by the interrupt/scheduler handler */
+		vmMVI5, 0l, /* Clear r5 for incrementing by the interrupt/scheduler handler */
 		/* Wait for r5 to increment to 1 */
-		MVI1, 0l,
-		ADDI1, (Obj)1,
-		BNEI5, (Obj)1, (Obj)(-5*8),
+		vmMVI1, 0l,
+		vmADDI1, (Obj)1,
+		vmBNEI5, (Obj)1, (Obj)(-5*8),
 		/* Wait for r5 to increment to 2 */
-		MVI1, 0l,
-		ADDI1, (Obj)1,
-		BNEI5, (Obj)2, (Obj)(-5*8),
+		vmMVI1, 0l,
+		vmADDI1, (Obj)1,
+		vmBNEI5, (Obj)2, (Obj)(-5*8),
 		/* Wait for r5 to increment to 3 */
-		MVI1, 0l,
-		ADDI1, (Obj)1,
-		BNEI5, (Obj)3, (Obj)(-5*8),
+		vmMVI1, 0l,
+		vmADDI1, (Obj)1,
+		vmBNEI5, (Obj)3, (Obj)(-5*8),
 		/* Wait for r5 to increment to 4 */
-		MVI1, 0l,
-		ADDI1, (Obj)1,
-		BNEI5, (Obj)4, (Obj)(-5*8),
-		QUIT };
+		vmMVI1, 0l,
+		vmADDI1, (Obj)1,
+		vmBNEI5, (Obj)4, (Obj)(-5*8),
+		vmQUIT };
 
 	r0 = memNewVector(TCODE, sizeof(prog)/8);
 	memcpy(r0, prog, sizeof(prog));

@@ -14,13 +14,15 @@
 #include <errno.h>
 #include "mem.h"
 /*
-  Type_stuff
-  Descriptors
-  Heap_stuff
-  Object_creation
-  Garbage_collector
-  Debugging_aids
-  External_calls
+ Pointer_Strings
+ Type_stuff
+ Descriptors
+ Root_Set
+ Heap_stuff
+ Object_creation
+ Garbage_collector
+ Debugging_aids
+ Init
 
   ABOUT THIS MODULE
 
@@ -70,8 +72,46 @@
 
 
 void memGarbageCollectInternal (Descriptor desc, Num byteSize);
-Num memHeapLength (Num heapIndex);
-void memError (void);
+
+
+
+void memError (void) {
+	fprintf (stderr, "\nERROR: memError() called: Halting process with a seg fault.\n");
+	*(int*)0 = 0; // Force a crash to catch in debugger.
+}
+
+
+/*******************************************************************************
+ Pointer_Strings
+
+ Simple table insertion and lookup of a string to a pointer value aka object. char* must be
+ the type due to how the preprocessor generates symbols.
+*******************************************************************************/
+#define OBJ_STR_MAX 4096
+typedef struct {Obj obj;  Str str;} ObjStr;
+ObjStr memObjStrDB[OBJ_STR_MAX];
+Num ObjStrCount = 0;
+
+/* Retrieve string associated with the pointer object
+*/
+Str memPointerString (Obj obj) {
+ Num i;
+	for (i=0; i<ObjStrCount; ++i)
+		if (memObjStrDB[i].obj == obj) return memObjStrDB[i].str;
+	return NULL;
+}
+
+/* Assign a fixed pointer location a string name.  Useful for assigning
+   a descriptive string to a C function, C pointer or static scheme object.
+*/
+void memPointerRegisterString (Obj obj, Str str) {
+	DBBEG("  Registering "OBJ"  string="STR" on existing str="STR, obj, str, memPointerString(obj));
+	assert(NULL == memPointerString(obj));
+	assert(ObjStrCount < OBJ_STR_MAX);
+	memObjStrDB[ObjStrCount].obj = obj;
+	memObjStrDB[ObjStrCount++].str = str;
+	DBEND();
+}
 
 
 
@@ -88,13 +128,15 @@ void memError (void);
 #define TMAXVECTOR    0xefl
 #define TMAXINTERNAL  0xffl
 
+/* Type string database
+*/
 typedef struct {
 	Str description;
 } MemTypeDescriptor;
 
-MemTypeDescriptor memTypeDB[TMAXINTERNAL+1];
+MemTypeDescriptor memTypeStringDB[TMAXINTERNAL+1];
 
-void memRegisterInternalType (Type type, char *description) {
+void memTypeRegisterStringInternal (Type type, char *description) {
 	DBBEG();
 	assert(strlen(description)<=8);
 	DB("Type type="HEX"  char *description="STR, type, description);
@@ -102,19 +144,34 @@ void memRegisterInternalType (Type type, char *description) {
 	assert(type <= TMAXINTERNAL);
 
 	/* Object types can't be redefined */
-	if (memTypeDB[type].description != NULL) {
-		fprintf (stderr, "Trying to register type "NUM":"STR" but assigned to "STR, type, description, memTypeDB[type].description);
+	if (memTypeStringDB[type].description != NULL) {
+		fprintf (stderr, "Trying to register type "NUM":"STR" but assigned to "STR, type, description, memTypeStringDB[type].description);
 		exit(-1);
 	}
 
-	memTypeDB[type].description = (Str)description;
+	memTypeStringDB[type].description = (Str)description;
 	DBEND();
+}
+
+void memTypeRegisterString (Type type, char *description) {
+	assert(type <= TMAXVECTOR); /* Only arrays and vector can be created externally */
+	memTypeRegisterStringInternal(type, description);
+}
+
+/* Get external description of the type for debugging and object dumps */
+Str memTypeString (Type t) {
+	DB("Type t="NUM, t);
+	assert(t <= TMAXINTERNAL);
+	return memTypeStringDB[t].description
+		?  memTypeStringDB[t].description
+		: (Str)"?????";
 }
 
 void memDebugDumpAllTypes(void) {
  Num i=0;
 	for (i=0; i<256; ++i) {
-		if (memTypeDB[i].description) printf("("HEX02"="STR") ", i, memTypeDB[i].description);
+		if (memTypeStringDB[i].description)
+			printf("("HEX02"="STR") ", i, memTypeStringDB[i].description);
 		if (TMAXARRAY==i || TMAXVECTOR==i) printf ("\n");
 	}
 }
@@ -185,6 +242,7 @@ Num memIsObjectFinalizer (Obj o) { return memObjectType(o) == TFINALIZER; }
 Num memIsObjectPointer (Obj o)   { return memObjectType(o) == TPOINTER; }
 Num memIsObjectStack (Obj o)     { return memObjectType(o) == TSTACK; }
 Num memIsObjectShadow (Obj o)    { return memObjectType(o) == TSHADOW; }
+Num memIsObjectType (Obj o, Type t){ return memIsObjectValid(o) && memObjectType(o) == t; }
 
 
 
@@ -206,6 +264,24 @@ Num memObjectSize (Obj o) {
 	return memIsObjectBaseArray(o)
 	       ? memArrayLengthToObjectSize(memObjectLength(o))
 	       : memVectorLengthToObjectSize(memObjectLength(o));
+}
+
+
+
+/*******************************************************************************
+ Root_Set
+
+ Register the address of an object pointer for the garbage collector to be
+ included in the root set during a garbage collection
+*******************************************************************************/
+#define MemRootSetCountMax 64
+Obj *MemRootSet[MemRootSetCountMax];
+Num MemRootSetCount = 0;
+
+void memRootSetRegisterString (Obj *objp, Str desc) {
+	assert(MemRootSetCount<MemRootSetCountMax);
+	MemRootSet[MemRootSetCount++] = objp;
+	memPointerRegisterString(objp, desc);
 }
 
 
@@ -233,6 +309,26 @@ Heap heapOld;   /* Where old objects live during runtime. */
 Heap heap;      /* Where new young objects are created during runtime. */
 Heap heapNew;   /* GC work area. */
 Heap heapStatic;/* Objects that are never deleted nor touched by the GC. */
+
+
+/* Return number of objects in heap.  Used for unit tests.
+*/
+Num memHeapLength (Num heapIndex) {
+ Heap *h;
+ Obj o;
+ Num count = 0;
+	h = (heapIndex==0) ? &heapStatic :
+	    (heapIndex==1) ? &heapOld :
+	    (heapIndex==2) ? &heap :
+	    (heapIndex==3) ? &heapNew : NULL; /* Default to the young heap */
+	assert(h != NULL);
+	o = h->start + DescSize;
+	while (o < h->next) {
+		++count;
+		o += memObjectSize(o);
+	}
+	return count;
+}
 
 
 /* Get a simple one word description of a heap pointer
@@ -330,17 +426,6 @@ void memFreeHeap (Heap *h) {
 int mutatedOldObjectsLength=0;
 Obj *(mutatedOldObjects[0x400])={0};
 */
-
-
-const Num GC_MODE_YOUNG=0;
-const Num GC_MODE_OLD=1;
-
-Num GarbageCollectionMode;
-Num garbageCollectionCount = 0;
-
-/* Function pointers called before and after a GC proper.  */
-Func memPreGarbageCollect = 0;
-Func memPostGarbageCollect = 0;
 
 
 /* Allocate an object in the heap:
@@ -520,7 +605,15 @@ Num memIsObjectValid  (Obj o) {
 }
 
 
-/* Object mutators.
+/* Calculate a pointer object's index offset into the object it's pointing
+   at. A pointer is a vector whos first element is a void* and the second
+   element is the object the void* should be pointing somewhere inside of. */
+Num memPointerOffset (Obj obj) {
+	return (Num)(memVectorObject(obj, 0) - memVectorObject(obj, 1));
+}
+
+
+/* Object mutators
 */
 void memArraySet (Obj obj, Num offset, u8 item) {
 	#if DEBUG_ASSERT
@@ -700,20 +793,10 @@ Num memStackLength (Obj obj) {
 /*******************************************************************************
  Garbage_collector
 *******************************************************************************/
-#define MemRootSetCountMax 64
-Num MemRootSetCount=0;
-Obj *MemRootSet[MemRootSetCountMax];
-
-/* Calculate a pointer object's index offset into the object it's pointing
-   at. A pointer is a vector whos first element is a void* and the second
-   element is the object the void* should be pointing somewhere inside of. */
-Num memPointerOffset (Obj obj) {
-	return (Num)(memVectorObject(obj, 0) - memVectorObject(obj, 1));
-}
-
 
 /* Ring buffer.  Used for debugging internal behavior.
 */ 
+#if 0
 const Int RBUFMAX=0x100;
 Int rbufi=0;
 Int rbuf[0x100]={0};
@@ -730,6 +813,18 @@ void memRbufAdd (Int p) {
 	if (rbufi==RBUFMAX) rbufi=0;
 	rbuf[rbufi]=RBUFTOP;
 }
+#endif
+
+const Num GC_MODE_YOUNG=0;
+const Num GC_MODE_OLD=1;
+
+Num GarbageCollectionMode;
+Num garbageCollectionCount = 0;
+
+/* Function pointers called before and after a GC proper.  */
+Func memPreGarbageCollect = 0;
+Func memPostGarbageCollect = 0;
+
 
 
 /* Given pointer to an object, move object into the new heap and update
@@ -1040,10 +1135,11 @@ void memDebugDumpHeapHeaders (FILE *stream) {
 
 	for (i=0; i<MemRootSetCount; ++i) {
 		if (0 == i%4) printf ("\n");
-		fprintf (stream, "%8s "OBJ, memObjString(MemRootSet[i]), *MemRootSet[i]);
+		fprintf (stream, "%8s "OBJ, memPointerString(MemRootSet[i]), *MemRootSet[i]);
 	}
 	fprintf (stream, "\n");
 }
+
 
 /* Generic object to string dumper.
    #<11112222f000 y  int:02 0004  (61 62 63 64) "abcd">
@@ -1093,7 +1189,7 @@ void memDebugDumpObject (Obj o, FILE *stream) {
 		} else {
 			if (memIsObjectFinalizer(o)) {
 				/* Finalizer */
-				fprintf (stream, "#("HEX":"STR" . "OBJ")", ((Obj*)o)[0], memObjString(((Obj*)o)[0]), ((Obj*)o)[1]);
+				fprintf (stream, "#("HEX":"STR" . "OBJ")", ((Obj*)o)[0], memPointerString(((Obj*)o)[0]), ((Obj*)o)[1]);
 			} else if (memIsObjectPointer(o)) {
 				/* Pointer */
 				fprintf (stream, OBJ" "OBJ"["NUM"]",((Obj*)o)[0], ((Obj*)o)[1], ((Obj*)o)[0] - ((Obj*)o)[1]);
@@ -1112,7 +1208,7 @@ void memDebugDumpObject (Obj o, FILE *stream) {
 				for (i=0; i<memObjectLength(o); i++) {
 					obj = ((Obj*)o)[i];
 					fprintf (stream, "%s"OBJ, ((i==0)?"#(":" "), obj);
-					s = memObjString(obj); /* Internal pointer address */
+					s = memPointerString(obj); /* Internal pointer address */
 					if (s) fprintf (stream, ":%s", s);
 				}
 				fprintf (stream, ")");
@@ -1203,7 +1299,6 @@ void memDebugDumpAll (FILE *stream) {
 }
 
 
-
 void memValidateObject (Obj o) {
  Obj oo, op;
  Int valid=1;
@@ -1250,7 +1345,7 @@ void memValidateObject (Obj o) {
 				      || memIsObjectInHeap(&heap, oo)
 				      || memIsObjectInHeap(&heapStatic, oo))
 				    && (oo > (Obj)0x430000 && oo < (Obj)-0x430000) /* Immediate values */
-				    && !memObjString(oo)) { /* Ignore registered internal pointers. */
+				    && !memPointerString(oo)) { /* Ignore registered internal pointers. */
 					fprintf (stderr, "\nERROR memValidateObject() vector object "OBJ"["INT"]="OBJ" invalid.", o, i, oo);
 					//wscmWrite(memVectorObject(o, 2), 0, 1);
 					valid=0;
@@ -1263,8 +1358,6 @@ void memValidateObject (Obj o) {
 	}
 	DBEND();
 }
-
-
 
 void memValidateHeapStructures (void) {
  Obj o;
@@ -1293,74 +1386,9 @@ void memValidateHeapStructures (void) {
 
 
 
-/* Return number of objects in heap.  Used for unit tests.
-*/
-Num memHeapLength (Num heapIndex) {
- Heap *h;
- Obj o;
- Num count = 0;
-	h = (heapIndex==0) ? &heapStatic :
-	    (heapIndex==1) ? &heapOld :
-	    (heapIndex==2) ? &heap :
-	    (heapIndex==3) ? &heapNew : NULL; /* Default to the young heap */
-	assert(h != NULL);
-	o = h->start + DescSize;
-	while (o < h->next) {
-		++count;
-		o += memObjectSize(o);
-	}
-	return count;
-}
-
-
-/* Get external description of the type for debugging and object dumps */
-Str memTypeString (Type t) {
-	DB("Type t="NUM, t);
-	assert(t <= TMAXINTERNAL);
-	return memTypeDB[t].description
-		?  memTypeDB[t].description
-		: (Str)"?????";
-}
-
-
-/* Simple table insertion and lookup of a string
-   to a pointer value aka object. char* must be
-   the type due to how the preprocessor generates
-   symbols. */
-#define TABLEMAX 4096
-typedef struct {Obj obj;  Str str;} osPair;
-osPair osTable[TABLEMAX];
-Num osCount=0;
-
-Str memObjString (Obj obj) {
- Num i;
-	for (i=0; i<osCount; ++i)
-		if (osTable[i].obj==obj) return osTable[i].str;
-	return NULL;
-}
-
-/* Assign a fixed pointer location with a string name
-*/
-void memObjStringRegister (Obj obj, Str str) {
-	DBBEG("  Registering "OBJ"  string="STR" on existing str="STR, obj, str, memObjString(obj));
-	assert(NULL == memObjString(obj));
-	assert(osCount < TABLEMAX);
-	osTable[osCount].obj = obj;
-	osTable[osCount++].str = str;
-	DBEND();
-}
-
-void memError (void) {
-	fprintf (stderr, "\nERROR: memError() called: Halting process with a seg fault.\n");
-	*(int*)0 = 0; // Force a crash to catch in debugger.
-}
-
-
-
 /*******************************************************************************
- External_calls
+ Init
 *******************************************************************************/
-
 void memInitialize (Func preGC, Func postGC) {
  static Num shouldInitialize=1;
 	DBBEG();
@@ -1368,11 +1396,11 @@ void memInitialize (Func preGC, Func postGC) {
 		DB("Activating module...");
 		shouldInitialize=0;
 		DB("Register the internal object types");
-		memRegisterInternalType(TSEMAPHORE,"SEM");
-		memRegisterInternalType(TFINALIZER,"FIN");
-		memRegisterInternalType(TPOINTER,  "PTR");
-		memRegisterInternalType(TSTACK,    "STK");
-		memRegisterInternalType(TSHADOW,   "SHDW");
+		memTypeRegisterStringInternal(TSEMAPHORE,"SEM");
+		memTypeRegisterStringInternal(TFINALIZER,"FIN");
+		memTypeRegisterStringInternal(TPOINTER,  "PTR");
+		memTypeRegisterStringInternal(TSTACK,    "STK");
+		memTypeRegisterStringInternal(TSHADOW,   "SHDW");
 		DB("Create heaps");
 		memInitializeHeap  (&heapStatic, HEAP_STATIC_BLOCK_COUNT);
 		memInitializeHeap  (&heap, HEAP_BLOCK_COUNT);
@@ -1395,21 +1423,6 @@ void memInitialize (Func preGC, Func postGC) {
 	}
 
 	DBEND();
-}
-
-void memRegisterType (Type type, char *description) {
-	assert(type <= TMAXVECTOR); /* Only arrays and vector can be created externally */
-	memRegisterInternalType (type, description);
-}
-
-
-/* Register the address of an object pointer.  All of these object locations
-   are used as the root set for the garbage collector.
-*/
-void memRegisterRootObject (Obj *objp, Str desc) {
-	assert(MemRootSetCount<MemRootSetCountMax);
-	MemRootSet[MemRootSetCount++] = objp;
-	memObjStringRegister (objp, desc);
 }
 
 
