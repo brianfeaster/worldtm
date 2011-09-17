@@ -1,4 +1,4 @@
-#define DEBUG 0
+#define DEBUG 1
 #define DB_DESC "CC"
 #include "debug.h"
 #include <stdio.h>
@@ -49,7 +49,8 @@ void ccInitialize (void);
 #define TICODE  0x87l
 #define TIBLOCK 0x88l
 
-/* Icode symbols TODO not sure if i need both these and the assembly opcode symbols */
+/* Icode symbols.  Since they are less generalized I can't
+   use the VM objects */
 Obj smv, smvi;
 Obj sldi;
 Obj spush, spop;
@@ -105,9 +106,7 @@ Num ccIBlockID (Obj ib)                     { return (Num)memVectorObject(ib, IB
 Obj ccIBlockTag (Obj ib)                         { return memVectorObject(ib, IBLOCK_INDEX_TAG); }
 Obj ccIBlockIncomingList (Obj ib)                { return memVectorObject(ib, IBLOCK_INDEX_INCOMING); }
 Obj ccIBlockGetDefaultBlock (Obj ib)     { return car(memVectorObject(ib, IBLOCK_INDEX_DEFAULT)); }
-Obj ccIBlockGetDefaultAddr  (Obj ib)     { return cdr(memVectorObject(ib, IBLOCK_INDEX_DEFAULT)); }
 Obj ccIBlockGetConditionalBlock (Obj ib) { return car(memVectorObject(ib, IBLOCK_INDEX_CONDITIONAL)); }
-Obj ccIBlockGetConditionalAddr  (Obj ib) { return cdr(memVectorObject(ib, IBLOCK_INDEX_CONDITIONAL)); }
 
 /* Lookup iblock by ID
 */
@@ -179,22 +178,6 @@ void ccIBlockSetConditional (Num parentid, Num childid) {
 
 	memVectorSet(condPair, 0, childib);
 	ccIBlockAddIncoming(childib, parentib);
-}
-
-void ccIBlockSetDefaultAddr (Obj ib, Obj child) {
- Obj condPair;
-	if (false != ccIBlockGetDefaultBlock(ib)) {
-		condPair = memVectorObject(ib, IBLOCK_INDEX_DEFAULT);
-		memVectorSet(condPair, 1, child);
-	}
-}
-
-void ccIBlockSetConditionalAddr (Obj ib, Obj child) {
- Obj condPair;
-	if (false != ccIBlockGetConditionalBlock(ib)) {
-		condPair = memVectorObject(ib, IBLOCK_INDEX_CONDITIONAL);
-		memVectorSet(condPair, 1, child);
-	}
 }
 
 void ccIBlockSetICode (Num offset, Obj op) {
@@ -391,10 +374,10 @@ void ccDumpICode (Obj c) {
 
 void ccDumpIBlock (Obj ib) {
  Num i;
- Obj o, block, addr;
+ Obj o, block;
 	assert(TIBLOCK == memObjectType(ib));
 	/* ID */
-	fprintf(stderr, "\n#<"HEX03"  ", ccIBlockID(ib));
+	fprintf(stderr, "\n#<"HEX03" "OBJ"  ", ccIBlockID(ib), ib);
 	/* Tag */
 	sysDisplay(ccIBlockTag(ib), stderr);
 	/* Incoming block IDs */
@@ -410,36 +393,30 @@ void ccDumpIBlock (Obj ib) {
 		fprintf(stderr, "\n  "HEX02"  ", i-IBLOCK_INDEX_ICODE);
 		ccDumpICode(memVectorObject(ib, i));
 	}
-	/* Conditional block */
-	block = ccIBlockGetConditionalBlock(ib);
-	addr = ccIBlockGetConditionalAddr(ib);
-	if (false==block && false==addr)
-		fprintf(stderr, "  (---)");
-	else {
-		fprintf (stderr, "  (");
-		if (memIsObjectType(block, TIBLOCK)) fprintf(stderr, HEX03" ", ccIBlockID(block));
-		else sysDisplay(block, stderr);
-		fprintf (stderr, " ");
-		if (memIsObjectType(addr, TIBLOCK)) fprintf(stderr, HEX03" ", ccIBlockID(addr));
-		else sysDisplay(addr, stderr);
-		fprintf (stderr, ")");
-	}
 	fprintf (stderr, "\n");
 	/* Default block */
 	block = ccIBlockGetDefaultBlock(ib);
-	addr = ccIBlockGetDefaultAddr(ib);
-	if (false==block && false==addr)
-		fprintf(stderr, "  (---)");
+	if (false==block)
+		fprintf(stderr, "  [---]");
 	else {
-		fprintf (stderr, "  (");
-		if (memIsObjectType(block, TIBLOCK)) fprintf(stderr, HEX03" ", ccIBlockID(block));
+		fprintf (stderr, "  [");
+		if (memIsObjectType(block, TIBLOCK)) fprintf(stderr, HEX03, ccIBlockID(block));
+		else if (!memIsObjectValid(block)) fprintf(stderr, HEX03, ccIBlockID(memVectorObject(rcode, (Num)block)));
 		else sysDisplay(block, stderr);
-		fprintf (stderr, " ");
-		if (memIsObjectType(addr, TIBLOCK)) fprintf(stderr, HEX03" ", ccIBlockID(addr));
-		else sysDisplay(addr, stderr);
-		fprintf (stderr, ")");
+		fprintf (stderr, "]");
 	}
 
+	/* Conditional block */
+	block = ccIBlockGetConditionalBlock(ib);
+	if (false==block)
+		fprintf(stderr, "  [---]");
+	else {
+		fprintf (stderr, "  [");
+		if (memIsObjectType(block, TIBLOCK)) fprintf(stderr, HEX03, ccIBlockID(block));
+		else if (!memIsObjectValid(block)) fprintf(stderr, HEX03, ccIBlockID(memVectorObject(rcode, (Num)block)));
+		else sysDisplay(block, stderr);
+		fprintf (stderr, "]");
+	}
 	fprintf (stderr, ">");
 }
 
@@ -462,8 +439,17 @@ void ccEmitOpcode (Obj op) {
 	memVectorSet(rcode, pccode++, op);
 }
 
+void ccEmitOpcode2 (Obj op1, Obj op2) {
+	memVectorSet(rcode, pccode++, op1);
+	memVectorSet(rcode, pccode++, op2);
+}
+
 void ccEmitIblockOpcodes (void) {
  Num i;
+	DBBEG("      iblock="NUM, ccIBlockID(riblock));
+	/* Re-tag the iblock with its initial location in the code block */
+	ccIBlockSetTag (riblock, (Obj)pccode);
+
 	for (i=IBLOCK_INDEX_ICODE; i < memObjectLength(riblock); ++i) {
 		/* r2 = icode object, vector of fields */
 		r2 = memVectorObject(riblock, i);
@@ -492,13 +478,13 @@ void ccEmitIblockOpcodes (void) {
 			r3 = memVectorObject(r2, 1); /* icode's 2nd field: reg */
 			if (R0 == r3) {
 				ccEmitOpcode(vmMVI0);
-				ccEmitOpcode(memVectorObject(r2, 2)); /* icode's 3rd field: immediate */
 			} else if (R1 == r3) {
 				ccEmitOpcode(vmMVI1);
-				ccEmitOpcode(memVectorObject(r2, 2)); /* icode's 3rd field: immediate */
+			} else if (R2 == r3) {
+				ccEmitOpcode(vmMVI2);
 			} else
 				assert(!"Unsuported icode MVI ?? imm");
-
+			ccEmitOpcode(memVectorObject(r2, 2)); /* icode's 3rd field: immediate */
 		/* LDI */
 		} else if (sldi == r3) {
 			r3 = memVectorObject(r2, 1); /* icode's 2nd field: reg */
@@ -542,50 +528,49 @@ void ccEmitIblockOpcodes (void) {
 			r3 = memVectorObject(r2, 1); /* icode's 2nd field: reg */
 			if (R0 == r3) {
 				ccEmitOpcode(vmADDI0);
-				ccEmitOpcode(memVectorObject(r2, 2)); /* icode's 3rd field: immediate */
 			} else if (R1 == r3) {
 				ccEmitOpcode(vmADDI1);
-				ccEmitOpcode(memVectorObject(r2, 2)); /* icode's 3rd field: immediate */
+			} else if (R2 == r3) {
+				ccEmitOpcode(vmADDI2);
 			} else
 				assert(!"Unsuported icode ADDI ?? imm");
+			ccEmitOpcode(memVectorObject(r2, 2)); /* icode's 3rd field: immediate */
 
 		/* BNEI */
 		} else if (sbnei == r3) {
 			r3 = memVectorObject(r2, 1); /* icode's 2nd field: reg */
 			if (R0 == r3) {
 				ccEmitOpcode(vmBNEI0);
-				ccEmitOpcode(memVectorObject(r2, 2)); /* icode's 3rd field: immediate */
-				ccEmitOpcode((Obj)(-3*8)); /* opcode's bra address */
 			} else if (R1 == r3) {
 				ccEmitOpcode(vmBNEI1);
-				ccEmitOpcode(memVectorObject(r2, 2)); /* icode's 3rd field: immediate */
-				ccEmitOpcode((Obj)(-3*8)); /* opcode's bra address */
+			} else if (R2 == r3) {
+				ccEmitOpcode(vmBNEI2);
 			} else
 				assert(!"Unsuported icode BNEI ?? offset");
+			ccEmitOpcode(memVectorObject(r2, 2)); /* icode's 3rd field: immediate */
+			ccEmitOpcode((Obj)(-3*8)); /* icode's 4th field: bra address */
 
 		/* BEQI */
 		} else if (sbeqi == r3) {
 			r3 = memVectorObject(r2, 1); /* icode's 2nd field: reg */
 			if (R0 == r3) {
 				ccEmitOpcode(vmBEQI0);
-				ccEmitOpcode(memVectorObject(r2, 2)); /* icode's 3rd field: immediate */
-				ccEmitOpcode((Obj)(-3*8)); /* opcode's bra address */
 			} else if (R1 == r3) {
 				ccEmitOpcode(vmBEQI1);
-				ccEmitOpcode(memVectorObject(r2, 2)); /* icode's 3rd field: immediate */
-				ccEmitOpcode((Obj)(-3*8)); /* opcode's bra address */
 			} else
 				assert(!"Unsuported icode BEQI ?? offset");
+			ccEmitOpcode(memVectorObject(r2, 2)); /* icode's 3rd field: immediate */
+			ccEmitOpcode((Obj)(-3*8)); /* icode's 4th field: bra address */
 
 		/* BRTI */
 		} else if (sbrti == r3) {
 			r3 = memVectorObject(r2, 1); /* icode's 2nd field: reg */
 			if (R0 == r3) {
 				ccEmitOpcode(vmBRTI0);
-				ccEmitOpcode(memVectorObject(r2, 2)); /* icode's 3rd field: immediate type */
-				ccEmitOpcode((Obj)(-3*8)); /* opcode's bra address */
 			} else
 				assert(!"Unsuported icode BNEI ?? offset");
+			ccEmitOpcode(memVectorObject(r2, 2)); /* icode's 3rd field: immediate type */
+			ccEmitOpcode((Obj)(-3*8)); /* opcode's bra address */
 
 		/* BRTI */
 		} else if (sbra == r3) {
@@ -594,8 +579,7 @@ void ccEmitIblockOpcodes (void) {
 
 		/* SYSI */
 		} else if (ssysi == r3) {
-			ccEmitOpcode(vmSYSI);
-			ccEmitOpcode(memVectorObject(r2, 1));
+			ccEmitOpcode2(vmSYSI, memVectorObject(r2, 1));
 
 		/* QUIT */
 		} else if (squit == r3) {
@@ -613,6 +597,7 @@ void ccEmitIblockOpcodes (void) {
 			assert(!"Unsuported opcode");
 		}
 	}
+	DBEND();
 }
 
 
@@ -621,167 +606,171 @@ void ccEmitIblockOpcodes (void) {
    iblock structure.
 */
 void ccPrepareIBlockBranches (void) {
- Num idNext;
-	idNext = ccIBlockID(riblock)+1;
-
+ Obj defBlock, condBlock;
+ Num id;
+	DBBEG("  iblock="NUM, ccIBlockID(riblock));
+	/* If no default block is set then verify no conditional block either as it's
+	   probably the final "quit" iblock. */
 	if (false == ccIBlockGetDefaultBlock(riblock)) {
-		/* If no default block then there better not be a conditional block as it's
-		   probably the final "quit" iblock generated. */
 		assert(false == ccIBlockGetConditionalBlock(riblock));
-		return;
+		goto ret;
 	}
 
-	if ((idNext == iblockCount) || (ccIBlockGetDefaultBlock(riblock) != ccIBlock(idNext))) {
-		/* I'm the last iblock in the igraph vector or the next iblock is not my default */
-		ccEmitOpcode(vmBRA); /* Emit jump opcode */
-		ccEmitOpcode(false);
-		/* Cache jump opcode's offset-field location */
-		ccIBlockSetDefaultAddr(riblock, (Obj)(pccode-1));
-		/* Cache branch opcode's offset-field location (but only if this is a branch iblock) */
-		ccIBlockSetConditionalAddr(riblock, (Obj)(pccode-3));
-	} else {
-		/* Cache branch opcode's offset-field location (but only if this is a branch iblock) */
-		ccIBlockSetConditionalAddr(riblock, (Obj)(pccode-1));
-	}
-}
-
-
-/* Resolve current iblock's branch-opcode offset field if
-   the address is for an already placed conditional block
-*/
-void ccResolveConditional (void) {
- Obj condBlock;
- Obj condBlockAddr;
- Num opcodeFieldAddr;
-	/* If I have a conditional target block, consider its code-block address */
+	/* If the iblock has a conditional iblock, cache the branch opcode's offset-field location and
+	   set the field value to the target iblock temporarily */
+	//ccIBlockSetConditionalAddr(riblock, (Obj)(pccode-1)); // (ib, child)
 	condBlock = ccIBlockGetConditionalBlock(riblock);
 	if (false != condBlock) {
-		/* Consider conditional block's code-block address */
-		condBlockAddr = ccIBlockTag(condBlock);
-		if (true != condBlockAddr) { /* The target block's tag will be a code-block address if placed, #t otherwise */
-			opcodeFieldAddr = (Num)ccIBlockGetConditionalAddr(riblock);
- 			/* Set the branch-opcode's offset */
-			memVectorSet(rcode, opcodeFieldAddr, (Obj)(((Int)condBlockAddr-(Int)opcodeFieldAddr-1)*8)); /* opcode's bra address */
-		}
+		assert(memIsObjectType(condBlock, TIBLOCK));
+		memVectorSet(rcode, pccode-1, condBlock);
+		ccIBlockSetConditionalTag(riblock, (Obj)(pccode-1));
 	}
+
+	/* if the iblock is the last iblock in the igraph vector or the next iblock is not my default */
+	id = ccIBlockID(riblock);
+	defBlock = ccIBlockGetDefaultBlock(riblock);
+	if ((id == iblockCount - 1) || (defBlock != ccIBlock(id + 1))) {
+		ccEmitOpcode2(vmBRA, false); /* Emit jump opcode */
+		/* Cache jump opcode's offset-field location */
+		//ccIBlockSetDefaultAddr(riblock, (Obj)(pccode-1));
+		assert(false != defBlock);
+		assert(memIsObjectType(defBlock, TIBLOCK));
+		memVectorSet(rcode, pccode-1, defBlock);
+		ccIBlockSetDefaultTag(riblock, (Obj)(pccode-1));
+	}
+ret:
+	DBEND();
 }
 
-/* Resolve current iblock's jump-opcode offset field if
-   the address is for an already placed conditional block
+
+/* Resolve current iblock's jump-opcode offset field
 */
 void ccResolveDefault (void) {
  Obj defBlock;
  Obj defBlockAddr;
  Num opcodeFieldAddr;
-	/* Only resolve if the default opcode index is an integer.  False means no jump was required
-	   as its default iblock was emitted after this block. */
-	opcodeFieldAddr = (Num)ccIBlockGetDefaultAddr(riblock);
-	if (false != (Obj)opcodeFieldAddr) {
-		/* Consider default block */
-		defBlock = ccIBlockGetDefaultBlock(riblock);  assert(false != defBlock);
-		/* Consider default block's code-block address */
+	DBBEG("      iblock="NUM, ccIBlockID(riblock));
+	/* Only resolve if the default opcode index is an immediate integer.
+	   False means no jump was required as its default iblock was
+	   emitted after this block. */
+	opcodeFieldAddr = (Num)ccIBlockGetDefaultBlock(riblock);
+
+	if (!memIsObjectValid((Obj)opcodeFieldAddr)) {
+		/* Consider default block and it's address in the code block*/
+		defBlock = memVectorObject(rcode, opcodeFieldAddr);
+		assert(false != defBlock);
 		defBlockAddr = ccIBlockTag(defBlock);
-		if (true != defBlockAddr) { /* The target block's tag will be a code-block address if placed, #t otherwise */
- 			/* Set the jump-opcode's offset */
-			memVectorSet(rcode, opcodeFieldAddr, (Obj)(((Int)defBlockAddr-(Int)opcodeFieldAddr-1)*8));
-		}
+		assert(true != defBlockAddr); /* If it wasn't placed, it would be tagged #t */
+ 		/* Set the jump-opcode's offset */
+		memVectorSet(rcode, opcodeFieldAddr, (Obj)(((Int)defBlockAddr-(Int)opcodeFieldAddr-1)*8));
 	}
+	DBEND();
 }
 
-
-/* Resolve any unresolved default branch offsets of parent
-   iblocks to the current iblock if they've already been placed
+/* Resolve current iblock's branch-opcode offset field
 */
-void ccResolveParentIBlockDefault (void) {
- Obj parent, cindex;
- Int blockIndex;
-	r1 = ccIBlockIncomingList(riblock); /* Incoming iblock list */
-	while (null != r1) {
-		parent = car(r1); /* Consider an incoming parent iblock */
-		if (riblock == ccIBlockGetDefaultBlock(parent)) { /* Am I its default child iblock? */
-			/* Is parent placed?  If so cindex will be the branch op's
-			   offset field in the code block.  If not, false implying my icode
-			   was emitted directly after the parent. */
-			cindex = ccIBlockGetDefaultAddr(parent);
-			if (false != cindex) {
-				assert(0 <= cindex);
-				blockIndex = (Int)ccIBlockTag(riblock); /* My first emitted opcode offset in the code block */
-				memVectorSet(rcode, (Num)cindex, (Obj)((blockIndex-((Int)cindex)-1)*8)); /* opcode's jmp address */
-			}
-		}
-		r1 = cdr(r1);
-	}
-}
+void ccResolveConditional (void) {
+ Obj condBlock;
+ Obj condBlockAddr;
+ Num opcodeFieldAddr;
+	DBBEG("  iblock="NUM, ccIBlockID(riblock));
+	/* Only resolve if the conditional opcode index is an immediate integer.
+	   False means no final branch op at the end of the block */
+	opcodeFieldAddr = (Num)ccIBlockGetConditionalBlock(riblock);
 
-/* Resolve any unresolved conditional branch offsets of parent
-   iblocks to the current iblock if they've already been placed
-*/
-void ccResolveParentIBlockConditional (void) {
- Obj cindex;
- Int blockIndex;
-	r1 = ccIBlockIncomingList(riblock); /* Incoming iblock list */
-	while (null != r1) {
-		r2 = car(r1); /* Consider an incoming parent iblock */
-		if (riblock == ccIBlockGetConditionalBlock(r2)) { /* Am I it's conditional child iblock? */
-			/* Is parent placed?  If so cindex will be the branch op's
-			   offset field in the code block.  If not, false.  */
-			cindex = ccIBlockGetConditionalAddr(r2);
-			if (false != cindex) {
-				assert(0 <= cindex);
-				blockIndex = (Int)ccIBlockTag(riblock); /* My first emitted opcode offset in the code block */
-				memVectorSet(rcode, (Num)cindex, (Obj)((blockIndex-((Int)cindex)-1)*8)); /* opcode's bra address */
-			}
-		}
-		r1 = cdr(r1);
+	if (!memIsObjectValid((Obj)opcodeFieldAddr)) {
+		/* Consider default block and it's address in the code block*/
+		condBlock = memVectorObject(rcode, opcodeFieldAddr);
+		assert(false != condBlock);
+		condBlockAddr = ccIBlockTag(condBlock);
+		assert(true != condBlockAddr); /* If it wasn't placed, it would be tagged #t */
+ 		/* Set the jump-opcode's offset */
+		memVectorSet(rcode, opcodeFieldAddr, (Obj)(((Int)condBlockAddr-(Int)opcodeFieldAddr-1)*8));
 	}
+	DBEND();
 }
 
 
-/*
+/* For every iblock in the igraph, icode is emitted to the code object.
+   The block's address in the code block are stored.  The branch field
+   for branch instruction are also stored so when the offset can be
+   determined, the branch opcode's field can be set quickly.
+
    riblock/r16  <= current iblock
    rcode/r1e    <= code emitted to
    pccode       <= C var code object index
 */
 void ccAssembleAllIBlocks (void) {
  Num i;
-
+	DBBEG();
+	/* Place the blocks */
 	for (i=0; i < iblockCount; ++i) {
 		riblock = ccIBlock(i); /* Consider iblock from vector of all iblocks */
 
-		/* Tag the iblock with its initial location in the code block */
-		assert(true == ccIBlockTag(riblock));
-		ccIBlockSetTag (riblock, (Obj)pccode);
+		/* This means the iblock is not connected to the igraph as it wasn't
+		   recursively found when counting the igraph fields */
+		if (false != ccIBlockTag(riblock)) {
 
-		/* Translate and emit the icodes as virtual machine opcodes */
-		ccEmitIblockOpcodes();
+			/* Translate and emit the icodes as virtual machine opcodes */
+			ccEmitIblockOpcodes();
 
-		/* Set the default and conditional address flags as well as emit a jump if the default
-		   block is not the next block to be emitted */
-		ccPrepareIBlockBranches();
-//ccDumpIBlock(riblock);
+			/* Emit a jump, if the default block does not follow immediatley after.
+		   	Set up the iblock to resolve the target default and conditional branch offsets by
+		   	moving the iblock from the default/conditional tag to the opcode's offset field
+		   	and resetting the tag to the opcode's offset field offset in the code block. */
+			ccPrepareIBlockBranches();
+		}
+	}
+	DBEND();
+}
 
-		/* Resolve my conditional branch offset */
+void ccResolveBranchOpcodeAddresses (void) {
+ Num i;
+	DBBEG();
+	/* Resolve branch offsets */
+	for (i=0; i < iblockCount; ++i) {
+		riblock = ccIBlock(i); /* Consider iblock from vector of all iblocks */
+		/* Resolve my branch opcode offsets */
 		ccResolveDefault();
 		ccResolveConditional();
-
-		/* Resolve parent's unresolved default and conditional branch opcode offsets */
-		ccResolveParentIBlockDefault();
-		ccResolveParentIBlockConditional();
 	}
+//ccDumpIBlock(riblock);
+//vmDebugDumpCode(rcode, stderr);
+	DBEND();
 }
 
 
-/* Create new code object who's size is the total
-   icode field count of the entire igraph.  Sets each
-   iblock's tag field to true.
+/* Initialize iblock default and conditional tags with
+   block ID immediate numbers
+*/
+void ccInitIBlockBranches (Obj ib) {
+ Obj tag;
+
+	tag = ccIBlockGetDefaultBlock(ib);
+	if (true == tag) {
+		/* Default block is via 'next logical' */
+		ccIBlockSetDefault(ccIBlockID(ib), 1+ccIBlockID(ib)); 
+	} else if (false != tag && !memIsObjectType(tag, TIBLOCK))
+		/* Default block is via 'labeled block' */
+		ccIBlockSetDefault(ccIBlockID(ib), (Num)memVectorObject(r3, (Num)tag));
+
+	tag = ccIBlockGetConditionalBlock(ib);
+	if (false != tag && !memIsObjectType(tag, TIBLOCK))
+		/* Conditional block is a labeled block */
+		ccIBlockSetConditional(ccIBlockID(ib), (Num)memVectorObject(r3, (Num)tag)); 
+}
+
+/* Recursively traverse the igraph's iblocks.  Tag each with #t.
+   Also resolve default and conditional branch links.
 */
 Num ccCountIGraphFields (Obj ib) {
  Num i, len=0;
 
-	if (memObjectType(ib)!=TIBLOCK || true == ccIBlockTag(ib))
-		return 0;
+	/* Base case.  Not an iblock or the iblock has been traversed already (tagged with #t) */
+	if (!memIsObjectType(ib, TIBLOCK) || true == ccIBlockTag(ib)) return 0;
 
 	ccIBlockSetTag(ib, true);
+	ccInitIBlockBranches(ib);
 
 	for (i=IBLOCK_INDEX_ICODE; i<memObjectLength(ib); ++i)
 		len += memObjectLength(memVectorObject(ib, i));
@@ -791,27 +780,36 @@ Num ccCountIGraphFields (Obj ib) {
 }
 
 
-/* The IGraph's iblocks are found in rigraph/rf.  The icode found in each iblock are
-   assembled into a VM code object object rcode/r1e which can be run in the VM.
+/* The IGraph's iblocks are found in rigraph/rf.  The icode found in each iblock
+   and the links between icodes, are assembled into a VM code object object
+   rcode/r1e which can be run in the VM.
 
          r0 <= head iblock object representing entire igraph
           r2 = icode
           r3 = field
    rcode/r1e => code object
-
-   Create the code block object which all iblocks are compile to.
-   As it compiles each iblock, icode is emitted to the code object.
-   Block addresses are recorded as well as branch instruction offsets.
-   As iblocks are compiled, the opcode's offsets are eventually resolved.
 */
 void ccAssembleIGraph (void) {
  Num len;
+	DBBEG();
 
+	/* Create the code block object which all iblocks are compile to */
 	len = ccCountIGraphFields(ccIBlock(0));
 	rcode = memNewVector(TCODE, len);
 	pccode = 0;
 
+	DB(NUM" opcode fields in igraph", len);
+
+//sysDisplay(r3,stdout);
+
+//ccDumpIBlocks();
 	ccAssembleAllIBlocks();
+
+
+	ccResolveBranchOpcodeAddresses();
+
+//vmDebugDumpCode(rcode, stderr);
+	DBEND();
 }
 
 
@@ -822,19 +820,9 @@ void ccAssembleIGraph (void) {
  Accept opcode and opcode fields and compile into an igraph.
 *******************************************************************************/
 Num IBlockCount = 0;
-Num ICodeCount = 0;
 Num LabelIndex = 0;
 void ccAsmLabelsReset() {
 	LabelIndex = 0;
-}
-
-/* Prepare ASM for multiple calls to ccAsm()
-*/
-void ccAsmInit (void) {
-	IBlockCount = 0;
-	ccResetIGraph();
-	riblocklast = false;
-	objNewVector(LabelIndex);  r3 = r0;
 }
 
 /* Generate a label for the label opcode and branch opcode address fields
@@ -843,49 +831,48 @@ Num ccAsmLabelNew() {
 	return LabelIndex++;
 }
 
-/* Pop ICodeCount icode objects from stack, add to
-   a new iblock then push iblock back to stack
+/* Prepare ASM for multiple calls to ccAsm()
 */
-void ccGenerateIBlockWithPushedIcodes (void) {
+void ccAsmInit (void) {
+	DBBEG();
+	IBlockCount = 0;
+	ccResetIGraph();
+	riblocklast = false;
+
+	objNewVector(LabelIndex);
+	r3 = r0;
+	DBEND();
+}
+
+/* Replace count icodes on stack with a new iblock containing the icodes.
+*/
+void ccGenerateIBlockWithPushedIcodes (Num count) {
  Num n;
-	ccGenerateNewIBlock(ICodeCount); /* Create new empty iblock in riblock */
-	for (n=1; n <= ICodeCount; ++n) ccIBlockSetICode(ICodeCount-n, vmPop()); /* pop icodes into new iblock */
-	vmPush(riblock); /* push new iblock */
-	ICodeCount = 0;
+	/* Create new empty iblock in riblock and pop icodes from stack into it */
+	ccGenerateNewIBlock(count);
+	for (n=1; n <= count; ++n)
+		ccIBlockSetICode(count-n, vmPop());
+
+	/* Connect the 'first' iblock generated by the current ASM call to
+	   to the last iblock generated by the last call to ASM */
+	if ((0 == IBlockCount) && (false != riblocklast)) {
+		ccIBlockSetDefaultTag(riblocklast, riblock);  // TODO this fails when performed after direct iblock creation
+	}
+
+	/* Keep track of the last iblock generated.  See above statement. */
+	riblocklast = riblock;
+
 	++IBlockCount;
 }
 
-/* Pop iblocks off stack creating a new igraph.  The deafult and conditional
-   iblocks are set as well. */
-void ccGenerateIGgraphWithPushedIBlocks (void) {
- Obj tagDefault, tagConditional;
-	while (IBlockCount--) {
-		riblock = vmPop();
-		if (false != riblocklast) {
-
-			tagDefault = ccIBlockGetDefaultBlock(riblock);
-			if (true == tagDefault) {
-				/* Default block is next logical */
-				ccIBlockSetDefault(ccIBlockID(riblock), 1+(Num)ccIBlockID(riblock)); 
-			} else if (false != tagDefault)
-				/* Default is a labeled block */
-				ccIBlockSetDefault(ccIBlockID(riblock), (Num)memVectorObject(r3, (Num)tagDefault));
-
-			tagConditional = ccIBlockGetConditionalBlock(riblock);
-			if (false != tagConditional)
-				/* Conditional block is a labeled block */
-				ccIBlockSetConditional(ccIBlockID(riblock), (Num)memVectorObject(r3, (Num)tagConditional)); 
-		}
-		riblocklast = riblock;
-	}
-}
 
 void ccAsmAsm (Obj f, ...) {
  va_list ap;
+ Num ICodeCount = 0;
  Obj obj, r, rr, i, o, l;
 	DBBEG ();
 
-	ICodeCount = 0;
+	IBlockCount = 0;
 
 	/* Parse the opcode fields and create then push an icode object */
 	for (va_start(ap, f), obj = f; (obj != END); obj = va_arg(ap, Obj)) {
@@ -910,38 +897,49 @@ void ccAsmAsm (Obj f, ...) {
 			i = va_arg(ap, Obj);
 			o = va_arg(ap, Obj);
 			ccNewICodeBNEI(r, i, o);  vmPush(r0);
-			ccGenerateIBlockWithPushedIcodes();
+			ccGenerateIBlockWithPushedIcodes(ICodeCount);
+			ICodeCount = 0;
+			ccIBlockSetDefaultTag(riblock, true); /* signal this block's default is the next one */
+			ccIBlockSetConditionalTag(riblock, o);  /* signal this block conditional is a label */
+		} else if (BEQI == obj) {
+			r = va_arg(ap, Obj);
+			i = va_arg(ap, Obj);
+			o = va_arg(ap, Obj);
+			ccNewICodeBEQI(r, i, o);  vmPush(r0);
+			ccGenerateIBlockWithPushedIcodes(ICodeCount);
+			ICodeCount = 0;
 			ccIBlockSetDefaultTag(riblock, true); /* signal this block's default is the next one */
 			ccIBlockSetConditionalTag(riblock, o);  /* signal this block conditional is a label */
 		} else if (BRA == obj) {
 			o = va_arg(ap, Obj);
 			ccNewICodeBRA(o);  vmPush(r0);
-			ccGenerateIBlockWithPushedIcodes();
+			ccGenerateIBlockWithPushedIcodes(ICodeCount);
+			ICodeCount = 0;
 			ccIBlockSetDefaultTag(riblock, o);  /* signal this block's default is a label */
 		} else if (LABEL == obj) {
 			l = va_arg(ap, Obj);
-			if (1 < ICodeCount) {
-				--ICodeCount;
-				ccGenerateIBlockWithPushedIcodes();
+			/* Since labels aren't opcodes, undo the assumed icode counter at the beginning of this 'if block */
+			--ICodeCount;
+			if (0 < ICodeCount) {
+				ccGenerateIBlockWithPushedIcodes(ICodeCount);
+				ICodeCount = 0;
 				ccIBlockSetDefaultTag(riblock, true);  /* default block is next */
-			} else
-				--ICodeCount; /* Undo the assumed icode counter at the beginning of this 'if block */
+			}
 			/* Set the next block's ID in the label/iblockID table */
-			memVectorSet(r3, (Num)l, (Obj)(IBlockCount));
+			memVectorSet(r3, (Num)l, (Obj)(iblockCount));
 		} else if (QUIT == obj) {
 			ccNewICodeQUIT();  vmPush(r0);
+		} else {
+			assert(!"Unhandled asm opcode");
 		}
 	}
 	va_end(ap); /* stdarg */
 
 	/* Might have to create an iblock with remaining icodes on stack */
-	if (ICodeCount) ccGenerateIBlockWithPushedIcodes();
-
-	//ccGenerateIGgraphWithPushedIBlocks();
+	if (ICodeCount) ccGenerateIBlockWithPushedIcodes(ICodeCount);
 
 //ccDumpIBlocks();
 //sysWrite(r3, stdout); printf("\n");
-
 	DBEND ();
 }
 
@@ -1078,6 +1076,7 @@ void ccIf (Num flags) {
 		riblock = ccIBlock(endid); /* Done block is now the last iblock */
 	}
 
+ccDumpIBlocks();
 	DBEND();
 }
 
@@ -1088,8 +1087,11 @@ void ccCombination (Num flags) {
 
 void ccSelfEvaluating (Num flags) {
 	DBBEG();
-	ccNewDefaultIBlock(ccIBlockID(riblock), 1);
-		ccMVI(R0, rexpr);
+	//ccNewDefaultIBlock(ccIBlockID(riblock), 1);
+		//ccMVI(R0, rexpr);
+	ccAsm (
+		MVI, R0, rexpr
+	);
 	DBEND();
 }
 
@@ -1097,7 +1099,6 @@ void ccSelfEvaluating (Num flags) {
    expr/r15 onto the end of the igraph in igraph/rf.
 */
 void ccCompileExpr (Num flags) {
-	/* I was originally emitting intermediate representation */
 	DBBEG("Create intermediate graph data structure");
 
 	switch (memObjectType(rexpr)) {
@@ -1124,11 +1125,13 @@ void ccCompileExpr (Num flags) {
    rcode/r1e  => VM code block
 */
 void ccCompile () {
-	ccResetIGraph();
+
+	ccAsmInit ();
 
 	/* Head iblock of the igraph */
 	ccGenerateNewIBlock(1);
 	ccNOP();
+	riblocklast = riblock;
 	ccCompileExpr(0);
 
 	/* Finalize the iblock with an iblock containing the VM quit op */
@@ -1220,7 +1223,7 @@ void ccInitialize (void) {
 
 int mmain (int argc, char *argv[]) {
 	ccInitialize();
-	//repl();
+	repl();
 	return 0;
 }
 

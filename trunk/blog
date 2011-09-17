@@ -3555,3 +3555,13 @@ Another finalizes the igraph construction process and the 3rd compiles the
 igraph into a code object for running in the VM.
 
 Wondering if I should merge GenerateIGraph with ccAsm.
+
+
+
+Fri Sep 16 12:15:54 EDT 2011
+
+After recursively scanning the igraph, un-visited iblocks will have their
+tag unchanged and will be ignored during the AssembleAllIBlocks loop.  This was
+realized when an old assertion failed during the loop which verified all blocks
+were tagged with #t.  This was a valid assumption while I was initially creating
+the igraph directly.

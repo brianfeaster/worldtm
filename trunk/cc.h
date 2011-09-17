@@ -61,7 +61,6 @@ void ccAssembleIGraph (void);
 ***************************************/
 void ccAsmInit (void);
 Num ccAsmLabelNew();
-void ccGenerateIGgraphWithPushedIBlocks (void);
 void ccAsmAsm (Obj f, ...);
 #define ccAsm(...) ccAsmAsm(__VA_ARGS__, END)
 
