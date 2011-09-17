@@ -70,7 +70,6 @@ void test2 (void) {
 	id3 = ccNewDefaultIBlock (id2, 1);
 	ccQUIT();
 
-	r0 = ccIBlock(0);;
 	ccAssembleIGraph(); /* rcode/r1e */
 	rip = 0;
 
@@ -111,7 +110,6 @@ void test3 (void) {
 	id5 = ccNewDefaultIBlock(id4, 1);
 	ccQUIT();
 
-	r0 = ccIBlock(0);;
 	ccAssembleIGraph(); /* rcode/r1e */
 	rip = 0;
 
@@ -158,8 +156,6 @@ void test4 (void) {
 	ccQUIT();
 	ccIBlockSetConditional(id4, id6); /* Set 4's conditional branch to this iblock*/
 
-
-	r0 = ccIBlock(0);;
 	ccAssembleIGraph(); /* rcode/r1e */
 	rip = 0;
 
@@ -211,7 +207,6 @@ void test5 (void) {
 
 	//ccDumpIBlocks();
 
-	r0 = ccIBlock(0);;
 	ccAssembleIGraph(); /* rcode/r1e */
 	rip = 0;
 
@@ -228,58 +223,69 @@ void ccDumpObjR0 (void) { sysDisplay(r0, stdout); }
 void ccDumpNewline (void) { printf("\n"); }
 
 void cctTestAsm() {
- Num L1, L2, L3, L4;
-	L1 = ccAsmLabelNew();
-	L2 = ccAsmLabelNew();
-	L3 = ccAsmLabelNew();
-	L4 = ccAsmLabelNew();
+ Num L1, L2, L3, L4, L5, L6;
+
+	//ccResetIGraph();
+	//ccGenerateNewIBlock(1);
+	//ccNOP();
+	//ccAssembleIGraph(); /* rcode/r1e */
 
 	memPointerRegister(ccDumpStringR0);
 	memPointerRegister(ccDumpObjR0);
 	memPointerRegister(ccDumpNewline);
 
+	/* For now labels must be created before initializing the asm module */
+	L1 = ccAsmLabelNew();
+	L2 = ccAsmLabelNew();
+	L3 = ccAsmLabelNew();
+	L4 = ccAsmLabelNew();
+	L5 = ccAsmLabelNew();
+	L6 = ccAsmLabelNew();
 	ccAsmInit ();
 
 	ccAsm (
-		MVI, R1, (Obj)20,
+		MVI, R2, (Obj)5,
+		MVI, R1, (Obj)8,
 	LABEL, L1,
-		MVI, R0, (Obj)20,
+		MVI, R0, (Obj)8,
 	LABEL, L2,
 		SYSI, ccDumpStringR0,
 		ADDI, R0, -1l,
-		BNEI, R0, 0l, L2,
+		BEQI, R0, 0l, L3,
+		BRA, L2,
+	LABEL, L3,
 		SYSI, ccDumpNewline,
 		ADDI, R1, -1l,
 		BNEI, R1, 0l, L1
 	);
 
-	//ccGenerateIGgraphWithPushedIBlocks();
+	//vmPush(r3);
 	//ccAssembleIGraph();
 	//rip = 0;
-//ccDumpIBlocks ();
-//vmDebugDumpCode(rcode, stderr);
 	//vmRun();
+	//r3 = vmPop();
+
 	//ccAsmInit ();
 
 	ccAsm (
-		MVI, R0, false,
-		BNEI, R0, true, L3,
-		MVI, R0, false,
-		BRA, L4,
-	LABEL, L3,
-		MVI, R0, true,
 	LABEL, L4,
+		MVI, R0, false,
+		BNEI, R0, true, L5,
+		MVI, R0, false,
+		BRA, L6,
+	LABEL, L5,
+		MVI, R0, true,
+	LABEL, L6,
 		SYSI, ccDumpObjR0,
+		MVI, R1, (Obj)2,
+		ADDI, R2, -1l,
+		BNEI, R2, 0l, L1,
 		QUIT);
 	
-	ccGenerateIGgraphWithPushedIBlocks();
 	ccAssembleIGraph();
+
 	rip = 0;
 	vmRun();
-
-ccDumpIBlocks ();
-vmDebugDumpCode(rcode, stderr);
-
 }
 
 

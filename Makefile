@@ -1,6 +1,6 @@
 # Makefile for Wscheme.  It's simple.
 
-CFLAGS = -Wall -ggdb -Wno-format -Wno-trigraphs -march=native -Wconversion
+CFLAGS = -Wall -ggdb -Wno-format -Wno-trigraphs -march=native -Wconversion -O3
 #CFLAGS = -D_GNU_SOURCE -march=pentium -Wall -Wno-format -Wno-trigraphs -ggdb -Wconversion -O3
 # -Wall            -- Many warnings.
 # -Wno-format      -- Disable the annoying printf warnings.
@@ -49,6 +49,8 @@ comp.o: comp.h os.h sys.h obj.h asm.h vm.h mem.h globals.h debug.h
 wscm.o: comp.h os.h sys.h obj.h asm.h vm.h mem.h globals.h debug.h
 
 cc.o:     cc.h      sys.h obj.h       vm.h mem.h globals.h debug.h
+
+cct.o:   cc.c cc.h      sys.h obj.h       vm.h mem.h globals.h debug.h
 
 build: globals.h debug.h mem.h vm.h asm.h obj.h sys.h os.h comp.h mem.c vm.c asm.c obj.c sys.c os.c comp.c wscm.c
 	cat globals.h debug.h mem.h vm.h asm.h obj.h sys.h os.h comp.h mem.c vm.c asm.c obj.c sys.c os.c comp.c wscm.c > build.c ; gcc $(CFLAGS) $(LDFLAGS) build.c -o wscm

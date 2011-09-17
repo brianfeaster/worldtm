@@ -97,9 +97,9 @@ void *vmNOP,
      *vmPUSH0, *vmPUSH1, *vmPUSH2, *vmPUSH3, *vmPUSH4, *vmPUSH5, *vmPUSH7, *vmPUSH19,
      *vmPUSH1A, *vmPUSH1B,
      *vmPOP0,  *vmPOP1,  *vmPOP2,  *vmPOP3,  *vmPOP4,  *vmPOP7, *vmPOP19, *vmPOP1A,  *vmPOP1B,
-     *vmADDI0, *vmADDI1, *vmADD10, *vmMUL10,
+     *vmADDI0, *vmADDI1, *vmADDI2, *vmADD10, *vmMUL10,
      *vmBLTI1,
-     *vmBEQI0, *vmBEQI1, *vmBEQI7, *vmBNEI0, *vmBNEI1, *vmBNEI5, *vmBRTI0, *vmBNTI0, *vmBRA,
+     *vmBEQI0, *vmBEQI1, *vmBEQI7, *vmBNEI0, *vmBNEI1, *vmBNEI2, *vmBNEI5, *vmBRTI0, *vmBNTI0, *vmBRA,
      *vmJ0, *vmJ2, *vmJAL0, *vmJAL2, *vmRET,
      *vmSYSI, *vmSYS0, *vmQUIT;
 
@@ -138,11 +138,11 @@ void vmVm (Int cmd) {
 		vmPOP0=&&pop0;    vmPOP1=&&pop1;   vmPOP2=&&pop2;   vmPOP3=&&pop3;  vmPOP4=&&pop4;  vmPOP7=&&pop7;
 		vmPOP19=&&pop19;  vmPOP1A=&&pop1a; vmPOP1B=&&pop1b;
 
-		vmADDI0=&&addi0; vmADDI1=&&addi1; vmADD10=&&add10; vmMUL10=&&mul10;
+		vmADDI0=&&addi0; vmADDI1=&&addi1; vmADDI2=&&addi2; vmADD10=&&add10; vmMUL10=&&mul10;
 
 		vmBLTI1=&&blti1;
 		vmBEQI0=&&beqi0; vmBEQI1=&&beqi1; vmBEQI7=&&beqi7;
-		vmBNEI0=&&bnei0; vmBNEI1=&&bnei1; vmBNEI5=&&bnei5;
+		vmBNEI0=&&bnei0; vmBNEI1=&&bnei1; vmBNEI2=&&bnei2; vmBNEI5=&&bnei5;
 		vmBRTI0=&&brti0; vmBNTI0=&&bnti0;
 		vmBRA=&&bra;
 
@@ -175,11 +175,11 @@ void vmVm (Int cmd) {
 		memPointerRegister(vmPOP0); memPointerRegister(vmPOP1); memPointerRegister(vmPOP2); memPointerRegister(vmPOP3);
 		memPointerRegister(vmPOP4); memPointerRegister(vmPOP7); memPointerRegister(vmPOP19);
 		memPointerRegister(vmPOP1A); memPointerRegister(vmPOP1B);
-		memPointerRegister(vmADDI0); memPointerRegister(vmADDI1); memPointerRegister(vmADD10);
+		memPointerRegister(vmADDI0); memPointerRegister(vmADDI1); memPointerRegister(vmADDI2); memPointerRegister(vmADD10);
 		memPointerRegister(vmMUL10);
 		memPointerRegister(vmBLTI1);
 		memPointerRegister(vmBEQI0); memPointerRegister(vmBEQI1); memPointerRegister(vmBEQI7);
-		memPointerRegister(vmBNEI0); memPointerRegister(vmBNEI1); memPointerRegister(vmBNEI5);
+		memPointerRegister(vmBNEI0); memPointerRegister(vmBNEI1); memPointerRegister(vmBNEI2); memPointerRegister(vmBNEI5);
 		memPointerRegister(vmBRTI0);
 		memPointerRegister(vmBNTI0);
 		memPointerRegister(vmBRA);
@@ -348,6 +348,7 @@ void vmVm (Int cmd) {
 	/* Add immediate to r0. */
 	addi0: OPDB("addi0"); r0 += *(Int*)(rip+=8); goto **(void**)(rip+=8);
 	addi1: OPDB("addi1"); r1 += *(Int*)(rip+=8); goto **(void**)(rip+=8);
+	addi2: OPDB("addi2"); r2 += *(Int*)(rip+=8); goto **(void**)(rip+=8);
 
 	/* Mutate object r1 with (object r1 + object r0). */
 	add10: OPDB("add10"); *(Int*)r1 += *(Int*)r0; goto **(void**)(rip+=8);
@@ -423,7 +424,21 @@ void vmVm (Int cmd) {
 
 	/* Jump to immediate2 if r1 not equal to immediate 1. */
 	bnei1: OPDB("bnei1");
-	if (r1!=*(void**)(rip+=8)) {
+	if (r1 != *(void**)(rip+=8)) {
+		rip += 8;
+		rip += *(Int*)rip;
+		rip +=8;
+		if (vmInterrupt) vmProcessInterrupt();
+		goto **(void**)(rip);
+	} else {
+		rip += 2*8;
+		if (vmInterrupt) vmProcessInterrupt();
+		goto **(void**)(rip);
+	}
+
+	/* Jump to immediate2 if r1 not equal to immediate 1. */
+	bnei2: OPDB("bnei2");
+	if (r2 != *(void**)(rip+=8)) {
 		rip += 8;
 		rip += *(Int*)rip;
 		rip +=8;
@@ -436,7 +451,7 @@ void vmVm (Int cmd) {
 	}
 
 	bnei5: OPDB("bnei5");
-	if (r5!=*(void**)(rip+=8)) {
+	if (r5 != *(void**)(rip+=8)) {
 		rip += 8;
 		rip += *(Int*)rip;
 		rip +=8;
@@ -575,6 +590,15 @@ void vmObjectDumperDefault (Obj o, FILE *stream) {
 
 void (* vmObjectDumper)(Obj o, FILE *stream) = vmObjectDumperDefault;
 
+Int vmOffsetToPosition (Obj codeBlock, Obj *instPtr) {
+ Int pos = 3 + instPtr - (Obj*)codeBlock + (Int)*(instPtr+2) / 8;
+	return (memObjectLength(codeBlock) < pos) ? (Int)*(instPtr+2) : pos;
+}
+Int vmBraOffsetToPosition (Obj codeBlock, Obj *instPtr) {
+ Int pos = 2 + instPtr - (Obj*)codeBlock + (Int)*(instPtr+1) / 8;
+	return (memObjectLength(codeBlock) < pos) ? (Int)*(instPtr+1) : pos;
+}
+
 void vmDebugDumpCode (Obj c, FILE *stream) {
  int fdState;
  Obj *i = c;
@@ -658,40 +682,32 @@ void vmDebugDumpCode (Obj c, FILE *stream) {
 		else if (*i==vmPOP19) {fprintf(stream, "pop_19 ");}
 		else if (*i==vmPOP1A) {fprintf(stream, "pop_1a ");}
 		else if (*i==vmPOP1B) {fprintf(stream, "pop_1b ");}
-		else if (*i==vmADDI0) {fprintf(stream, "addi_0 %d", *(i+1)); i++; }
-		else if (*i==vmADDI1) {fprintf(stream, "addi_1 %d", *(i+1)); i++; }
+		else if (*i==vmADDI0) {fprintf(stream, "addi_0 %ld", *(i+1)); i++; }
+		else if (*i==vmADDI1) {fprintf(stream, "addi_1 %ld", *(i+1)); i++; }
+		else if (*i==vmADDI2) {fprintf(stream, "addi_2 %ld", *(i+1)); i++; }
 		else if (*i==vmADD10) {fprintf(stream, "add_1_0 "); }
 		else if (*i==vmMUL10) {fprintf(stream, "mul_1_0 "); }
-		else if (*i==vmBLTI1) {fprintf(stream, "blti_1 %x %04x",
-									 *(i+1), 3+i-(Obj*)c+(Int)*(i+2)/8); i+=2;}
-		else if (*i==vmBEQI0) {fprintf(stream, "beqi_0 %x %04x",
-									 *(i+1), 3+i-(Obj*)c+(Int)*(i+2)/8); i+=2;}
-		else if (*i==vmBEQI1) {fprintf(stream, "beqi_1 %x %04x",
-									 *(i+1), 3+i-(Obj*)c+(Int)*(i+2)/8); i+=2;}
-		else if (*i==vmBEQI7) {fprintf(stream, "beqi_7 %x %04x",
-									 *(i+1), 3+i-(Obj*)c+(Int)*(i+2)/8); i+=2;}
-		else if (*i==vmBNEI0) {fprintf(stream, "bnei_0 %x %04x",
-									 *(i+1), 3+i-(Obj*)c+(Int)*(i+2)/8); i+=2;}
-		else if (*i==vmBNEI1) {fprintf(stream, "bnei_1 %x %04x",
-									 *(i+1), 3+i-(Obj*)c+(Int)*(i+2)/8); i+=2;}
-		else if (*i==vmBNEI5) {fprintf(stream, "bnei_5 ");
-									vmObjectDumper(*(i+1), stream);
-									fprintf(stream, " %04x", 3+i-(Obj*)c+(Int)*(i+2)/8);
-									i+=2;}
-		else if (*i==vmBRTI0) {fprintf (stream, "brti_0 %x %04x",
-									 *(i+1), 3+i-(Obj*)c+(Int)*(i+2)/8); i+=2;}
-		else if (*i==vmBNTI0) {fprintf (stream, "bnti_0 %08x %04x",
-									 *(i+1), 3+i-(Obj*)c+(Int)*(i+2)/8); i+=2;}
-		else if (*i==vmBRA)   {fprintf (stream, "bra %04x",
-									 2+i-(Obj*)c+(Int)*(i+1)/8); i++;}
-		else if (*i==vmJ0)    {fprintf (stream, "j_0 ");}
-		else if (*i==vmJ2)    {fprintf (stream, "j_2 ");}
-		else if (*i==vmJAL0)  {fprintf (stream, "jal_0 ");}
-		else if (*i==vmJAL2)  {fprintf (stream, "jal_2 ");}
-		else if (*i==vmRET)   {fprintf (stream, "ret ");}
-		else if (*i==vmSYSI)  {fprintf (stream, "sysi "); vmObjectDumper(*++i, stream);}
-		else if (*i==vmSYS0)  {fprintf (stream, "sys_0 ");}
-		else if (*i==vmQUIT)  {fprintf (stream, "quit ");}
+
+		else if (*i==vmBLTI1) {fprintf(stream, "blti_1 "HEX" "HEX04, *(i+1), vmOffsetToPosition(c, i)); i+=2;}
+		else if (*i==vmBEQI0) {fprintf(stream, "beqi_0 "HEX" "HEX04, *(i+1), vmOffsetToPosition(c, i)); i+=2;}
+		else if (*i==vmBEQI1) {fprintf(stream, "beqi_1 "HEX" "HEX04, *(i+1), vmOffsetToPosition(c, i)); i+=2;}
+		else if (*i==vmBEQI7) {fprintf(stream, "beqi_7 "HEX" "HEX04, *(i+1), vmOffsetToPosition(c, i)); i+=2;}
+		else if (*i==vmBNEI0) {fprintf(stream, "bnei_0 "HEX" "HEX04, *(i+1), vmOffsetToPosition(c, i)); i+=2;}
+		else if (*i==vmBNEI1) {fprintf(stream, "bnei_1 "HEX" "HEX04, *(i+1), vmOffsetToPosition(c, i)); i+=2;}
+		else if (*i==vmBNEI2) {fprintf(stream, "bnei_2 "HEX" "HEX04, *(i+1), vmOffsetToPosition(c, i)); i+=2;}
+		else if (*i==vmBNEI5) {fprintf(stream, "bnei_5 "HEX" "HEX04, *(i+1), vmOffsetToPosition(c, i)); i+=2;}
+		else if (*i==vmBRTI0) {fprintf(stream, "brti_0 "HEX" "HEX04, *(i+1), vmOffsetToPosition(c, i)); i+=2;}
+		else if (*i==vmBNTI0) {fprintf(stream, "bnti_0 "HEX" "HEX04, *(i+1), vmOffsetToPosition(c, i)); i+=2;}
+		else if (*i==vmBRA)   {fprintf(stream, "bra "HEX04, vmBraOffsetToPosition(c, i)); i++;}
+
+		else if (*i==vmJ0)    {fprintf(stream, "j_0 ");}
+		else if (*i==vmJ2)    {fprintf(stream, "j_2 ");}
+		else if (*i==vmJAL0)  {fprintf(stream, "jal_0 ");}
+		else if (*i==vmJAL2)  {fprintf(stream, "jal_2 ");}
+		else if (*i==vmRET)   {fprintf(stream, "ret ");}
+		else if (*i==vmSYSI)  {fprintf(stream, "sysi "); vmObjectDumper(*++i, stream);}
+		else if (*i==vmSYS0)  {fprintf(stream, "sys_0 ");}
+		else if (*i==vmQUIT)  {fprintf(stream, "quit ");}
 		else {
 			//fprintf(stream, HEX" = ", *i);
 			vmObjectDumper(*i, stream);

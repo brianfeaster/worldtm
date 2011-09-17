@@ -60,9 +60,9 @@ extern void *vmNOP,
      *vmPUSH0, *vmPUSH1, *vmPUSH2, *vmPUSH3, *vmPUSH4, *vmPUSH5, *vmPUSH7, *vmPUSH19,
      *vmPUSH1A, *vmPUSH1B,
      *vmPOP0,  *vmPOP1,  *vmPOP2,  *vmPOP3,  *vmPOP4,  *vmPOP7, *vmPOP19, *vmPOP1A,  *vmPOP1B,
-     *vmADDI0, *vmADDI1, *vmADD10, *vmMUL10,
+     *vmADDI0, *vmADDI1, *vmADDI2, *vmADD10, *vmMUL10,
      *vmBLTI1,
-     *vmBEQI0, *vmBEQI1, *vmBEQI7, *vmBNEI0, *vmBNEI1, *vmBNEI5, *vmBRTI0, *vmBNTI0, *vmBRA,
+     *vmBEQI0, *vmBEQI1, *vmBEQI7, *vmBNEI0, *vmBNEI1, *vmBNEI2, *vmBNEI5, *vmBRTI0, *vmBNTI0, *vmBRA,
      *vmJ0, *vmJ2, *vmJAL0, *vmJAL2, *vmRET,
      *vmSYSI, *vmSYS0, *vmQUIT;
 
