@@ -15,45 +15,42 @@ LDFLAGS = -lm
 # -lm       Math library (probably trig functions).
 # -lcrypto  Crypto library for md5sum hash function.
 
-MEMTOBJS  =  memt.o                                    mem.o
-VMTOBJS   =   vmt.o                               vm.o mem.o
-ASMTOBJS  =  asmt.o                         asm.o vm.o mem.o
-OBJTOBJS  =  objt.o                   obj.o       vm.o mem.o
-SYSTOBJS  =  syst.o             sys.o obj.o       vm.o mem.o
-OSTOBJS   =   ost.o        os.o sys.o obj.o       vm.o mem.o
-COMPTOBJS = compt.o comp.o os.o sys.o obj.o asm.o vm.o mem.o
-WSCMTOBJS = wscmt.o comp.o os.o sys.o obj.o asm.o vm.o mem.o
-CCTOBJS   =   cct.o   cc.o      sys.o obj.o       vm.o mem.o
+MEMTOBJS  =  memt.o                                         mem.o
+VMTOBJS   =   vmt.o                                    vm.o mem.o
+ASMTOBJS  =  asmt.o                              asm.o vm.o mem.o
+OBJTOBJS  =  objt.o                        obj.o       vm.o mem.o
+SYSTOBJS  =  syst.o                  sys.o obj.o       vm.o mem.o
+OSTOBJS   =   ost.o             os.o sys.o obj.o       vm.o mem.o
+COMPTOBJS = compt.o      comp.o os.o sys.o obj.o asm.o vm.o mem.o
+WSCMTOBJS = wscmt.o      comp.o os.o sys.o obj.o asm.o vm.o mem.o
+CCTOBJS   =   cct.o cc.o        os.o sys.o obj.o       vm.o mem.o
 
-WSCMOBJS  =  wscm.o comp.o os.o sys.o obj.o asm.o vm.o mem.o
-CCOBJS    =           cc.o      sys.o obj.o       vm.o mem.o
+WSCMOBJS  =  wscm.o cc.o comp.o os.o sys.o obj.o asm.o vm.o mem.o
 
 wscm: $(WSCMOBJS)
 
-cc: $(CCOBJS)
+mem.o:                                               mem.h globals.h debug.h
 
-mem.o:                                     mem.h globals.h debug.h
+vm.o:                                           vm.h mem.h globals.h debug.h
 
-vm.o:                                 vm.h mem.h globals.h debug.h
+asm.o:                                    asm.h vm.h mem.h globals.h debug.h
 
-asm.o:                          asm.h vm.h mem.h globals.h debug.h
+obj.o:                              obj.h       vm.h mem.h globals.h debug.h
 
-obj.o:                    obj.h       vm.h mem.h globals.h debug.h
+sys.o:                        sys.h obj.h       vm.h mem.h globals.h debug.h sys.c
 
-sys.o:              sys.h obj.h       vm.h mem.h globals.h debug.h
+os.o:                    os.h sys.h obj.h       vm.h mem.h globals.h debug.h
 
-os.o:          os.h sys.h obj.h       vm.h mem.h globals.h debug.h
+comp.o:           comp.h os.h sys.h obj.h asm.h vm.h mem.h globals.h debug.h
 
-comp.o: comp.h os.h sys.h obj.h asm.h vm.h mem.h globals.h debug.h
+wscm.o:           comp.h os.h sys.h obj.h asm.h vm.h mem.h globals.h debug.h
 
-wscm.o: comp.h os.h sys.h obj.h asm.h vm.h mem.h globals.h debug.h
+cc.o:   cc.h cc.h        os.h sys.h obj.h       vm.h mem.h globals.h debug.h
 
-cc.o:     cc.h      sys.h obj.h       vm.h mem.h globals.h debug.h
+cct.o:  cc.c cc.h        os.h sys.h obj.h       vm.h mem.h globals.h debug.h
 
-cct.o:   cc.c cc.h      sys.h obj.h       vm.h mem.h globals.h debug.h
-
-build: globals.h debug.h mem.h vm.h asm.h obj.h sys.h os.h comp.h mem.c vm.c asm.c obj.c sys.c os.c comp.c wscm.c
-	cat globals.h debug.h mem.h vm.h asm.h obj.h sys.h os.h comp.h mem.c vm.c asm.c obj.c sys.c os.c comp.c wscm.c > build.c ; gcc $(CFLAGS) $(LDFLAGS) build.c -o wscm
+build: globals.h debug.h mem.h vm.h asm.h obj.h sys.h os.h cc.h comp.h mem.c vm.c asm.c obj.c sys.c os.c cc.c comp.c wscm.c
+	cat globals.h debug.h mem.h vm.h asm.h obj.h sys.h os.h cc.h comp.h mem.c vm.c asm.c obj.c sys.c os.c cc.c comp.c wscm.c > build.c ; gcc $(CFLAGS) $(LDFLAGS) build.c -o wscm
 
 memt: $(MEMTOBJS)
 
@@ -67,9 +64,9 @@ syst: $(SYSTOBJS)
 
 ost: $(OSTOBJS)
 
-compt: $(COMPTOBJS)
-
 cct: $(CCTOBJS)
+
+compt: $(COMPTOBJS)
 
 wscmt: $(WSCMTOBJS)
 
@@ -91,11 +88,12 @@ systest: syst
 ostest: ost
 	./ost
 
+cctest: cct
+	sleep 1
+	./cct
+
 comptest: compt
 	./compt
-
-cctest: cct
-	./cct
 
 wscmtest: wscmt
 	./wscmt
@@ -103,14 +101,14 @@ wscmtest: wscmt
 worldscheme: wscm
 	./wscm scmt.scm
 
-tests: memt vmt asmt objt syst ost compt cct wscmt
+tests: memt vmt asmt objt syst ost cct compt wscmt
 
-test: memtest vmtest asmtest objtest systest ostest comptest cctest wscmtest worldscheme
+test: memtest vmtest asmtest objtest systest ostest cctest comptest wscmtest worldscheme
 
 linecount:
-	wc Makefile globals.h debug.h mem.h vm.h asm.h obj.h sys.h os.h comp.h mem.c vm.c asm.c obj.c sys.c os.c comp.c wscm.c memt.c vmt.c asmt.c objt.c syst.c ost.c compt.c cct.c wscmt.c
+	wc Makefile globals.h debug.h mem.h vm.h asm.h obj.h sys.h os.h cc.h comp.h mem.c vm.c asm.c obj.c sys.c os.c cc.c comp.c wscm.c memt.c vmt.c asmt.c objt.c syst.c ost.c cct.c compt.c wscmt.c
 
 clean:
-	rm $(MEMTOBJS) $(VMTOBJS) $(ASMTOBJS) $(OBJTOBJS) $(SYSTOBJS) $(OSTOBJS) $(COMPTOBJS) $(CCTOBJS) $(WSCMTOBJS) $(WSCMOBJS) memt vmt asmt objt syst ost compt cct wscmt wscm build.c build.o
+	rm $(MEMTOBJS) $(VMTOBJS) $(ASMTOBJS) $(OBJTOBJS) $(SYSTOBJS) $(OSTOBJS) $(COMPTOBJS) $(CCTOBJS) $(WSCMTOBJS) $(WSCMOBJS) memt vmt asmt objt syst ost cct compt wscmt wscm build.c build.o
 
 

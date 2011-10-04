@@ -54,7 +54,8 @@ void sysTGEBind (void);
 Num sysEnvFind (void);
 void sysEnvGet (void);
 void sysDefine (char* sym);
-void sysDefineSyscall (Func function, char* symbol);
+void sysDefineSyscallString (Func function, Str functionStr, char* symbol);
+#define sysDefineSyscall(f,s) sysDefineSyscallString(f, (Str)#f, s)
 
 /* Serializers_internal */
 void sysSerializeInteger (Int theint, Num base);

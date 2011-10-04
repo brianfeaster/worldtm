@@ -43,26 +43,26 @@ int myTest (void) {
 		vmSYSI, asmtDisplayString,
 		vmSYSI, asmtDisplayNewline,
 		vmMVI0, 0l,
-	LABEL, "main",
+	vmLABEL, "main",
 		vmMV10,
-	LABEL, "loop",
+	vmLABEL, "loop",
 		vmSYSI, asmtDisplayInteger,
 		vmPUSH1,
 			vmMVI1, " ",
 			vmSYSI, asmtDisplayString, /* Space */
 		vmPOP1,
 		vmADDI1, 1l,
-		vmBEQI1, 10l, ADDR, "loopdone",
-		vmBRA, ADDR, "loop",
-	LABEL, "loopdone",
+		vmBEQI1, 10l, vmADDR, "loopdone",
+		vmBRA, vmADDR, "loop",
+	vmLABEL, "loopdone",
 		vmMVI1, "\r\n",
 		vmSYSI, asmtDisplayString,
 		vmADDI0, 1l,
-		vmBNEI0, 10l, ADDR, "main",
-	LABEL, "done",
+		vmBNEI0, 10l, vmADDR, "main",
+	vmLABEL, "done",
 		vmSYSI, asmtVmDebugDumpCode,
 		vmQUIT,
-		END
+		vmEND
 	);
 
 	/* Compile the assembly */

@@ -10,6 +10,7 @@
 
 #define TEST(fn) (printf("Calling test: "#fn"()  "), fn(),printf("PASS\n"))
 
+#define rexpr       rf /* Expression being compiled.  See vm.h */
 
 
 /* Verify a simple lambda expression compiles and evaluates

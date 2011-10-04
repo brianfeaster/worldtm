@@ -27,6 +27,7 @@
 #include "asm.h"
 #include "vm.h"
 #include "mem.h"
+#include "cc.h"
 /* 
    Useful_functions
    Networking_stuff
@@ -349,9 +350,7 @@ void wscmOpenLocalStream (void) {
 
 /* This can do anything.  I change it mainly for debugging and prototyping. */
 void syscallFun (void) {
-	while ((Num)r1--) sysWrite(vmPop(), stdout);
-	osDebugDumpThreadInfo ();
-	memDebugDumpHeapHeaders(stderr);
+	vmDebugDumpCode(rcode, stderr);
 	r0 = true;
 }
 
@@ -1549,7 +1548,7 @@ void wscmCreateRead (void) {
 		r0, /* Label */
 		vmMVI4, 0l,             /* r4 <- Initial state. */
 		vmMVI6, 0l,             /* r6 <- initial yylength. */
-	LABEL, "scan",
+	vmLABEL, "scan",
 		/* Call recv block to read one char */
 		vmMVI2, false, /* tell recv to not timeout */
 		vmMVI3, null, /* tell recv that we want a character */
@@ -1559,14 +1558,14 @@ void wscmCreateRead (void) {
 		vmMV30,                     /* move char to r3 */
 		vmMVI0, 0l, /* Initialize final state to 0.  Will return 0 when still in non-final state. */
 		vmSYSI, wscmSysTransition, /* Syscall to get next state. */
-		vmBEQI0, 0l, ADDR, "scan",
+		vmBEQI0, 0l, vmADDR, "scan",
 		/* close paren? */
-		vmBNEI0, SCLOSEPAREN, ADDR, "dot",
+		vmBNEI0, SCLOSEPAREN, vmADDR, "dot",
 		vmMVI0, null,
 		vmRET,
-	LABEL, "dot",
+	vmLABEL, "dot",
 		/* dot? */
-		vmBNEI0, SDOT, ADDR, "eof",
+		vmBNEI0, SDOT, vmADDR, "eof",
 		vmPUSH7, vmPUSH1A, vmPUSH1B, /* Recurse on this fn (parser) with isList set. */
 		vmMVI7, 1l,
 		vmMV01E,
@@ -1575,13 +1574,13 @@ void wscmCreateRead (void) {
 		vmLDI00, 0l, /* Only want the car of the list we just parsed. */
 		vmRET,
 		/* eof? */
-	LABEL, "eof",
-		vmBNEI0, SEOF, ADDR, "vector",
+	vmLABEL, "eof",
+		vmBNEI0, SEOF, vmADDR, "vector",
 		vmMVI0, eof,
 		vmRET,
 		/* vector? */
-	LABEL, "vector",
-		vmBNEI0, SVECTOR, ADDR, "quote",
+	vmLABEL, "vector",
+		vmBNEI0, SVECTOR, vmADDR, "quote",
 		vmPUSH7, vmPUSH1A, vmPUSH1B, /* Recursive call with isList set */
 		vmMVI7, 1l,
 		vmMV01E,
@@ -1591,10 +1590,10 @@ void wscmCreateRead (void) {
 		vmMV10,
 		vmSYSI, objListToVector,
 		vmPOP1,  /* Restore r1. */
-		vmBRA, ADDR, "done",
+		vmBRA, vmADDR, "done",
 		/* quote? */
-	LABEL, "quote",
-		vmBNEI0, SQUOTE, ADDR, "unquotesplicing",
+	vmLABEL, "quote",
+		vmBNEI0, SQUOTE, vmADDR, "unquotesplicing",
 		vmPUSH7, vmPUSH1A, vmPUSH1B,
 		vmMVI7, 0l,
 		vmMV01E,
@@ -1608,10 +1607,10 @@ void wscmCreateRead (void) {
 			vmMV20,            /* Cdr object. */
 			vmSYSI, objCons12,
 		vmPOP2, vmPOP1,   /* Restore r1 and r2 */
-		vmBRA, ADDR, "done",
+		vmBRA, vmADDR, "done",
 		/* unquote-splicing? */
-	LABEL, "unquotesplicing",
-		vmBNEI0, SUNQUOTESPLICING, ADDR, "unquote",
+	vmLABEL, "unquotesplicing",
+		vmBNEI0, SUNQUOTESPLICING, vmADDR, "unquote",
 		vmPUSH7, vmPUSH1A, vmPUSH1B,
 		vmMVI7, 0l,
 		vmMV01E,
@@ -1625,10 +1624,10 @@ void wscmCreateRead (void) {
 			vmMV20,            /* Cdr object. */
 			vmSYSI, objCons12,
 		vmPOP2, vmPOP1,   /* Restore r1 and r2 */
-		vmBRA, ADDR, "done",
+		vmBRA, vmADDR, "done",
 		/* unquote? */
-	LABEL, "unquote",
-		vmBNEI0, SUNQUOTE, ADDR, "quasiquote",
+	vmLABEL, "unquote",
+		vmBNEI0, SUNQUOTE, vmADDR, "quasiquote",
 		vmPUSH7, vmPUSH1A, vmPUSH1B,
 		vmMVI7, 0l,
 		vmMV01E,
@@ -1642,10 +1641,10 @@ void wscmCreateRead (void) {
 			vmMV20,            /* Cdr object. */
 			vmSYSI, objCons12,
 		vmPOP2, vmPOP1,   /* Restore r1 and r2 */
-		vmBRA, ADDR, "done",
+		vmBRA, vmADDR, "done",
 		/* quasiquote? */
-	LABEL, "quasiquote",
-		vmBNEI0, SQUASIQUOTE, ADDR, "openparen",
+	vmLABEL, "quasiquote",
+		vmBNEI0, SQUASIQUOTE, vmADDR, "openparen",
 		vmPUSH7, vmPUSH1A, vmPUSH1B,
 		vmMVI7, 0l,
 		vmMV01E,
@@ -1659,73 +1658,73 @@ void wscmCreateRead (void) {
 			vmMV20,             /* Cdr object. */
 			vmSYSI, objCons12,
 		vmPOP2, vmPOP1,   /* Restore r1 and r2 */
-		vmBRA, ADDR, "done",
+		vmBRA, vmADDR, "done",
 		/* open paren? */
-	LABEL, "openparen",
-		vmBNEI0, SOPENPAREN, ADDR, "character",
+	vmLABEL, "openparen",
+		vmBNEI0, SOPENPAREN, vmADDR, "character",
 		vmPUSH7, vmPUSH1A, vmPUSH1B, /* Recursive call with isList set */
 		vmMVI7, 1l,
 		vmMV01E,
 		vmJAL0,
 		vmPOP1B, vmPOP1A, vmPOP7,
-		vmBRA, ADDR, "done",
+		vmBRA, vmADDR, "done",
 		/* character? */
-	LABEL, "character",
-		vmBNEI0, SCHARACTER, ADDR, "symbol",
+	vmLABEL, "character",
+		vmBNEI0, SCHARACTER, vmADDR, "symbol",
 		vmSYSI, sysNewCharacter,
-		vmBRA, ADDR, "done",
+		vmBRA, vmADDR, "done",
 		/* symbol? */
-	LABEL, "symbol",
-		vmBNEI0, SSYMBOL, ADDR, "string",
+	vmLABEL, "symbol",
+		vmBNEI0, SSYMBOL, vmADDR, "string",
 		vmSYSI, sysNewSymbol,
-		vmBRA, ADDR, "done",
+		vmBRA, vmADDR, "done",
 		/* string? */
-	LABEL, "string",
-		vmBNEI0, SSTRING, ADDR, "integer",
+	vmLABEL, "string",
+		vmBNEI0, SSTRING, vmADDR, "integer",
 		vmSYSI, sysNewString,
-		vmBRA, ADDR, "done",
+		vmBRA, vmADDR, "done",
 		/* integer? */
-	LABEL, "integer",
-		vmBNEI0, SINTEGER, ADDR, "real",
+	vmLABEL, "integer",
+		vmBNEI0, SINTEGER, vmADDR, "real",
 		vmSYSI, sysNewInteger,
-		vmBRA, ADDR, "done",
+		vmBRA, vmADDR, "done",
 		/* real? */
-	LABEL, "real",
-		vmBNEI0, SREAL, ADDR, "oct",
+	vmLABEL, "real",
+		vmBNEI0, SREAL, vmADDR, "oct",
 		vmSYSI, sysNewReal,
-		vmBRA, ADDR, "done",
+		vmBRA, vmADDR, "done",
 		/* oct number? */
-	LABEL, "oct",
-		vmBNEI0, SOCT, ADDR, "hex",
+	vmLABEL, "oct",
+		vmBNEI0, SOCT, vmADDR, "hex",
 		vmSYSI, sysNewOct,
-		vmBRA, ADDR, "done",
+		vmBRA, vmADDR, "done",
 		/* hex number? */
-	LABEL, "hex",
-		vmBNEI0, SHEX, ADDR, "binary",
+	vmLABEL, "hex",
+		vmBNEI0, SHEX, vmADDR, "binary",
 		vmSYSI, sysNewHex,
-		vmBRA, ADDR, "done",
+		vmBRA, vmADDR, "done",
 		/* binary number? */
-	LABEL, "binary",
-		vmBNEI0, SBINARY, ADDR, "false",
+	vmLABEL, "binary",
+		vmBNEI0, SBINARY, vmADDR, "false",
 		vmSYSI, sysNewBinary,
-		vmBRA, ADDR, "done",
+		vmBRA, vmADDR, "done",
 		/* false? */
-	LABEL, "false",
-		vmBNEI0, SFALSE, ADDR, "true",
+	vmLABEL, "false",
+		vmBNEI0, SFALSE, vmADDR, "true",
 		vmMVI0, false,
-		vmBRA, ADDR, "done",
+		vmBRA, vmADDR, "done",
 		/* true? */
-	LABEL, "true",
-		vmBNEI0, STRUE, ADDR, "default",
+	vmLABEL, "true",
+		vmBNEI0, STRUE, vmADDR, "default",
 		vmMVI0, true,
-		vmBRA, ADDR, "done",
+		vmBRA, vmADDR, "done",
 		/* default to null? */
-	LABEL, "default",
+	vmLABEL, "default",
 		vmMVI0, null,
 
 		/* List context?  If so recurse and contruct pair. */
-	LABEL, "done",
-		vmBEQI7, 0l, ADDR, "ret",
+	vmLABEL, "done",
+		vmBEQI7, 0l, vmADDR, "ret",
 		vmPUSH0, /* Save object just parsed. */
 		vmPUSH1A, vmPUSH1B, /* Recurse. */
 		vmMV01E, /* r0 <- code register*/
@@ -1740,9 +1739,9 @@ void wscmCreateRead (void) {
 		vmSYSI, objCons12,
 		vmPOP2, vmPOP1,   /* Restore r1 and r2 */
 	
-	LABEL, "ret",
+	vmLABEL, "ret",
 		vmRET,
-		END
+		vmEND
 	);
 	asmCompileAsmstack(0);
 	asmNewCode();
@@ -1788,7 +1787,7 @@ void wscmCreateRead (void) {
 		vmJAL0,
 		vmPOP19, vmPOP1B, vmPOP1A,
 		vmRET,
-		END
+		vmEND
 	);
 	asmCompileAsmstack(0);
 	asmNewCode();  r1=r0;
@@ -1811,7 +1810,7 @@ void wscmCreateRepl (void) {
 		vmMVI1, 1l,
 		vmSYSI, syscallDisplay,
 		/* Display prompt. */
-		LABEL, "repl",
+		vmLABEL, "repl",
 		vmMVI0, r2, // Prompt
 		vmPUSH0,
 		vmMVI1, 1l,
@@ -1825,9 +1824,9 @@ void wscmCreateRepl (void) {
 		vmJAL0,
 		vmPOP19, vmPOP1B, vmPOP1A,
 		/* Done if an #eof parsed. */
-		vmBRTI0, TEOF, ADDR, "done",
+		vmBRTI0, TEOF, vmADDR, "done",
 		/* Compile expression. */
-		vmSYSI, compSysCompile,
+		vmSYSI, ccCompile, // WAS compSysCompile
 		/* Run code. */
 		vmPUSH1A, vmPUSH1B, vmPUSH19,
 		vmJAL0,
@@ -1836,15 +1835,15 @@ void wscmCreateRepl (void) {
 		vmPUSH0,
 		vmMVI1, 1l,
 		vmSYSI, syscallDisplay,
-		vmBRA, ADDR, "repl",
-		LABEL, "done",
+		vmBRA, vmADDR, "repl",
+		vmLABEL, "done",
 		vmMVI0, r5, /* Bye message. */
 		vmPUSH0,
 		vmMVI1, 1l,
 		vmSYSI, syscallDisplay,
 		//RET,
 		vmSYSI, osUnthread,
-		END
+		vmEND
 	);
 	asmCompileAsmstack(0);
 	asmNewCode(); r1=r0;
@@ -1858,6 +1857,11 @@ void wscmInitialize (void) {
 	DBBEG();
 
 	compInitialize();
+	ccInitialize();
+
+	/* Although already activated, just pass in a scheduler handler callback.
+	   Called when vmInterrupt is set.  */
+	vmInitialize(wscmSchedule, sysDisplay);
 
 	/* Register objects and pointer addresses with their
 	   C source names for object debug dumps. */
@@ -2036,8 +2040,11 @@ void wscmCReadEvalPrintLoop (void) {
 
 		fprintf(stderr, "\n== Compile ======================\n");
 		sysWrite(r0, stderr);
-		rexpr=r0; compCompile(); /* Compile r15/expr into VM runable code in r0. */
-		rcode=r0; rip=0;
+
+		ccCompile(); /* Compile r0 into VM runable code into r0 */
+
+		rcode = r0;
+		rip = 0;
 		vmDebugDumpCode(rcode, stderr);
 
 		fprintf(stderr, "== Execute and return value =====\n");
@@ -2062,8 +2069,7 @@ void wscmASMReadEvalPrintLoop (int argc, char *argv[]) {
 	/* Bind symbol 'input and assign the stdin port or the
 	   filename passed as arg 1 to wscm */
 	if (argc==2) {
-		/* Create port object, push the argument, set arg count to 1 then
-		   make the syscall. */
+		/* Create port object, push the argument, set arg count to 1 then make the syscall. */
 		objNewSymbol((Str)argv[1], strlen(argv[1]));
 		vmPush(r0);  r1=(Obj)1;  syscallOpenFile();  r2=r0;
 		/* Assign port to existing binding. */
@@ -2074,7 +2080,8 @@ void wscmASMReadEvalPrintLoop (int argc, char *argv[]) {
 	}
 
 	objNewSymbol ((Str)"repl2", 5);  r1=r0;  /* wscmCreateRepl creates repl2 closure */
-	sysTGEFind(); r0=caar(r0);
+	sysTGEFind();
+	r0 = caar(r0);
 
 	osNewThread();
 	osScheduler();
@@ -2097,10 +2104,13 @@ void wscmStringReadEvalPrintLoop (void) {
       (eval wscmLoadExpr)\
       (wscmLoad~ (read FILE:SCM.SCM)))))\
   (close FILE:SCM.SCM)\
-  (send \"\r\nbye.\r\n\" stdout))");
+  (send \"\r\nbye.\r\n\" stdout)\
+  (quit))");
 	yyparse(); /* Use the internal parser */
-	rexpr = r0;
-	compCompile();
+	//rexpr = r0;  compCompile();
+	//sysDisplay(r0, stderr);
+	ccCompile();
+	//vmDebugDumpCode(r0, stderr);
 	osNewThread(); /* Create a new thread */
 	osScheduler();
 	vmRun();
@@ -2130,10 +2140,6 @@ int main (int argc, char *argv[]) {
 	srandom((unsigned int)time(NULL));
 
 	wscmInitialize();
-
-	/* Although already activated, just pass in a scheduler handler callback.
-	   Called when vmInterrupt is set.  */
-	vmInitialize(wscmSchedule, sysDisplay);
 
 	wscmBindArgs((Num)argc, argv);
 

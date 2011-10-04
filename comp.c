@@ -13,6 +13,8 @@
 #include "asm.h"
 #include "vm.h"
 #include "mem.h"
+
+
 /* Functions related to compiling scheme expressions
    into virtual machine code blocks.  Not reentrant.
 */
@@ -90,7 +92,7 @@ void compSysCompile (void) {
 	asmAsm ( /* Keep track of original expression for debugging. */
 		vmBRA, 8,
 		rexpr,
-		END
+		vmEND
 	);
 	if (compExpression(0))
 	{
@@ -100,7 +102,7 @@ void compSysCompile (void) {
 	}
 	asmAsm(
 		vmRET,
-		END
+		vmEND
 	);
 	asmNewCode();
 	if (wscmDebug) vmDebugDumpCode(r0, stderr); // Dump the code block after compiling code during runtime.
@@ -116,7 +118,7 @@ void compEval (Num flags) {
 	compExpression(flags & ~TAILCALL);
 	asmAsm(
 		vmSYSI, compSysCompile,
-	END);
+	vmEND);
 	if (flags & TAILCALL) {
 		asm(vmJ0);
 	} else {
@@ -124,7 +126,7 @@ void compEval (Num flags) {
 			vmPUSH1A, vmPUSH1B, vmPUSH19,
 			vmJAL0,
 			vmPOP19, vmPOP1B, vmPOP1A,
-		END);
+		vmEND);
 	}
 	DBEND();
 }
@@ -444,7 +446,7 @@ void compLambdaBody (Num flags) {
 	asmAsm(
 		vmBRA, 8l,
 		rexpr,
-		END
+		vmEND
 	);
 
 	/* Emit code that extends stack-stored arguments (Free variables can be
@@ -460,14 +462,14 @@ void compLambdaBody (Num flags) {
 
 		opcodeStart = memStackLength(rasmstack);
 		asmAsm (
-			vmBEQI1, 0, ADDR, "expectedNoArgs",
+			vmBEQI1, 0, vmADDR, "expectedNoArgs",
 			vmMVI0, rexpr, /* Error situation.  Add expression to stack */
 			vmPUSH0,
 			vmADDI1, 1l,
 			vmMVI0, "Too many arguments to closure",
 			vmSYSI, compError, /* Error correction */
-			LABEL, "expectedNoArgs",
-			END);
+			vmLABEL, "expectedNoArgs",
+			vmEND);
 		asmCompileAsmstack(opcodeStart);
 	} else {
 		/* Emit code that extends the environment.  Pops the top most arguments
@@ -485,14 +487,14 @@ void compLambdaBody (Num flags) {
 		else { asm(vmLDI50); asm(1l); }
 
 		asmAsm (
-			vmBNEI5, null, ADDR, "keepLexicalEnvironment",
+			vmBNEI5, null, vmADDR, "keepLexicalEnvironment",
 			vmMV51C,
-		LABEL, "keepLexicalEnvironment",
+		vmLABEL, "keepLexicalEnvironment",
 			vmMVI0, null, /* Initial formal argument 'rest' value (empty list). */
 			/* r3 is non-dotted formal argument length. */
-			vmBLTI1, r3, ADDR, "notEnoughArguments",
-			vmBEQI1, r3, ADDR, "normalFormals",
-			END);
+			vmBLTI1, r3, vmADDR, "notEnoughArguments",
+			vmBEQI1, r3, vmADDR, "normalFormals",
+			vmEND);
 
 		/* Emit code for functions lacking a dotted formal argument.  This code
 		   will be reached if there are more values passed to the function than
@@ -505,18 +507,18 @@ void compLambdaBody (Num flags) {
 				vmADDI1, 1l,
 				vmMVI0, "Too many arguments to function",
 				vmSYSI, compError, /* Error correction */
-				END);
+				vmEND);
 		}
 
 		asmAsm (
-		LABEL, "buildRestList",
+		vmLABEL, "buildRestList",
 			vmMV30,
 			vmPOP2,
 			vmSYSI, objCons23,
 			vmADDI1, -1l,
-			vmBNEI1, r3, ADDR, "buildRestList",
-			vmBRA, ADDR, "normalFormals",
-		LABEL, "notEnoughArguments",
+			vmBNEI1, r3, vmADDR, "buildRestList",
+			vmBRA, vmADDR, "normalFormals",
+		vmLABEL, "notEnoughArguments",
 			vmMVI0, rexpr, /* Add expression to stack */
 			vmPUSH0,
 			vmADDI1, 1l,
@@ -524,8 +526,8 @@ void compLambdaBody (Num flags) {
 			vmSYSI, compError, /* Error correction */
 			vmPUSH0,
 			vmADDI1, 1l,
-			vmBNEI1, r3, ADDR, "notEnoughArguments",
-		LABEL, "normalFormals",
+			vmBNEI1, r3, vmADDR, "notEnoughArguments",
+		vmLABEL, "normalFormals",
 			vmPUSH0,
 			/* Create the local environment. r1 is the length of the vector.
 			   3 is added to account for the parent env, formal argument list
@@ -537,7 +539,7 @@ void compLambdaBody (Num flags) {
 			   created before the call to this C function. */
 			vmMVI3,  cdr(renv),
 			vmSTI30, 1l,
-			END
+			vmEND
 		);
 		asmCompileAsmstack(opcodeStart);
 
@@ -548,7 +550,7 @@ void compLambdaBody (Num flags) {
 			asmAsm (
 				vmPOP2,
 				vmSTI20, r3+2l,
-				END
+				vmEND
 			);
 		}
 		/* Set env register to the newly extended environment. */
@@ -662,7 +664,7 @@ void compLambda (Num flags) {
 	asmAsm(
 		vmMVI1, r0, /* Load r1 with code. */
 		vmSYSI, sysNewClosure1Env, /* Create closure from r1 and env (r1c) */
-		END);
+		vmEND);
 
 	DBEND();
 }
@@ -686,10 +688,10 @@ void compMacro (Num flags) {
 		vmPUSH1A, vmPUSH1B, vmPUSH19,
 		vmJAL0,
 		vmPOP19, vmPOP1B, vmPOP1A,
-		vmLDI20, 0l, /* load r2 with code and jump. */
+		vmLDI20, 0l, /* load r2 with code block and call it.  it will return a closure.  */
 		vmPOP1,
 		vmJ2,
-	END);
+	vmEND);
 
 	asmNewCode(); /* Transfer code stack to fixed size code vector into r0. */
 	rasmstack=vmPop();
@@ -701,7 +703,7 @@ void compMacro (Num flags) {
 		vmSYSI, sysNewClosure1Env, /* Create closure from r1 and env (r1c) */
 		vmMVI2, null, /* Replace stored lexical environment with null so dynamic environment is used when applied */
 		vmSTI20, 1l,
-	END);
+	vmEND);
 
 	DBEND();
 }
@@ -775,7 +777,7 @@ void compVectorVectorRef (Num flags) {
 		vmSYSI, compVerifyVectorRef,
 		vmLDI20, 0l, /* Load 2nd index object integer value into register. */
 		vmLD012,    /* Index the sub-vector. */
-		END
+		vmEND
 	);
 	DBEND();
 }
@@ -802,7 +804,7 @@ void compVectorSetb (Num flags) {
 		vmSYSI, compVerifyVectorSetB,
 		vmLDI22, 0,   /* Load offset object's integer value into register. */
 		vmST012,      /* Store new-value object in vector. */
-		END
+		vmEND
 	);
 	DBEND();
 }
@@ -833,7 +835,7 @@ void compVectorVectorSetb (Num flags) {
 		vmLDI20, 0l, /* Load 1st index object integer value into register. */
 		vmLD012,    /* Index the vetor. */
 		vmPUSH0,    /* Save sub-vector. */
-		END
+		vmEND
 	);
 
 	/* Pop and compile new-value expression. */
@@ -845,7 +847,7 @@ void compVectorVectorSetb (Num flags) {
 		vmSYSI, compVerifyVectorSetB,
 		vmLDI22, 0l,   /* Load offset object's integer value into register. */
 		vmST012,      /* Store new-value object in vector. */
-		END
+		vmEND
 	);
 	DBEND();
 }
@@ -863,7 +865,7 @@ void compCons (Num flags) {
 		vmPOP1,
 		vmMV20,
 		vmSYSI, objCons12,
-		END
+		vmEND
 	);
 	DBEND();
 }
@@ -896,16 +898,16 @@ void compCar (Num flags) {
 	objNewString((Str)"RUNTIME ERROR:", 14);
 	opcodeStart = memStackLength(rasmstack);
 	asmAsm(
-		vmBRTI0, TPAIR, ADDR, "car",
+		vmBRTI0, TPAIR, vmADDR, "car",
 		vmMVI0, r0,
 		vmPUSH0,
 		vmMVI0, rexpr,
 		vmPUSH0,
 		vmMVI1, 2l,
 		vmSYSI, compError,
-		LABEL, "car",
+		vmLABEL, "car",
 		vmLDI00, 0l, /* Perform car. */
-		END
+		vmEND
 	);
 	asmCompileAsmstack(opcodeStart);
 ret:
@@ -1023,7 +1025,7 @@ void compPairP (Num flags) {
 		vmMVI0, false,
 		vmBRA, 2*8l,
 		vmMVI0, true,
-		END
+		vmEND
 	);
 
 	DB("<--compPairP");
@@ -1042,13 +1044,13 @@ void compVectorP (Num flags) {
 
 	opcodeStart = memStackLength(rasmstack);
 	asmAsm (
-		vmBRTI0, TNULLVEC, ADDR, "yes",
-		vmBRTI0, TVECTOR,  ADDR, "yes",
+		vmBRTI0, TNULLVEC, vmADDR, "yes",
+		vmBRTI0, TVECTOR,  vmADDR, "yes",
 		vmMVI0, false,
-		vmBRA, ADDR, "done",
-		LABEL, "yes", vmMVI0, true,
-		LABEL, "done", 
-		END
+		vmBRA, vmADDR, "done",
+		vmLABEL, "yes", vmMVI0, true,
+		vmLABEL, "done",
+		vmEND
 	);
 	asmCompileAsmstack(opcodeStart);
 
@@ -1068,13 +1070,13 @@ void compStringP (Num flags) {
 
 	opcodeStart = memStackLength(rasmstack);
 	asmAsm (
-		vmBRTI0, TSTRING, ADDR, "yes",
-		vmBRTI0, TNULLSTR, ADDR, "yes",
+		vmBRTI0, TSTRING, vmADDR, "yes",
+		vmBRTI0, TNULLSTR, vmADDR, "yes",
 		vmMVI0, false,
-		vmBRA, ADDR, "done",
-		LABEL, "yes", vmMVI0, true,
-		LABEL, "done", 
-		END
+		vmBRA, vmADDR, "done",
+		vmLABEL, "yes", vmMVI0, true,
+		vmLABEL, "done",
+		vmEND
 	);
 	asmCompileAsmstack(opcodeStart);
 
@@ -1094,13 +1096,13 @@ void compIntegerP (Num flags) {
 
 	opcodeStart = memStackLength(rasmstack);
 	asmAsm (
-		vmBRTI0, TINTEGER, ADDR, "yes",
+		vmBRTI0, TINTEGER, vmADDR, "yes",
 		vmMVI0, false,
-		vmBRA, ADDR, "done",
-	LABEL, "yes",
+		vmBRA, vmADDR, "done",
+	vmLABEL, "yes",
 		vmMVI0, true,
-	LABEL, "done", 
-		END
+	vmLABEL, "done",
+		vmEND
 	);
 	asmCompileAsmstack(opcodeStart);
 
@@ -1120,12 +1122,12 @@ void compSymbolP (Num flags) {
 
 	opcodeStart = memStackLength(rasmstack);
 	asmAsm (
-		vmBRTI0, TSYMBOL, ADDR, "yes",
+		vmBRTI0, TSYMBOL, vmADDR, "yes",
 		vmMVI0, false,
-		vmBRA, ADDR, "done",
-		LABEL, "yes", vmMVI0, true,
-		LABEL, "done", 
-		END
+		vmBRA, vmADDR, "done",
+		vmLABEL, "yes", vmMVI0, true,
+		vmLABEL, "done",
+		vmEND
 	);
 	asmCompileAsmstack(opcodeStart);
 
@@ -1146,7 +1148,7 @@ void compPortP (Num flags) {
 		vmMVI0, false,
 		vmBRA, 2*8l,
 		vmMVI0, true,
-		END
+		vmEND
 	);
 	DBEND();
 }
@@ -1164,13 +1166,13 @@ void compEOFObjectP (Num flags) {
 	compExpression(flags & ~TAILCALL);
 	opcodeStart = memStackLength(rasmstack);
 	asmAsm (
-		vmBRTI0, TEOF, ADDR, "iseof",
+		vmBRTI0, TEOF, vmADDR, "iseof",
 		vmMVI0, false,
-		vmBRA, ADDR, "end",
-		LABEL, "iseof",
+		vmBRA, vmADDR, "end",
+		vmLABEL, "iseof",
 		vmMVI0, true,
-		LABEL, "end",
-		END
+		vmLABEL, "end",
+		vmEND
 	);
 	asmCompileAsmstack(opcodeStart);
 	DBEND();
@@ -1183,7 +1185,7 @@ void compBegin (Num flags) {
 	if (rexpr == null) {
 		asmAsm(
 			vmMVI0, null,
-			END
+			vmEND
 		);
 	} else {
 		/* Compile non-tail expression. */
@@ -1206,7 +1208,7 @@ void compQuote (void) {
 	DBBEG();
 	asmAsm (
 		vmMVI0, cadr(rexpr),
-		END
+		vmEND
 	);
 	DBEND();
 }
@@ -1218,15 +1220,15 @@ void compAsmTailCall () {
  Num opcodeStart = memStackLength(rasmstack);
 	DBBEG();
 	asmAsm (
-		vmBRTI0,  TSYSCALL, ADDR, "syscall",
-		vmBRTI0,  TCLOSURE, ADDR, "code",
+		vmBRTI0,  TSYSCALL, vmADDR, "syscall",
+		vmBRTI0,  TCLOSURE, vmADDR, "code",
 		/* Illegal operator section.  For now just dump the arguments.
 		*/
 		vmSYSI, compIllegalOperator,
 		vmRET, /* Since tail call, return. */
 		/*  Reference the syscall address then make the system call.
 		*/
-		LABEL, "syscall",
+		vmLABEL, "syscall",
 		vmLDI00, 0l,
 		vmSYS0,
 		vmRET, /* Since a tail call, return. */
@@ -1234,10 +1236,10 @@ void compAsmTailCall () {
 		   argument count and r0 is the closure (which is needed as it
 		   holds the lexical environment).
 		*/
-		LABEL, "code",
+		vmLABEL, "code",
 		vmLDI20, 0l,
 		vmJ2,
-		END
+		vmEND
 	);
 	asmCompileAsmstack(opcodeStart);
 	DBEND();
@@ -1249,29 +1251,29 @@ void compAsmNonTailCall () {
  Num opcodeStart = memStackLength(rasmstack);
 	DBBEG();
 	asmAsm (
-		vmBRTI0,  TSYSCALL, ADDR, "syscall",
-		vmBRTI0,  TCLOSURE, ADDR, "closure",
+		vmBRTI0,  TSYSCALL, vmADDR, "syscall",
+		vmBRTI0,  TCLOSURE, vmADDR, "closure",
 		/* Illegal operator section.  For now just dump the arguments. */
 		vmSYSI, compIllegalOperator,
-		vmBRA,  ADDR, "end",
+		vmBRA,  vmADDR, "end",
 		/* Syscall operator section.  Reference the syscall address, set the
 	   	operand count then make the system call.  */
-	LABEL, "syscall",
+	vmLABEL, "syscall",
 		vmLDI00, 0l,
 		vmSYS0,
-		vmBRA,  ADDR, "end",
+		vmBRA,  vmADDR, "end",
 		/* Closure operator section.
 		*/
-	LABEL, "closure",
+	vmLABEL, "closure",
 		vmLDI20, 0l, /* load r2 with code and jump. */
 		vmJAL2,
 		/* End of block.
 		 */
-	LABEL, "end",
+	vmLABEL, "end",
 		vmPOP19, /* Restores previous environment, ip and code registers. */
 		vmPOP1B,
 		vmPOP1A,
-		END
+		vmEND
 	);
 	asmCompileAsmstack(opcodeStart);
 	DBEND();
@@ -1354,7 +1356,7 @@ void compAIf (Num flags) {
 			vmPUSH1A,
 			vmPUSH1B,
 			vmPUSH19,
-			END
+			vmEND
 		);
 	}
 
@@ -1491,13 +1493,13 @@ void compOr (Num flags) {
 				rexpr = car(rexpr); /* Consider next expression. */
 				compExpression(flags & ~TAILCALL);
 				asmAsm (
-					vmBNTI0, TFALSE, ADDR, "end",
-					END
+					vmBNTI0, TFALSE, vmADDR, "end",
+					vmEND
 				);
 			}
 			rexpr = vmPop();
 		}
-		asm (LABEL); asm ("end");
+		asm (vmLABEL); asm ("end");
 		asmCompileAsmstack(opcodeStart);
 	}
 	DBEND();
@@ -1527,13 +1529,13 @@ void compAnd (Num flags) {
 				rexpr = car(rexpr); /* Consider next expression. */
 				compExpression(flags & ~TAILCALL);
 				asmAsm (
-					vmBRTI0, TFALSE, ADDR, "end",
-					END
+					vmBRTI0, TFALSE, vmADDR, "end",
+					vmEND
 				);
 			}
 			rexpr = vmPop();
 		}
-		asm (LABEL); asm ("end");
+		asm (vmLABEL); asm ("end");
 		asmCompileAsmstack(opcodeStart);
 	}
 	DBEND();
@@ -1558,7 +1560,7 @@ void compThread (void) {
 	asmAsm(
 		vmMVI0, r0,
 		vmSYSI, osNewThread, /* the osNewThread syscall returns thread ID integer object */
-		END);
+		vmEND);
 
 	DBEND("  => ");
 	DBE objDump(r0, stderr);
@@ -1804,8 +1806,8 @@ void compQuasiquote (Num flags) {
 	DBEND();
 }
 
-/* Test code that for now emits a code block that peforms a compiled tree    
-   structure walk.  It'll print the compiled tree nodes along with the 
+/* Test code that for now emits a code block that peforms a compiled tree
+   structure walk.  It'll print the compiled tree nodes along with the
    corresponding passed tree nodes.  Not sure where I was going with this.
    IE ((syntax-rules (x y z)) '(1 (2 3) 4)) => x1y(2 3)z4
 */
@@ -1838,7 +1840,7 @@ void compSyntaxRulesHelper (void) {
 }
 
 /* Experimenal code.  Not sure if is very useful now.
-*/ 
+*/
 void compSyntaxRules (void) {
 	DBBEG();
 	DBE objDump (rexpr, stderr);
@@ -1866,12 +1868,12 @@ void compNot (Num flags) {
 	compExpression(flags & ~TAILCALL);
 	opcodeStart = memStackLength(rasmstack);
 	asmAsm (
-		vmBRTI0, TFALSE, ADDR, "false",
+		vmBRTI0, TFALSE, vmADDR, "false",
 		vmMVI0, false,
-		vmBRA, ADDR, "done",
-		LABEL, "false", vmMVI0, true,
-		LABEL, "done",
-		END
+		vmBRA, vmADDR, "done",
+		vmLABEL, "false", vmMVI0, true,
+		vmLABEL, "done",
+		vmEND
 	);
 	asmCompileAsmstack(opcodeStart);
 	DBEND();
@@ -1898,7 +1900,7 @@ DB("   compAdd constant folding:%d", sum);
 		vmMVI1, r0,
 		vmSYSI, objCopyInteger, /* A copy because atom is mutated. */
 		vmMV10,
-		END
+		vmEND
 	);
 	rexpr=vmPop(); /* Restore parameter list. */
 	/* Scan parameter list for non-constant expressions to compile. */
@@ -1941,7 +1943,7 @@ void compCombination (Num flags) {
 			vmPUSH1A,
 			vmPUSH1B,
 			vmPUSH19,
-			END
+			vmEND
 		);
 	}
 
@@ -1994,7 +1996,7 @@ void compApply (Num flags) {
 			vmPUSH1A,
 			vmPUSH1B,
 			vmPUSH19,
-			END
+			vmEND
 		);
 	}
 
@@ -2026,16 +2028,16 @@ void compApply (Num flags) {
 	asmAsm (
 		vmMVI1, operandCount-1, /* Initialize operand count in r1 to number of initial arguments to apply. */
 		vmPOP0,    /* Pop argument-list. */
-		LABEL, "argcount",
-		vmBRTI0, TNULL, ADDR, "argcountdone",
+		vmLABEL, "argcount",
+		vmBRTI0, TNULL, vmADDR, "argcountdone",
 		vmADDI1, 1l, /* Inc argument count in r1. */
 		vmLDI20, 0l, /* Push the car. */
 		vmPUSH2,
 		vmLDI00, 1l, /* Consider cdr. */
-		vmBRA, ADDR, "argcount",
-		LABEL, "argcountdone",
+		vmBRA, vmADDR, "argcount",
+		vmLABEL, "argcountdone",
 		vmMV03,     /* Operator back to r0 */
-		END
+		vmEND
 	);
 	asmCompileAsmstack(opcodeStart);
 
@@ -2052,7 +2054,7 @@ void compApply (Num flags) {
 	DBEND();
 }
 
-/* Stored stack expected in r1.
+/* Stored stack expected in r3.
 */
 void compReinstateContinuation (void) {
  Num length;
@@ -2099,7 +2101,7 @@ void compCreateContinuation (void) {
 	asmAsm(
 		vmMVI3, r1,  /* Stored copy of stack in r3. */
 		vmSYSI, compReinstateContinuation,
-		END
+		vmEND
 	);
 	asmNewCode();  r1=r0;
 	sysNewClosure1Env();
@@ -2131,8 +2133,8 @@ void compCallcc (Num flags) {
 	opcodeStart = memStackLength(rasmstack);
 	asmAsm(
 		vmSYSI, compCreateContinuation,
-		vmBRA, ADDR, "continuationcall",
-		END
+		vmBRA, vmADDR, "continuationcall",
+		vmEND
 	);
 
 	/* Is this a tail call?  if not save state. */
@@ -2141,7 +2143,7 @@ void compCallcc (Num flags) {
 			vmPUSH1A,
 			vmPUSH1B,
 			vmPUSH19,
-			END
+			vmEND
 		);
 
 	asm(vmPUSH0); /* Push the continuation just create. */
@@ -2153,7 +2155,7 @@ void compCallcc (Num flags) {
 	if ((unsigned)flags & TAILCALL) compAsmTailCall();
 	else compAsmNonTailCall();
 
-	asmAsm(LABEL, "continuationcall", END);
+	asmAsm(vmLABEL, "continuationcall", vmEND);
 	asmCompileAsmstack(opcodeStart);
 
 	DBEND();
@@ -2243,7 +2245,7 @@ Num compCompile (void) {
 	asmAsm (
 		vmBRA, 8l,
 		rexpr,
-		END
+		vmEND
 	);
 
 	ret = compExpression(0);  /* No compiler flags */
@@ -2264,6 +2266,9 @@ void compInitialize (void) {
 		shouldInitialize=0;
 		sysInitialize ();
 		asmInitialize ();
+		if (!memIsObjectStack(rasmstack)) {
+			rasmstack = memNewStack();
+		}
 		memPointerRegister(compIllegalOperator);
 		memPointerRegister(compSysCompile);
 		memPointerRegister(compTGELookup);

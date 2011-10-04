@@ -11,9 +11,10 @@
 
 #define TVECTOR 0x81l
 
-Obj LABEL;/* Branch symbol. */
-Obj ADDR; /* Branch opcode offset symbol. */
-Obj END;  /* Sentinel for assembly programs.  Must be last assembly opcode. */
+
+Obj vmLABEL;/* Branch symbol. */
+Obj vmADDR; /* Branch opcode offset symbol. */
+Obj vmEND;  /* Sentinel for assembly programs.  Must be last assembly opcode. */
 
 void asmAsm (Obj o, ...) {
  va_list ap;
@@ -21,7 +22,7 @@ void asmAsm (Obj o, ...) {
 	DBBEG ();
 	va_start(ap, o);
 	obj = o;
-	while (obj!=END) {
+	while (obj!=vmEND) {
 		DB(INT4":"OBJ, memStackLength(rasmstack), obj);
 		memStackPush(rasmstack, obj);
 		obj = va_arg(ap, Obj);
@@ -85,13 +86,13 @@ void asmCompileAsmstack (Num opcodeStart) {
 	opcodeWrite = opcodeStart;
 	for (i=opcodeWrite; i<opcodeEnd; i++) {
 		r0 = memVectorObject(rasmstack, i);
-		if (r0 == LABEL) {
+		if (r0 == vmLABEL) {
 			DB(HEX4" label "OBJ" %s", opcodeWrite, r0, memVectorObject(rasmstack, i+1));
 			/* Store label value. */
 			memVectorSet(r2, labelCount++, memVectorObject(rasmstack, ++i));
 			/* Store opcode address. */
 			memVectorSet(r2, labelCount++, (Obj)opcodeWrite);
-		} else if (r0 == ADDR) {
+		} else if (r0 == vmADDR) {
 			DB(HEX4" addr "OBJ, opcodeWrite, r0);
 			/* Store label value. */
 			memVectorSet(r3, addrCount++, memVectorObject(rasmstack, ++i));
@@ -154,9 +155,9 @@ void asmInitialize (void) {
 		DB("  Activating module...");
 		shouldInitialize=0;
 		vmInitialize(0, 0);
-		LABEL = &LABEL;
-		ADDR = &ADDR;
-		END = &END;
+		vmLABEL = &vmLABEL;
+		vmADDR = &vmADDR;
+		vmEND = &vmEND;
 		rasmstack = memNewStack();
 	} else {
 		DB("  Module already activated");

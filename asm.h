@@ -4,12 +4,12 @@
 #include "globals.h"
 
 /* A few assembly opcodes. */
-extern Obj LABEL;/* Branch symbol. */
-extern Obj ADDR; /* Branch opcode offset symbol. */
-extern Obj END;  /* Sentinel for assembly programs.  Must be last assembly opcode. */
+extern Obj vmLABEL;/* Branch symbol. */
+extern Obj vmADDR; /* Branch opcode offset symbol. */
+extern Obj vmEND;  /* Sentinel for assembly programs.  Must be last assembly opcode. */
 
 /* Push passed opcodes to assembly stack.  The final opcode must be END. */
-#define asm(o) asmAsm((Obj)(o), END)
+#define asm(o) asmAsm((Obj)(o), vmEND)
 void asmAsm (Obj o, ...);
 
 /* Assemble code in the asmstack inline.  For now it just takes care of

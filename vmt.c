@@ -11,35 +11,37 @@
 
 
 
-/* A character buffer and the functions that print to it
+/* A character file buffer and the functions that print to it
 */
-FILE *fp;
-char *fpBuff;
-Num buffLength=0;
+FILE *FB;
+char *fpBuff=NULL;
 
+/* Initialize character file buffer */
 void vmtIOInit (void) {
-	fp = open_memstream(&fpBuff, &buffLength);
-	assert(NULL != fp);
+ static Num fpBuffStrSize;
+	FB = open_memstream(&fpBuff, &fpBuffStrSize);
+	assert(NULL != FB);
 }
 
-void vmtIOFlush (void) {
-	fflush(fp);
-}
-
-void vmtIOFinalize (void) {
-	fclose(fp);
+/* Compare character file buffer's contents with string argument */
+void vmtIOFinalize (char *baseString) {
+	fflush(FB);
+	assert(0 == strcmp(fpBuff, baseString));
+	fclose(FB);
 	free(fpBuff);
 }
 
+
+
 void displayIntegerR1 (void) {
-	//printf("%d", r1);
-	fprintf(fp, "%d", r1);
+	fprintf(FB, "%d", r1);
 }
 
 void displayStringR1 (void) {
-	//printf("%s", r1);
-	fprintf(fp, "%s", r1);
+	fprintf(FB, "%s", r1);
 }
+
+
 
 /* A machine language program that outputs to a buffer some strings and numbers.
 */
@@ -47,8 +49,8 @@ void fancyHelloWorld (void) {
  Length codeSize;
  char *baseString;
  /* Registers holding runable code objects */
+ #define printNumbersSub r9
  #define helloWorldSub r10
- #define printNumbersSub r11
 
 	vmtIOInit();
 
@@ -126,16 +128,10 @@ void fancyHelloWorld (void) {
 	rip=0;
 	vmRun();
 
-
 	/* Verify the machine language program's output against a magic string */
-	vmtIOFlush();
-	baseString = "3Hello,World[tm]!2Hello,World[tm]!1Hello,World[tm]!001234\n"
-	             "3Hello,World[tm]!2Hello,World[tm]!1Hello,World[tm]!001234\n"
-	             "3Hello,World[tm]!2Hello,World[tm]!1Hello,World[tm]!001234\n";
-	assert(buffLength == strlen(baseString));
-	assert(0 == strcmp(fpBuff, baseString));
-
-	vmtIOFinalize();
+	vmtIOFinalize("3Hello,World[tm]!2Hello,World[tm]!1Hello,World[tm]!001234\n"
+	              "3Hello,World[tm]!2Hello,World[tm]!1Hello,World[tm]!001234\n"
+	              "3Hello,World[tm]!2Hello,World[tm]!1Hello,World[tm]!001234\n");
 }
 
 
