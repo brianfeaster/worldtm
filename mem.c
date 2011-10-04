@@ -92,15 +92,6 @@ typedef struct {Obj obj;  Str str;} ObjStr;
 ObjStr memObjStrDB[OBJ_STR_MAX];
 Num ObjStrCount = 0;
 
-/* Retrieve string associated with the pointer object
-*/
-Str memPointerString (Obj obj) {
- Num i;
-	for (i=0; i<ObjStrCount; ++i)
-		if (memObjStrDB[i].obj == obj) return memObjStrDB[i].str;
-	return NULL;
-}
-
 /* Assign a fixed pointer location a string name.  Useful for assigning
    a descriptive string to a C function, C pointer or static scheme object.
 */
@@ -111,6 +102,15 @@ void memPointerRegisterString (Obj obj, Str str) {
 	memObjStrDB[ObjStrCount].obj = obj;
 	memObjStrDB[ObjStrCount++].str = str;
 	DBEND();
+}
+
+/* Retrieve string associated with the pointer object
+*/
+Str memPointerString (Obj obj) {
+ Num i;
+	for (i=0; i<ObjStrCount; ++i)
+		if (memObjStrDB[i].obj == obj) return memObjStrDB[i].str;
+	return NULL;
 }
 
 

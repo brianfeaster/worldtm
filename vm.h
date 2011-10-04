@@ -72,8 +72,6 @@ extern void *vmNOP,
 
 extern Int vmInterrupt;
 
-void vmSigAlarmReset (void);
-
 void vmRun (void);
 void vmInitialize (Func intHandler, void(*vmObjDumper)(Obj, FILE*));
 void vmDebugDumpCode (Obj c, FILE *stream);

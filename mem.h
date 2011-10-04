@@ -38,10 +38,16 @@ typedef Num Length; /* Remaining bytes of descriptor */
 
 /***************************************
  Pointer_Strings
+
+ Mechanism to associate a C pointer address with a string.  A macro is
+ provided to associate a pointer addresses and its string representation.
+ char* must be the type (instead of my Str type) due to how the preprocessor
+ generates symbols.
 ***************************************/
-Str memPointerString (Obj obj);
 void memPointerRegisterString (Obj obj, Str str);
 #define memPointerRegister(o) memPointerRegisterString(o, (Str)#o)
+
+Str memPointerString (Obj obj);
 
 
 
@@ -52,11 +58,8 @@ void memTypeRegisterString (Type type, char *description);
 #define memTypeRegister(t) memTypeRegisterString(t, (Str)#t)
 
 Str memTypeString (Type t);
-/* Mechanism to associate a C pointer address with a string.  A macro is
-   provided to associate a pointer addresses and its string representation.
-   char* must be the type (instead of my Str type) due to how the preprocessor
-   generates symbols. */
-Str  memObjString         (Obj obj);
+
+void memDebugDumpAllTypes(void);
 
 
 
