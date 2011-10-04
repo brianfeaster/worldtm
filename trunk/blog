@@ -3565,3 +3565,52 @@ tag unchanged and will be ignored during the AssembleAllIBlocks loop.  This was
 realized when an old assertion failed during the loop which verified all blocks
 were tagged with #t.  This was a valid assumption while I was initially creating
 the igraph directly.
+
+
+
+Sat Sep 17 11:37:34 EDT 2011
+
+Multiple calls to ccAsm work as expected.  Not sure if I want to keep
+compatibility with NewIBlock calls which allow empty new block insertion
+into the igraph.  It would make sense to migrate it to the unit test actually.
+
+
+
+Tue Sep 20 21:39:13 EDT 2011
+
+After a closure eis extended, all symbols can be looked up and their actual
+location cached.  The closure code block would need to be compiled every time
+it's called.  This would benefit self tail called blocks.
+
+
+
+Wed Sep 21 21:25:03 EDT 2011
+
+[ ] Transactional memory:  Would it be possible to implement this mechanism on
+top of mem objects?  It would remove the need for semaphores.
+
+The new compiler module needs to be reentrant so that lambda blocks can be
+assembled and compiled during another compilation.
+
+
+
+Sun Sep 25 00:30:27 EDT 2011
+
+Inlined lambda's don't require encapsulation into a closure object.
+
+
+
+Mon Sep 26 19:42:16 EDT 2011
+
+The unit tests have been allowing me to make drastic changes to the cc module
+without being hungup on tricky bugs.  Liberal use of assert is also helping.
+The loose coupling between modules is really helping.  I spent a week or two
+separating module interdependancy a while back which has allowed me to work on
+the new compiler module, cc, along side the existing comp and asm modules.
+
+
+
+Sun Oct  2 19:40:29 EDT 2011
+
+The new compiler sets rcode/r1e with the new compiled code block.  The original
+returned the new block in r0.  I need to go back and make the switch.

@@ -1,68 +1,94 @@
 #ifndef _CC_H
 #define _CC_H
-
 #include "globals.h"
 
-/* Register values */
-extern Obj R0;
-extern Obj R1;
-extern Obj R2;
-extern Obj R3;
-extern Obj R4;
-extern Obj R5;
-extern Obj R6;
-extern Obj R7;
-extern Obj R1C;
 
-extern Obj MV;
-extern Obj MVI;
-extern Obj LDI;
-extern Obj PUSH;
-extern Obj POP;
-extern Obj ADDI;
-extern Obj BNEI;
-extern Obj BEQI;
-extern Obj BRTI;
-extern Obj BRA;
-extern Obj SYSI;
-extern Obj NOP;
-extern Obj QUIT;
-extern Obj LABEL;
-extern Obj END;
+/* Opcodes and fields */
+#define R0 (Obj)0x0
+#define R1 (Obj)0x1
+#define R2 (Obj)0x2
+#define R3 (Obj)0x3
+#define R4 (Obj)0x4
+#define R5 (Obj)0x5
+#define R6 (Obj)0x6
+#define R7 (Obj)0x7
+#define R8 (Obj)0x8
+#define R9 (Obj)0x9
+#define RA (Obj)0xa
+#define RB (Obj)0xb
+#define RC (Obj)0xc
+#define RD (Obj)0xd
+#define RE (Obj)0xe
+#define RF (Obj)0xf
+#define R10 (Obj)0x10
+#define R11 (Obj)0x11
+#define R12 (Obj)0x12
+#define R13 (Obj)0x13
+#define R14 (Obj)0x14
+#define R15 (Obj)0x15
+#define R16 (Obj)0x16
+#define R17 (Obj)0x17
+#define R18 (Obj)0x18
+#define R19 (Obj)0x19
+#define R1A (Obj)0x1a
+#define R1B (Obj)0x1b
+#define R1C (Obj)0x1c
+#define R1D (Obj)0x1d
+#define R1E (Obj)0x1e
+#define R1F (Obj)0x1f
 
-/***************************************
- Igraph_and_iblocks
-***************************************/
-Obj ccIBlock (Num id);
-void ccIBlockSetDefault (Num parentid, Num childid);
-void ccIBlockSetConditional (Num parentid, Num childid);
-Num ccGenerateNewIBlock (Num icodeSize);
-Num ccNewDefaultIBlock (Num parentID, Num icodeCount);
-Num ccNewConditionalIBlock (Num parentID, Num icodeCount);
-void ccMV (Obj ra, Obj rb);
-void ccMVI (Obj ra, Obj o);
-void ccLDI (Obj ra, Obj rb, Obj o);
-void ccPUSH (Obj o);
-void ccPOP ();
-void ccADDI (Obj ra, Obj o);
-void ccBNEI (Obj ra, Obj imm, Obj o);
-void ccBEQI (Obj ra, Obj imm, Obj o);
-void ccBRTI (Obj ra, Obj imm, Obj o);
-void ccBRA (Obj o);
-void ccSYSI (Obj o);
-void ccNOP ();
-void ccQUIT ();
-void ccResetIGraph (void);
-void ccAssembleIGraph (void);
+#define MV   (Obj)0x20
+#define MVI  (Obj)0x21
+#define LDI  (Obj)0x22
+#define LD   (Obj)0x23
+#define STI  (Obj)0x24
+#define ST   (Obj)0x25
+#define PUSH (Obj)0x26
+#define POP  (Obj)0x27
+#define ADDI (Obj)0x28
+#define BLTI (Obj)0x29
+#define BEQI (Obj)0x2a
+#define BNEI (Obj)0x2b
+#define BRTI (Obj)0x2c
+#define BNTI (Obj)0x2d
+#define BRA  (Obj)0x2e
+#define JMP  (Obj)0x2f
+#define JAL  (Obj)0x30
+#define RET  (Obj)0x31
+#define SYS  (Obj)0x32
+#define SYSI (Obj)0x33
+#define NOP  (Obj)0x34
+#define QUIT (Obj)0x35
+
+#define LABEL (Obj)0xfe
+#define END  (Obj)0xff
 
 
 /***************************************
  ASM
 ***************************************/
 void ccAsmInit (void);
-Num ccAsmLabelNew();
+Obj ccNewLabel();
 void ccAsmAsm (Obj f, ...);
 #define ccAsm(...) ccAsmAsm(__VA_ARGS__, END)
+
+
+/***************************************
+ ASM
+***************************************/
+void ccStart (void);
+
+
+/***************************************
+ Compiler
+***************************************/
+void ccCompile (void);
+
+
+/***************************************
+ Debugging
+***************************************/
+void ccDumpIBlocks (void);
 
 
 /***************************************

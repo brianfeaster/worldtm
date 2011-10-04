@@ -15,6 +15,7 @@
    removal of objects are required.  Currently, a generational bi-heap collector
    is implemented.
 */ 
+#define TSTACK         0xfel
 
 
 /* Byte count of a Linux virtual memory block and the resolution of mmap.
@@ -67,7 +68,7 @@ Type memObjectType   (Obj obj);
 Num  memObjectLength (Obj obj);
 
 Num memIsObjectBaseArray (Obj o);
-
+Num memIsObjectStack (Obj o);
 Num memIsObjectType (Obj o, Type t);
 
 Num memArrayLengthToObjectSize  (Length length);

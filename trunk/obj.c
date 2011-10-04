@@ -174,6 +174,14 @@ void objNewSyscall (Func f) {
 	memVectorSet(r0, 0, f);
 }
 
+void objCons01 (void) {
+ Obj o;
+   o = memNewVector(TPAIR, 2);
+	memVectorSet(o, 0, r0);
+	memVectorSet(o, 1, r1);
+	r0 = o;
+}
+
 void objCons10 (void) {
  Obj o;
    o = memNewVector(TPAIR, 2);

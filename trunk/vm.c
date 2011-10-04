@@ -370,7 +370,7 @@ void vmVm (Int cmd) {
 	/* Jump to immediate2 if r0 equal to immediate 1
 	*/
 	beqi0: OPDB("beqi0");
-	if (r0==*(void**)(rip+=8)) {
+	if (r0 == *(void**)(rip+=8)) {
 		rip += 8;
 		rip += *(Int*)rip;
 		rip += 8;
@@ -618,96 +618,96 @@ void vmDebugDumpCode (Obj c, FILE *stream) {
 			(i==rip || lineNumber==(Num)rip)?"*":" ",
 			lineNumber);
 		if      (*i==vmNOP)   {fprintf(stream, "nop");}
-		else if (*i==vmMVI0)  {fprintf(stream, "mvi_0 "); vmObjectDumper(*++i, stream);}
-		else if (*i==vmMVI1)  {fprintf(stream, "mvi_1 "); vmObjectDumper(*++i, stream);}
-		else if (*i==vmMVI2)  {fprintf(stream, "mvi_2 "); vmObjectDumper(*++i, stream);}
-		else if (*i==vmMVI3)  {fprintf(stream, "mvi_3 "); vmObjectDumper(*++i, stream);}
-		else if (*i==vmMVI4)  {fprintf(stream, "mvi_4 "); vmObjectDumper(*++i, stream);}
-		else if (*i==vmMVI5)  {fprintf(stream, "mvi_5 "); vmObjectDumper(*++i, stream);}
-		else if (*i==vmMVI6)  {fprintf(stream, "mvi_6 "); vmObjectDumper(*++i, stream);}
-		else if (*i==vmMVI7)  {fprintf(stream, "mvi_7 "); vmObjectDumper(*++i, stream);}
-		else if (*i==vmMV01)  {fprintf(stream, "mv_0_1 ");}
-		else if (*i==vmMV02)  {fprintf(stream, "mv_0_2 ");}
-		else if (*i==vmMV03)  {fprintf(stream, "mv_0_3 ");}
-		else if (*i==vmMV04)  {fprintf(stream, "mv_0_4 ");}
-		else if (*i==vmMV07)  {fprintf(stream, "mv_0_7 ");}
-		else if (*i==vmMV01E) {fprintf(stream, "mv_0_1e ");}
-		else if (*i==vmMV10)  {fprintf(stream, "mv_1_0 ");}
-		else if (*i==vmMV13)  {fprintf(stream, "mv_1_3 ");}
-		else if (*i==vmMV20)  {fprintf(stream, "mv_2_0 ");}
-		else if (*i==vmMV23)  {fprintf(stream, "mv_2_3 ");}
-		else if (*i==vmMV30)  {fprintf(stream, "mv_3_0 ");}
-		else if (*i==vmMV50)  {fprintf(stream, "mv_5_0 ");}
-		else if (*i==vmMV51C) {fprintf(stream, "mv_5_1c ");}
-		else if (*i==vmMV518) {fprintf(stream, "mv_5_18 ");}
-		else if (*i==vmMV1C0) {fprintf(stream, "mv_1c_0 ");}
-		else if (*i==vmMV1C18) {fprintf(stream, "mv_1c_18 ");}
-		else if (*i==vmMV61) {fprintf(stream, "mv_6_1 ");}
-		else if (*i==vmMV72) {fprintf(stream, "mv_7_2 ");}
-		else if (*i==vmLDI00) {fprintf(stream, "ldi_0_0 "); vmObjectDumper(*++i, stream);}
-		else if (*i==vmLDI02) {fprintf(stream, "ldi_0_2 "); vmObjectDumper(*++i, stream);}
-		else if (*i==vmLDI01C){fprintf(stream, "ldi_0_1c "); vmObjectDumper(*++i, stream);}
-		else if (*i==vmLDI11) {fprintf(stream, "ldi_1_1 "); vmObjectDumper(*++i, stream);}
-		else if (*i==vmLDI11C){fprintf(stream, "ldi_1_1c "); vmObjectDumper(*++i, stream);}
-		else if (*i==vmLDI20) {fprintf(stream, "ldi_2_0 "); vmObjectDumper(*++i, stream);}
-		else if (*i==vmLDI22) {fprintf(stream, "ldi_2_2 "); vmObjectDumper(*++i, stream);}
-		else if (*i==vmLDI50) {fprintf(stream, "ldi_5_0 "); vmObjectDumper(*++i, stream);}
-		else if (*i==vmLDI1C0){fprintf(stream, "ldi_1c_0 "); vmObjectDumper(*++i, stream);}
-		else if (*i==vmLD012) {fprintf(stream, "ld0_1_2");}
-		else if (*i==vmSTI01) {fprintf(stream, "sti_0_1 "); vmObjectDumper(*++i, stream);}
-		else if (*i==vmSTI01C){fprintf(stream, "sti_0_1c "); vmObjectDumper(*++i, stream);}
-		else if (*i==vmSTI20) {fprintf(stream, "sti_2_0 "); vmObjectDumper(*++i, stream);}
-		else if (*i==vmSTI21) {fprintf(stream, "sti_2_1 "); vmObjectDumper(*++i, stream);}
-		else if (*i==vmSTI30) {fprintf(stream, "sti_3_0 "); vmObjectDumper(*++i, stream);}
-		else if (*i==vmSTI40) {fprintf(stream, "sti_4_0 "); vmObjectDumper(*++i, stream);}
-		else if (*i==vmSTI50) {fprintf(stream, "sti_5_0 "); vmObjectDumper(*++i, stream);}
-		else if (*i==vmST012) {fprintf(stream, "st_0_1_2 ");}
-		else if (*i==vmST201) {fprintf(stream, "st_2_0_1 ");}
-		else if (*i==vmPUSH0) {fprintf(stream, "push_0 ");}
-		else if (*i==vmPUSH1) {fprintf(stream, "push_1 ");}
-		else if (*i==vmPUSH2) {fprintf(stream, "push_2 ");}
-		else if (*i==vmPUSH3) {fprintf(stream, "push_3 ");}
-		else if (*i==vmPUSH4) {fprintf(stream, "push_4 ");}
-		else if (*i==vmPUSH5) {fprintf(stream, "push_5 ");}
-		else if (*i==vmPUSH7) {fprintf(stream, "push_7 ");}
-		else if (*i==vmPUSH19){fprintf(stream, "push_19 ");}
-		else if (*i==vmPUSH1A){fprintf(stream, "push_1a ");}
-		else if (*i==vmPUSH1B){fprintf(stream, "push_1b ");}
-		else if (*i==vmPOP0)  {fprintf(stream, "pop_0 ");}
-		else if (*i==vmPOP1)  {fprintf(stream, "pop_1 ");}
-		else if (*i==vmPOP2)  {fprintf(stream, "pop_2 ");}
-		else if (*i==vmPOP3)  {fprintf(stream, "pop_3 ");}
-		else if (*i==vmPOP4)  {fprintf(stream, "pop_4 ");}
-		else if (*i==vmPOP7)  {fprintf(stream, "pop_7 ");}
-		else if (*i==vmPOP19) {fprintf(stream, "pop_19 ");}
-		else if (*i==vmPOP1A) {fprintf(stream, "pop_1a ");}
-		else if (*i==vmPOP1B) {fprintf(stream, "pop_1b ");}
-		else if (*i==vmADDI0) {fprintf(stream, "addi_0 %ld", *(i+1)); i++; }
-		else if (*i==vmADDI1) {fprintf(stream, "addi_1 %ld", *(i+1)); i++; }
-		else if (*i==vmADDI2) {fprintf(stream, "addi_2 %ld", *(i+1)); i++; }
-		else if (*i==vmADD10) {fprintf(stream, "add_1_0 "); }
-		else if (*i==vmMUL10) {fprintf(stream, "mul_1_0 "); }
+		else if (*i==vmMVI0)  {fprintf(stream, "mvi  $0 "); vmObjectDumper(*++i, stream);}
+		else if (*i==vmMVI1)  {fprintf(stream, "mvi  $1 "); vmObjectDumper(*++i, stream);}
+		else if (*i==vmMVI2)  {fprintf(stream, "mvi  $2 "); vmObjectDumper(*++i, stream);}
+		else if (*i==vmMVI3)  {fprintf(stream, "mvi  $3 "); vmObjectDumper(*++i, stream);}
+		else if (*i==vmMVI4)  {fprintf(stream, "mvi  $4 "); vmObjectDumper(*++i, stream);}
+		else if (*i==vmMVI5)  {fprintf(stream, "mvi  $5 "); vmObjectDumper(*++i, stream);}
+		else if (*i==vmMVI6)  {fprintf(stream, "mvi  $6 "); vmObjectDumper(*++i, stream);}
+		else if (*i==vmMVI7)  {fprintf(stream, "mvi  $7 "); vmObjectDumper(*++i, stream);}
+		else if (*i==vmMV01)  {fprintf(stream, "mv   $0 $1 ");}
+		else if (*i==vmMV02)  {fprintf(stream, "mv   $0 $2 ");}
+		else if (*i==vmMV03)  {fprintf(stream, "mv   $0 $3 ");}
+		else if (*i==vmMV04)  {fprintf(stream, "mv   $0 $4 ");}
+		else if (*i==vmMV07)  {fprintf(stream, "mv   $0 $7 ");}
+		else if (*i==vmMV01E) {fprintf(stream, "mv   $0 $1e ");}
+		else if (*i==vmMV10)  {fprintf(stream, "mv   $1 $0 ");}
+		else if (*i==vmMV13)  {fprintf(stream, "mv   $1 $3 ");}
+		else if (*i==vmMV20)  {fprintf(stream, "mv   $2 $0 ");}
+		else if (*i==vmMV23)  {fprintf(stream, "mv   $2 $3 ");}
+		else if (*i==vmMV30)  {fprintf(stream, "mv   $3 $0 ");}
+		else if (*i==vmMV50)  {fprintf(stream, "mv   $5 $0 ");}
+		else if (*i==vmMV51C) {fprintf(stream, "mv   $5 $1c ");}
+		else if (*i==vmMV518) {fprintf(stream, "mv   $5 $18 ");}
+		else if (*i==vmMV1C0) {fprintf(stream, "mv   $1c $0 ");}
+		else if (*i==vmMV1C18){fprintf(stream, "mv   $1c $18 ");}
+		else if (*i==vmMV61)  {fprintf(stream, "mv   $6 $1 ");}
+		else if (*i==vmMV72)  {fprintf(stream, "mv   $7 $2 ");}
+		else if (*i==vmLDI00) {fprintf(stream, "ldi  $0 $0 "); vmObjectDumper(*++i, stream);}
+		else if (*i==vmLDI02) {fprintf(stream, "ldi  $0 $2 "); vmObjectDumper(*++i, stream);}
+		else if (*i==vmLDI01C){fprintf(stream, "ldi  $0 $1c "); vmObjectDumper(*++i, stream);}
+		else if (*i==vmLDI11) {fprintf(stream, "ldi  $1 $1 "); vmObjectDumper(*++i, stream);}
+		else if (*i==vmLDI11C){fprintf(stream, "ldi  $1 $1c "); vmObjectDumper(*++i, stream);}
+		else if (*i==vmLDI20) {fprintf(stream, "ldi  $2 $0 "); vmObjectDumper(*++i, stream);}
+		else if (*i==vmLDI22) {fprintf(stream, "ldi  $2 $2 "); vmObjectDumper(*++i, stream);}
+		else if (*i==vmLDI50) {fprintf(stream, "ldi  $5 $0 "); vmObjectDumper(*++i, stream);}
+		else if (*i==vmLDI1C0){fprintf(stream, "ldi  $1c $0 "); vmObjectDumper(*++i, stream);}
+		else if (*i==vmLD012) {fprintf(stream, "ld0  $1 $2");}
+		else if (*i==vmSTI01) {fprintf(stream, "sti  $0 $1 "); vmObjectDumper(*++i, stream);}
+		else if (*i==vmSTI01C){fprintf(stream, "sti  $0 $1c "); vmObjectDumper(*++i, stream);}
+		else if (*i==vmSTI20) {fprintf(stream, "sti  $2 $0 "); vmObjectDumper(*++i, stream);}
+		else if (*i==vmSTI21) {fprintf(stream, "sti  $2 $1 "); vmObjectDumper(*++i, stream);}
+		else if (*i==vmSTI30) {fprintf(stream, "sti  $3 $0 "); vmObjectDumper(*++i, stream);}
+		else if (*i==vmSTI40) {fprintf(stream, "sti  $4 $0 "); vmObjectDumper(*++i, stream);}
+		else if (*i==vmSTI50) {fprintf(stream, "sti  $5 $0 "); vmObjectDumper(*++i, stream);}
+		else if (*i==vmST012) {fprintf(stream, "st   $0 $1 $2 ");}
+		else if (*i==vmST201) {fprintf(stream, "st   $2 $0 $1 ");}
+		else if (*i==vmPUSH0) {fprintf(stream, "push $0 ");}
+		else if (*i==vmPUSH1) {fprintf(stream, "push $1 ");}
+		else if (*i==vmPUSH2) {fprintf(stream, "push $2 ");}
+		else if (*i==vmPUSH3) {fprintf(stream, "push $3 ");}
+		else if (*i==vmPUSH4) {fprintf(stream, "push $4 ");}
+		else if (*i==vmPUSH5) {fprintf(stream, "push $5 ");}
+		else if (*i==vmPUSH7) {fprintf(stream, "push $7 ");}
+		else if (*i==vmPUSH19){fprintf(stream, "push $19 ");}
+		else if (*i==vmPUSH1A){fprintf(stream, "push $1a ");}
+		else if (*i==vmPUSH1B){fprintf(stream, "push $1b ");}
+		else if (*i==vmPOP0)  {fprintf(stream, "pop  $0 ");}
+		else if (*i==vmPOP1)  {fprintf(stream, "pop  $1 ");}
+		else if (*i==vmPOP2)  {fprintf(stream, "pop  $2 ");}
+		else if (*i==vmPOP3)  {fprintf(stream, "pop  $3 ");}
+		else if (*i==vmPOP4)  {fprintf(stream, "pop  $4 ");}
+		else if (*i==vmPOP7)  {fprintf(stream, "pop  $7 ");}
+		else if (*i==vmPOP19) {fprintf(stream, "pop  $19 ");}
+		else if (*i==vmPOP1A) {fprintf(stream, "pop  $1a ");}
+		else if (*i==vmPOP1B) {fprintf(stream, "pop  $1b ");}
+		else if (*i==vmADDI0) {fprintf(stream, "addi $0 %ld", *(i+1)); i++; }
+		else if (*i==vmADDI1) {fprintf(stream, "addi $1 %ld", *(i+1)); i++; }
+		else if (*i==vmADDI2) {fprintf(stream, "addi $2 %ld", *(i+1)); i++; }
+		else if (*i==vmADD10) {fprintf(stream, "add  $1 $0 "); }
+		else if (*i==vmMUL10) {fprintf(stream, "mul  $1 $0 "); }
 
-		else if (*i==vmBLTI1) {fprintf(stream, "blti_1 "HEX" "HEX04, *(i+1), vmOffsetToPosition(c, i)); i+=2;}
-		else if (*i==vmBEQI0) {fprintf(stream, "beqi_0 "HEX" "HEX04, *(i+1), vmOffsetToPosition(c, i)); i+=2;}
-		else if (*i==vmBEQI1) {fprintf(stream, "beqi_1 "HEX" "HEX04, *(i+1), vmOffsetToPosition(c, i)); i+=2;}
-		else if (*i==vmBEQI7) {fprintf(stream, "beqi_7 "HEX" "HEX04, *(i+1), vmOffsetToPosition(c, i)); i+=2;}
-		else if (*i==vmBNEI0) {fprintf(stream, "bnei_0 "HEX" "HEX04, *(i+1), vmOffsetToPosition(c, i)); i+=2;}
-		else if (*i==vmBNEI1) {fprintf(stream, "bnei_1 "HEX" "HEX04, *(i+1), vmOffsetToPosition(c, i)); i+=2;}
-		else if (*i==vmBNEI2) {fprintf(stream, "bnei_2 "HEX" "HEX04, *(i+1), vmOffsetToPosition(c, i)); i+=2;}
-		else if (*i==vmBNEI5) {fprintf(stream, "bnei_5 "HEX" "HEX04, *(i+1), vmOffsetToPosition(c, i)); i+=2;}
-		else if (*i==vmBRTI0) {fprintf(stream, "brti_0 "HEX" "HEX04, *(i+1), vmOffsetToPosition(c, i)); i+=2;}
-		else if (*i==vmBNTI0) {fprintf(stream, "bnti_0 "HEX" "HEX04, *(i+1), vmOffsetToPosition(c, i)); i+=2;}
+		else if (*i==vmBLTI1) {fprintf(stream, "blti $1 "HEX" "HEX04, *(i+1), vmOffsetToPosition(c, i)); i+=2;}
+		else if (*i==vmBEQI0) {fprintf(stream, "beqi $0 "HEX" "HEX04, *(i+1), vmOffsetToPosition(c, i)); i+=2;}
+		else if (*i==vmBEQI1) {fprintf(stream, "beqi $1 "HEX" "HEX04, *(i+1), vmOffsetToPosition(c, i)); i+=2;}
+		else if (*i==vmBEQI7) {fprintf(stream, "beqi $7 "HEX" "HEX04, *(i+1), vmOffsetToPosition(c, i)); i+=2;}
+		else if (*i==vmBNEI0) {fprintf(stream, "bnei $0 "HEX" "HEX04, *(i+1), vmOffsetToPosition(c, i)); i+=2;}
+		else if (*i==vmBNEI1) {fprintf(stream, "bnei $1 "HEX" "HEX04, *(i+1), vmOffsetToPosition(c, i)); i+=2;}
+		else if (*i==vmBNEI2) {fprintf(stream, "bnei $2 "HEX" "HEX04, *(i+1), vmOffsetToPosition(c, i)); i+=2;}
+		else if (*i==vmBNEI5) {fprintf(stream, "bnei $5 "HEX" "HEX04, *(i+1), vmOffsetToPosition(c, i)); i+=2;}
+		else if (*i==vmBRTI0) {fprintf(stream, "brti $0 "HEX" "HEX04, *(i+1), vmOffsetToPosition(c, i)); i+=2;}
+		else if (*i==vmBNTI0) {fprintf(stream, "bnti $0 "HEX" "HEX04, *(i+1), vmOffsetToPosition(c, i)); i+=2;}
 		else if (*i==vmBRA)   {fprintf(stream, "bra "HEX04, vmBraOffsetToPosition(c, i)); i++;}
 
-		else if (*i==vmJ0)    {fprintf(stream, "j_0 ");}
-		else if (*i==vmJ2)    {fprintf(stream, "j_2 ");}
-		else if (*i==vmJAL0)  {fprintf(stream, "jal_0 ");}
-		else if (*i==vmJAL2)  {fprintf(stream, "jal_2 ");}
-		else if (*i==vmRET)   {fprintf(stream, "ret ");}
+		else if (*i==vmJ0)    {fprintf(stream, "j    $0 ");}
+		else if (*i==vmJ2)    {fprintf(stream, "j    $2 ");}
+		else if (*i==vmJAL0)  {fprintf(stream, "jal  $0 ");}
+		else if (*i==vmJAL2)  {fprintf(stream, "jal  $2 ");}
+		else if (*i==vmRET)   {fprintf(stream, "ret");}
 		else if (*i==vmSYSI)  {fprintf(stream, "sysi "); vmObjectDumper(*++i, stream);}
-		else if (*i==vmSYS0)  {fprintf(stream, "sys_0 ");}
-		else if (*i==vmQUIT)  {fprintf(stream, "quit ");}
+		else if (*i==vmSYS0)  {fprintf(stream, "sys  $0 ");}
+		else if (*i==vmQUIT)  {fprintf(stream, "quit");}
 		else {
 			//fprintf(stream, HEX" = ", *i);
 			vmObjectDumper(*i, stream);

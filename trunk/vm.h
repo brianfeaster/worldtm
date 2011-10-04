@@ -7,17 +7,21 @@
 #define TCODE 0xefl
 
 /* Global virtual machine register aliases */
-#define rblocked   r10 /* WSCM: I/O and Semaphore blocked threads */
-#define rthreads   r11 /* WSCM: Thread vector */
-#define rsleeping  r12 /* WSCM: Sleeping thread */
-#define rrunning   r13 /* WSCM: Current thread */
-#define rready     r14 /* WSCM: Thread list */
 
-#define rexpr      r15 /* WSCM: Expression being compiled */
-#define rasmstack  r16 /* ASM,COMP: Opcode stack where machine code is emitted (ribloc in new compiler) */
+//#define rexpr      re /* was r15 WSCM: Expression being compiled */
+//#define rasmstack   rd /* Vector where new icodes are initially placed before being stuffed into a new iblock */
+#define rexpr       rf /* Expression being compiled.  See vm.h */
+
+#define rasmstack  r10 /* was r16 ASM,COMP: Opcode stack where machine code is emitted (riblock in new compiler) */
+#define rblocked   r12 /* WSCM: I/O and Semaphore blocked threads */
+#define rthreads   r13 /* WSCM: Thread vector */
+#define rsleeping  r14 /* WSCM: Sleeping thread */
+#define rrunning   r15 /* WSCM: Current thread */
+#define rready     r16 /* WSCM: Thread list */
+
 #define rsymbols   r17 /* OBJ: Symbol table used by scanner and OS */
-
 #define rtge       r18 /* WSCM: Global environment */
+
 #define rretenv    r19 /* VM: Caller's env */
 #define rretip     r1a /* VM: Caller's ip */
 #define rretcode   r1b /* VM: Caller's code block */
@@ -25,7 +29,7 @@
 #define rip        r1d /* VM: Current running program instruction pointer */
 #define rcode      r1e /* VM: Currently running code object */
 
-#define rstack     r1f /* Register alias: Global stack used by VM */
+#define rstack     r1f /* Global stack created and used by VM module */
 
 
 /* Registers:  These make up the root set for the garbage collector.  All
@@ -57,8 +61,8 @@ extern void *vmNOP,
      *vmLD012,
      *vmSTI01, *vmSTI01C, *vmSTI21, *vmSTI20, *vmSTI30, *vmSTI40, *vmSTI50,
      *vmST012, *vmST201,
-     *vmPUSH0, *vmPUSH1, *vmPUSH2, *vmPUSH3, *vmPUSH4, *vmPUSH5, *vmPUSH7, *vmPUSH19,
-     *vmPUSH1A, *vmPUSH1B,
+     *vmPUSH0, *vmPUSH1, *vmPUSH2, *vmPUSH3, *vmPUSH4, *vmPUSH5, *vmPUSH7,
+     *vmPUSH19, *vmPUSH1A, *vmPUSH1B,
      *vmPOP0,  *vmPOP1,  *vmPOP2,  *vmPOP3,  *vmPOP4,  *vmPOP7, *vmPOP19, *vmPOP1A,  *vmPOP1B,
      *vmADDI0, *vmADDI1, *vmADDI2, *vmADD10, *vmMUL10,
      *vmBLTI1,

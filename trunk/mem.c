@@ -67,7 +67,7 @@
 #define TSEMAPHORE     0xfbl
 #define TFINALIZER     0xfcl
 #define TPOINTER       0xfdl
-#define TSTACK         0xfel
+//#define TSTACK         0xfel
 #define TSHADOW        0xffl
 
 
@@ -237,11 +237,11 @@ Num memIsObjectBaseVectorOrArray (Obj o) { return memObjectType(o) <= TMAXVECTOR
 // memIsObjectVector() REIMPLEMENTED
 
 /* Is object a special type? */
-Num memIsObjectSemaphore (Obj o) { return memObjectType(o) == TSEMAPHORE; }
-Num memIsObjectFinalizer (Obj o) { return memObjectType(o) == TFINALIZER; }
-Num memIsObjectPointer (Obj o)   { return memObjectType(o) == TPOINTER; }
-Num memIsObjectStack (Obj o)     { return memObjectType(o) == TSTACK; }
-Num memIsObjectShadow (Obj o)    { return memObjectType(o) == TSHADOW; }
+Num memIsObjectSemaphore (Obj o)   { return memIsObjectValid(o) && memObjectType(o) == TSEMAPHORE; }
+Num memIsObjectFinalizer (Obj o)   { return memIsObjectValid(o) && memObjectType(o) == TFINALIZER; }
+Num memIsObjectPointer (Obj o)     { return                        memObjectType(o) == TPOINTER; } /* During a garbage collection, memIsObjectValid would fail because the object is in the temporary 'new' heap */
+Num memIsObjectStack (Obj o)       { return memIsObjectValid(o) && memObjectType(o) == TSTACK; }
+Num memIsObjectShadow (Obj o)      { return memIsObjectValid(o) && memObjectType(o) == TSHADOW; }
 Num memIsObjectType (Obj o, Type t){ return memIsObjectValid(o) && memObjectType(o) == t; }
 
 
@@ -484,7 +484,7 @@ Obj memNewObject (Descriptor desc, Num byteSize) {
 	return o;
 }
 
-/* Allocate a static object.  Like memNewObject except it can't fail.
+/* Allocate a static object.  Called by memNewObject.
 */
 Obj memNewStaticObject (Descriptor desc, Num byteSize) {
  Obj o;
@@ -504,7 +504,7 @@ Obj memNewStaticObject (Descriptor desc, Num byteSize) {
 
 
 Obj memNewStatic (Type type, Length length) {
-Obj o;
+ Obj o;
 	DBBEG("  type:"HEX02"  length:"HEX, type, length);
 	o = memNewStaticObject (memMakeDescriptor(type, length),
 	                    memArrayLengthToObjectSize(length));
@@ -512,8 +512,11 @@ Obj o;
 	return o;
 }
 
+/* The static heap isn't used as a root set by the garbage collector.
+   There's no check verifying a static array has a vector object.
+*/
 Obj memNewStaticVector (Type type, Length length) {
-Obj o;
+ Obj o;
 	DBBEG("  type:"HEX02"  length:"HEX, type, length);
 	o = memNewStaticObject (memMakeDescriptor(type, length),
 	                    memVectorLengthToObjectSize(length));
@@ -522,7 +525,7 @@ Obj o;
 }
 
 Obj memNewArray (Type type, Length length) {
-Obj o;
+ Obj o;
 	DBBEG("  type:"HEX02"  length:"HEX, type, length);
 	o = memNewObject (memMakeDescriptor(type, length),
 	              memArrayLengthToObjectSize(length));
@@ -531,7 +534,7 @@ Obj o;
 }
 
 Obj memNewVector (Type type, Length length) {
-Obj o;
+ Obj o;
 	DBBEG("  type:"HEX02"  length:"HEX, type, length);
 	o = memNewObject (memMakeDescriptor(type, length),
 	              memVectorLengthToObjectSize(length));
@@ -599,9 +602,9 @@ Num memIsObjectInHeap (Heap *heap, Obj o) {
 
 /* Check that object pointer is in a valid heap address. */
 Num memIsObjectValid  (Obj o) {
-	return memIsObjectInHeap(&heap, o)
-	       || memIsObjectInHeap(&heapOld, o)
-	       || memIsObjectInHeap(&heapStatic, o);
+	return memIsObjectInHeap(&heap, o)    ||
+	       memIsObjectInHeap(&heapOld, o) ||
+	       memIsObjectInHeap(&heapStatic, o);
 }
 
 

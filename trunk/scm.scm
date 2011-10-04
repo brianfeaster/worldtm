@@ -30,6 +30,7 @@
                  (if (null? (cdr o))
                      r
                      (cons " . " (display-list-serialize (cdr o) r))))))
+
 (define (display-list-serialize-vector v r)
  (let ~ ((i (- (vector-length v) 1))
          (r (cons ")" r)))
@@ -296,6 +297,9 @@
         (begin (vector-set! v i (make-vector x a))
                (~ (+ i 1)))))))
 
+(define (vector-vector-set! v x y o)
+ (vector-set! (vector-ref v x) y o))
+
 (define (vector-set-vector! v1 s v2 t)
  (let ~ ((a s)
          (b t))
@@ -331,9 +335,9 @@
         (map f (cdr x)))))
 
 (define (for-each fn lst)
- (if (null? lst) ()
-     (begin (fn (car lst))
-            (for-each fn (cdr lst)))))
+  (if (pair? lst)
+      (begin (fn (car lst))
+             (for-each fn (cdr lst)))))
 
 ; Same as for-each except arguments are switched
 (define (each-for lst fn) (for-each fn lst))
