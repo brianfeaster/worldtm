@@ -329,7 +329,7 @@ void vmVm (void) {
 	gPOP3: OPDB("pop3");   r3 = vmPop();  goto **(void**)(rip+=8);
 	gPOP4: OPDB("pop4");   r4 = vmPop();  goto **(void**)(rip+=8);
 	gPOP7: OPDB("pop7");   r7 = vmPop();  goto **(void**)(rip+=8);
-	gPOP19:OPDB("POP19"); r19 = vmPop();  goto **(void**)(rip+=8);
+	gPOP19:OPDB("pop19"); r19 = vmPop();  goto **(void**)(rip+=8);
 	gPOP1A:OPDB("pop1a"); r1a = vmPop();  goto **(void**)(rip+=8);
 	gPOP1B:OPDB("pop1b"); r1b = vmPop();  goto **(void**)(rip+=8);
 

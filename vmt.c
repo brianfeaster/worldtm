@@ -14,22 +14,23 @@
 /* A character file buffer and the functions that print to it
 */
 FILE *FB;
-char *fpBuff=NULL;
+char *FBBuff=NULL;
 
 /* Initialize character file buffer */
-void vmtIOInit (void) {
- static Num fpBuffStrSize;
-	FB = open_memstream(&fpBuff, &fpBuffStrSize);
+void FBInit (void) {
+ static Num size;
+	FB = open_memstream(&FBBuff, &size);
 	assert(NULL != FB);
 }
 
 /* Compare character file buffer's contents with string argument */
-void vmtIOFinalize (char *baseString) {
+void FBFinalize (char *goldenString) {
 	fflush(FB);
-	assert(0 == strcmp(fpBuff, baseString));
+	assert(0 == strcmp(FBBuff, goldenString));
 	fclose(FB);
-	free(fpBuff);
+	free(FBBuff);
 }
+
 
 
 
@@ -52,7 +53,7 @@ void fancyHelloWorld (void) {
  #define printNumbersSub r9
  #define helloWorldSub r10
 
-	vmtIOInit();
+	FBInit();
 
 	/* Dump "hello world" to stdout */
 	Obj helloWorld[] = {
@@ -129,7 +130,7 @@ void fancyHelloWorld (void) {
 	vmRun();
 
 	/* Verify the machine language program's output against a magic string */
-	vmtIOFinalize("3Hello,World[tm]!2Hello,World[tm]!1Hello,World[tm]!001234\n"
+	FBFinalize("3Hello,World[tm]!2Hello,World[tm]!1Hello,World[tm]!001234\n"
 	              "3Hello,World[tm]!2Hello,World[tm]!1Hello,World[tm]!001234\n"
 	              "3Hello,World[tm]!2Hello,World[tm]!1Hello,World[tm]!001234\n");
 }

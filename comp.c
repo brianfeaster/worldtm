@@ -15,134 +15,55 @@
 #include "mem.h"
 
 
-/* Functions related to compiling scheme expressions
-   into virtual machine code blocks.  Not reentrant.
-*/
 
-
-Num wscmDebug=0;
-Num compExpression (Num flags);
-
-
-/* Compiler flags passed around by comp functions.
-*/
-static const Num TAILCALL  = 0x00010000;
-static const Num NODEFINES = 0x00020000;
 /*
-static const Num R8 =        0x00000100;
-static const Num R7 =        0x00000080;
-static const Num R6 =        0x00000040;
-static const Num R5 =        0x00000020;
-static const Num R4 =        0x00000010;
-static const Num R3 =        0x00000008;
-static const Num R2 =        0x00000004;
-static const Num R1 =        0x00000002;
-static const Num R0 =        0x00000001;
+TABLE OF CONTENTS
+ Compiler
+ Init
+
+TERMS
+  I-Graph   Intermediate graph composed of I-blocks
+  I-Block   I-graph node composed of a list of incoming iblocks, outgoing iblocks and icode statements
+  I-Code    I-block statement composed of multiple code fields
+
+DESIGN
+   Expression to compile assigned to rexpr/r15
+   Flow keeps track of pseudo environment in renv/r1c and used registers in flags
 */
 
+void ccDumpICode (Obj ic);
+void ccDumpIBlock (Obj ib);
+void ccCompileExpr (Num flags);
+void ccInitialize (void);
 
-
-void compWrite (void) {
-	objDump(r0, stdout);
-}
-
-
-/* Has compiler encountered an error flag?
+/* compiler flags
 */
-Num CompError;
+static const Num CCTAILCALL  = (Num)0x00010000;
+static const Num CCNODEFINES = (Num)0x00020000;
 
-void compError (void) {
-	fprintf(stderr, "compError: "STR, r0);
+
+
+/*******************************************************************************
+ Compiler
+
+ Compile a scheme expression into a VM code block.  Calls ASM and Assemble
+ functions in this module.
+*******************************************************************************/
+
+void ccError (void) {
+	fprintf(stderr, "ccError: "STR, r0);
 	while (r1--) {
+		fprintf (stderr, " ");
 		sysDisplay(vmPop(), stderr);
 	}
 	exit(-1);
 }
 
 
-/* Dump the illegal operator error message including the offending expression
-*/
-void compIllegalOperator (void) {
-	fprintf (stderr, "ERROR: Illegal operator (");
-	objDump (r0, stderr);
-	while ((Int)r1--) {
-		fprintf (stderr, " ");
-		objDump (vmPop(), stderr);
-	}
-	fprintf(stderr, ")");
-	r0 = false; /* TODO return false for now.  Add a call to error continuation. */
-}
-
-/* Remember BASIC?  This is a 'REMark' or comment syntatic operator.
-*/
-void compRem () {
-	DBBEG();
-	DBEND();
-}
-
-/* Compiles s-expression in r0 into code block in r0.  Probably messes up
-   a bunch of registers.
-	TODO: does this mangle r19/1a/1b retenv/retip/retcode?
-*/
-void compSysCompile (void) {
-	DBBEG();
-	rexpr=r0;
-	vmPush(renv);
-	CompError=0;
-	asmAsm ( /* Keep track of original expression for debugging. */
-		vmBRA, 8,
-		rexpr,
-		vmEND
-	);
-	if (compExpression(0))
-	{
-		r0 = "compSysCompile: compExpression failed";
-		compError();
-		goto ret;
-	}
-	asmAsm(
-		vmRET,
-		vmEND
-	);
-	asmNewCode();
-	if (wscmDebug) vmDebugDumpCode(r0, stderr); // Dump the code block after compiling code during runtime.
-	renv=vmPop();
-ret:
-	DBEND("  =>  ");
-	DBE objDump (r0, stderr);
-}
-
-void compEval (Num flags) {
-	DBBEG();
-	rexpr = cadr(rexpr);
-	compExpression(flags & ~TAILCALL);
-	asmAsm(
-		vmSYSI, compSysCompile,
-	vmEND);
-	if (flags & TAILCALL) {
-		asm(vmJ0);
-	} else {
-		asmAsm(
-			vmPUSH1A, vmPUSH1B, vmPUSH19,
-			vmJAL0,
-			vmPOP19, vmPOP1B, vmPOP1A,
-		vmEND);
-	}
-	DBEND();
-}
-
-/* Doesn't need compiling so just return it.
-*/
-void compSelfEvaluating (void) {
-	DBBEG();
-	asm(vmMVI0); asm(rexpr);
-	DBEND();
-}
-
 /* Run time symbol lookup syscall.  If a symbol in r1 found in TGE mutate code
    to just reference the binding's value rather than make this syscall.
 */
-void compTGELookup (void) {
+void ccTGELookup (void) {
 	DBBEG();
 	sysTGEFind();
 	if (r0 == null) {
@@ -162,121 +83,10 @@ void compTGELookup (void) {
 	DBEND();
 }
 
-void compVariableReference (Num flags) {
- Num ret, depth;
-	DBBEG();
-	DBE objDump(rexpr, stderr);
-	r1 = rexpr;
-
-	/* Scan local environments.  Returned is a 16 bit number, the high 8 bits
-	   is the environment chain depth, the low 8 bits the binding offset. The
-	   offset will be 2 or greater if a variable is found in any environment
-	   excluding the global environment. */
-	ret = sysEnvFind();
-	if (ret) {
-	DB("   found in a local environment %02x", ret);
-		/* Emit code that traverses the environment chain and references the
-		   proper binding. */
-		if ((ret>>8) == 0) {
-			asm(vmLDI01C); asm(ret & 0xff);
-		} else {
-			asm(vmLDI01C); asm(0l);
-			for (depth=1; depth < (ret>>8); depth++) {
-				asm(vmLDI00); asm(0l);
-			}
-			asm(vmLDI00); asm(ret & 0xff); /* Mask the offset value. */
-		}
-	} else {
-		/* Scan tge... */
-		sysTGEFind();
-		if (r0 == null) {
-			DB("   can't find in TGE...maybe at runtime");
-			asm(vmMVI1); asm(rexpr);
-			asm(vmSYSI); asm(compTGELookup);
-		} else {
-			DB("   found in TGE");
-			asm(vmMVI0); asm(r0);
-			asm(vmLDI00); asm(0l);
-		}
-	}
-
-	DBEND();
-}
-
-/* Transform expr:((fn formals) body) into the form
-   r0:(fn (lambda formals body)).  No syntic error checking is performed
-   yet.  Would rather implement a macro transformation facility.
-*/
-void compTransformDefineFunction (void) {
-	DBBEG();
-	r5 = cdr(rexpr);  /* Function's body. */
-	rexpr = car(rexpr);
-	r3 = car(rexpr); /* Function's name. */
-	r4 = cdr(rexpr); /* Function's formal parameters. */
-
-	r1=r4;      r2=r5;   objCons12(); /* (formals body) */
-	r1=slambda; r2=r0;   objCons12(); /* (lambda formals body) */
-	r1=r0;      r2=null; objCons12(); /* ((lambda formals body)) */
-	r1=r3;      r2=r0;   objCons12(); /* (fn (lambda formals body)) */
-	
-	DBEND("  =>  ");
-	DBE objDump(rexpr, stderr);
-}
-
-
-/* Define by itself only makes sense when evaluated in the top level
-   environment.  Any other use of it is just syntatic sugar for the various
-   let expressions.  For now define will always work and assumes TGE as the
-   current working environment.
-*/
-void compDefine (Num flags) {
-	DBBEG();
-
-	if (flags & NODEFINES) {
-		//CompError = 1;
-		fprintf(stderr, "ERROR: compDefine(): Define not allowed here");
-		objDump(rexpr, stderr);
-	} else {
-		rexpr = cdr(rexpr); /* Skip 'define symbol. */
-
-		vmPush(renv);
-		renv = rtge;
-
-		/* If the expression is of the form ((...) body) transform. */
-		if (objIsPair(car(rexpr))) {
-			compTransformDefineFunction();
-			rexpr = r0;
-		}
-
-		if (TSYMBOL == memObjectType(r1=car(rexpr))) {
-			/* Bind (if not already bound) the symbol and get its binding. */
-			sysTGEBind();
-			/* Emit code to set the binding's value. */
-			rexpr = cdr(rexpr);
-			if (objIsPair(rexpr)) {
-				vmPush(r0); /* Save binding. */
-				rexpr = car(rexpr); /* Consider this definition's expression and compile. */
-				compExpression((Num)flags & ~TAILCALL);
-				asm(vmMVI1); asm(vmPop()); /* Load r1 with saved binding. */
-				asm(vmSTI01); asm(0l);    /* Set binding's value. */
-			} else {
-				write (2, "ERROR: compDefine(): Missing expression.", 40);
-			}
-		} else  {
-			write (2, "ERROR: compDefine(): Not a symbol:", 34); objDump(r1, stderr);
-		}
-
-		renv = vmPop();
-	}
-
-	DBEND();
-	return;
-}
-
 /* Run time symbol mutate syscall.  If a symbol in r1 found in TGE mutate code
    to just reference the binding's and mutate binding's value with r0.
 */
-void compTGEMutate (void) {
+void ccTGEMutate (void) {
 	DBBEG();
 	r2=r0; /* Since a syscall, save value we're trying to set!. */
 	sysTGEFind();
@@ -298,56 +108,398 @@ void compTGEMutate (void) {
 	DBEND();
 }
 
-
-void compSetb (Num flags) {
- Num ret, depth;
+/* Generate assembly which looks up value of symbol in a local or
+   global environment and assigns to r0
+*/
+void ccSymbol (Num flags) {
+ Num d, ret, depth, offset;
 	DBBEG();
-	rexpr = cdr(rexpr); /* Skip 'set! symbol. */
-	vmPush(car(rexpr)); /* Save symbol. */
+	DBE objDump(rexpr, stderr);
+
+	/* Scan local environments.  Returned is a 16 bit number, the high 8 bits
+	   is the environment chain depth, the low 8 bits the binding offset. The
+	   offset will be 2 or greater if a variable is found in any environment
+	   excluding the global environment. */
+	r1 = rexpr;
+	ret = sysEnvFind();
+
+	if (ret) {
+		depth = ret >> 8;
+		offset = ret & 0xff;
+		DB("   found in a local environment depth:"NUM" offset:"NUM, depth, offset);
+		/* Emit code that traverses the environment chain and references the proper binding. */
+		if (depth == 0) {
+			asmAsm(LDI, R0, R1C, (Obj)offset);
+		} else {
+			asmAsm(LDI, R0, R1C, 0l); /* Parent env */
+			for (d=1; d < depth; d++) asmAsm(LDI, R0, R0, 0l); /* It's parent env */
+			asmAsm(LDI, R0, R0, (Obj)offset); /* Local symbol offset */
+		}
+	} else {
+		/* Scan tge... */
+		sysTGEFind();
+		if (null == r0) {
+			DB("   can't find in TGE...maybe at runtime");
+			asmAsm(
+				MVI, R1, rexpr,
+				SYSI, ccTGELookup);
+		} else {
+			DB("   found in TGE");
+			r3 = r0; /* Keep track of the symbol */
+			asmAsm(
+				MVI, R0, r3,
+				LDI, R0, R0, 0l);
+		}
+	}
+	DBEND();
+}
+
+
+void ccSetB (Num flags) {
+ Num ret, d,depth, offset;
+	DBBEG();
+	rexpr = cdr(rexpr); /* Consider set! parameter list (S E) */
+	vmPush(car(rexpr)); /* Save S */
 	/* Emit code that evaluates the expression. */
 	rexpr = cadr(rexpr);
-	compExpression(flags & ~TAILCALL);
+	ccCompileExpr(flags & ~CCTAILCALL);
 
-	r1 = vmPop(); /* Restore symbol. */
 	/* Scan local environments.  Returned is a 16 bit number, the high 8 bits
 	   is the environment chain depth, the low 8 bits the binding offset. The
 	   offset will be 1 or greater if a variable is found in any environment
 	   excluding the global environment. */
+	r1 = vmPop(); /* Restore S */
 	ret = sysEnvFind();
+
 	if (ret) {
-	DB("   found in a local environment %02x", ret);
-		/* Emit code that traverses the environment chain and references the
-		   proper binding. */
-		if (ret>>8 == 0) {
-			asm(vmSTI01C); asm(ret & 0xff);
+		depth = ret >> 8;
+		offset = ret & 0xff;
+		DB("   found in a local environment depth:"NUM" offset:"NUM, depth, offset);
+		/* Emit code that traverses the environment chain and references the proper binding. */
+		if (depth == 0) {
+			asmAsm(STI, R0, R1C, (Obj)offset);
 		} else {
-			asm(vmLDI11C); asm(0l);
-			for (depth=1; depth < (ret>>8); depth++) {
-				asm(vmLDI11); asm(0l);
-			}
-			asm(vmSTI01); asm(ret & 0xff); /* Mask the offset value. */
+			asmAsm(LDI, R1, R1C, 0l); /* Parent env */
+			for (d=1; d < depth; d++) asmAsm(LDI, R1, R1, 0l); /* It's parent env */
+			asmAsm(STI, R0, R1, (Obj)offset); /* Local symbol offset */
 		}
 	} else {
 		/* Scan tge... */
 		sysTGEFind();
 		if (r0 == null) {
 			DB("   can't find in TGE...maybe at runtime");
-			asm(vmMVI1); asm(r1);
-			asm(vmSYSI); asm(compTGEMutate);
+			asmAsm(
+				MVI, R1, rexpr,
+				SYSI, ccTGEMutate);
 		} else {
 			DB("   found in TGE");
-			asm(vmMVI1); asm(r0);
-			asm(vmSTI01); asm(0l);
+			r3 = r0; /* Keep track of the symbol */
+			asmAsm(
+				MVI, R1, r3,
+				STI, R0, R1, 0l);
 		}
 	}
 
 	DBEND();
 }
 
+void ccIf (Num flags) {
+ Obj L1, L2;
+	DBBEG();
+
+	rexpr = cdr(rexpr); /* Consider if expression's parameter list (TEST CONSEQUENT ALTERNATE)*/
+	assert("If expression missing TEST operand" && memIsObjectType(rexpr, TPAIR));
+
+	/* [TEST] */
+	r0 = cdr(rexpr); /* Make sure at least the CONSEQUENT operand exists */
+	assert("If expression missing consequent" && memIsObjectType(r0, TPAIR));
+	vmPush(r0); /* Push (CONSEQUENT ALTERNATE) */
+
+	rexpr = car(rexpr); /* Compile TEST expression */
+	ccCompileExpr(flags & ~CCTAILCALL);
+	rexpr = vmPop(); /* Restore (CONSEQUENT ALTERNATE) */
+
+	/* [TEST]---[BRANCH] */
+ 	L1 = asmNewLabel();
+	asmAsm(BEQI, R0, false, L1);
+
+	/* [TEST]---[BRANCH]---[CONSEQUENT] */
+	vmPush(cdr(rexpr)); /* Push (ALTERNATE) */
+	rexpr = car(rexpr); /* Compile CONSEQUENT expression */
+	ccCompileExpr(flags);
+	rexpr = vmPop(); /* Restore (ALTERNATE) */
+
+	if (null == rexpr) {
+		/* [TEST]---[BRANCH]---[CONSEQUENT]--[END] */
+		asmAsm(LABEL, L1);
+	} else {
+ 		L2 = asmNewLabel();
+		/* [TEST]---[BRANCH]---[CONSEQUENT]--[JUMP]--[ALTERNATE]--[END] */
+		asmAsm(BRA, L2);
+		asmAsm(LABEL, L1);
+		rexpr = car(rexpr); /* Consider alternate */
+		ccCompileExpr(flags); /* Compile ALTERNATE expression.  It becomes the leading alternate block's default */
+		asmAsm(LABEL, L2);
+	}
+
+	DBEND();
+}
+
+void ccCons (Num flags) {
+	DBBEG();
+
+	rexpr = cdr(rexpr); /* Consider cons's parameter list (A B)*/
+	assert(memIsObjectType(rexpr, TPAIR)); /* TODO Ugly output Assertion memIsObjectType(r15, 0x80l) */
+
+	vmPush(cdr(rexpr)); /* Save (B) */
+
+	rexpr = car(rexpr); /* Consider and compile A */
+	ccCompileExpr(flags & ~CCTAILCALL);
+
+	asmAsm(
+		PUSH, R0
+	);
+
+	rexpr = vmPop(); /* Restore (B) */
+	assert(memIsObjectType(rexpr, TPAIR));
+	assert(memIsObjectType(cdr(rexpr), TNULL));
+
+	rexpr = car(rexpr); /* Consider and compile B */
+	ccCompileExpr(flags & ~CCTAILCALL);
+
+	asmAsm(
+		POP, R1,
+		SYSI, objCons10
+	);
+
+	DBEND();
+}
+
+
+/* Parse the form (? *) placing * into r1
+   Return: 0 success  -1 error
+*/
+Int ccParseUnary (void) {
+	r0 = cdr(rexpr); /* Consider arguments */
+	if (!objIsPair(r0)) return -1; /* No arguments */
+	r1 = car(r0);
+	if (cdr(r0) != null) return -1; /* More than one argument */
+	return 0;
+}
+
+void ccCar (Num flags) {
+ Obj Lok;
+	DBBEG();
+
+	vmPush(rexpr); /* Save expression. */
+
+	if (ccParseUnary()) {
+		r0 = "Compiler error";
+		r1 = (Obj)1;
+		ccError();
+	}
+
+	rexpr = r1;  /* Consider and compile expression parsed */
+
+	ccCompileExpr(flags & ~CCTAILCALL);
+	rexpr = vmPop(); /* Restore expression and use in runtime error message */
+	Lok = asmNewLabel();
+	asmAsm(
+		BRTI, R0, TPAIR, Lok,
+		MVI, R0, rexpr,
+		PUSH, R0,
+		MVI, R1, 1l,
+		MVI, R0, "runtime error",
+		SYSI, ccError,
+	 LABEL, Lok,
+		LDI, R0, R0, 0l /* Perform car */
+	);
+	DBEND();
+}
+
+void ccCdr (Num flags) {
+ Obj Lok;
+	DBBEG();
+
+	vmPush(rexpr); /* Save expression. */
+
+	if (ccParseUnary()) {
+		r0 = "Compiler error";
+		r1 = (Obj)1;
+		ccError();
+	}
+
+	rexpr = r1;  /* Consider and compile expression parsed */
+
+	ccCompileExpr(flags & ~CCTAILCALL);
+	rexpr = vmPop(); /* Restore expression and use in runtime error message */
+	Lok = asmNewLabel();
+	asmAsm(
+		BRTI, R0, TPAIR, Lok,
+		MVI, R0, rexpr,
+		PUSH, R0,
+		MVI, R1, 1l,
+		MVI, R0, "runtime error",
+		SYSI, ccError,
+	 LABEL, Lok,
+		LDI, R0, R0, 1l /* Perform cdr */
+	);
+	DBEND();
+}
+
+void ccSetCarB (Num flags) {
+	DBBEG();
+	rexpr = cdr(rexpr); /* Skip set-car! symbol. */
+	if (rexpr == null) {
+		printf ("ERROR: set-car! illegal pair expression: ");
+		objDump (rexpr, stdout);
+		goto ret;
+	}
+	vmPush(car(rexpr)); /* Save pair expression. */
+	rexpr = cdr(rexpr);
+	if (rexpr == null) {
+		printf ("ERROR: set-car! illegal object expression: ");
+		objDump (rexpr, stdout);
+		goto ret;
+	}
+	rexpr = car(rexpr);/* Consider and compile object expression. */
+	ccCompileExpr(flags & ~CCTAILCALL);
+	asmAsm(PUSH, R0);
+	rexpr = vmPop();
+	ccCompileExpr(flags & ~CCTAILCALL);
+	asmAsm(
+		POP, R2,
+		STI, R2, R0, 0l);
+ret:
+	DBEND();
+}
+
+void ccSetCdrB (Num flags) {
+	DBBEG();
+	rexpr = cdr(rexpr); /* Skip set-cdr! symbol. */
+	if (rexpr == null) {
+		printf ("ERROR: set-cdr! illegal pair expression: ");
+		objDump (rexpr, stdout);
+		goto ret;
+	}
+	vmPush(car(rexpr)); /* Save pair expression. */
+	rexpr = cdr(rexpr);
+	if (rexpr == null) {
+		printf ("ERROR: set-cdr! illegal object expression: ");
+		objDump (rexpr, stdout);
+		goto ret;
+	}
+	rexpr = car(rexpr);/* Consider and compile object expression. */
+	ccCompileExpr(flags & ~CCTAILCALL);
+	asmAsm(PUSH, R0);
+	rexpr = vmPop();
+	ccCompileExpr(flags & ~CCTAILCALL);
+	asmAsm(
+		POP, R2,
+		STI, R2, R0, 1l);
+ret:
+	DBEND();
+}
+
+void ccVerifyVectorRef (void) {
+	if (memObjectLength(r1) <= (Num)r2) {
+		vmPush(r2);
+		vmPush(r1);
+		r0 = "vector-ref out of bounds";
+		r1 = (Obj)2;
+		ccError();
+	}
+}
+
+void ccVerifyVectorSetB (void) {
+	if (memObjectLength(r1) <= (Num)r2) {
+		vmPush(r0);
+		vmPush(r2);
+		vmPush(r1);
+		r0 = "vector-set! out of bounds";
+		r1 = (Obj)3;
+		ccError();
+	}
+}
+
+void ccVectorRef (Num flags) {
+	DBBEG();
+	vmPush(car(cddr(rexpr))); /* Save index expression. */
+	rexpr = cadr(rexpr);       /* Compile Vector expression. */
+	ccCompileExpr(flags & ~CCTAILCALL);
+	rexpr = vmPop();            /* Compile index expression. */
+	if (TINTEGER == memObjectType(rexpr)) {
+		/* Load static integer value into register */
+		asmAsm(
+			MV, R1, R0, /* Move object to r1 */
+			MVI, R2, *(Num*)rexpr,
+			SYSI, ccVerifyVectorRef,
+			LD, R0, R1, R2);
+	} else {
+		asmAsm(PUSH, R0);
+		ccCompileExpr(flags & ~CCTAILCALL);
+		asmAsm(
+			POP, R1,
+			/* Load object's integer value into register. */
+			LDI, R2, R0, 0l, /* This fails runtime type check */
+			SYSI, ccVerifyVectorRef,
+			LD, R0, R1, R2);
+	}
+	DBEND();
+}
+
+void ccVectorSetB (Num flags) {
+	DBBEG();
+	rexpr=cdr(rexpr); /* Skip 'vector-set!. */
+	vmPush(car(cddr(rexpr))); /* Save new-value expression. */
+	vmPush(cadr(rexpr));      /* Save index expression. */
+	/* Consider and compile Vector expression. */
+	rexpr = car(rexpr);
+	ccCompileExpr(flags & ~CCTAILCALL);
+	asmAsm(PUSH, R0);           /* Save vector object. */
+	/* Pop and compile index expression. */
+	rexpr=vmPop();
+	ccCompileExpr(flags & ~CCTAILCALL);
+	asmAsm(PUSH, R0);           /* Save offset object. */
+	/* Pop and compile new-value expression. */
+	rexpr=vmPop();
+	ccCompileExpr(flags & ~CCTAILCALL);
+	asmAsm (
+		POP, R2,       /* Pop offset object. */
+		LDI, R2, R2, 0l,   /* Load offset object's integer value into register. */
+		POP, R1,       /* Pop vector object. */
+		SYSI, ccVerifyVectorSetB,
+		ST, R0, R1, R2       /* Store new-value object in vector. */
+	);
+	DBEND();
+}
+
+
+/* Transform expr:((fn formals) body) into the form
+   r0:(fn (lambda formals body)).  No syntic error checking is performed
+   yet.  Would rather implement a macro transformation facility.
+*/
+void ccTransformDefineFunction (void) {
+	DBBEG();
+	r5 = cdr(rexpr);  /* Function's body. */
+	rexpr = car(rexpr);
+	r3 = car(rexpr); /* Function's name. */
+	r4 = cdr(rexpr); /* Function's formal parameters. */
+
+	r1=r4;      r2=r5;   objCons12(); /* (formals body) */
+	r1=slambda; r2=r0;   objCons12(); /* (lambda formals body) */
+	r1=r0;      r2=null; objCons12(); /* ((lambda formals body)) */
+	r1=r3;      r2=r0;   objCons12(); /* (fn (lambda formals body)) */
+	
+	DBEND("  =>  ");
+	DBE objDump(rexpr, stderr);
+}
+
+
 /* Transform expr:((define x q) (define y r) body)
        => r0:((lambda (x y) (set! x q) (set! y r) body) () ())
 */
-void compTransformInternalDefinitions(void) {
+void ccTransformInternalDefinitions(void) {
  Int definitionsCount=0;
 	DBBEG();
 
@@ -356,7 +508,7 @@ void compTransformInternalDefinitions(void) {
 		vmPush(cdr(rexpr));
 		rexpr = cdar(rexpr); // Consider next expression and skip 'define.
 		if (objIsPair(car(rexpr))) {
-			compTransformDefineFunction(); // Returns (fn (lambda formals body))
+			ccTransformDefineFunction(); // Returns (fn (lambda formals body))
 		} else {
 			r0=rexpr;
 		}
@@ -393,8 +545,8 @@ void compTransformInternalDefinitions(void) {
 	DBE objDump(rexpr, stdout);
 }
 
-/*
-   Given (args body) in expr (r18) create a new code block that basically
+
+/* Given (args body) in expr (r18) create a new code block that basically
    handles a call to a closures function.  The code assumes the closure is
    in r0.  A closure is a pair (code . environment) containing the code itself
    and the closures instantiated environment.
@@ -430,131 +582,128 @@ void compTransformInternalDefinitions(void) {
   (3) A syscall that attempts to locate the named binding which will then
       code modify itslef into case (1).
 */
-void compLambdaBody (Num flags) {
- Num opcodeStart;
+void ccLambdaBody (Num flags) {
+ Obj Lcomment, Lexpectednoargs, LkeepLexicalEnvironment, LnotEnoughArguments, LnormalFormals, LbuildRestList;
 	DBBEG();
 	DBE objDump(rexpr, stdout);
 
-	/* Since we're creating a new code object, save the current asmstack and
-	   create a new one to start emitting opcodes to. */
-	vmPush(rasmstack);
-	r0=memNewStack();
-	rasmstack=r0;
+	/* Since we're creating a new code object, create a new ASM context */
+	asmStart();
 
 	/* The first opcode emitted is a branch past a pointer to the original
 	   expression being compiled.  This is a quick and dirty debugging aid. */
-	asmAsm(
-		vmBRA, 8l,
-		rexpr,
-		vmEND
-	);
+	Lcomment = asmNewLabel();
+	//asmAsm(
+	//	BRA, Lcomment,
+	//	rexpr,
+	//	LABEL, Lcomment
+	//);
 
 	/* Emit code that extends stack-stored arguments (Free variables can be
 	   statically compiled?  r2 is assumed to hold the environment to be
-	   extended, r1 the argument count, r3 the formal arguments. */
+	   extended, r1 the argument count, r3 the formal arguments.) */
 	if (null == car(rexpr)) {
 		/* Since a lambda with empty formals list, emit code which doesn't extend
 		   the environment but instead sets env to the containing closure's env
 		   or TGE if this is a top level definition (which will always be for 'lambda
 		   and not 'macro) */
-		if (renv==rtge) asm(vmMV1C18);
-		else { asm(vmLDI1C0); asm(1l); }
+		if (renv == rtge) asmAsm(MV, R1C, R18); /* env = tge */
+		else asmAsm(LDI, R1C, R0, 1l);
 
-		opcodeStart = memStackLength(rasmstack);
+		Lexpectednoargs = asmNewLabel();
 		asmAsm (
-			vmBEQI1, 0, vmADDR, "expectedNoArgs",
-			vmMVI0, rexpr, /* Error situation.  Add expression to stack */
-			vmPUSH0,
-			vmADDI1, 1l,
-			vmMVI0, "Too many arguments to closure",
-			vmSYSI, compError, /* Error correction */
-			vmLABEL, "expectedNoArgs",
-			vmEND);
-		asmCompileAsmstack(opcodeStart);
+			BEQI, R1, 0, Lexpectednoargs,
+			MVI, R0, rexpr, /* Error situation.  Add expression to stack */
+			PUSH, R0,
+			ADDI, R1, 1l,
+			MVI, R0, "Too many arguments to closure",
+			SYSI, ccError, /* Error correction */
+			LABEL, Lexpectednoargs
+		);
 	} else {
 		/* Emit code that extends the environment.  Pops the top most arguments
 		   into a list for the 'rest' formal parameter  (lambda (a b . rest)...).
 		   R3 contains the non-dotted formal parameter length (via the Normalize
 		   function above). */
-		opcodeStart = memStackLength(rasmstack);
 
-		/* Temporarily save lexical environment, from closure in r0 or tge, to r5.
+		/* Temporarily save lexical environment, from closure in r0, or tge, to r5.
 		   The stored environment might be null in which case keep track of
 		   the current/dynamic environment instead of the stored lexical.  Use
 		   TGE when a top level definition.  See also the similar situation in this
-		   if blocks true clause with the empty formals case. */
-		if (car(renv)==rtge) asm(vmMV518);
-		else { asm(vmLDI50); asm(1l); }
+		   if block's true clause with the empty formals case. */
+		if (car(renv) == rtge) asmAsm(MV, R5, R18);
+		else asmAsm(LDI, R5, R0, 1l);
 
+		LkeepLexicalEnvironment = asmNewLabel();
+		LnotEnoughArguments = asmNewLabel();
+		LnormalFormals = asmNewLabel();
 		asmAsm (
-			vmBNEI5, null, vmADDR, "keepLexicalEnvironment",
-			vmMV51C,
-		vmLABEL, "keepLexicalEnvironment",
-			vmMVI0, null, /* Initial formal argument 'rest' value (empty list). */
+			BNEI, R5, null, LkeepLexicalEnvironment,
+			MV, R5, R1C,
+		 LABEL, LkeepLexicalEnvironment,
+			MVI, R0, null, /* Initial formal argument 'rest' value (empty list). */
 			/* r3 is non-dotted formal argument length. */
-			vmBLTI1, r3, vmADDR, "notEnoughArguments",
-			vmBEQI1, r3, vmADDR, "normalFormals",
-			vmEND);
+			BLTI, R1, r3, LnotEnoughArguments,
+			BEQI, R1, r3, LnormalFormals
+		);
 
 		/* Emit code for functions lacking a dotted formal argument.  This code
 		   will be reached if there are more values passed to the function than
 		   there are formal arguments.  Otherwise it will just continue to build
 		   the dotted formal list. */
-		if (r4==0) {
+		if (r4 == 0) {
 			asmAsm (
-				vmMVI0, rexpr, /* Add expression to stack */
-				vmPUSH0,
-				vmADDI1, 1l,
-				vmMVI0, "Too many arguments to function",
-				vmSYSI, compError, /* Error correction */
-				vmEND);
+				MVI, R0, rexpr, /* Add expression to stack */
+				PUSH, R0,
+				ADDI, R1, 1l,
+				MVI, R0, "Too many arguments to function",
+				SYSI, ccError /* Error correction */
+			);
 		}
 
+		LbuildRestList = asmNewLabel();
 		asmAsm (
-		vmLABEL, "buildRestList",
-			vmMV30,
-			vmPOP2,
-			vmSYSI, objCons23,
-			vmADDI1, -1l,
-			vmBNEI1, r3, vmADDR, "buildRestList",
-			vmBRA, vmADDR, "normalFormals",
-		vmLABEL, "notEnoughArguments",
-			vmMVI0, rexpr, /* Add expression to stack */
-			vmPUSH0,
-			vmADDI1, 1l,
-			vmMVI0, "Not enough arguments to closure",
-			vmSYSI, compError, /* Error correction */
-			vmPUSH0,
-			vmADDI1, 1l,
-			vmBNEI1, r3, vmADDR, "notEnoughArguments",
-		vmLABEL, "normalFormals",
-			vmPUSH0,
+		LABEL, LbuildRestList,
+			MV, R3, R0,
+			POP, R2,
+			SYSI, objCons23,
+			ADDI, R1, -1l,
+			BNEI, R1, r3, LbuildRestList,
+			BRA, LnormalFormals,
+		LABEL, LnotEnoughArguments,
+			MVI, R0, rexpr, /* Add expression to stack */
+			PUSH, R0,
+			ADDI, R1, 1l,
+			MVI, R0, "Not enough arguments to closure",
+			SYSI, ccError, /* Error correction */
+			PUSH, R0,
+			ADDI, R1, 1l,
+			BNEI, R1, r3, LnotEnoughArguments,
+		LABEL, LnormalFormals,
+			PUSH, R0,
 			/* Create the local environment. r1 is the length of the vector.
 			   3 is added to account for the parent env, formal argument list
 			   and rest formal argument. */
-			vmADDI1, 3l,
-			vmSYSI,  objNewVector1, /* New vector in r0 of size imm:r1. */
-			vmSTI50, 0l, /* Set parent link. */
+			ADDI, R1, 3l,
+			SYSI,  objNewVector1, /* New vector in r0 of size imm:r1. */
+			STI, R5, R0, 0l, /* Set parent link. */
 			/* Set the environment's normalized formal argument list which was
 			   created before the call to this C function. */
-			vmMVI3,  cdr(renv),
-			vmSTI30, 1l,
-			vmEND
+			MVI, R3, cdr(renv),
+			STI, R3, R0, 1l
 		);
-		asmCompileAsmstack(opcodeStart);
 
 		/* Emit code that pops arguments off stack and stores into proper
 		   local environment locations.  */
 		r3++;
 		while (r3--) {
 			asmAsm (
-				vmPOP2,
-				vmSTI20, r3+2l,
-				vmEND
+				POP, R2,
+				STI, R2, R0, r3+2l
 			);
 		}
 		/* Set env register to the newly extended environment. */
-		asm(vmMV1C0);
+		asmAsm(MV, R1C, R0);
 	}
 
 	/* Skip lambda's formal argument list. */
@@ -565,35 +714,33 @@ void compLambdaBody (Num flags) {
 	   specification which requires body contain a sequence of one or more
 	   expressions. */
 	if (rexpr == null) {
-		asm(vmMVI0); asm(null);
+		asmAsm(MVI, R0, null);
 		DB("   Empty function body.");
 	} else {
 		/* Transform internal definitions, if any, and body into equivalent
 		   expanded letrec and body, ie:(((lambda (f) (set! f ...) body) () () ...)).*/
-		compTransformInternalDefinitions();
+		ccTransformInternalDefinitions();
 		while (cdr(rexpr) != null) {
 			DB("   Lambda non-tail optimization");
 			vmPush(cdr(rexpr)); /* Push next expr. */
 			rexpr = car(rexpr);
-			compExpression((flags & ~TAILCALL) | NODEFINES);
+			ccCompileExpr((flags & ~CCTAILCALL) | CCNODEFINES);
 			rexpr = vmPop();
 		}
 		DB("   Lambda tail optimization");
 		rexpr = car(rexpr);
-		compExpression(flags | TAILCALL | NODEFINES);
+		ccCompileExpr(flags | CCTAILCALL | CCNODEFINES);
 	}
 
-	asm(vmRET);
-	asmNewCode(); /* Transfer code stack to fixed size code vector. */
+	asmAsm(RET);
 
-	/* Revert back to code block we're generating. */
-	rasmstack=vmPop();
+	/* Assemble igraph and restore previous ASM context */
+//ccDumpIBlocks();
+	asmAsmIGraph();
 
-	DBEND("  =>  ");
-	DBE objDump (r0, stderr);
+	DBE vmDebugDumpCode(r0, stderr);
+	DBEND();
 }
-
-
 
 /* Normalize a scheme formals list into an internal normalized formals
    environment list.  A proper list with a symbol or null as the "rest"
@@ -614,7 +761,7 @@ void compLambdaBody (Num flags) {
            r3   Number of non-dotted formal parameters
            r4   0 or 1 dotted formals
 */
-void compNormalizeFormals(void) {
+void ccNormalizeFormals(void) {
  Num i;
 	r3=0; /* Keep track of non-dotted formal count. */
 
@@ -635,11 +782,7 @@ void compNormalizeFormals(void) {
 	while (i--) { r2=r0;  r1=vmPop();  objCons12(); }
 }
 
-
-
-/* Uses  r0 r1 r2 r3 r4
-*/
-void compLambda (Num flags) {
+void ccLambda (Num flags) {
 	DBBEG();
 	rexpr = cdr(rexpr); /* Skip 'lambda. */
 
@@ -650,748 +793,298 @@ void compLambda (Num flags) {
 	   is just the pair (parent-environment . formals-list)*/
 	if (car(rexpr) != null) {
 		r0=car(rexpr);
-		compNormalizeFormals(); /* Create normalized list in r0, length in r3, dotted-formal bool in r4. */
+		ccNormalizeFormals(); /* Create normalized list in r0, length in r3, dotted-formal bool in r4. */
 		r1=renv;  r2=r0;  objCons12();  renv=r0;
 	}
 
 	/* Create closures code block in r0. */
-	compLambdaBody(flags);
+	ccLambdaBody(flags);
 
 	renv = vmPop(); /* Restore env. */
 
 	/* Generate code that generates a closure.  Closure returned in r0 created
 	   from r1 (code) and r1c (current environment). */
 	asmAsm(
-		vmMVI1, r0, /* Load r1 with code. */
-		vmSYSI, sysNewClosure1Env, /* Create closure from r1 and env (r1c) */
-		vmEND);
-
-	DBEND();
-}
-
-
-
-void compMacro (Num flags) {
-	DBBEG();
-
-	vmPush(rasmstack);
-	r0=memNewStack();
-	rasmstack=r0;
-
-	/* Transform (macro ... ...) => (lambda .. ...) assigned to r0 */
-	r1=slambda;  r2 = cdr(rexpr);  objCons12();
-
-	asmAsm(
-		vmPUSH1,
-		vmMVI0, r0,
-		vmSYSI, compSysCompile,
-		vmPUSH1A, vmPUSH1B, vmPUSH19,
-		vmJAL0,
-		vmPOP19, vmPOP1B, vmPOP1A,
-		vmLDI20, 0l, /* load r2 with code block and call it.  it will return a closure.  */
-		vmPOP1,
-		vmJ2,
-	vmEND);
-
-	asmNewCode(); /* Transfer code stack to fixed size code vector into r0. */
-	rasmstack=vmPop();
-
-	/* Generate code that generates a closure.  Closure returned in r0 created
-	   from r1 (code) and r1c (current environment). */
-	asmAsm(
-		vmMVI1, r0, /* Load r1 with code block just compiled. */
-		vmSYSI, sysNewClosure1Env, /* Create closure from r1 and env (r1c) */
-		vmMVI2, null, /* Replace stored lexical environment with null so dynamic environment is used when applied */
-		vmSTI20, 1l,
-	vmEND);
-
-	DBEND();
-}
-
-
-
-void compVerifyVectorRef (void) {
-	if (*(Int*)r0 < 0 || memObjectLength(r1) <= *(Int*)r0) {
-		fprintf (stderr, "\nERROR::out of bounds:  (vector-ref ");
-		objDump(r1, stderr); fprintf (stderr, " ");
-		objDump(r0, stderr); fprintf (stderr, ")");
-		compError();
-	}
-}
-
-void compVerifyVectorSetB (void) {
-	if (*(Int*)r2 < 0 || memObjectLength(r1) <= *(Int*)r2) {
-		fprintf (stderr, "\nERROR::out of bounds:  (vector-set! ");
-		objDump(r1, stderr); fprintf (stderr, " ");
-		objDump(r2, stderr); fprintf (stderr, " ");
-		objDump(r0, stderr); fprintf (stderr, ")");
-		compError();
-	}
-}
-
-void compVectorRef (Num flags) {
-	DBBEG();
-	vmPush(car(cddr(rexpr))); /* Save index expression. */
-	rexpr = cadr(rexpr);       /* Compile Vector expression. */
-	compExpression(flags & ~TAILCALL);
-	rexpr = vmPop();            /* Compile index expression. */
-	if (TINTEGER == memObjectType(rexpr)) {
-		/* Load static integer value into register. */
-		asm(vmLDI00); asm(*(Int*)rexpr);
-	} else {
-		asm(vmPUSH0);
-		compExpression(flags & ~TAILCALL);
-		asm(vmPOP1);
-		asm(vmSYSI); asm(compVerifyVectorRef);
-		/* Load object's integer value into register. */
-		asm(vmLDI20); asm(0l); /* This fails runtime type check */
-		asm(vmLD012);
-	}
-	DBEND();
-}
-
-void compVectorVectorRef (Num flags) {
-	DBBEG();
-	rexpr=cdr(rexpr);    /* Skip 'vector-vector-ref. */
-	vmPush(cadr(rexpr));  /* Save 1st index expressions. */
-	vmPush(car(rexpr));   /* Save vector expressions. */
-
-	rexpr=car(cddr(rexpr)); /* Compile 2nd expression. */
-	compExpression(flags & ~TAILCALL);
-	asm(vmPUSH0);
-
-	rexpr = vmPop();     /* Restore and compile vector expression. */
-	compExpression(flags & ~TAILCALL);
-	asm(vmPUSH0);
-
-	rexpr = vmPop();     /* Restore and compile 1st index expression. */
-	compExpression(flags & ~TAILCALL);
-
-	asmAsm (
-		vmPOP1,     /* Restore vector. */
-		vmSYSI, compVerifyVectorRef,
-		vmLDI20, 0l, /* Load 1st index object integer value into register. */
-		vmLD012,    /* Index the vector. */
-		vmMV10,     /* Move the sub-vector into r1. */
-		vmPOP0,     /* Restore 2nd index object. */
-		vmSYSI, compVerifyVectorRef,
-		vmLDI20, 0l, /* Load 2nd index object integer value into register. */
-		vmLD012,    /* Index the sub-vector. */
-		vmEND
-	);
-	DBEND();
-}
-
-void compVectorSetb (Num flags) {
-	DBBEG();
-	rexpr=cdr(rexpr); /* Skip 'vector-set!. */
-	vmPush(car(cddr(rexpr))); /* Save new-value expression. */
-	vmPush(cadr(rexpr));      /* Save index expression. */
-	/* Consider and compile Vector expression. */
-	rexpr = car(rexpr);
-	compExpression(flags & ~TAILCALL);
-	asm(vmPUSH0);           /* Save vector object. */
-	/* Pop and compile index expression. */
-	rexpr=vmPop();
-	compExpression(flags & ~TAILCALL);
-	asm(vmPUSH0);           /* Save offset object. */
-	/* Pop and compile new-value expression. */
-	rexpr=vmPop();
-	compExpression(flags & ~TAILCALL);
-	asmAsm (
-		vmPOP2,       /* Pop offset object. */
-		vmPOP1,       /* Pop vector object. */
-		vmSYSI, compVerifyVectorSetB,
-		vmLDI22, 0,   /* Load offset object's integer value into register. */
-		vmST012,      /* Store new-value object in vector. */
-		vmEND
-	);
-	DBEND();
-}
-
-void compVectorVectorSetb (Num flags) {
-	DBBEG();
-	rexpr=cdr(rexpr);        /* Skip 'vector-vector-set!. */
-	vmPush(cadr(cddr(rexpr)));/* Save new-value expression. */
-	vmPush(cadr(rexpr));      /* Save 1st index expression. */
-	vmPush(car(rexpr));       /* Save vector expression. */
-
-	rexpr = car(cddr(rexpr)); /* Consider and compile 2nd index expression. */
-	compExpression(flags & ~TAILCALL);
-	asm(vmPUSH0);           /* Save vector object. */
-
-	/* Pop and compile vector expression. */
-	rexpr=vmPop();
-	compExpression(flags & ~TAILCALL);
-	asm(vmPUSH0);           /* Save offset object. */
-
-	/* Pop and compile 1st index expression. */
-	rexpr=vmPop();
-	compExpression(flags & ~TAILCALL);
-
-	asmAsm (
-		vmPOP1,     /* Restore vector. */
-		vmSYSI, compVerifyVectorRef,
-		vmLDI20, 0l, /* Load 1st index object integer value into register. */
-		vmLD012,    /* Index the vetor. */
-		vmPUSH0,    /* Save sub-vector. */
-		vmEND
+		MVI, R1, r0, /* Load r1 with code just generated */
+		SYSI, sysNewClosure1Env /* Create closure from r1 and env (r1c) */
 	);
 
-	/* Pop and compile new-value expression. */
-	rexpr=vmPop();
-	compExpression(flags & ~TAILCALL);
-	asmAsm (
-		vmPOP1,       /* Pop vector object. */
-		vmPOP2,       /* Pop offset object. */
-		vmSYSI, compVerifyVectorSetB,
-		vmLDI22, 0l,   /* Load offset object's integer value into register. */
-		vmST012,      /* Store new-value object in vector. */
-		vmEND
-	);
-	DBEND();
-}
-
-void compCons (Num flags) {
-	DBBEG();
-	rexpr = cdr(rexpr);      /* skip 'cons. */
-	vmPush(cadr(rexpr));      /* Save cdr expression. */
-	rexpr = car(rexpr);      /* Compile car expression. */
-	compExpression(flags & ~TAILCALL);
-	asm(vmPUSH0);
-	rexpr = vmPop();          /* Restore and compile cdr expression. */
-	compExpression(flags & ~TAILCALL);
-	asmAsm (
-		vmPOP1,
-		vmMV20,
-		vmSYSI, objCons12,
-		vmEND
-	);
-	DBEND();
-}
-
-/* Parse the form (? *) placing * into r1
-   Return: 0 success  -1 error
-*/
-Int parseUnary (void) {
-	r0 = cdr(rexpr);
-	if (!objIsPair(r0)) return -1;
-	r1 = car(r0);
-	if (cdr(r0) != null) return -1;
-	return 0;
-}
-
-void compCar (Num flags) {
- Num opcodeStart;
-	DBBEG();
-	if (parseUnary()) {
-		CompError = 1;
-		objNewString((u8*)"ERROR: syntax error:", 20);  vmPush(r0);
-		vmPush(rexpr);
-		r1=(Obj)2;
-		goto ret;
-	}
-	vmPush(rexpr); /* Save expression. */
-	rexpr = r1;  /* Consider and compile expression parsed. */
-	compExpression(flags & ~TAILCALL);
-	rexpr = vmPop(); /* Restore expression. */
-	objNewString((Str)"RUNTIME ERROR:", 14);
-	opcodeStart = memStackLength(rasmstack);
-	asmAsm(
-		vmBRTI0, TPAIR, vmADDR, "car",
-		vmMVI0, r0,
-		vmPUSH0,
-		vmMVI0, rexpr,
-		vmPUSH0,
-		vmMVI1, 2l,
-		vmSYSI, compError,
-		vmLABEL, "car",
-		vmLDI00, 0l, /* Perform car. */
-		vmEND
-	);
-	asmCompileAsmstack(opcodeStart);
-ret:
-	DBEND();
-}
-
-void compCdr (Num flags) {
-	DBBEG();
-	if (!objIsPair(cdr(rexpr))) {
-		r0 = "ERROR: cdr illegal operand count: ";
-		CompError = 1;
-		goto ret;
-	}
-	rexpr = cadr(rexpr);      /* Consider and compile expression. */
-	compExpression(flags & ~TAILCALL);
-	asm(vmLDI00); asm(1);
-ret:
-	DBEND();
-}
-
-void compSetCarB (Num flags) {
-	DB("-->compSetCarB");
-	rexpr = cdr(rexpr); /* Skip set-car! symbol. */
-	if (rexpr == null) {
-		printf ("ERROR: set-car! illegal pair expression: ");
-		objDump (rexpr, stdout);
-		goto ret;
-	}
-	vmPush(car(rexpr)); /* Save pair expression. */
-	rexpr = cdr(rexpr);
-	if (rexpr == null) {
-		printf ("ERROR: set-car! illegal object expression: ");
-		objDump (rexpr, stdout);
-		goto ret;
-	}
-	rexpr = car(rexpr);/* Consider and compile object expression. */
-	compExpression(flags & ~TAILCALL);
-	asm(vmPUSH0);
-	rexpr = vmPop();
-	compExpression(flags & ~TAILCALL);
-	asm(vmPOP2);
-	asm(vmSTI20); asm(0l);
-ret:
-	DB("<--compSetCarB");
-}
-
-void compSetCdrB (Num flags) {
-	DB("-->compSetCdrB");
-	rexpr = cdr(rexpr); /* Skip set-cdr! symbol. */
-	if (rexpr == null) {
-		printf ("ERROR: set-cdr! illegal pair expression: ");
-		objDump (rexpr, stdout);
-		goto ret;
-	}
-	vmPush(car(rexpr)); /* Save pair expression. */
-	rexpr = cdr(rexpr);
-	if (rexpr == null) {
-		printf ("ERROR: set-cdr! illegal object expression: ");
-		objDump (rexpr, stdout);
-		goto ret;
-	}
-	rexpr = car(rexpr);/* Consider and compile object expression. */
-	compExpression(flags & ~TAILCALL);
-	asm(vmPUSH0);
-	rexpr = vmPop();
-	compExpression(flags & ~TAILCALL);
-	asm(vmPOP2);
-	asm(vmSTI20); asm(1l);
-ret:
-	DB("<--compSetCdrB");
-}
-
-void compProcedureP (Num flags) {
-	DBBEG();
-	if (!objIsPair(cdr(rexpr))) {
-		write (1, "ERROR: null? illegal operand count: ", 36);
-		objDump (rexpr, stdout);
-	}
-	rexpr = cadr(rexpr);      /* Consider and compile expression. */
-	compExpression(flags & ~TAILCALL);
-	asm(vmBRTI0); asm(TCLOSURE); asm(4*8l);
-	asm(vmMVI0); asm(false);
-	asm(vmBRA); asm(2*8l);
-	asm(vmMVI0); asm(true);
-	DBEND();
-}
-
-void compNullP (Num flags) {
-	DB("-->compNullP");
-	if (!objIsPair(cdr(rexpr))) {
-		write (1, "ERROR: null? illegal operand count: ", 36);
-		objDump (rexpr, stdout);
-	}
-	rexpr = cadr(rexpr);      /* Consider and compile expression. */
-	compExpression(flags & ~TAILCALL);
-	asm(vmBRTI0); asm(TNULL); asm(4*8l);
-	asm(vmMVI0); asm(false);
-	asm(vmBRA); asm(2*8l);
-	asm(vmMVI0); asm(true);
-	DB("<--compNullP");
-}
-
-void compPairP (Num flags) {
-	DB("-->compPairP");
-	if (!objIsPair(cdr(rexpr))) {
-		write (1, "ERROR: pair? illegal operand count: ", 36);
-		objDump (rexpr, stdout);
-		return;
-	}
-	rexpr = cadr(rexpr);      /* Consider and compile expression. */
-	compExpression(flags & ~TAILCALL);
-
-	asmAsm(
-		vmBRTI0, TPAIR, 4*8l,
-		vmMVI0, false,
-		vmBRA, 2*8l,
-		vmMVI0, true,
-		vmEND
-	);
-
-	DB("<--compPairP");
-}
-
-void compVectorP (Num flags) {
- Num opcodeStart;
-	DBBEG();
-	if (!objIsPair(cdr(rexpr))) {
-		write (1, "ERROR: vector? illegal operand count: ", 38);
-		objDump (rexpr, stdout);
-		return;
-	}
-	rexpr = cadr(rexpr);      /* Consider and compile expression. */
-	compExpression(flags & ~TAILCALL);
-
-	opcodeStart = memStackLength(rasmstack);
-	asmAsm (
-		vmBRTI0, TNULLVEC, vmADDR, "yes",
-		vmBRTI0, TVECTOR,  vmADDR, "yes",
-		vmMVI0, false,
-		vmBRA, vmADDR, "done",
-		vmLABEL, "yes", vmMVI0, true,
-		vmLABEL, "done",
-		vmEND
-	);
-	asmCompileAsmstack(opcodeStart);
-
-	DBEND();
-}
-
-void compStringP (Num flags) {
- Num opcodeStart;
-	DBBEG();
-	if (!objIsPair(cdr(rexpr))) {
-		write (1, "ERROR: string? illegal operand count: ", 38);
-		objDump (rexpr, stdout);
-		return;
-	}
-	rexpr = cadr(rexpr);      /* Consider and compile expression. */
-	compExpression(flags & ~TAILCALL);
-
-	opcodeStart = memStackLength(rasmstack);
-	asmAsm (
-		vmBRTI0, TSTRING, vmADDR, "yes",
-		vmBRTI0, TNULLSTR, vmADDR, "yes",
-		vmMVI0, false,
-		vmBRA, vmADDR, "done",
-		vmLABEL, "yes", vmMVI0, true,
-		vmLABEL, "done",
-		vmEND
-	);
-	asmCompileAsmstack(opcodeStart);
-
-	DBEND();
-}
-
-void compIntegerP (Num flags) {
- Num opcodeStart;
-	DBBEG();
-	if (!objIsPair(cdr(rexpr))) {
-		write (1, "ERROR: integer? illegal operand count: ", 38);
-		objDump (rexpr, stdout);
-		return;
-	}
-	rexpr = cadr(rexpr);      /* Consider and compile expression. */
-	compExpression(flags & ~TAILCALL);
-
-	opcodeStart = memStackLength(rasmstack);
-	asmAsm (
-		vmBRTI0, TINTEGER, vmADDR, "yes",
-		vmMVI0, false,
-		vmBRA, vmADDR, "done",
-	vmLABEL, "yes",
-		vmMVI0, true,
-	vmLABEL, "done",
-		vmEND
-	);
-	asmCompileAsmstack(opcodeStart);
-
-	DBEND();
-}
-
-void compSymbolP (Num flags) {
- Num opcodeStart;
-	DBBEG();
-	if (!objIsPair(cdr(rexpr))) {
-		fprintf (stderr, "ERROR: symbol? illegal operand count:");
-		objDump (rexpr, stderr);
-		return;
-	}
-	rexpr = cadr(rexpr); /* Consider and compile expression. */
-	compExpression(flags & ~TAILCALL);
-
-	opcodeStart = memStackLength(rasmstack);
-	asmAsm (
-		vmBRTI0, TSYMBOL, vmADDR, "yes",
-		vmMVI0, false,
-		vmBRA, vmADDR, "done",
-		vmLABEL, "yes", vmMVI0, true,
-		vmLABEL, "done",
-		vmEND
-	);
-	asmCompileAsmstack(opcodeStart);
-
-	DBEND();
-}
-
-void compPortP (Num flags) {
-	DBBEG();
-	if (!objIsPair(cdr(rexpr))) {
-		write (1, "ERROR: vector? illegal operand count: ", 38);
-		objDump (rexpr, stdout);
-		return;
-	}
-	rexpr = cadr(rexpr);      /* Consider and compile expression. */
-	compExpression(flags & ~TAILCALL);
-	asmAsm(
-		vmBRTI0, TPORT, 4*8l,
-		vmMVI0, false,
-		vmBRA, 2*8l,
-		vmMVI0, true,
-		vmEND
-	);
 	DBEND();
 }
 
 
-void compEOFObjectP (Num flags) {
- Num opcodeStart;
-	DBBEG();
-	if (!objIsPair(cdr(rexpr))) {
-		printf ("ERROR: eof-object? illegal operand count: ");
-		objDump (rexpr, stdout);
-		return;
-	}
-	rexpr = cadr(rexpr);      /* Consider and compile expression. */
-	compExpression(flags & ~TAILCALL);
-	opcodeStart = memStackLength(rasmstack);
-	asmAsm (
-		vmBRTI0, TEOF, vmADDR, "iseof",
-		vmMVI0, false,
-		vmBRA, vmADDR, "end",
-		vmLABEL, "iseof",
-		vmMVI0, true,
-		vmLABEL, "end",
-		vmEND
-	);
-	asmCompileAsmstack(opcodeStart);
-	DBEND();
-}
-
-void compBegin (Num flags) {
+void ccBegin (Num flags) {
 	DBBEG();
 	rexpr = cdr(rexpr); /* Skip symbol 'begin. */
 
 	if (rexpr == null) {
-		asmAsm(
-			vmMVI0, null,
-			vmEND
-		);
+		asmAsm( MVI, R0, null);
 	} else {
-		/* Compile non-tail expression. */
 		while (cdr(rexpr) != null) {
-			DB("   compBegin begin block non-tail expression.");
-			vmPush(cdr(rexpr)); /* Push reset of expression. */
-			rexpr = car(rexpr);
-			compExpression(flags & ~TAILCALL);
-			rexpr = vmPop();
+			DB("begin block's non-tail expression");
+			vmPush(cdr(rexpr)); /* Push rest of operands */
+			rexpr = car(rexpr); /* Consider next operand */
+			ccCompileExpr(flags & ~CCTAILCALL);
+			rexpr = vmPop(); /* Pop rest of expression */
 		}
-		/* Compile the tail expression. */
-		DB("   compBegin begin block tail expression.");
+		DB("begin block's tail expression");
 		rexpr = car(rexpr);
-		compExpression(flags);
+		ccCompileExpr(flags);
 	}
 	DBEND();
 }
 
-void compQuote (void) {
+
+void ccDefine (Num flags) {
 	DBBEG();
-	asmAsm (
-		vmMVI0, cadr(rexpr),
-		vmEND
-	);
+	if (flags & CCNODEFINES) {
+		//CompError = 1;
+		fprintf(stderr, "ERROR: compDefine(): Define not allowed here");
+		objDump(rexpr, stderr);
+	} else {
+		rexpr = cdr(rexpr); /* Skip 'define symbol. */
+
+		vmPush(renv);
+		renv = rtge;
+
+		/* If the expression is of the form ((...) body) transform. */
+		if (objIsPair(car(rexpr))) {
+			ccTransformDefineFunction();
+			rexpr = r0;
+		}
+
+		if (TSYMBOL == memObjectType(r1=car(rexpr))) {
+			/* Bind (if not already bound) the symbol and get its binding. */
+			sysTGEBind();
+			/* Emit code to set the binding's value. */
+			rexpr = cdr(rexpr);
+			if (objIsPair(rexpr)) {
+				vmPush(r0); /* Save binding. */
+				rexpr = car(rexpr); /* Consider this definition's expression and compile. */
+				ccCompileExpr((Num)flags & ~CCTAILCALL);
+				asmAsm(
+					MVI, R1, vmPop(), /* Load r1 with saved binding. */
+					STI, R0, R1, 0L);    /* Set binding's value. */
+			} else {
+				fprintf(stderr, "ERROR: compDefine(): Missing expression.");
+			}
+		} else  {
+			fprintf(stderr, "ERROR: compDefine(): Not a symbol:"); objDump(r1, stderr);
+		}
+
+		renv = vmPop();
+	}
 	DBEND();
 }
 
 
-void compAsmTailCall () {
-	/* Keep track of this opcode position for the compiling of the
-	   labels and branches. */
- Num opcodeStart = memStackLength(rasmstack);
+void ccNot (Num flags) {
+ Obj L1, L2;
 	DBBEG();
+	rexpr = cadr(rexpr);           /* Compile this expression */
+	ccCompileExpr(flags & ~CCTAILCALL);
+ 	L1 = asmNewLabel();
+ 	L2 = asmNewLabel();
 	asmAsm (
-		vmBRTI0,  TSYSCALL, vmADDR, "syscall",
-		vmBRTI0,  TCLOSURE, vmADDR, "code",
-		/* Illegal operator section.  For now just dump the arguments.
-		*/
-		vmSYSI, compIllegalOperator,
-		vmRET, /* Since tail call, return. */
-		/*  Reference the syscall address then make the system call.
-		*/
-		vmLABEL, "syscall",
-		vmLDI00, 0l,
-		vmSYS0,
-		vmRET, /* Since a tail call, return. */
+		BEQI, R0, false, L1,
+		MVI, R0, false,
+		BRA, L2,
+		LABEL, L1,
+		MVI, R0, true,
+		LABEL, L2
+	);
+	DBEND();
+}
+
+/* Compiles expressions of the form (or exp ...) into:
+		exp
+		branch if not false to end
+*/
+void ccOr (Num flags) {
+ Obj Lend;
+	DBBEG();
+	rexpr = cdr(rexpr); /* Skip 'or. */
+
+	/* Empty or expression returns #f. */
+	if (null == rexpr) {
+		asmAsm (MVI, R0, false);
+	} else {
+		Lend = asmNewLabel();
+		while (objIsPair(rexpr)) {
+			vmPush (cdr(rexpr)); /* Push rest. */
+			/* Is this the last expression?  If so it's tail optimized. */
+			if (!objIsPair(cdr(rexpr))) {
+				rexpr = car(rexpr); /* Consider next expression. */
+				ccCompileExpr(flags);
+			} else {
+				rexpr = car(rexpr); /* Consider next expression. */
+				ccCompileExpr(flags & ~CCTAILCALL);
+				asmAsm(BNTI, R0, TFALSE, Lend);
+			}
+			rexpr = vmPop();
+		}
+		asmAsm (LABEL, Lend);
+	}
+	DBEND();
+}
+
+/* Compiles expressions of the form (and exp ...) into:
+		exp
+		branch if false to end
+*/
+void ccAnd (Num flags) {
+ Obj Lend;
+	DBBEG();
+	rexpr = cdr(rexpr); /* Skip 'and. */
+
+	/* Empty or expression returns #t. */
+	if (null == rexpr) {
+		asmAsm (MVI, R0, true);
+	} else {
+		Lend = asmNewLabel();
+		while (objIsPair(rexpr)) {
+			vmPush (cdr(rexpr)); /* Push rest. */
+			/* Is this the last expression?  If so it's tail optimized. */
+			if (!objIsPair(cdr(rexpr))) {
+				rexpr = car(rexpr); /* Consider next expression. */
+				ccCompileExpr(flags);
+			} else {
+				rexpr = car(rexpr); /* Consider next expression. */
+				ccCompileExpr(flags & ~CCTAILCALL);
+				asmAsm(BRTI, R0, TFALSE, Lend);
+			}
+			rexpr = vmPop();
+		}
+		asmAsm (LABEL, Lend);
+	}
+	DBEND();
+}
+
+
+void ccAsmTailCall () {
+ Obj Lsyscall, Lclosure;
+	DBBEG();
+	Lsyscall = asmNewLabel();
+	Lclosure = asmNewLabel();
+	asmAsm (
+		BRTI, R0, TSYSCALL, Lsyscall,
+		BRTI, R0, TCLOSURE, Lclosure,
+		/* Illegal operator section.  For now just dump the arguments.  */
+		MVI, R0, "Illegal Operator Type",
+		SYSI, ccError,
+		RET, /* Since tail call, return. */
+		/*  Reference the syscall address then make the system call.  */
+	 LABEL, Lsyscall,
+		LDI, R0, R0, 0l,
+		SYS, R0,
+		RET, /* Since a tail call, return. */
 		/* Closure operator section.  Load jump address into r2.  R1 is
 		   argument count and r0 is the closure (which is needed as it
 		   holds the lexical environment).
 		*/
-		vmLABEL, "code",
-		vmLDI20, 0l,
-		vmJ2,
-		vmEND
+	 LABEL, Lclosure,
+		LDI, R2, R0, 0l,
+		JMP, R2
 	);
-	asmCompileAsmstack(opcodeStart);
 	DBEND();
 }
 
-void compAsmNonTailCall () {
-	/* Keep track of this opcode position for the compiling of the
-	   labels and branches. */
- Num opcodeStart = memStackLength(rasmstack);
+void ccAsmNonTailCall () {
+ Obj Lsyscall, Lclosure, Lend;
 	DBBEG();
+ 	Lsyscall = asmNewLabel();
+ 	Lclosure = asmNewLabel();
+ 	Lend = asmNewLabel();
 	asmAsm (
-		vmBRTI0,  TSYSCALL, vmADDR, "syscall",
-		vmBRTI0,  TCLOSURE, vmADDR, "closure",
+		BRTI, R0,  TSYSCALL, Lsyscall,
+		BRTI, R0,  TCLOSURE, Lclosure,
 		/* Illegal operator section.  For now just dump the arguments. */
-		vmSYSI, compIllegalOperator,
-		vmBRA,  vmADDR, "end",
+		MVI, R0, "Illegal Operator Type",
+		SYSI, ccError,
+	//	SYSI, ccIllegalOperator,
+		BRA,  Lend,
 		/* Syscall operator section.  Reference the syscall address, set the
 	   	operand count then make the system call.  */
-	vmLABEL, "syscall",
-		vmLDI00, 0l,
-		vmSYS0,
-		vmBRA,  vmADDR, "end",
-		/* Closure operator section.
-		*/
-	vmLABEL, "closure",
-		vmLDI20, 0l, /* load r2 with code and jump. */
-		vmJAL2,
-		/* End of block.
-		 */
-	vmLABEL, "end",
-		vmPOP19, /* Restores previous environment, ip and code registers. */
-		vmPOP1B,
-		vmPOP1A,
-		vmEND
+	LABEL, Lsyscall,
+		LDI, R0, R0, 0l,
+		SYS, R0,
+		BRA,  Lend,
+		/* Closure operator section.  */
+	LABEL, Lclosure,
+		LDI, R2, R0, 0l, /* load r2 with code and jump. */
+		JAL, R2,
+		/* End of block.  */
+	LABEL, Lend,
+		POP, R19, /* Restores previous environment, ip and code registers. */
+		POP, R1B,
+		POP, R1A
 	);
-	asmCompileAsmstack(opcodeStart);
 	DBEND();
 }
 
-
-/* Compiles expressions of the form (if test consequent alternate).
-*/
-void compIf (Num flags) {
- Num falseBraAddr, trueContAddr;
-	DBBEG();
-	rexpr = cdr(rexpr); /* Skip 'if symbol. */
-	vmPush (cddr(rexpr)); /* Push alternate expressions list.  Will be NULL or a list containing the alternate expression. */
-	vmPush (cadr(rexpr));  /* Push consequent expressions. */
-
-	/* Compile 'test' expression. */
-	DB("compiling test");
-	rexpr = car(rexpr);
-	compExpression(flags & ~TAILCALL);
-
-	/* The "branch on type" opcode.  Its immediate branch address field
-	   is kept track of and will be set with the proper offset below.  */
-	asm(vmBRTI0); asm(TFALSE); asm(0l);
-	falseBraAddr = memStackLength(rasmstack);
-
-	DB("compiling consequent");
-	rexpr = vmPop(); /* Compile consequent. */
-	compExpression(flags);
-
-	/* The "branch after true block" opcode.  Its immediate branch address field
-	   is kept track of and will be set with the proper offset below.  */
-	asm(vmBRA); asm(0l);
-	trueContAddr = memStackLength(rasmstack);
-
-	/* Fill in the "branch on false" field. */
-	DB("setting branch on false:%03x brt TFALSE %02x", falseBraAddr, (8*(trueContAddr-falseBraAddr)));
-	memVectorSet(rasmstack, falseBraAddr, (Obj)(8*(trueContAddr-falseBraAddr)));
-
-	/* Compile alternate.  Might not be specified in expression so just return (). */
-	DB("compiling alternate");
-	rexpr = vmPop();
-	if (rexpr == null) {
-		asm(vmMVI0); asm(null);
-	}
-	else {
-		rexpr = car(rexpr); /* Consider alternate expression. */
-		compExpression(flags);
-	}
-
-	/* Fill in the "branch after true block" field. */
-	DBBEG("setting branch after true:%03x bra %02x", trueContAddr, (8*(memStackLength(rasmstack)-trueContAddr)));
-	memVectorSet(rasmstack, trueContAddr,
-	                (Obj)(8 * (memStackLength(rasmstack) - trueContAddr) ));
-	DBEND();
-}
 
 /* Compiles expression of the form (if testExpr (consequentExpr {value of testExpr}) alternateExpr)
 */
-void compAIf (Num flags) {
- Num falseBraAddr, trueContAddr;
+void ccAIf (Num flags) {
+ Obj LfalseBraAddr, LtrueContAddr;
 	DBBEG();
 	rexpr = cdr(rexpr); /* Skip 'aif symbol. */
 	vmPush (cddr(rexpr)); /* Push alternate expressions list.  Will be NULL or a list containing the alternate expression. */
 	vmPush (cadr(rexpr));  /* Push consequent expressions. */
 
-	/* Compile 'test' expression. */
 	DB("compiling test");
 	rexpr = car(rexpr);
-	compExpression(flags & ~TAILCALL);
+	ccCompileExpr(flags & ~CCTAILCALL);
 
-	/* The "branch on type" opcode.  Its immediate branch address field
-	   is kept track of and will be set with the proper offset below.  */
-	asm(vmBRTI0); asm(TFALSE); asm(0l);
-	falseBraAddr = memStackLength(rasmstack);
-
-	/* Save execution state, possibly, since the following is the equivalent
-	   of compCombination */
-	if (!((Num)flags & TAILCALL)) {
-		asmAsm (
-			vmPUSH1A,
-			vmPUSH1B,
-			vmPUSH19,
-			vmEND
-		);
-	}
+	DB("compiling test logic");
+	LfalseBraAddr = asmNewLabel();
+	asmAsm (
+		BEQI, R0, false, LfalseBraAddr
+	);
 
 	DB("compiling consequent");
-	asm(vmPUSH0); /* Push result of test expression on the stack.  Becomes argument to consequent. */
+	/* Save execution state, possibly, since the following is the equivalent of ccCombination */
+	if (!((Num)flags & CCTAILCALL)) {
+		asmAsm (
+			PUSH, R1A,
+			PUSH, R1B,
+			PUSH, R19);
+	}
+
+	asmAsm(
+		PUSH, R0 /* Push result of test expression on the stack.  Becomes argument to consequent. */
+	);
+
 	rexpr = vmPop(); /* Compile consequent. */
-	compExpression(flags & ~TAILCALL);
+	ccCompileExpr(flags & ~CCTAILCALL);
 
-	asm(vmMVI1); asm(1l); /* Set the argument count to 1.  Argument already on the stack. */
+	asmAsm(
+		MVI, R1, 1l  /* Set the argument count to 1.  Argument already on the stack. */
+	);
 	
-	if ((Num)flags & TAILCALL) compAsmTailCall();
-	else compAsmNonTailCall();
+	if ((Num)flags & CCTAILCALL) ccAsmTailCall();
+	else ccAsmNonTailCall();
 
-	asm(vmBRA); asm(0l);
-	trueContAddr = memStackLength(rasmstack);
+	DB("compiling end of consequent and beginning of alternate");
+	LtrueContAddr = asmNewLabel();
+	asmAsm(
+		BRA, LtrueContAddr,
+	 LABEL, LfalseBraAddr
+	);
 
-	/* Fill in the "branch on false" field. */
-	DB("setting branch on false:%03x brt TFALSE %02x", falseBraAddr, (8*(trueContAddr-falseBraAddr)));
-	memVectorSet(rasmstack, falseBraAddr, (Obj)(8*(trueContAddr-falseBraAddr)));
-
-	/* Compile alternate.  Might not be specified in expression so just return #f. */
 	DB("compiling alternate");
 	rexpr = vmPop();
 	if (objIsPair(rexpr)) {
 		 /* Compile alternate expression. */
 		rexpr = car(rexpr);
-		compExpression(flags);
+		ccCompileExpr(flags);
 	} else {
-		/* reg 0 already #f from test condition */
+		/* No alternate expression so return #f which is in reg 0 from the test condition */
 	}
 
-	/* Fill in the "branch after true block" field. */
-	DB("setting branch after true:%03x bra %02x", trueContAddr, (8*(memStackLength(rasmstack)-trueContAddr)));
-	memVectorSet(rasmstack, trueContAddr,
-	                (Obj)(8 * (memStackLength(rasmstack) - trueContAddr) ));
+	asmAsm(
+	 LABEL, LtrueContAddr
+	);
 	DBEND();
 }
 
@@ -1402,7 +1095,7 @@ void compAIf (Num flags) {
                (<test>)
                (else      <expr> ...)
 */
-void compCond (Num flags) {
+void ccCond (Num flags) {
  Num clauses=0;
 	DBBEG();
 	rexpr = cdr(rexpr); /* Skip symbol 'cond */
@@ -1465,108 +1158,249 @@ void compCond (Num flags) {
 	DB ("compCond translated ");
 	DBE objDump(r0, stdout);
 	rexpr = r0;
-	compExpression(flags);
+	ccCompileExpr(flags);
 	DBEND();
 }
 
-/* Compiles expressions of the form (or exp ...) into:
-		exp
-		branch if not false to end
-*/
-void compOr (Num flags) {
- Num opcodeStart;
+void ccProcedureP (Num flags) {
+ Obj Lend, Ltrue;
 	DBBEG();
-	rexpr = cdr(rexpr); /* Skip 'or. */
-
-	/* Empty or expression returns #f. */
-	if (null == rexpr) {
-		asm (vmMVI0); asm(false);
-	} else {
-		opcodeStart = memStackLength(rasmstack);
-		while (objIsPair(rexpr)) {
-			vmPush (cdr(rexpr)); /* Push rest. */
-			/* Is this the last expression?  If so it's tail optimized. */
-			if (!objIsPair(cdr(rexpr))) {
-				rexpr = car(rexpr); /* Consider next expression. */
-				compExpression(flags);
-			} else {
-				rexpr = car(rexpr); /* Consider next expression. */
-				compExpression(flags & ~TAILCALL);
-				asmAsm (
-					vmBNTI0, TFALSE, vmADDR, "end",
-					vmEND
-				);
-			}
-			rexpr = vmPop();
-		}
-		asm (vmLABEL); asm ("end");
-		asmCompileAsmstack(opcodeStart);
+	if (!objIsPair(cdr(rexpr))) {
+		fprintf (stderr, "ERROR: (procedure?) illegal operand count: ");
+		objDump (rexpr, stdout);
 	}
-	DBEND();
-}
 
-/* Compiles expressions of the form (and exp ...) into:
-		exp
-		branch if false to end
-*/
-void compAnd (Num flags) {
- Num opcodeStart;
-	DBBEG();
-	rexpr = cdr(rexpr); /* Skip 'and. */
+	/* Consider and compile expression. */
+	rexpr = cadr(rexpr);
+	ccCompileExpr(flags & ~CCTAILCALL);
 
-	/* Empty or expression returns #t. */
-	if (null == rexpr) {
-		asm (vmMVI0); asm(true);
-	} else {
-		opcodeStart = memStackLength(rasmstack);
-		while (objIsPair(rexpr)) {
-			vmPush (cdr(rexpr)); /* Push rest. */
-			/* Is this the last expression?  If so it's tail optimized. */
-			if (!objIsPair(cdr(rexpr))) {
-				rexpr = car(rexpr); /* Consider next expression. */
-				compExpression(flags);
-			} else {
-				rexpr = car(rexpr); /* Consider next expression. */
-				compExpression(flags & ~TAILCALL);
-				asmAsm (
-					vmBRTI0, TFALSE, vmADDR, "end",
-					vmEND
-				);
-			}
-			rexpr = vmPop();
-		}
-		asm (vmLABEL); asm ("end");
-		asmCompileAsmstack(opcodeStart);
-	}
-	DBEND();
-}
-
-void compThread (void) {
-	DBBEG();
-
-	vmPush(rasmstack); /* Save code stack. */
-
-	/* Create new emit-code stack. */
-	rasmstack = memNewStack();
-
-	/* Compile parameter passed to thread emitting the unthread syscall
-	   as the last opcode. */
-	compBegin(0);
-	asm(vmSYSI); asm(osUnthread);
-	asmNewCode(); /* new code object returned in r0 */
-
-	rasmstack = vmPop(); /* Restore code stack. */
+	Lend = asmNewLabel();
+	Ltrue = asmNewLabel();
 
 	asmAsm(
-		vmMVI0, r0,
-		vmSYSI, osNewThread, /* the osNewThread syscall returns thread ID integer object */
-		vmEND);
+		BRTI, R0, TCLOSURE, Ltrue,
+		MVI, R0, false,
+		BRA, Lend,
+	 LABEL, Ltrue,
+		MVI, R0, true,
+	 LABEL, Lend);
 
-	DBEND("  => ");
-	DBE objDump(r0, stderr);
+	DBEND();
 }
 
-void compTransformLet (void) {
+
+void ccNullP (Num flags) {
+ Obj Lend, Ltrue;
+	DBBEG();
+	if (!objIsPair(cdr(rexpr))) {
+		fprintf (stderr, "ERROR: (null?) illegal operand count: ");
+		objDump (rexpr, stdout);
+	}
+
+	/* Consider and compile expression. */
+	rexpr = cadr(rexpr);
+	ccCompileExpr(flags & ~CCTAILCALL);
+
+	Lend = asmNewLabel();
+	Ltrue = asmNewLabel();
+
+	asmAsm(
+		BEQI, R0, null, Ltrue,
+		MVI, R0, false,
+		BRA, Lend,
+	 LABEL, Ltrue,
+		MVI, R0, true,
+	 LABEL, Lend);
+
+	DBEND();
+}
+
+void ccPairP (Num flags) {
+ Obj Lend, Ltrue;
+	DBBEG();
+	if (!objIsPair(cdr(rexpr))) {
+		fprintf (stderr, "ERROR: (pair?) illegal operand count: ");
+		objDump (rexpr, stdout);
+	}
+
+	/* Consider and compile expression. */
+	rexpr = cadr(rexpr);
+	ccCompileExpr(flags & ~CCTAILCALL);
+
+	Lend = asmNewLabel();
+	Ltrue = asmNewLabel();
+
+	asmAsm(
+		BRTI, R0, TPAIR, Ltrue,
+		MVI, R0, false,
+		BRA, Lend,
+	 LABEL, Ltrue,
+		MVI, R0, true,
+	 LABEL, Lend);
+
+	DBEND();
+}
+
+void ccVectorP (Num flags) {
+ Obj Lend, Ltrue;
+	DBBEG();
+	if (!objIsPair(cdr(rexpr))) {
+		fprintf (stderr, "ERROR: (vector?) illegal operand count: ");
+		objDump (rexpr, stdout);
+	}
+
+	/* Consider and compile expression. */
+	rexpr = cadr(rexpr);
+	ccCompileExpr(flags & ~CCTAILCALL);
+
+	Lend = asmNewLabel();
+	Ltrue = asmNewLabel();
+
+	asmAsm(
+		BRTI, R0, TVECTOR, Ltrue,
+		BRTI, R0, TNULLVEC, Ltrue,
+		MVI, R0, false,
+		BRA, Lend,
+	 LABEL, Ltrue,
+		MVI, R0, true,
+	 LABEL, Lend);
+
+	DBEND();
+}
+
+void ccStringP (Num flags) {
+ Obj Lend, Ltrue;
+	DBBEG();
+	if (!objIsPair(cdr(rexpr))) {
+		fprintf (stderr, "ERROR: (string?) illegal operand count: ");
+		objDump (rexpr, stdout);
+	}
+
+	/* Consider and compile expression. */
+	rexpr = cadr(rexpr);
+	ccCompileExpr(flags & ~CCTAILCALL);
+
+	Lend = asmNewLabel();
+	Ltrue = asmNewLabel();
+
+	asmAsm(
+		BRTI, R0, TSTRING, Ltrue,
+		BRTI, R0, TNULLSTR, Ltrue,
+		MVI, R0, false,
+		BRA, Lend,
+	 LABEL, Ltrue,
+		MVI, R0, true,
+	 LABEL, Lend);
+
+	DBEND();
+}
+
+void ccIntegerP (Num flags) {
+ Obj Lend, Ltrue;
+	DBBEG();
+	if (!objIsPair(cdr(rexpr))) {
+		fprintf (stderr, "ERROR: (integer?) illegal operand count: ");
+		objDump (rexpr, stdout);
+	}
+
+	/* Consider and compile expression. */
+	rexpr = cadr(rexpr);
+	ccCompileExpr(flags & ~CCTAILCALL);
+
+	Lend = asmNewLabel();
+	Ltrue = asmNewLabel();
+
+	asmAsm(
+		BRTI, R0, TINTEGER, Ltrue,
+		MVI, R0, false,
+		BRA, Lend,
+	 LABEL, Ltrue,
+		MVI, R0, true,
+	 LABEL, Lend);
+
+	DBEND();
+}
+
+void ccSymbolP (Num flags) {
+ Obj Lend, Ltrue;
+	DBBEG();
+	if (!objIsPair(cdr(rexpr))) {
+		fprintf (stderr, "ERROR: (integer?) illegal operand count: ");
+		objDump (rexpr, stdout);
+	}
+
+	/* Consider and compile expression. */
+	rexpr = cadr(rexpr);
+	ccCompileExpr(flags & ~CCTAILCALL);
+
+	Lend = asmNewLabel();
+	Ltrue = asmNewLabel();
+
+	asmAsm(
+		BRTI, R0, TSYMBOL, Ltrue,
+		MVI, R0, false,
+		BRA, Lend,
+	 LABEL, Ltrue,
+		MVI, R0, true,
+	 LABEL, Lend);
+
+	DBEND();
+}
+
+void ccPortP (Num flags) {
+ Obj Lend, Ltrue;
+	DBBEG();
+	if (!objIsPair(cdr(rexpr))) {
+		fprintf (stderr, "ERROR: (integer?) illegal operand count: ");
+		objDump (rexpr, stdout);
+	}
+
+	/* Consider and compile expression. */
+	rexpr = cadr(rexpr);
+	ccCompileExpr(flags & ~CCTAILCALL);
+
+	Lend = asmNewLabel();
+	Ltrue = asmNewLabel();
+
+	asmAsm(
+		BRTI, R0, TPORT, Ltrue,
+		MVI, R0, false,
+		BRA, Lend,
+	 LABEL, Ltrue,
+		MVI, R0, true,
+	 LABEL, Lend);
+
+	DBEND();
+}
+
+void ccEOFObjectP (Num flags) {
+ Obj Lend, Ltrue;
+	DBBEG();
+	if (!objIsPair(cdr(rexpr))) {
+		fprintf (stderr, "ERROR: (integer?) illegal operand count: ");
+		objDump (rexpr, stdout);
+	}
+
+	/* Consider and compile expression. */
+	rexpr = cadr(rexpr);
+	ccCompileExpr(flags & ~CCTAILCALL);
+
+	Lend = asmNewLabel();
+	Ltrue = asmNewLabel();
+
+	asmAsm(
+		BRTI, R0, TEOF, Ltrue,
+		MVI, R0, false,
+		BRA, Lend,
+	 LABEL, Ltrue,
+		MVI, R0, true,
+	 LABEL, Lend);
+
+	DBEND();
+}
+
+
+void ccTransformLet (void) {
  Num bindingLen, i;
 	DBBEG();
 	r4=car(rexpr);     /* Consider the let bindings. */
@@ -1617,7 +1451,7 @@ void compTransformLet (void) {
 	DBE objDump(rexpr, stdout);
 }
 
-void compTransformNamedLet (void) {
+void ccTransformNamedLet (void) {
  Num bindingLen, i;
 	DBBEG();
 	r3=car(rexpr);   /* Consider the named-let name symbol. */
@@ -1680,19 +1514,19 @@ void compTransformNamedLet (void) {
 	DBE objDump(rexpr, stdout);
 }
 
-void compLet (Num flags) {
+void ccLet (Num flags) {
 	DBBEG();
 	rexpr=cdr(rexpr); /* Skip 'let. */
 
 	/* Transform named-let form (let symbol ...). */
 	if (memObjectType(car(rexpr)) == TSYMBOL)
-		compTransformNamedLet();
+		ccTransformNamedLet();
 	/* Transform let form (let (...) ...). */
 	else
-		compTransformLet();
+		ccTransformLet();
 
 	/* Now compile the transformed form. */
-	compExpression(flags);
+	ccCompileExpr(flags);
 
 	DBEND();
 }
@@ -1701,7 +1535,7 @@ void compLet (Num flags) {
    (letrec ((v exp)...) body)  =>  (let ((v ())...) (set! v exp)... body)
    Why not:  ((lambda (v ...) (set! v exp) ... body) () ...)
 */
-void compTransformLetrec (void) {
+void ccTransformLetrec (void) {
  Num len;
 	DBBEG();
 	rexpr=cdr(rexpr); /* Skip letrec. */
@@ -1746,17 +1580,17 @@ void compTransformLetrec (void) {
 	DBE objDump(r0, stdout);
 }
 
-void compLetrec (Num flags) {
+void ccLetrec (Num flags) {
 	DBBEG();
-	compTransformLetrec();
+	ccTransformLetrec();
 	rexpr = r0;
-	compExpression(flags);
+	ccCompileExpr(flags);
 	DBEND();
 }
 
 /* Given <qq template> in rexpr, create cons tree in r0.
 */
-void compTransformQuasiquote (int depth) {
+void ccTransformQuasiquote (int depth) {
  int isUnquote, isQuasiquote;
 	DBBEG();
 	if (objIsPair(rexpr)) { /* Is this (unquote ...) */
@@ -1771,7 +1605,7 @@ void compTransformQuasiquote (int depth) {
 			/* ((unquote-splicing template) . b) */
 			vmPush(car(cdar(rexpr))); /* Save template */
 			rexpr=cdr(rexpr);  /* Consider b */
-			compTransformQuasiquote(depth); /* => b' */
+			ccTransformQuasiquote(depth); /* => b' */
 			/* (append template b') */
 			r1=r0;     r2=null;  objCons12(); /* => (b') */
 			r1=vmPop();  r2=r0;    objCons12(); /* => (template b') */
@@ -1779,10 +1613,10 @@ void compTransformQuasiquote (int depth) {
 		} else { /* Transform (a . b) => (cons a' b') */
 			vmPush(cdr(rexpr)); /* Save b */
 			rexpr=car(rexpr);  /* Consider a */
-			compTransformQuasiquote(depth); /* => a' */
+			ccTransformQuasiquote(depth); /* => a' */
 			rexpr=vmPop();      /* Restore b */
 			vmPush(r0);        /* Save a' */
-			compTransformQuasiquote(depth - isUnquote + isQuasiquote); /* => b' */
+			ccTransformQuasiquote(depth - isUnquote + isQuasiquote); /* => b' */
 			r1=r0;     r2=null;  objCons12(); /* => (b') */
 			r1=vmPop();  r2=r0;    objCons12(); /* => (a' b') */
 			r1=scons;  r2=r0;    objCons12(); /* => (cons a' b') */
@@ -1795,209 +1629,42 @@ void compTransformQuasiquote (int depth) {
 	DBEND();
 }
 
-void compQuasiquote (Num flags) {
+void ccQuasiquote (Num flags) {
 	DBBEG();
 	rexpr = cadr(rexpr); // Given (quasiquote <qq template>) pass <qq template>
-	compTransformQuasiquote(0);
+	ccTransformQuasiquote(0);
 	rexpr = r0;
 	DB("quasiquote transformation => ");
 	DBE objDump (rexpr, stderr);
-	compExpression(flags);
+	ccCompileExpr(flags);
 	DBEND();
 }
 
-/* Test code that for now emits a code block that peforms a compiled tree
-   structure walk.  It'll print the compiled tree nodes along with the
-   corresponding passed tree nodes.  Not sure where I was going with this.
-   IE ((syntax-rules (x y z)) '(1 (2 3) 4)) => x1y(2 3)z4
-*/
-void compSyntaxRulesHelper (void) {
-	DBBEG();
-	if (objIsPair(rexpr)) {
-		/* R2 contains the expression to be transformed.  */
-		DB("   Considering:");
-		DBE objDump(rexpr, stderr);
-		vmPush(cdr(rexpr));
-		asm(vmLDI02); asm(1l);
-		asm(vmPUSH0);
-		rexpr = car(rexpr);
-		asm(vmLDI22); asm(0l);
-		compSyntaxRulesHelper();
-		rexpr=vmPop();
-		asm(vmPOP2);
-		compSyntaxRulesHelper();
-	} else if (rexpr == null) {
-	} else {
-		asm(vmMVI0); asm(rexpr);
-		asm(vmPUSH0);
-		asm(vmMVI1); asm(1l);
-		asm(vmSYSI); asm(compWrite);
-		asm(vmPUSH2);
-		asm(vmMVI1); asm(1l);
-		asm(vmSYSI); asm(compWrite);
-	}
-	DBEND();
-}
 
-/* Experimenal code.  Not sure if is very useful now.
-*/
-void compSyntaxRules (void) {
+void ccQuote (void) {
 	DBBEG();
-	DBE objDump (rexpr, stderr);
-	rexpr = cadr(rexpr);
-	/* Create new code block. */
-	vmPush(rasmstack);
-	r0=memNewStack();
-	rasmstack=r0;
-	asm(vmPOP2);
-	compSyntaxRulesHelper();
-	asm(vmRET);
-	asmNewCode(); /* Transfer code stack to fixed size code vector. */
-	DBE objDump(r0, stdout);
-	/* Restore code block. */
-	rasmstack=vmPop();
-	asm(vmMVI1); asm(r0); /* Load r1 with code. */
-	asm(vmSYSI); asm(sysNewClosure1Env); /* Create closure from r1 and env (r1c) */
-	DBEND();
-}
-
-void compNot (Num flags) {
- Num opcodeStart;
-	DBBEG();
-	rexpr = cadr(rexpr);           /* Compile this expression */
-	compExpression(flags & ~TAILCALL);
-	opcodeStart = memStackLength(rasmstack);
 	asmAsm (
-		vmBRTI0, TFALSE, vmADDR, "false",
-		vmMVI0, false,
-		vmBRA, vmADDR, "done",
-		vmLABEL, "false", vmMVI0, true,
-		vmLABEL, "done",
-		vmEND
-	);
-	asmCompileAsmstack(opcodeStart);
+		MVI, R0,
+		 cadr(rexpr));
 	DBEND();
 }
-
-/* R1A/asmstack is the stack opcodes ae pushed onto.
-  R18/expr is the expression list who's element values needs to be added together.
-*/
-void compAdd (Num flags) {
- Int sum=0;
-	DBBEG();
-	rexpr=cdr(rexpr); /* Skip '+. */
-	vmPush(rexpr); /* Save parameter list. */
-	/* Constant folding:  Scan parameter list for constants and asm a single
-	   opcode that stores their sum. */
-	while (objIsPair(rexpr)) {
-		if (TINTEGER == memObjectType(car(rexpr)))
-			sum+=*(Int*)car(rexpr);
-		rexpr=cdr(rexpr);
-	}
-DB("   compAdd constant folding:%d", sum);
-	objNewInt(sum);
-	asmAsm (
-		vmMVI1, r0,
-		vmSYSI, objCopyInteger, /* A copy because atom is mutated. */
-		vmMV10,
-		vmEND
-	);
-	rexpr=vmPop(); /* Restore parameter list. */
-	/* Scan parameter list for non-constant expressions to compile. */
-	while (objIsPair(rexpr)) {
-		if (TINTEGER != memObjectType(car(rexpr))) {
-			asm(vmPUSH1); /* Save accumulating sum. */
-			vmPush(rexpr);                /* Save parameter list */
-			rexpr = car(rexpr);           /* Compile this expression */
-			compExpression(flags & ~TAILCALL);
-			rexpr = vmPop();              /* Restore parameter list */
-			asm(vmPOP1); /* Restore accumulating sum. */
-			asm(vmADD10); /* Add result of last expression to sum. */
-		}
-		rexpr = cdr(rexpr);
-	}
-	asm(vmMV01);
-	DBEND();
-}
-
-
-void compCombination (Num flags) {
- Int operandCount=0;
-	DBBEG();
-	DBE memDebugDumpObject(rexpr, stdout);
-
-	/* Make sure we push/pop the jump and linked code/ip registers at the start
-	   and just before the last expression.  This must be done before arguments
-	   are pushed onto the stack.  Bummer.
-	BF This might actually not work.  Branches to deleted opcodes are occuring.
-	if (!((unsigned)flags & TAILCALL)) {
-		if (memStackObject(rasmstack, 0) == POP1A) {
-			memStackPop(rasmstack); memStackPop(rasmstack); memStackPop(rasmstack);
-		} else {
-			asm(PUSH1A); asm(PUSH1B); asm(PUSH4);
-		}
-	}
-	*/
-	if (!((Num)flags & TAILCALL)) {
-		asmAsm (
-			vmPUSH1A,
-			vmPUSH1B,
-			vmPUSH19,
-			vmEND
-		);
-	}
-
-	vmPush(car(rexpr)); /* Save operator parameter. */
-
-	/* Compile operand expressions. */
-	rexpr = cdr(rexpr);
-	while (objIsPair(rexpr)) {
-		operandCount++;
-		vmPush(cdr(rexpr));
-		rexpr = car(rexpr);
-		compExpression(flags & ~TAILCALL);
-		if (CompError) goto ret;
-		asm(vmPUSH0);
-		rexpr = vmPop();
-	}
-
-	/* Restore and compile operator expression. */
-	rexpr=vmPop();
-	compExpression(flags & ~TAILCALL);
-	if (CompError) goto ret;
-
-	/* Need to asm code that handles operators of type syscall, closure,
-	   continuation and the like.  For now it just assumes a syscall.  Perhaps
-	   a special syscall that handles this all in C for now?
-	   Emit code to check the object type and either SYS the TSYSCALL type
-	   or JAL the TCODE type.  */
-	/* Emit code to that applys args to function/code tail optimized or not. */
-	asm (vmMVI1);  asm(operandCount);
-	if ((unsigned)flags & TAILCALL) compAsmTailCall();
-	else compAsmNonTailCall();
-	
-ret:
-	DBEND();
-}
-
 
 
 /* Compile the form (apply fn argument-list).  This should be similar to
    a combination expression. */
-void compApply (Num flags) {
- Num opcodeStart, operandCount=0;
+void ccApply (Num flags) {
+ Num operandCount=0;
+ Obj Largcount, Largcountdone;
 	DBBEG();
 
 	rexpr = cdr(rexpr); /* Skip over 'apply symbol */
 
 	/* Is this a tail call?  if not save state. */
-	if (!((Num)flags & TAILCALL)) {
+	if (!((Num)flags & CCTAILCALL)) {
 		asmAsm (
-			vmPUSH1A,
-			vmPUSH1B,
-			vmPUSH19,
-			vmEND
-		);
+			PUSH, R1A,
+			PUSH, R1B,
+			PUSH, R19);
 	}
 
 	vmPush(car(rexpr)); /* Save operator parameter. */
@@ -2008,38 +1675,37 @@ void compApply (Num flags) {
 	while (objIsPair(rexpr)) {
 		vmPush (cdr(rexpr)); /* Push rest */
 		rexpr = car(rexpr); /* Consider expression  */
-		compExpression(flags & ~TAILCALL);
-		asm(vmPUSH0);
+		ccCompileExpr(flags & ~CCTAILCALL);
+		asmAsm(PUSH, R0);
 		operandCount++;
 		rexpr = vmPop();
 	}
 
 	/* Restore and compile operator expression. */
 	rexpr=vmPop();
-	compExpression(flags & ~TAILCALL);
-	asm(vmMV30); /* Save operator in r3 */
+	ccCompileExpr(flags & ~CCTAILCALL);
+	asmAsm(MV, R3, R0); /* Save operator in r3 */
 
 	/* At this point stack has the arguments, the argument-list and r3 has function.
 	   Want to transfers the argument-list items from list to the stack with r1 ending up
 	   with the argument count.  Initially the argument count is the number of initial
 	   non-list arguments to apply.
 	*/
-	opcodeStart = memStackLength(rasmstack);
+	Largcount = asmNewLabel();
+	Largcountdone = asmNewLabel();
 	asmAsm (
-		vmMVI1, operandCount-1, /* Initialize operand count in r1 to number of initial arguments to apply. */
-		vmPOP0,    /* Pop argument-list. */
-		vmLABEL, "argcount",
-		vmBRTI0, TNULL, vmADDR, "argcountdone",
-		vmADDI1, 1l, /* Inc argument count in r1. */
-		vmLDI20, 0l, /* Push the car. */
-		vmPUSH2,
-		vmLDI00, 1l, /* Consider cdr. */
-		vmBRA, vmADDR, "argcount",
-		vmLABEL, "argcountdone",
-		vmMV03,     /* Operator back to r0 */
-		vmEND
+		MVI, R1, (Obj)(operandCount-1), /* Initialize operand count in r1 to number of initial arguments to apply. */
+		POP, R0,    /* Pop argument-list. */
+	 LABEL, Largcount,
+		BRTI, R0, TNULL, Largcountdone,
+		ADDI, R1, 1l, /* Inc argument count in r1. */
+		LDI, R2, R0, 0l, /* Push the car. */
+		PUSH, R2,
+		LDI, R0, R0, 1l, /* Consider cdr. */
+		BRA, Largcount,
+	 LABEL, Largcountdone,
+		MV, R0, R3     /* Operator back to r0 */
 	);
-	asmCompileAsmstack(opcodeStart);
 
 	/* Need to asm code that handles operators of type syscall, closure,
 	   continuation and the like.  For now it just assumes a syscall.  Perhaps
@@ -2048,16 +1714,104 @@ void compApply (Num flags) {
 	   or JAL the TCODE type.  */
 	/* Emit code to that applys args to function/code tail optimized or not. */
 
-	if ((unsigned)flags & TAILCALL) compAsmTailCall();
-	else compAsmNonTailCall();
+	if ((unsigned)flags & CCTAILCALL) ccAsmTailCall();
+	else ccAsmNonTailCall();
+
+	DBEND();
+}
+
+/* Compiles s-expression in r0 into code block in r0.  Probably messes up
+   a bunch of registers.
+	TODO: does this mangle r19/1a/1b retenv/retip/retcode?
+*/
+void ccSysCompile (void) {
+	DBBEG();
+
+	vmPush(renv); /* Save env vars */
+	vmPush(rcode);
+
+	//CompError = 0;
+	//asmAsm (BRA, 8, rexpr); /* Keep track of original expression for debugging. */
+	rexpr = r0;
+	asmInit();
+	ccCompileExpr(0);
+	//if (CompError)
+	//{
+	//	r0 = "compSysCompile: ccCompileExpr failed";
+	//	compError();
+	//	goto ret;
+	//}
+	asmAsm(RET);
+
+	asmAsmIGraph();
+	//r0 = rcode; /* Move new code block to r0 */
+
+	rcode = vmPop(); /* Restore env vars */
+	renv = vmPop();
+
+	DBE vmDebugDumpCode(r0, stderr); // Dump the code block after compiling code during runtime.
+	DBEND("  =>  ");
+	DBE objDump (r0, stderr);
+}
+
+void ccEval (Num flags) {
+	DBBEG();
+	rexpr = cadr(rexpr);
+	ccCompileExpr(flags & ~CCTAILCALL);
+	asmAsm(SYSI, (Obj)ccSysCompile);
+	if (flags & CCTAILCALL) {
+		asmAsm(JMP, R0);
+	} else {
+		asmAsm(
+			PUSH, R1A,
+			PUSH, R1B,
+			PUSH, R19,
+			JAL, R0,
+			POP, R19,
+			POP, R1B,
+			POP, R1A);
+	}
+	DBEND();
+}
+
+void ccMacro (Num flags) {
+	DBBEG();
+
+	asmStart();
+
+	/* Transform (macro ... ...) => (lambda .. ...) assigned to r0 */
+	r1=slambda;  r2 = cdr(rexpr);  objCons12();
+
+	asmAsm(
+		PUSH, R1,
+		MVI, R0, r0,
+		SYSI, ccSysCompile,
+		PUSH, R1A, PUSH, R1B, PUSH, R19,
+		JAL, R0,
+		POP, R19, POP, R1B, POP, R1A,
+		LDI, R2, R0, 0l, /* load r2 with code block and call it.  it will return a closure.  */
+		POP, R1,
+		JMP, R2);
+
+	asmAsmIGraph();
+	//r0 = rcode; /* Move new code block to r0 */
+
+	/* Generate code that generates a closure.  Closure returned in r0 created
+	   from r1 (code) and r1c (current environment). */
+	asmAsm(
+		MVI, R1, r0, /* Load r1 with code block just compiled. */
+		SYSI, sysNewClosure1Env, /* Create closure from r1 and env (r1c) */
+		MVI, R2, null, /* Replace stored lexical environment with null so dynamic environment is used when applied */
+		STI, R2, R0, 1l);
 
 	DBEND();
 }
 
 /* Stored stack expected in r3.
 */
-void compReinstateContinuation (void) {
+void ccSysReinstateContinuation (void) {
  Num length;
+	DBBEG();
 
 	if ((Int)r1==1) r0=vmPop();
 	else {
@@ -2076,9 +1830,12 @@ void compReinstateContinuation (void) {
 	rretip = vmPop();
 	renv = vmPop();
 	rretenv = vmPop();
+	r1 = (Obj)1l; /* Let contnuation code know this is a call to the continuation */
+
+	DBEND();
 }
 
-void compCreateContinuation (void) {
+void ccSysCreateContinuation (void) {
  Num length;
 	DBBEG();
 	vmPush(rretenv);
@@ -2091,26 +1848,25 @@ void compCreateContinuation (void) {
 	objNewVector(length);
 	memcpy(r0, rstack+ObjSize, length*ObjSize);
 	vmPop(); vmPop(); vmPop(); vmPop(); vmPop(); vmPop();
-	r1=r0;
-	/* r1 now has a copy of the stack */
 
-	/* Create a function that will reinstate this stack at runtime. */
-	vmPush(rasmstack);
-	r0=memNewStack();
-	rasmstack=r0;
+	/* Need to protect register rcode/r1e since we are creating
+	   a new code block at runtime. [TODO asmAsmIGraph should not clobber rcode] */
+	vmPush(rcode);
+
+	asmStart();
 	asmAsm(
-		vmMVI3, r1,  /* Stored copy of stack in r3. */
-		vmSYSI, compReinstateContinuation,
-		vmEND
-	);
-	asmNewCode();  r1=r0;
+		MVI, R3, r0,  /* Copy of stack moved to r3 at runtime */
+		SYSI, (Obj)ccSysReinstateContinuation);
+	asmAsmIGraph();
+	r1 = r0; /* Move new code block to r0 */
+
+	rcode = vmPop();
+
 	sysNewClosure1Env();
 	memVectorSet(r0, 1, rtge); /* Set to TGE just in case. */
-	rasmstack = vmPop();
 
-	/* Skip the "continuation" jump in the code just after this syscall
-	   in the compiled code.  See compCallcc() */
-	rip += 2;
+	r1 = 0l; /* Let continuation code know this is a call to capture the continuation and to pass it to fn argument  */
+
 	DBEND();
 }
 
@@ -2125,165 +1881,293 @@ void compCreateContinuation (void) {
    Emit code that calls the function with the continuation.  This might
    be in a tail context.
 */
-void compCallcc (Num flags) {
- Num opcodeStart;
+void ccDumpHeapHeaders (void) {
+	memDebugDumpHeapHeaders(stderr);
+}
+void ccCallcc (Num flags) {
+ Obj Lcontinuationcall;
 	DBBEG();
 	rexpr = cdr(rexpr); /* Skip over 'call/cc symbol in (call/cc fn)*/
 
-	opcodeStart = memStackLength(rasmstack);
+	Lcontinuationcall = asmNewLabel();
+
 	asmAsm(
-		vmSYSI, compCreateContinuation,
-		vmBRA, vmADDR, "continuationcall",
-		vmEND
+		SYSI, ccSysCreateContinuation,
+		BEQI, R1, 1l, Lcontinuationcall
 	);
 
 	/* Is this a tail call?  if not save state. */
-	if (!((Num)flags & TAILCALL))
+	if (!((Num)flags & CCTAILCALL))
 		asmAsm (
-			vmPUSH1A,
-			vmPUSH1B,
-			vmPUSH19,
-			vmEND
-		);
+			PUSH, R1A,
+			PUSH, R1B,
+			PUSH, R19);
 
-	asm(vmPUSH0); /* Push the continuation just create. */
-
-	rexpr = car(rexpr); /* Consider and compile fn. */
-	compExpression(flags & ~TAILCALL);
-
-	asm (vmMVI1);  asm(1);
-	if ((unsigned)flags & TAILCALL) compAsmTailCall();
-	else compAsmNonTailCall();
-
-	asmAsm(vmLABEL, "continuationcall", vmEND);
-	asmCompileAsmstack(opcodeStart);
-
-	DBEND();
-}
-
-
-
-/* Compile expression.
-   expr (r15) -> Expression to compile.
-   asmstack (r16) -> Stack the emitted opcodes are pushed onto.
-   env (r1c) -> Pseudo environment
-	An expression is either a symbol, syntax, combination or self evaluating.
-*/
-Num compExpression (Num flags) {
-	DBBEG();
-	DBE memDebugDumpObject(rexpr, stdout);
-	switch (memObjectType(rexpr)) {
-		case TSYMBOL :
-			compVariableReference(flags);
-			break;
-		case TPAIR :
-			if      (srem       == car(rexpr)) compRem(flags);
-			else if (sdefine    == car(rexpr)) compDefine(flags);
-			else if (ssetb      == car(rexpr)) compSetb(flags);
-			else if (slambda    == car(rexpr)) compLambda(flags);
-			else if (smacro     == car(rexpr)) compMacro(flags);
-			else if (snot       == car(rexpr)) compNot(flags);
-			else if (sadd       == car(rexpr)) compAdd(flags);
-			else if (svectorref == car(rexpr)) compVectorRef(flags);
-			else if (svectorvectorref == car(rexpr)) compVectorVectorRef(flags);
-			else if (svectorsetb== car(rexpr)) compVectorSetb(flags);
-			else if (svectorvectorsetb== car(rexpr)) compVectorVectorSetb(flags);
-			else if (scons      == car(rexpr)) compCons(flags);
-			else if (scar       == car(rexpr)) compCar(flags);
-			else if (scdr       == car(rexpr)) compCdr(flags);
-			else if (ssetcarb   == car(rexpr)) compSetCarB(flags);
-			else if (ssetcdrb   == car(rexpr)) compSetCdrB(flags);
-			else if (sprocedurep== car(rexpr)) compProcedureP(flags);
-			else if (snullp     == car(rexpr)) compNullP(flags);
-			else if (spairp     == car(rexpr)) compPairP(flags);
-			else if (svectorp   == car(rexpr)) compVectorP(flags);
-			else if (sstringp   == car(rexpr)) compStringP(flags);
-			else if (sintegerp  == car(rexpr)) compIntegerP(flags);
-			else if (ssymbolp   == car(rexpr)) compSymbolP(flags);
-			else if (sportp     == car(rexpr)) compPortP(flags);
-			else if (seofobjectp== car(rexpr)) compEOFObjectP(flags);
-			else if (sbegin     == car(rexpr)) compBegin(flags);
-			else if (squote     == car(rexpr)) compQuote();
-			else if (sif        == car(rexpr)) compIf(flags);
-			else if (saif       == car(rexpr)) compAIf(flags);
-			else if (scond      == car(rexpr)) compCond(flags);
-			else if (sor        == car(rexpr)) compOr(flags);
-			else if (sand       == car(rexpr)) compAnd(flags);
-			else if (sthread    == car(rexpr)) compThread();
-			else if (slet       == car(rexpr)) compLet(flags);
-			else if (sletrec    == car(rexpr)) compLetrec(flags);
-			else if (squasiquote== car(rexpr)) compQuasiquote(flags);
-			else if (ssyntaxrules== car(rexpr)) compSyntaxRules();
-			else if (seval      == car(rexpr)) compEval(flags);
-			else if (sapply     == car(rexpr)) compApply(flags);
-			else if (scallcc    == car(rexpr)) compCallcc(flags);
-			else compCombination(flags);
-			break;
-		default:
-			compSelfEvaluating();
-			break;
-	}
-	DBEND();
-	return CompError;
-}
-
-
-/* Compile expression.
-   r15 -> Expression we're compiling.
-   r0  <- Resuling code object (vector of VM opcodes).
-*/
-Num compCompile (void) {
- Num ret;
-	DBBEG();
-
-	CompError = 0; /* Clear error flag. */
-
-	/* Force evaluation in the global environment */
-	/* renv = rtge; */
-
-   /* Start emitting code.  Keep track of original expression for debugging. */
-	asmAsm (
-		vmBRA, 8l,
-		rexpr,
-		vmEND
+	asmAsm(
+		/* Push the continuation just create via ccSysCreateContinuation.  This is the argument to the function */
+		PUSH, R0
 	);
 
-	ret = compExpression(0);  /* No compiler flags */
+	rexpr = car(rexpr); /* Consider and compile fn. */
+	ccCompileExpr(flags & ~CCTAILCALL);
 
-   /* Emit the QUIT opcode which exits the VM. */
-	asm(vmQUIT);
-	asmNewCode();
+	/* Setup application to fn */
+	asmAsm(
+		MVI, R1, 1l
+	);
+
+	if ((unsigned)flags & CCTAILCALL) ccAsmTailCall();
+	else ccAsmNonTailCall();
+
+	asmAsm(
+		LABEL, Lcontinuationcall
+	);
 
 	DBEND();
-	return ret;
 }
 
-void compInitialize (void) {
+
+void osUnthread (void); /* Refactor this call or ccThread */
+void osNewThread (void); /* Refactor this call or ccThread */
+
+void ccThread (void) {
+	DBBEG();
+
+	asmStart(); /* Enter a new assembly context */
+
+	/* Compile parameters passed to thread as a begin block emitting the unthread syscall as the last opcode. */
+	ccBegin(0);
+
+	asmAsm(
+		SYSI, osUnthread
+	);
+	asmAsmIGraph();
+
+	asmAsm(
+		MVI, R0, r0,
+		SYSI, osNewThread /* the osNewThread syscall returns thread ID integer object */
+	);
+
+	DBEND("  => ");
+	DBE objDump(r0, stderr);
+}
+
+
+
+void ccCombination (Num flags) {
+ Int operandCount=0;
+	DBBEG();
+
+	if (!((Num)flags & CCTAILCALL)) {
+		asmAsm (
+			PUSH, R1A, // ip
+			PUSH, R1B, // code
+			PUSH, R19  // env
+		);
+	}
+
+	vmPush(car(rexpr)); /* Save expression's operator parameter */
+
+	/* Compile operand expressions. */
+	rexpr = cdr(rexpr);
+	while (objIsPair(rexpr)) {
+		operandCount++;
+		vmPush(cdr(rexpr));
+		rexpr = car(rexpr);
+		ccCompileExpr(flags & ~CCTAILCALL);
+		//if (CompError) goto ret;
+		asmAsm(PUSH, R0);
+		rexpr = vmPop();
+	}
+
+	/* Restore and compile operator expression. */
+	rexpr = vmPop();
+	ccCompileExpr(flags & ~CCTAILCALL);
+	//if (CompError) goto ret;
+
+	/* Emit code that applys args to function/code (hopefully) */
+	asmAsm (MVI, R1, operandCount);
+	if (flags & CCTAILCALL)
+		ccAsmTailCall();
+	else
+		ccAsmNonTailCall();
+
+	DBEND();
+}
+
+
+void ccSelfEvaluating (Num flags) {
+	DBBEG();
+	asmAsm(MVI, R0, rexpr);
+	DBEND();
+}
+
+
+/* Recursive scheme expression compiler.  Translates an expression in
+   expr/r15 onto the end of the igraph in igraph/rf.
+*/
+void ccCompileExpr (Num flags) {
+	DBBEG();
+	DBE sysDisplay(rexpr, stderr);
+
+	switch (memObjectType(rexpr)) {
+		case TSYMBOL: ccSymbol(flags); break;
+		case TPAIR  : if      (ssetb      == car(rexpr)) ccSetB(flags);
+			           else if (sif        == car(rexpr)) ccIf(flags);
+			           else if (scons      == car(rexpr)) ccCons(flags);
+			           else if (scar       == car(rexpr)) ccCar(flags);
+			           else if (scdr       == car(rexpr)) ccCdr(flags);
+			           else if (ssetcarb   == car(rexpr)) ccSetCarB(flags);
+			           else if (ssetcdrb   == car(rexpr)) ccSetCdrB(flags);
+			           else if (svectorref == car(rexpr)) ccVectorRef(flags);
+			           else if (svectorsetb== car(rexpr)) ccVectorSetB(flags);
+			           else if (slambda    == car(rexpr)) ccLambda(flags);
+			           else if (sbegin     == car(rexpr)) ccBegin(flags);
+			           else if (sdefine    == car(rexpr)) ccDefine(flags);
+			           else if (snot       == car(rexpr)) ccNot(flags);
+			           else if (sor        == car(rexpr)) ccOr(flags);
+			           else if (sand       == car(rexpr)) ccAnd(flags);
+			           else if (saif       == car(rexpr)) ccAIf(flags);
+			           else if (scond      == car(rexpr)) ccCond(flags);
+			           else if (sprocedurep== car(rexpr)) ccProcedureP(flags);
+			           else if (snullp     == car(rexpr)) ccNullP(flags);
+			           else if (spairp     == car(rexpr)) ccPairP(flags);
+			           else if (svectorp   == car(rexpr)) ccVectorP(flags);
+			           else if (sstringp   == car(rexpr)) ccStringP(flags);
+			           else if (sintegerp  == car(rexpr)) ccIntegerP(flags);
+			           else if (ssymbolp   == car(rexpr)) ccSymbolP(flags);
+			           else if (sportp     == car(rexpr)) ccPortP(flags);
+			           else if (seofobjectp== car(rexpr)) ccEOFObjectP(flags);
+			           else if (slet       == car(rexpr)) ccLet(flags);
+			           else if (sletrec    == car(rexpr)) ccLetrec(flags);
+			           else if (squasiquote== car(rexpr)) ccQuasiquote(flags);
+			           else if (squote     == car(rexpr)) ccQuote();
+			           else if (sapply     == car(rexpr)) ccApply(flags);
+			           else if (seval      == car(rexpr)) ccEval(flags);
+			           else if (smacro     == car(rexpr)) ccMacro(flags);
+			           else if (scallcc    == car(rexpr)) ccCallcc(flags);
+			           else if (sthread    == car(rexpr)) ccThread();
+			           else if (srem       == car(rexpr)) ;
+			           else ccCombination(flags);
+			           break;
+		default     : ccSelfEvaluating(flags);
+	}
+
+	DBEND();
+}
+
+
+
+/* Compiles the expression in r0 expr/r15 into an intermediate graph then
+   asembles the igraph into a VM code object.
+           r0 <= scheme expression to compile
+      rexpr/rf = temp
+  rcodenew/r11 = temp
+            r0 => VM code block
+*/
+void ccCompile (void) {
+	DBBEG();
+
+	rexpr = r0;
+
+	asmInit();
+	ccCompileExpr(0);
+	/* Finalize the last iblock with the 'ret' opcode */
+	asmAsm(RET);
+	asmAsmIGraph();
+//ccDumpIBlocks();
+
+	DBE vmDebugDumpCode(r0, stderr);
+	DBEND();
+}
+
+
+
+/*******************************************************************************
+ Init
+*******************************************************************************/
+void MysyscallDisplay (void) {
+	while (r1--) sysDisplay(vmPop(), stderr);
+}
+
+void ccInitialize (void) {
  static Num shouldInitialize=1;
 	DBBEG();
 	if (shouldInitialize) {
-		DB("Activating module...");
+		DB("Activating module");
 		shouldInitialize=0;
-		sysInitialize ();
-		asmInitialize ();
-		if (!memIsObjectStack(rasmstack)) {
-			rasmstack = memNewStack();
-		}
-		memPointerRegister(compIllegalOperator);
-		memPointerRegister(compSysCompile);
-		memPointerRegister(compTGELookup);
-		memPointerRegister(compTGEMutate);
-		memPointerRegister(compVerifyVectorRef);
-		memPointerRegister(compVerifyVectorSetB);
-		memPointerRegister(compReinstateContinuation);
-		memPointerRegister(compCreateContinuation);
-		memPointerRegister("Not enough arguments to closure");
-		memPointerRegister("Too many arguments to function");
+
+		DB("Initializing submodules");
+		asmInitialize(); /* objInitialize -> vmInitialize -> memInitialize */
+		sysInitialize(); /* objInitialize -> vmInitialize -> memInitialize */
+
+		DB("Registering static pointer description strings");
+		memPointerRegister(objCons10);
+		memPointerRegister(sysNewClosure1Env); 
+		memPointerRegister(ccSysCompile); 
+		memPointerRegister(ccSysReinstateContinuation); 
+		memPointerRegister(ccSysCreateContinuation); 
+		memPointerRegister(osNewThread); 
+		memPointerRegister("Too many arguments to closure"); 
+		memPointerRegister(ccError);
+
+		DB("Creating the global environment with predefined symbols 'x' and 'y'");
+		objNewSymbol((Str)"~TGE~", 5);
+		r1=r0;  r2=null;  objCons12();  renv=rtge=r0;
+
+		sysDefineSyscall(MysyscallDisplay, "display");
+
+		DB("Extending faux local environment");
+		r1=renv; /* Keep track of parent env */
+		objNewVector(4);
+		renv = r0;
+		memVectorSet(renv, 0, r1);
+		r1 = null;
+		objNewSymbol((Str)"yyy", (Num)3); objCons01(); r1 = r0;
+		objNewSymbol((Str)"xxx", (Num)3); objCons01();
+		memVectorSet(renv, 1, r0);
+		objNewInt(420);
+		memVectorSet(renv, 2, r0);
+		objNewInt(690);
+		memVectorSet(renv, 3, r0);
+
+		DB("Extending faux local environment");
+		r1=renv; /* Keep track of parent env */
+		objNewVector(4);
+		renv = r0;
+		memVectorSet(renv, 0, r1);
+		r1 = null;
+		objNewSymbol((Str)"yy", (Num)2); objCons01(); r1 = r0;
+		objNewSymbol((Str)"xx", (Num)2); objCons01();
+		memVectorSet(renv, 1, r0);
+		objNewInt(42);
+		memVectorSet(renv, 2, r0);
+		objNewInt(69);
+		memVectorSet(renv, 3, r0);
+
+		DB("Extending faux local environment");
+		r1=renv; /* Keep track of parent env */
+		objNewVector(4);
+		renv = r0;
+		memVectorSet(renv, 0, r1);
+		r1 = null;
+		objNewSymbol((Str)"y", (Num)1); objCons01(); r1 = r0;
+		objNewSymbol((Str)"x", (Num)1); objCons01();
+		memVectorSet(renv, 1, r0);
+		objNewInt(4);
+		memVectorSet(renv, 2, r0);
+		objNewInt(6);
+		memVectorSet(renv, 3, r0);
+
+		objNewInt(4242); sysDefine ("X"); /* It's always nice to have x and y defined with useful values */
+		objNewInt(6969); sysDefine ("Y"); /* It's always nice to have x and y defined with useful values */
 	} else {
 		DB("Module already activated");
 	}
 	DBEND();
 }
+
+
 
 #undef DB_DESC
 #undef DEBUG

@@ -1333,10 +1333,12 @@ ret:
 }
 
 
+#if 0
 void syscallToggleDebug (void) {
 	wscmDebug ^= 1;
 	r0 = wscmDebug ? true : false;
 }
+#endif
 
 
 void sysDumpCallStackCode (void) {
@@ -1541,210 +1543,256 @@ void wscmSysTransition (void) {
 	              out: r0 string
 */
 void wscmCreateRead (void) {
+ Obj Lscan, Ldot, Leof, Lvector, Ldone, Lquote, Lunquotesplicing, Lunquote, Lquasiquote, Lopenparen, Lcharacter, Lsymbol, Lstring, Linteger, Lreal, Loct, Lhex, Lbinary, Lfalse, Ltrue, Ldefault, Lret;
 	DBBEG();
+	asmInit();
 	objNewString((Str)"Parser",6); /* Label */
+	Lscan = asmNewLabel();
+	Ldot = asmNewLabel();
+	Leof = asmNewLabel();
+	Lvector = asmNewLabel();
+	Ldone = asmNewLabel();
+	Lquote = asmNewLabel();
+	Lunquotesplicing = asmNewLabel();
+	Lunquote = asmNewLabel();
+	Lquasiquote = asmNewLabel();
+	Lopenparen = asmNewLabel();
+	Lcharacter = asmNewLabel();
+	Lsymbol = asmNewLabel();
+	Lstring = asmNewLabel();
+	Linteger = asmNewLabel();
+	Lreal = asmNewLabel();
+	Loct = asmNewLabel();
+	Lhex = asmNewLabel();
+	Lbinary = asmNewLabel();
+	Lfalse = asmNewLabel();
+	Ltrue = asmNewLabel();
+	Ldefault = asmNewLabel();
+	Lret = asmNewLabel();
 	asmAsm (
-		vmBRA, 8l,
-		r0, /* Label */
-		vmMVI4, 0l,             /* r4 <- Initial state. */
-		vmMVI6, 0l,             /* r6 <- initial yylength. */
-	vmLABEL, "scan",
+		//BRA, 8l,
+		//r0, /* Label */
+		MVI, R4, 0l,             /* r4 <- Initial state. */
+		MVI, R6, 0l,             /* r6 <- initial yylength. */
+	 LABEL, Lscan,
 		/* Call recv block to read one char */
-		vmMVI2, false, /* tell recv to not timeout */
-		vmMVI3, null, /* tell recv that we want a character */
-		vmPUSH4,
-			vmSYSI, wscmRecvBlock, /* Syscall to read char. */
-		vmPOP4,
-		vmMV30,                     /* move char to r3 */
-		vmMVI0, 0l, /* Initialize final state to 0.  Will return 0 when still in non-final state. */
-		vmSYSI, wscmSysTransition, /* Syscall to get next state. */
-		vmBEQI0, 0l, vmADDR, "scan",
+		MVI, R2, false, /* tell recv to not timeout */
+		MVI, R3, null, /* tell recv that we want a character */
+		PUSH, R4,
+			SYSI, wscmRecvBlock, /* Syscall to read char. */
+		POP, R4,
+		MV, R3, R0,                     /* move char to r3 */
+		MVI, R0, 0l, /* Initialize final state to 0.  Will return 0 when still in non-final state. */
+		SYSI, wscmSysTransition, /* Syscall to get next state. */
+		BEQI, R0, 0l, Lscan,
 		/* close paren? */
-		vmBNEI0, SCLOSEPAREN, vmADDR, "dot",
-		vmMVI0, null,
-		vmRET,
-	vmLABEL, "dot",
+		BNEI, R0, SCLOSEPAREN, Ldot,
+		MVI, R0, null,
+		RET,
+	 LABEL, Ldot,
 		/* dot? */
-		vmBNEI0, SDOT, vmADDR, "eof",
-		vmPUSH7, vmPUSH1A, vmPUSH1B, /* Recurse on this fn (parser) with isList set. */
-		vmMVI7, 1l,
-		vmMV01E,
-		vmJAL0,
-		vmPOP1B, vmPOP1A, vmPOP7,
-		vmLDI00, 0l, /* Only want the car of the list we just parsed. */
-		vmRET,
+		BNEI, R0, SDOT, Leof,
+		PUSH, R7,
+		PUSH, R1A,
+		PUSH, R1B, /* Recurse on this fn (parser) with isList set. */
+		MVI, R7, 1l,
+		MV, R0, R1E,
+		JAL, R0,
+		POP, R1B,
+		POP, R1A,
+		POP, R7,
+		LDI, R0, R0, 0l, /* Only want the car of the list we just parsed. */
+		RET,
 		/* eof? */
-	vmLABEL, "eof",
-		vmBNEI0, SEOF, vmADDR, "vector",
-		vmMVI0, eof,
-		vmRET,
+	 LABEL, Leof,
+		BNEI, R0, SEOF, Lvector,
+		MVI, R0, eof,
+		RET,
 		/* vector? */
-	vmLABEL, "vector",
-		vmBNEI0, SVECTOR, vmADDR, "quote",
-		vmPUSH7, vmPUSH1A, vmPUSH1B, /* Recursive call with isList set */
-		vmMVI7, 1l,
-		vmMV01E,
-		vmJAL0,
-		vmPOP1B, vmPOP1A, vmPOP7,
-		vmPUSH1, /* Save r1 since objListToVector requires r1. */
-		vmMV10,
-		vmSYSI, objListToVector,
-		vmPOP1,  /* Restore r1. */
-		vmBRA, vmADDR, "done",
+	 LABEL, Lvector,
+		BNEI, R0, SVECTOR, Lquote,
+		PUSH, R7,
+		PUSH, R1A,
+		PUSH, R1B, /* Recursive call with isList set */
+		MVI, R7, 1l,
+		MV, R0, R1E,
+		JAL, R0,
+		POP, R1B,
+		POP, R1A,
+		POP, R7,
+		PUSH, R1, /* Save r1 since objListToVector requires r1. */
+		MV, R1, R0,
+		SYSI, objListToVector,
+		POP, R1,  /* Restore r1. */
+		BRA, Ldone,
 		/* quote? */
-	vmLABEL, "quote",
-		vmBNEI0, SQUOTE, vmADDR, "unquotesplicing",
-		vmPUSH7, vmPUSH1A, vmPUSH1B,
-		vmMVI7, 0l,
-		vmMV01E,
-		vmJAL0,
-		vmPOP1B, vmPOP1A, vmPOP7,
-		vmPUSH1, vmPUSH2, /* Save r1 and r2 */
-			vmMV10,           /* Car object. */
-			vmMVI2, null,/* Cdr object. */
-			vmSYSI, objCons12,
-			vmMVI1, squote,/* Car object. */
-			vmMV20,            /* Cdr object. */
-			vmSYSI, objCons12,
-		vmPOP2, vmPOP1,   /* Restore r1 and r2 */
-		vmBRA, vmADDR, "done",
+	 LABEL, Lquote,
+		BNEI, R0, SQUOTE, Lunquotesplicing,
+		PUSH, R7,
+		PUSH, R1A,
+		PUSH, R1B,
+		MVI, R7, 0l,
+		MV, R0, R1E,
+		JAL, R0,
+		POP, R1B,
+		POP, R1A, POP, R7,
+		PUSH, R1,
+		PUSH, R2, /* Save r1 and r2 */
+			MV, R1, R0,           /* Car object. */
+			MVI, R2, null,/* Cdr object. */
+			SYSI, objCons12,
+			MVI, R1, squote,/* Car object. */
+			MV, R2, R0,            /* Cdr object. */
+			SYSI, objCons12,
+		POP, R2,
+		POP, R1,   /* Restore r1 and r2 */
+		BRA, Ldone,
 		/* unquote-splicing? */
-	vmLABEL, "unquotesplicing",
-		vmBNEI0, SUNQUOTESPLICING, vmADDR, "unquote",
-		vmPUSH7, vmPUSH1A, vmPUSH1B,
-		vmMVI7, 0l,
-		vmMV01E,
-		vmJAL0,
-		vmPOP1B, vmPOP1A, vmPOP7,
-		vmPUSH1, vmPUSH2, /* Save r1 and r2 */
-			vmMV10,           /* Car object. */
-			vmMVI2, null,/* Cdr object. */
-			vmSYSI, objCons12,
-			vmMVI1, sunquotesplicing,/* Car object. */
-			vmMV20,            /* Cdr object. */
-			vmSYSI, objCons12,
-		vmPOP2, vmPOP1,   /* Restore r1 and r2 */
-		vmBRA, vmADDR, "done",
+	 LABEL, Lunquotesplicing,
+		BNEI, R0, SUNQUOTESPLICING, Lunquote,
+		PUSH, R7,
+		PUSH, R1A,
+		PUSH, R1B,
+		MVI, R7, 0l,
+		MV, R0, R1E,
+		JAL, R0,
+		POP, R1B,
+		POP, R1A,
+		POP, R7,
+		PUSH, R1, PUSH, R2, /* Save r1 and r2 */
+			MV, R1, R0,           /* Car object. */
+			MVI, R2, null,/* Cdr object. */
+			SYSI, objCons12,
+			MVI, R1, sunquotesplicing,/* Car object. */
+			MV, R2, R0,            /* Cdr object. */
+			SYSI, objCons12,
+		POP, R2,
+		POP, R1,   /* Restore r1 and r2 */
+		BRA, Ldone,
 		/* unquote? */
-	vmLABEL, "unquote",
-		vmBNEI0, SUNQUOTE, vmADDR, "quasiquote",
-		vmPUSH7, vmPUSH1A, vmPUSH1B,
-		vmMVI7, 0l,
-		vmMV01E,
-		vmJAL0,
-		vmPOP1B, vmPOP1A, vmPOP7,
-		vmPUSH1, vmPUSH2, /* Save r1 and r2 */
-			vmMV10,            /* Car object. */
-			vmMVI2, null,      /* Cdr object. */
-			vmSYSI, objCons12,
-			vmMVI1, sunquote,  /* Car object. */
-			vmMV20,            /* Cdr object. */
-			vmSYSI, objCons12,
-		vmPOP2, vmPOP1,   /* Restore r1 and r2 */
-		vmBRA, vmADDR, "done",
+	 LABEL, Lunquote,
+		BNEI, R0, SUNQUOTE, Lquasiquote,
+		PUSH, R7, PUSH, R1A, PUSH, R1B,
+		MVI, R7, 0l,
+		MV, R0, R1E,
+		JAL, R0,
+		POP, R1B, POP, R1A, POP, R7,
+		PUSH, R1, PUSH, R2, /* Save r1 and r2 */
+			MV, R1, R0,            /* Car object. */
+			MVI, R2, null,      /* Cdr object. */
+			SYSI, objCons12,
+			MVI, R1, sunquote,  /* Car object. */
+			MV, R2, R0,            /* Cdr object. */
+			SYSI, objCons12,
+		POP, R2, POP, R1,   /* Restore r1 and r2 */
+		BRA, Ldone,
 		/* quasiquote? */
-	vmLABEL, "quasiquote",
-		vmBNEI0, SQUASIQUOTE, vmADDR, "openparen",
-		vmPUSH7, vmPUSH1A, vmPUSH1B,
-		vmMVI7, 0l,
-		vmMV01E,
-		vmJAL0,
-		vmPOP1B, vmPOP1A, vmPOP7,
-		vmPUSH1, vmPUSH2, /* Save r1 and r2 */
-			vmMV10,             /* Car object. */
-			vmMVI2, null,       /* Cdr object. */
-			vmSYSI, objCons12,
-			vmMVI1, squasiquote,/* Car object. */
-			vmMV20,             /* Cdr object. */
-			vmSYSI, objCons12,
-		vmPOP2, vmPOP1,   /* Restore r1 and r2 */
-		vmBRA, vmADDR, "done",
+	 LABEL, Lquasiquote,
+		BNEI, R0, SQUASIQUOTE, Lopenparen,
+		PUSH, R7,
+		PUSH, R1A,
+		PUSH, R1B,
+		MVI, R7, 0l,
+		MV, R0, R1E,
+		JAL, R0,
+		POP, R1B,
+		POP, R1A,
+		POP, R7,
+		PUSH, R1,
+		PUSH, R2, /* Save r1 and r2 */
+			MV, R1, R0,             /* Car object. */
+			MVI, R2, null,       /* Cdr object. */
+			SYSI, objCons12,
+			MVI, R1, squasiquote,/* Car object. */
+			MV, R2, R0,             /* Cdr object. */
+			SYSI, objCons12,
+		POP, R2,
+		POP, R1,   /* Restore r1 and r2 */
+		BRA, Ldone,
 		/* open paren? */
-	vmLABEL, "openparen",
-		vmBNEI0, SOPENPAREN, vmADDR, "character",
-		vmPUSH7, vmPUSH1A, vmPUSH1B, /* Recursive call with isList set */
-		vmMVI7, 1l,
-		vmMV01E,
-		vmJAL0,
-		vmPOP1B, vmPOP1A, vmPOP7,
-		vmBRA, vmADDR, "done",
+	 LABEL, Lopenparen,
+		BNEI, R0, SOPENPAREN, Lcharacter,
+		PUSH, R7, PUSH, R1A, PUSH, R1B, /* Recursive call with isList set */
+		MVI, R7, 1l,
+		MV, R0, R1E,
+		JAL, R0,
+		POP, R1B, POP, R1A, POP, R7,
+		BRA, Ldone,
 		/* character? */
-	vmLABEL, "character",
-		vmBNEI0, SCHARACTER, vmADDR, "symbol",
-		vmSYSI, sysNewCharacter,
-		vmBRA, vmADDR, "done",
+	 LABEL, Lcharacter,
+		BNEI, R0, SCHARACTER, Lsymbol,
+		SYSI, sysNewCharacter,
+		BRA, Ldone,
 		/* symbol? */
-	vmLABEL, "symbol",
-		vmBNEI0, SSYMBOL, vmADDR, "string",
-		vmSYSI, sysNewSymbol,
-		vmBRA, vmADDR, "done",
+	 LABEL, Lsymbol,
+		BNEI, R0, SSYMBOL, Lstring,
+		SYSI, sysNewSymbol,
+		BRA, Ldone,
 		/* string? */
-	vmLABEL, "string",
-		vmBNEI0, SSTRING, vmADDR, "integer",
-		vmSYSI, sysNewString,
-		vmBRA, vmADDR, "done",
+	 LABEL, Lstring,
+		BNEI, R0, SSTRING, Linteger,
+		SYSI, sysNewString,
+		BRA, Ldone,
 		/* integer? */
-	vmLABEL, "integer",
-		vmBNEI0, SINTEGER, vmADDR, "real",
-		vmSYSI, sysNewInteger,
-		vmBRA, vmADDR, "done",
+	 LABEL, Linteger,
+		BNEI, R0, SINTEGER, Lreal,
+		SYSI, sysNewInteger,
+		BRA, Ldone,
 		/* real? */
-	vmLABEL, "real",
-		vmBNEI0, SREAL, vmADDR, "oct",
-		vmSYSI, sysNewReal,
-		vmBRA, vmADDR, "done",
+	 LABEL, Lreal,
+		BNEI, R0, SREAL, Loct,
+		SYSI, sysNewReal,
+		BRA, Ldone,
 		/* oct number? */
-	vmLABEL, "oct",
-		vmBNEI0, SOCT, vmADDR, "hex",
-		vmSYSI, sysNewOct,
-		vmBRA, vmADDR, "done",
+	 LABEL, Loct,
+		BNEI, R0, SOCT, Lhex,
+		SYSI, sysNewOct,
+		BRA, Ldone,
 		/* hex number? */
-	vmLABEL, "hex",
-		vmBNEI0, SHEX, vmADDR, "binary",
-		vmSYSI, sysNewHex,
-		vmBRA, vmADDR, "done",
+	 LABEL, Lhex,
+		BNEI, R0, SHEX, Lbinary,
+		SYSI, sysNewHex,
+		BRA, Ldone,
 		/* binary number? */
-	vmLABEL, "binary",
-		vmBNEI0, SBINARY, vmADDR, "false",
-		vmSYSI, sysNewBinary,
-		vmBRA, vmADDR, "done",
+	 LABEL, Lbinary,
+		BNEI, R0, SBINARY, Lfalse,
+		SYSI, sysNewBinary,
+		BRA, Ldone,
 		/* false? */
-	vmLABEL, "false",
-		vmBNEI0, SFALSE, vmADDR, "true",
-		vmMVI0, false,
-		vmBRA, vmADDR, "done",
+	 LABEL, Lfalse,
+		BNEI, R0, SFALSE, Ltrue,
+		MVI, R0, false,
+		BRA, Ldone,
 		/* true? */
-	vmLABEL, "true",
-		vmBNEI0, STRUE, vmADDR, "default",
-		vmMVI0, true,
-		vmBRA, vmADDR, "done",
+	 LABEL, Ltrue,
+		BNEI, R0, STRUE, Ldefault,
+		MVI, R0, true,
+		BRA, Ldone,
 		/* default to null? */
-	vmLABEL, "default",
-		vmMVI0, null,
+	 LABEL, Ldefault,
+		MVI, R0, null,
 
 		/* List context?  If so recurse and contruct pair. */
-	vmLABEL, "done",
-		vmBEQI7, 0l, vmADDR, "ret",
-		vmPUSH0, /* Save object just parsed. */
-		vmPUSH1A, vmPUSH1B, /* Recurse. */
-		vmMV01E, /* r0 <- code register*/
-		vmJAL0,
-		vmPOP1B, vmPOP1A,
+	 LABEL, Ldone,
+		BEQI, R7, 0l, Lret,
+		PUSH, R0, /* Save object just parsed. */
+		PUSH, R1A, PUSH, R1B, /* Recurse. */
+		MV, R0, R1E, /* r0 <- code register*/
+		JAL, R0,
+		POP, R1B, POP, R1A,
 		/* Create pair from top of stack and just parsed object.  Since we need
 		   r1 and r2 do a little pushing and moving of objects. */
-		vmPOP3, /* Restore object previously parsed. */
-		vmPUSH1, vmPUSH2, /* Save r1 and r2 */
-		vmMV13, /* Car object. */
-		vmMV20, /* Cdr object. */
-		vmSYSI, objCons12,
-		vmPOP2, vmPOP1,   /* Restore r1 and r2 */
+		POP, R3, /* Restore object previously parsed. */
+		PUSH, R1, PUSH, R2, /* Save r1 and r2 */
+		MV, R1, R3, /* Car object. */
+		MV, R2, R0, /* Cdr object. */
+		SYSI, objCons12,
+		POP, R2, POP, R1,   /* Restore r1 and r2 */
 	
-	vmLABEL, "ret",
-		vmRET,
-		vmEND
+	 LABEL, Lret,
+		RET
 	);
-	asmCompileAsmstack(0);
-	asmNewCode();
+	asmAsmIGraph();
 	r1=r0;
 
 	/* r5 eventually gets a new token string buffer (copied from this) when the
@@ -1771,26 +1819,30 @@ void wscmCreateRead (void) {
 	                  "--------------------------------------------------------------------------------",1600);
 	r2=r0;
 	objNewString((Str)"ParserMain",10); /* Label */
+	asmInit();
 	asmAsm (
-		vmBRA, 8l,
-		r0, /* Label */
-		vmMVI1, r2, /* The string buffer.  Lives in r5. */
-		vmSYSI, objCopyString,
-		vmMV50,
+		//BRA, 8l,
+		//r0, /* Label */
+		MVI, R1, r2, /* The string buffer.  Lives in r5. */
+		SYSI, objCopyString,
+		MV, R5, R0,
 		/* Initialize boolean to 'not parsing a list'. */
-		vmMVI7, 0l,
+		MVI, R7, 0l,
 		/* r1 gets port object from the required parameter to read.  (read portObject). */
-		vmPOP1,
+		POP, R1,
 		/* Call parser. */
-		vmMVI0, r1,  /* Insert code block object directly via r1 from above. */
-		vmPUSH1A, vmPUSH1B, vmPUSH19,
-		vmJAL0,
-		vmPOP19, vmPOP1B, vmPOP1A,
-		vmRET,
-		vmEND
+		MVI, R0, r1,  /* Insert code block object directly via r1 from above. */
+		PUSH, R1A,
+		PUSH, R1B,
+		PUSH, R19,
+			JAL, R0,
+		POP, R19,
+		POP, R1B,
+		POP, R1A,
+		RET
 	);
-	asmCompileAsmstack(0);
-	asmNewCode();  r1=r0;
+	asmAsmIGraph();
+	r1=r0;
 	sysNewClosure1Env();
 	DBEND();
 }
@@ -1798,55 +1850,58 @@ void wscmCreateRead (void) {
 /* Create a read-eval-print-loop closure in machine language.
 */
 void wscmCreateRepl (void) {
+ Obj Lrepl, Ldone;
 	DBBEG();
 	objNewSymbol ((Str)"\nVM>", 4);  r2=r0;
 	objNewSymbol ((Str)"stdin", 5);  r1=r0;  sysTGEFind(); r3=r0; /* The stdin binding, not value incase it changes */
 	objNewSymbol ((Str)"read", 4);  r1=r0;  sysTGEFind();  r4=caar(r0); /* The binding value is a closure so we need to car again for the code object. */
 	objNewString ((Str)"bye\n", 4);  r5=r0;
 	objNewString ((Str)"Entering repl2\n", 14);  r6=r0;
+	asmInit();
+	Lrepl = asmNewLabel();
+	Ldone = asmNewLabel();
 	asmAsm (
-		vmMVI0, r6, /* "Entering REPL\n" */
-		vmPUSH0,
-		vmMVI1, 1l,
-		vmSYSI, syscallDisplay,
+		MVI, R0, r6, /* "Entering REPL\n" */
+		PUSH, R0,
+		MVI, R1, 1l,
+		SYSI, syscallDisplay,
 		/* Display prompt. */
-		vmLABEL, "repl",
-		vmMVI0, r2, // Prompt
-		vmPUSH0,
-		vmMVI1, 1l,
-		vmSYSI, syscallDisplay,
+	 LABEL, Lrepl,
+		MVI, R0, r2, // Prompt
+		PUSH, R0,
+		MVI, R1, 1l,
+		SYSI, syscallDisplay,
 		/* Call read. */
-		vmPUSH1A, vmPUSH1B, vmPUSH19,
-		vmMVI0, r3, // in
-		vmLDI00, 0l,
-		vmPUSH0,
-		vmMVI0, r4, // read wscmCreateRead
-		vmJAL0,
-		vmPOP19, vmPOP1B, vmPOP1A,
+		PUSH, R1A, PUSH, R1B, PUSH, R19,
+		MVI, R0, r3, // in
+		LDI, R0, R0, 0l,
+		PUSH, R0,
+		MVI, R0, r4, // read wscmCreateRead
+		JAL, R0,
+		POP, R19, POP, R1B, POP, R1A,
 		/* Done if an #eof parsed. */
-		vmBRTI0, TEOF, vmADDR, "done",
+		BRTI, R0, TEOF, Ldone,
 		/* Compile expression. */
-		vmSYSI, ccCompile, // WAS compSysCompile
+		SYSI, ccCompile, // WAS compSysCompile
 		/* Run code. */
-		vmPUSH1A, vmPUSH1B, vmPUSH19,
-		vmJAL0,
-		vmPOP19, vmPOP1B, vmPOP1A,
+		PUSH, R1A, PUSH, R1B, PUSH, R19,
+		JAL, R0,
+		POP, R19, POP, R1B, POP, R1A,
 		/* (display ...) */
-		vmPUSH0,
-		vmMVI1, 1l,
-		vmSYSI, syscallDisplay,
-		vmBRA, vmADDR, "repl",
-		vmLABEL, "done",
-		vmMVI0, r5, /* Bye message. */
-		vmPUSH0,
-		vmMVI1, 1l,
-		vmSYSI, syscallDisplay,
+		PUSH, R0,
+		MVI, R1, 1l,
+		SYSI, syscallDisplay,
+		BRA, Lrepl,
+	 LABEL, Ldone,
+		MVI, R0, r5, /* Bye message. */
+		PUSH, R0,
+		MVI, R1, 1l,
+		SYSI, syscallDisplay,
 		//RET,
-		vmSYSI, osUnthread,
-		vmEND
+		SYSI, osUnthread
 	);
-	asmCompileAsmstack(0);
-	asmNewCode(); r1=r0;
+	asmAsmIGraph();
+	r1=r0;
 	sysNewClosure1Env();
 	DBEND();
 }
@@ -1856,7 +1911,6 @@ void wscmInitialize (void) {
  Num i;
 	DBBEG();
 
-	compInitialize();
 	ccInitialize();
 
 	/* Although already activated, just pass in a scheduler handler callback.
@@ -1973,7 +2027,7 @@ void wscmInitialize (void) {
 	sysDefineSyscall (syscallSemaphoreDown, "semaphore-down");
 	sysDefineSyscall (syscallSemaphoreUp, "semaphore-up");
 	sysDefineSyscall (syscallSignal, "signal");
-	sysDefineSyscall (syscallToggleDebug, "toggle-debug");
+//	sysDefineSyscall (syscallToggleDebug, "toggle-debug");
 	sysDefineSyscall (sysDumpTGE, "tge");
 
 	/* Create the standard I/O port object */
