@@ -16,10 +16,21 @@
 /* Verify a simple lambda expression compiles and evaluates
 */
 void simpleLambda (void) {
+
+	asmInit();
+	ccICodePushNewQUIT();
+	ccICodePushNewQUIT();
+	ccGenerateIBlockWithPushedIcodes();
+	asmAsmIGraph();
+	rretcode = r0;
+	rretip = 0;
+
 	yy_scan_string ((Str)"((lambda () 99))");
 	yyparse(); /* Use the internal parser */
-	rexpr=r0; compCompile();
+	ccCompile();
 	rcode=r0;
+//vmDebugDumpCode(rcode, stderr);
+//memDebugDumpAll(stderr);
 	rip=0;
 	vmRun();
 	assert(99 == *(Int*)r0); /* The expression returns the number 99 */
@@ -33,7 +44,7 @@ int main (int argc, char *argv[]) {
 	setbuf(stdout,0);
 	printf ("--Welcome to unit test %s----------------\n", __FILE__);
 
-	compInitialize();
+	ccInitialize();
 
 	TEST(simpleLambda);
 

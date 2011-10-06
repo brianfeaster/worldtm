@@ -63,6 +63,12 @@ void sysEquals (void) {
 	     ? true : false;
 }
 
+void sysAdd (void) {
+	r1=vmPop();
+	r0=vmPop();
+	objNewInt(*(Int*)r1 + *(Int*)r2);
+}
+
 void wscmtDisplay (void) {
  Int fd=1;
  FILE *stream=NULL;
@@ -83,7 +89,7 @@ int main (void) {
 	setbuf(stdout, NULL);
 	testGoto();
 
-	compInitialize();
+	ccInitialize();
 
 	/* Create empty global environment list. */
 	objNewSymbol((Str)"TGE", 3);
@@ -91,17 +97,29 @@ int main (void) {
 
 	sysDefineSyscall (wscmtDisplay, "display");
 	sysDefineSyscall (sysEquals, "=");
+	sysDefineSyscall (sysAdd, "+");
 
-	//yy_scan_string((Str)"(display (eval '(+ 1 2)))"); eval is a good one to test
+	/* Create a code block that will be returned to after a 'ret' call */
+	asmInit();
+	ccICodePushNewQUIT();
+	ccICodePushNewQUIT();
+	ccGenerateIBlockWithPushedIcodes();
+	asmAsmIGraph();
+	rretcode = r0;
+	rretip = 0;
+
+	//yy_scan_string((Str)"(display (eval '(+ 1 2)))");
 	yy_scan_string((Str)"(let ~ ((i 0)(e 9000)) (display i) (display \"\\r\")(if (= i e) (display \"\n\") (~ (+ i 1) e)))");
 	
-	yyparse(); //wscmWrite(r0, 0, 1);
-	rexpr=r0; compCompile();
-
+	yyparse();
+	ccCompile();
+//vmDebugDumpCode(r0, stderr);
 
 	// Fire up VM.
 	sleep(1); vmInterrupt=0; /* Give the interrupt handler time to trigger so forcing it to 0 actually stays 0. */
-	rcode=r0; rip=0; vmRun();
+	rcode=r0;
+	rip=0;
+	vmRun();
 	memGarbageCollect();
 
 	DBE memDebugDumpAll(stdout);
