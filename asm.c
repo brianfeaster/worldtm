@@ -43,6 +43,9 @@ Num ccIsObjectTypeIBlock (Obj ib) { return memIsObjectType(ib, TIBLOCK); }
 /*******************************************************************************
  I_Code
 
+ Vector's of length 6 containing: an opcode, 0-3 register, possible immeidate and
+ possible branch field.
+
  New icode objects are pushed to a vector with the count in ICodeCount.  They are
  eventually popped off the vector and added to new iblocks.
 *******************************************************************************/
@@ -63,189 +66,51 @@ Obj ccICodePop (void) {
 	return ic;
 }
 
-Num ccICodeFieldLength (Obj ic) {
+/* Will always return 6
+*/
+Num asmICodeFieldLength (Obj ic) {
 	assert(ccIsObjectTypeICode(ic));
 	return memObjectLength(ic);
 }
 
-Obj ccICodeField(Obj ic, Num i) {
-	assert(i < ccICodeFieldLength(ic));
+Obj asmICodeField(Obj ic, Num i) {
+	assert(i < asmICodeFieldLength(ic));
 	return memVectorObject(ic, i);
 }
+
+void asmNewICode (Obj op, Obj r, Obj s, Obj t, Obj i, Obj b) {
+	r0 = memNewVector(TICODE, 6);
+	ccICodePush(r0);
+	memVectorSet(r0, 0, op);/* Opcode */
+	memVectorSet(r0, 1, r); /* Register 0 */
+	memVectorSet(r0, 2, s); /* Register 0 */
+	memVectorSet(r0, 3, t); /* Register 0 */
+	memVectorSet(r0, 4, i); /* Immediate value */
+	memVectorSet(r0, 5, b); /* Branch offset */
+}
 	
-
-void ccICodePushNewMV (Obj rega, Obj regb) {
-	r0 = memNewVector(TICODE, 3);
-	memVectorSet(r0, 0, MV);
-	memVectorSet(r0, 1, (Obj)rega);
-	memVectorSet(r0, 2, (Obj)regb);
-	ccICodePush(r0);
-}
-
-void ccICodePushNewMVI (Obj r, Obj i) {
-	r0 = memNewVector(TICODE, 3);
-	memVectorSet(r0, 0, MVI);
-	memVectorSet(r0, 1, (Obj)r);
-	memVectorSet(r0, 2, i);
-	ccICodePush(r0);
-}
-
-void ccICodePushNewLDI (Obj rega, Obj regb, Obj i) {
-	r0 = memNewVector(TICODE, 4);
-	memVectorSet(r0, 0, LDI);
-	memVectorSet(r0, 1, (Obj)rega);
-	memVectorSet(r0, 2, (Obj)regb);
-	memVectorSet(r0, 3, i);
-	ccICodePush(r0);
-}
-
-void ccICodePushNewLD (Obj rega, Obj regb, Obj regc) {
-	r0 = memNewVector(TICODE, 4);
-	memVectorSet(r0, 0, LD);
-	memVectorSet(r0, 1, (Obj)rega);
-	memVectorSet(r0, 2, (Obj)regb);
-	memVectorSet(r0, 3, (Obj)regc);
-	ccICodePush(r0);
-}
-
-void ccICodePushNewSTI (Obj rega, Obj regb, Obj i) {
-	r0 = memNewVector(TICODE, 4);
-	memVectorSet(r0, 0, STI);
-	memVectorSet(r0, 1, (Obj)rega);
-	memVectorSet(r0, 2, (Obj)regb);
-	memVectorSet(r0, 3, i);
-	ccICodePush(r0);
-}
-
-void ccICodePushNewST (Obj rega, Obj regb, Obj regc) {
-	r0 = memNewVector(TICODE, 4);
-	memVectorSet(r0, 0, ST);
-	memVectorSet(r0, 1, (Obj)rega);
-	memVectorSet(r0, 2, (Obj)regb);
-	memVectorSet(r0, 3, (Obj)regc);
-	ccICodePush(r0);
-}
-
-void ccICodePushNewPUSH (Obj r) {
-	r0 = memNewVector(TICODE, 2);
-	memVectorSet(r0, 0, PUSH);
-	memVectorSet(r0, 1, r);
-	ccICodePush(r0);
-}
-
-void ccICodePushNewPOP (Obj r) {
-	r0 = memNewVector(TICODE, 2);
-	memVectorSet(r0, 0, POP);
-	memVectorSet(r0, 1, r);
-	ccICodePush(r0);
-}
-
-void ccICodePushNewADDI (Obj r, Obj i) {
-	r0 = memNewVector(TICODE, 3);
-	memVectorSet(r0, 0, ADDI);
-	memVectorSet(r0, 1, (Obj)r);
-	memVectorSet(r0, 2, i);
-	ccICodePush(r0);
-}
-
-void ccICodePushNewBLTI (Obj r, Obj i, Obj l) {
-	r0 = memNewVector(TICODE, 4);
-	memVectorSet(r0, 0, BLTI);
-	memVectorSet(r0, 1, r);
-	memVectorSet(r0, 2, i);
-	memVectorSet(r0, 3, l);
-	ccICodePush(r0);
-}
-
-void ccICodePushNewBEQI (Obj rega, Obj i, Obj l) {
-	r0 = memNewVector(TICODE, 4);
-	memVectorSet(r0, 0, BEQI);
-	memVectorSet(r0, 1, rega);
-	memVectorSet(r0, 2, i);
-	memVectorSet(r0, 3, l);
-	ccICodePush(r0);
-}
-
-void ccICodePushNewBNEI (Obj r, Obj i, Obj l) {
-	r0 = memNewVector(TICODE, 4);
-	memVectorSet(r0, 0, BNEI);
-	memVectorSet(r0, 1, (Obj)r);
-	memVectorSet(r0, 2, i);
-	memVectorSet(r0, 3, l);
-	ccICodePush(r0);
-}
-
-void ccICodePushNewBRTI (Obj rega, Obj t, Obj l) {
-	r0 = memNewVector(TICODE, 4);
-	memVectorSet(r0, 0, BRTI);
-	memVectorSet(r0, 1, (Obj)rega);
-	memVectorSet(r0, 2, t);
-	memVectorSet(r0, 3, l);
-	ccICodePush(r0);
-}
-
-void ccICodePushNewBNTI (Obj rega, Obj t, Obj l) {
-	r0 = memNewVector(TICODE, 4);
-	memVectorSet(r0, 0, BNTI);
-	memVectorSet(r0, 1, (Obj)rega);
-	memVectorSet(r0, 2, t);
-	memVectorSet(r0, 3, l);
-	ccICodePush(r0);
-}
-
-void ccICodePushNewBRA (Obj l) {
-	r0 = memNewVector(TICODE, 2);
-	memVectorSet(r0, 0, BRA);
-	memVectorSet(r0, 1, l);
-	ccICodePush(r0);
-}
-
-void ccICodePushNewJ (Obj r) {
-	r0 = memNewVector(TICODE, 2);
-	memVectorSet(r0, 0, JMP);
-	memVectorSet(r0, 1, r);
-	ccICodePush(r0);
-}
-
-void ccICodePushNewJAL (Obj r) {
-	r0 = memNewVector(TICODE, 2);
-	memVectorSet(r0, 0, JAL);
-	memVectorSet(r0, 1, r);
-	ccICodePush(r0);
-}
-
-void ccICodePushNewRET () {
-	r0 = memNewVector(TICODE, 1);
-	memVectorSet(r0, 0, RET);
-	ccICodePush(r0);
-}
-
-void ccICodePushNewSYS (Obj r) {
-	r0 = memNewVector(TICODE, 2);
-	memVectorSet(r0, 0, SYS);
-	memVectorSet(r0, 1, r);
-	ccICodePush(r0);
-}
-
-void ccICodePushNewSYSI (Obj o) {
-	vmPush(o);
-	r0 = memNewVector(TICODE, 2);
-	memVectorSet(r0, 0, SYSI);
-	memVectorSet(r0, 1, vmPop());
-	ccICodePush(r0);
-}
-
-void ccICodePushNewNOP (void) {
-	r0 = memNewVector(TICODE, 1);
-	memVectorSet(r0, 0, NOP);
-	ccICodePush(r0);
-}
-
-void ccICodePushNewQUIT (void) {
-	r0 = memNewVector(TICODE, 1);
-	memVectorSet(r0, 0, QUIT);
-	ccICodePush(r0);
-}
+void ccICodePushNewMV (Obj r, Obj s)         { asmNewICode(MV,   r,  s, NA, NA, NA); }
+void ccICodePushNewMVI (Obj r, Obj i)        { asmNewICode(MVI,  r, NA, NA,  i, NA); }
+void ccICodePushNewLDI (Obj r, Obj s, Obj i) { asmNewICode(LDI,  r,  s, NA,  i, NA); }
+void ccICodePushNewLD (Obj r, Obj s, Obj t)  { asmNewICode(LD,   r,  s,  t, NA, NA); }
+void ccICodePushNewSTI (Obj r, Obj s, Obj i) { asmNewICode(STI,  r,  s, NA,  i, NA); }
+void ccICodePushNewST (Obj r, Obj s, Obj t)  { asmNewICode(ST,   r,  s,  t, NA, NA); }
+void ccICodePushNewPUSH (Obj r)              { asmNewICode(PUSH, r, NA, NA, NA, NA); }
+void ccICodePushNewPOP (Obj r)               { asmNewICode(POP,  r, NA, NA, NA, NA); }
+void ccICodePushNewADDI (Obj r, Obj i)       { asmNewICode(ADDI, r, NA, NA,  i, NA); }
+void ccICodePushNewBLTI (Obj r, Obj i, Obj l){ asmNewICode(BLTI, r, NA, NA,  i,  l); }
+void ccICodePushNewBEQI (Obj r, Obj i, Obj l){ asmNewICode(BEQI, r, NA, NA,  i,  l); }
+void ccICodePushNewBNEI (Obj r, Obj i, Obj l){ asmNewICode(BNEI, r, NA, NA,  i,  l); }
+void ccICodePushNewBRTI (Obj r, Obj t, Obj l){ asmNewICode(BRTI, r, NA, NA,  t,  l); }
+void ccICodePushNewBNTI (Obj r, Obj t, Obj l){ asmNewICode(BNTI, r, NA, NA,  t,  l); }
+void ccICodePushNewBRA (Obj l)               { asmNewICode(BRA, NA, NA, NA, NA,  l); }
+void ccICodePushNewJMP (Obj r)               { asmNewICode(JMP,  r, NA, NA, NA, NA); }
+void ccICodePushNewJAL (Obj r)               { asmNewICode(JAL,  r, NA, NA, NA, NA); }
+void ccICodePushNewRET ()                    { asmNewICode(RET, NA, NA, NA, NA, NA); }
+void ccICodePushNewSYS (Obj r)               { asmNewICode(SYS,  r, NA, NA, NA, NA); }
+void ccICodePushNewSYSI (Obj i)              { asmNewICode(SYSI,NA, NA, NA,  i, NA); }
+void ccICodePushNewNOP (void)                { asmNewICode(NOP, NA, NA, NA, NA, NA); }
+void ccICodePushNewQUIT (void)               { asmNewICode(QUIT,NA, NA, NA, NA, NA); }
 
 
 
@@ -272,11 +137,11 @@ Num IBlockCount=0;
 #define IBLOCK_INDEX_INCOMING    4
 #define IBLOCK_INDEX_ICODE       5
 
-Num ccIBlockID (Obj ib)                  { return (Num)memVectorObject(ib, IBLOCK_INDEX_ID); }
-Obj ccIBlockTag (Obj ib)                 { return memVectorObject(ib, IBLOCK_INDEX_TAG); }
-Obj ccIBlockDefaultBlock (Obj ib)     { return memVectorObject(ib, IBLOCK_INDEX_DEFAULT); }
-Obj ccIBlockConditionalBlock (Obj ib) { return memVectorObject(ib, IBLOCK_INDEX_CONDITIONAL); }
-Obj ccIBlockIncomingList (Obj ib)        { return memVectorObject(ib, IBLOCK_INDEX_INCOMING); }
+Num ccIBlockID (Obj ib)             { return (Num)memVectorObject(ib, IBLOCK_INDEX_ID); }
+Obj ccIBlockTag (Obj ib)            { return memVectorObject(ib, IBLOCK_INDEX_TAG); }
+Obj ccIBlockDefaultTag (Obj ib)     { return memVectorObject(ib, IBLOCK_INDEX_DEFAULT); }
+Obj ccIBlockConditionalTag (Obj ib) { return memVectorObject(ib, IBLOCK_INDEX_CONDITIONAL); }
+Obj ccIBlockIncomingList (Obj ib)   { return memVectorObject(ib, IBLOCK_INDEX_INCOMING); }
 
 Num ccIBlockICodeLength (Obj ib) {
 	assert(ccIsObjectTypeIBlock(ib));
@@ -508,7 +373,7 @@ void ccGenerateIBlockWithPushedIcodes () {
 	/* Connect the 'first' iblock generated by the current ASM call to
 	   to the last iblock generated by the last call to ASM */
 	if (riblocklast
-	    && ccIBlockDefaultBlock(riblocklast) == false) {
+	    && ccIBlockDefaultTag(riblocklast) == false) {
 		ccIBlockDefaultTagSet(riblocklast, riblock);
 	}
 
@@ -626,7 +491,7 @@ void asmAsmInternal (Obj f, ...) {
 		} else if (JMP == obj) {
 			r = va_arg(ap, Obj);
 			DB("j   ["HEX"]", r);
-			ccICodePushNewJ(r);
+			ccICodePushNewJMP(r);
 			ccGenerateIBlockWithPushedIcodes();
 			// no default block after a jump
 		} else if (JAL == obj) {
@@ -707,12 +572,12 @@ void ccEmitIblockOpcodes (void) {
 
 	for (i=0; i<ccIBlockICodeLength(riblock); ++i) {
 		r0 = ccIBlockICode(riblock, i); /* Consider icode object in r0 */
-		field0 = ccICodeField(r0, 0);
+		field0 = asmICodeField(r0, 0);
 		DB("field0 = "HEX, field0);
 		switch ((Num)field0) {
 		case (Num)MV:
-			field1 = ccICodeField(r0, 1);
-			field2 = ccICodeField(r0, 2);
+			field1 = asmICodeField(r0, 1);
+			field2 = asmICodeField(r0, 2);
 			switch ((Num)field1) {
 				case (Num)R0 : switch ((Num)field2) {
 				               case (Num)R1 : ccEmitOpcode(vmMV01); break;
@@ -742,8 +607,8 @@ void ccEmitIblockOpcodes (void) {
 				default : assert(!"Unsuported icode MV ?? reg"); }
 			break;
 		case (Num)MVI:
-			field1 = ccICodeField(r0, 1);
-			field2 = ccICodeField(r0, 2);
+			field1 = asmICodeField(r0, 1);
+			field2 = asmICodeField(r0, 4);
 			switch ((Num)field1) {
 				case (Num)R0 : ccEmitOpcode(vmMVI0); break;
 				case (Num)R1 : ccEmitOpcode(vmMVI1); break;
@@ -756,9 +621,9 @@ void ccEmitIblockOpcodes (void) {
 			ccEmitOpcode(field2);
 			break;
 		case (Num)LDI:
-			field1 = ccICodeField(r0, 1);
-			field2 = ccICodeField(r0, 2);
-			field3 = ccICodeField(r0, 3);
+			field1 = asmICodeField(r0, 1);
+			field2 = asmICodeField(r0, 2);
+			field3 = asmICodeField(r0, 4);
 			switch ((Num)field1) {
 				case (Num)R0 : switch ((Num)field2) {
 				          case (Num)R0 : ccEmitOpcode(vmLDI00); break;
@@ -783,9 +648,9 @@ void ccEmitIblockOpcodes (void) {
 			ccEmitOpcode(field3);
 			break;
 		case (Num)LD:
-			field1 = ccICodeField(r0, 1);
-			field2 = ccICodeField(r0, 2);
-			field3 = ccICodeField(r0, 3);
+			field1 = asmICodeField(r0, 1);
+			field2 = asmICodeField(r0, 2);
+			field3 = asmICodeField(r0, 3);
 			switch ((Num)field1) {
 				case (Num)R0 : switch ((Num)field2) {
 				               case (Num)R1 : switch ((Num)field3) {
@@ -795,9 +660,9 @@ void ccEmitIblockOpcodes (void) {
 				default : assert(!"Unsuported field LD ?reg? reg reg"); }
 			break;
 		case (Num)STI:
-			field1 = ccICodeField(r0, 1);
-			field2 = ccICodeField(r0, 2);
-			field3 = ccICodeField(r0, 3);
+			field1 = asmICodeField(r0, 1);
+			field2 = asmICodeField(r0, 2);
+			field3 = asmICodeField(r0, 4);
 			switch ((Num)field1) {
 				case (Num)R0 : switch ((Num)field2) {
 				               case (Num)R1 : ccEmitOpcode(vmSTI01); break;
@@ -817,9 +682,9 @@ void ccEmitIblockOpcodes (void) {
 			ccEmitOpcode(field3);
 			break;
 		case (Num)ST:
-			field1 = ccICodeField(r0, 1);
-			field2 = ccICodeField(r0, 2);
-			field3 = ccICodeField(r0, 3);
+			field1 = asmICodeField(r0, 1);
+			field2 = asmICodeField(r0, 2);
+			field3 = asmICodeField(r0, 3);
 			switch ((Num)field1) {
 				case (Num)R0 : switch ((Num)field2) {
 				               case (Num)R1 : switch ((Num)field3) {
@@ -829,7 +694,7 @@ void ccEmitIblockOpcodes (void) {
 				default : assert(!"Unsuported field ST ?reg? reg reg"); }
 			break;
 		case (Num)PUSH:
-			field1 = ccICodeField(r0, 1);
+			field1 = asmICodeField(r0, 1);
 			switch ((Num)field1) {
 				case (Num)R0 : ccEmitOpcode(vmPUSH0); break;
 				case (Num)R1 : ccEmitOpcode(vmPUSH1); break;
@@ -842,7 +707,7 @@ void ccEmitIblockOpcodes (void) {
 				default : assert(!"Unsuported field PUSH ?reg?"); }
 			break;
 		case (Num)POP:
-			field1 = ccICodeField(r0, 1);
+			field1 = asmICodeField(r0, 1);
 			switch ((Num)field1) {
 				case (Num)R0 : ccEmitOpcode(vmPOP0); break;
 				case (Num)R1 : ccEmitOpcode(vmPOP1); break;
@@ -856,8 +721,8 @@ void ccEmitIblockOpcodes (void) {
 				default : assert(!"Unsuported field POP ?reg?"); }
 			break;
 		case (Num)ADDI:
-			field1 = ccICodeField(r0, 1);
-			field2 = ccICodeField(r0, 2);
+			field1 = asmICodeField(r0, 1);
+			field2 = asmICodeField(r0, 4);
 			switch ((Num)field1) {
 				case (Num)R0 : ccEmitOpcode(vmADDI0); break;
 				case (Num)R1 : ccEmitOpcode(vmADDI1); break;
@@ -866,9 +731,9 @@ void ccEmitIblockOpcodes (void) {
 			ccEmitOpcode(field2);
 			break;
 		case (Num)BLTI:
-			field1 = ccICodeField(r0, 1);
-			field2 = ccICodeField(r0, 2);
-			//field3 = ccICodeField(r0, 3);
+			field1 = asmICodeField(r0, 1);
+			field2 = asmICodeField(r0, 4);
+			//field3 = asmICodeField(r0, 5);
 			switch ((Num)field1) {
 				case (Num)R1 : ccEmitOpcode(vmBLTI1); break;
 				default : assert(!"Unsuported field BLTI ?reg? imm offset"); }
@@ -876,9 +741,9 @@ void ccEmitIblockOpcodes (void) {
 			ccEmitOpcode((Obj)(-3*8)); /* Branch address left unresolved */
 			break;
 		case (Num)BEQI:
-			field1 = ccICodeField(r0, 1);
-			field2 = ccICodeField(r0, 2);
-			//field3 = ccICodeField(r0, 3);
+			field1 = asmICodeField(r0, 1);
+			field2 = asmICodeField(r0, 4);
+			//field3 = asmICodeField(r0, 5);
 			switch ((Num)field1) {
 				case (Num)R0 : ccEmitOpcode(vmBEQI0); break;
 				case (Num)R1 : ccEmitOpcode(vmBEQI1); break;
@@ -888,9 +753,9 @@ void ccEmitIblockOpcodes (void) {
 			ccEmitOpcode((Obj)(-3*8)); /* Branch address left unresolved */
 			break;
 		case (Num)BNEI:
-			field1 = ccICodeField(r0, 1);
-			field2 = ccICodeField(r0, 2);
-			//field3 = ccICodeField(r0, 3);
+			field1 = asmICodeField(r0, 1);
+			field2 = asmICodeField(r0, 4);
+			//field3 = asmICodeField(r0, 5);
 			switch ((Num)field1) {
 				case (Num)R0 : ccEmitOpcode(vmBNEI0); break;
 				case (Num)R1 : ccEmitOpcode(vmBNEI1); break;
@@ -901,9 +766,9 @@ void ccEmitIblockOpcodes (void) {
 			ccEmitOpcode((Obj)(-3*8)); /* Branch address left unresolved */
 			break;
 		case (Num)BRTI:
-			field1 = ccICodeField(r0, 1);
-			field2 = ccICodeField(r0, 2);
-			//field3 = ccICodeField(r0, 3);
+			field1 = asmICodeField(r0, 1);
+			field2 = asmICodeField(r0, 4);
+			//field3 = asmICodeField(r0, 5);
 			switch ((Num)field1) {
 				case (Num)R0 : ccEmitOpcode(vmBRTI0); break;
 				default : assert(!"Unsuported field BRTI ?reg? imm offset"); }
@@ -911,9 +776,9 @@ void ccEmitIblockOpcodes (void) {
 			ccEmitOpcode((Obj)(-3*8)); /* Branch address left unresolved */
 			break;
 		case (Num)BNTI:
-			field1 = ccICodeField(r0, 1);
-			field2 = ccICodeField(r0, 2);
-			//field3 = ccICodeField(r0, 3);
+			field1 = asmICodeField(r0, 1);
+			field2 = asmICodeField(r0, 4);
+			//field3 = asmICodeField(r0, 5);
 			switch ((Num)field1) {
 				case (Num)R0 : ccEmitOpcode(vmBNTI0); break;
 				default : assert(!"Unsuported field BNTI ?reg? imm offset"); }
@@ -924,14 +789,14 @@ void ccEmitIblockOpcodes (void) {
 			/* Emitted by parent logic */
 			break;
 		case (Num)JMP :
-			field1 = ccICodeField(r0, 1);
+			field1 = asmICodeField(r0, 1);
 			switch ((Num)field1) {
 				case (Num)R0 : ccEmitOpcode(vmJ0); break;
 				case (Num)R2 : ccEmitOpcode(vmJ2); break;
 				default : assert(!"Unsuported field JMP ?reg?"); }
 			break;
 		case (Num)JAL :
-			field1 = ccICodeField(r0, 1);
+			field1 = asmICodeField(r0, 1);
 			switch ((Num)field1) {
 				case (Num)R0 : ccEmitOpcode(vmJAL0); break;
 				case (Num)R2 : ccEmitOpcode(vmJAL2); break;
@@ -941,13 +806,13 @@ void ccEmitIblockOpcodes (void) {
 			ccEmitOpcode(vmRET);
 			break;
 		case (Num)SYS :
-			field1 = ccICodeField(r0, 1);
+			field1 = asmICodeField(r0, 1);
 			switch ((Num)field1) {
 				case (Num)R0 : ccEmitOpcode(vmSYS0); break;
 				default : assert(!"Unsuported field SYS ?imm?"); }
 			break;
 		case (Num)SYSI:
-			field1 = ccICodeField(r0, 1);
+			field1 = asmICodeField(r0, 4);
 			ccEmitOpcode2(vmSYSI, field1);
 			break;
 		case (Num)QUIT:
@@ -976,14 +841,14 @@ void ccPrepareIBlockBranches (void) {
 	DBBEG("  iblock="NUM, ccIBlockID(riblock));
 	/* If no default block is set then verify no conditional block either as it's
 	   probably the final "quit" iblock. */
-	if (false == ccIBlockDefaultBlock(riblock)) {
-		assert(false == ccIBlockConditionalBlock(riblock));
+	if (false == ccIBlockDefaultTag(riblock)) {
+		assert(false == ccIBlockConditionalTag(riblock));
 		goto ret;
 	}
 
 	/* If the iblock has a conditional iblock, cache the branch opcode's offset-field location and
 	   set the field value to the target iblock temporarily */
-	condBlock = ccIBlockConditionalBlock(riblock);
+	condBlock = ccIBlockConditionalTag(riblock);
 	if (false != condBlock) {
 		assert(ccIsObjectTypeIBlock(condBlock));
 		codeBlockOffset = pccode - 1;
@@ -993,7 +858,7 @@ void ccPrepareIBlockBranches (void) {
 
 	/* if the iblock is the last iblock in the igraph vector or the next iblock is not my default */
 	id = ccIBlockID(riblock);
-	defBlock = ccIBlockDefaultBlock(riblock);
+	defBlock = ccIBlockDefaultTag(riblock);
 	if ((id == IBlockCount - 1) || (defBlock != ccIBlock(id + 1))) {
 		assert(ccIsObjectTypeIBlock(defBlock));
 		ccEmitOpcode2(vmBRA, false); /* Emit jump opcode */
@@ -1007,7 +872,7 @@ ret:
 
 
 /* For every iblock in the igraph that has been tagged #t, icode is emitted
-   to the code object.  The iblock is tagged with itss address in the code
+   to the code object.  The iblock is tagged with its address in the code
    block.  The branch field for branch instruction are also stored so when
    the offset can be determined, the branch opcode's field can be set quickly.
 
@@ -1049,7 +914,7 @@ void ccResolveDefault (void) {
 	/* Only resolve if the default opcode index is an immediate integer.
 	   False means no jump was required as its default iblock was
 	   emitted after this block. */
-	opcodeFieldAddr = (Num)ccIBlockDefaultBlock(riblock);
+	opcodeFieldAddr = (Num)ccIBlockDefaultTag(riblock);
 
 	if (!memIsObjectValid((Obj)opcodeFieldAddr)) {
 		/* Consider default block and it's address in the code block*/
@@ -1073,7 +938,7 @@ void ccResolveConditional (void) {
 	DBBEG("  iblock="NUM, ccIBlockID(riblock));
 	/* Only resolve if the conditional opcode index is an immediate integer.
 	   False means no final branch op at the end of the block */
-	opcodeFieldAddr = (Num)ccIBlockConditionalBlock(riblock);
+	opcodeFieldAddr = (Num)ccIBlockConditionalTag(riblock);
 
 	if (!memIsObjectValid((Obj)opcodeFieldAddr)) {
 		/* Consider default block and it's address in the code block*/
@@ -1116,7 +981,7 @@ void ccInitIBlockBranchTagsToIBlocks (Obj ib) {
 	DBE ccDumpIBlock(ib);
 
 	r4 = ib; /* TODO this iblock being passed around in C land is incorrect.  Use a register instead. */
-	tag = ccIBlockDefaultBlock(r4);
+	tag = ccIBlockDefaultTag(r4);
 	if (false != tag) {
 		if (true == tag) {
 			/* Default block is via 'next logical' */
@@ -1127,7 +992,7 @@ void ccInitIBlockBranchTagsToIBlocks (Obj ib) {
 		}
 	}
 
-	tag = ccIBlockConditionalBlock(r4);
+	tag = ccIBlockConditionalTag(r4);
 	if (false != tag) {
 		/* Conditional block is a labeled block */
 		if (!ccIsObjectTypeIBlock(tag)) { /* Could already be connected if non ASM flow */
@@ -1152,68 +1017,60 @@ void compSetIBlockICodeToNOP (Obj ib, Num icidx) {
      start <= index
        reg <= register field
  Look for "push reg" icode in iblock in riblock starting at icode start,
- skipping nop.
+ skipping nop and instructions that don't use the same register.
 */
 Num compOptimizePopPushFindPush(Num start, Obj reg) {
  Obj ic;
- Num idx=0, i;
- Obj field0, field1, field2;
+ Num i;
+ Obj field0, field1, field2, field3;
+
 	for (i=start; i<ccIBlockICodeLength(riblock); ++i) {
+
+		/* Consider next instruction and its fields */
 		ic = ccIBlockICode(riblock, i);
-		field0 = ccICodeField(ic, 0);
-		if (MVI == field0) {
-			field1 = ccICodeField(ic, 1);
-			if (reg != field1) continue;
-		}
-		if (MV == field0) {
-			field1 = ccICodeField(ic, 1);
-			field2 = ccICodeField(ic, 2);
-			if (reg != field1 && reg != field2) continue;
-		}
-		if (LDI == field0) {
-			field1 = ccICodeField(ic, 1);
-			field2 = ccICodeField(ic, 2);
-			if (reg != field1 && reg != field2) continue;
-		}
-		if (STI == field0) {
-			field1 = ccICodeField(ic, 1);
-			field2 = ccICodeField(ic, 2);
-			if (reg != field1 && reg != field2) continue;
-		}
-		if (ADDI == field0) {
-			field1 = ccICodeField(ic, 1);
-			if (reg != field1) continue;
-		}
-		if (PUSH == field0) {
-			field1 = ccICodeField(ic, 1);
-			if (reg == field1) idx = i;
-		}
-		if (NOP == field0) continue;
-		break;
+		field0 = asmICodeField(ic, 0);
+		field1 = asmICodeField(ic, 1);
+		field2 = asmICodeField(ic, 2);
+		field3 = asmICodeField(ic, 3);
+
+		/* Found a matching push so stop looking and succeed passing index back */
+		if ((PUSH == field0) && (reg == field1))
+			return i;
+
+		/* Found an instruction that alters the stack so stop looking and fail*/
+		if ((PUSH == field0) || (POP == field0))
+			return 0;
+
+		/* Found instruction that requires register, stop looking and fail */
+		if ((reg == field1) || (reg == field2) || (reg == field3))
+			return 0;
 	}
-	return idx;
+
+	return 0;
 }
 
 /* riblock <= iblock to optimize
    return => optimization performed
 */
-Num compOptimizePopPush(Num skip) {
+Num compOptimizePopPush(void) {
  Obj ic;
  Num ret=0, i;
  Obj field0, field1;
  Num idx;
+	/* Scan every icode in iblock */
 	for (i=0; i<ccIBlockICodeLength(riblock); ++i) {
 		ic = ccIBlockICode(riblock, i);
-		field0 = ccICodeField(ic, 0);
+		/* Look for a pop instruction */
+		field0 = asmICodeField(ic, 0);
 		if (POP == field0) {
-			field1 = ccICodeField(ic, 1);
+			/* Consider its register */
+			field1 = asmICodeField(ic, 1);
+			/* And find a matching push that cancels the pop */
 			idx = compOptimizePopPushFindPush(i+1, field1);
 			if (0 != idx) {
 				ret = 1;
-				if (!skip) {
-					compSetIBlockICodeToNOP(riblock, i);
-					compSetIBlockICodeToNOP(riblock, idx);
-				}
+				compSetIBlockICodeToNOP(riblock, i);
+				compSetIBlockICodeToNOP(riblock, idx);
 				break;
 			}
 		}
@@ -1232,11 +1089,9 @@ void compOptimizeAllIBlocks (void) {
 		/* Consider each live iblock */
 		riblock = ccIBlock(i);
 		if (true == ccIBlockTag(riblock)) {
-//if (compOptimizePopPush(1)) ccDumpIBlock(riblock);
-			while (compOptimizePopPush(0)) {
+			while (compOptimizePopPush()) {
 				ret=1;
 			}
-//if (ret) { ccDumpIBlock(riblock); ret = 0; }
 		}
 	}
 	DBEND();
@@ -1267,9 +1122,9 @@ Num ccCountIGraphFields (Obj ib) {
 	}
 
 	vmPush(ib);
-	len += ccCountIGraphFields(ccIBlockDefaultBlock(ib));
+	len += ccCountIGraphFields(ccIBlockDefaultTag(ib));
 	ib = vmPop();
-	len += ccCountIGraphFields(ccIBlockConditionalBlock(ib));
+	len += ccCountIGraphFields(ccIBlockConditionalTag(ib));
 	return len;
 }
 
@@ -1290,11 +1145,12 @@ void asmAsmIGraph (void) {
 
 	assert(0 < IBlockCount && "There are no iblocks to assemble");
 
+//ccDumpIBlocks();
+
 	/* Create the code block object which all iblocks are compile to */
 	len = ccCountIGraphFields(ccIBlock(iblockOffset));
 	rcodenew = memNewVector(TCODE, len);
 	pccode = 0;
-
 
 	compOptimizeAllIBlocks();
 
@@ -1316,107 +1172,38 @@ void asmAsmIGraph (void) {
 /*******************************************************************************
  Debugging
 *******************************************************************************/
-void ccDumpICodeFieldsImm (Obj c) {
- Obj r;
-	r = ccICodeField(c, 1);
-	objDump(r, stderr);
+void ccDumpICodeFields (Obj ic) {
+ Obj f;
+	if ((Obj)NA != (f = asmICodeField(ic, 1))) { assert(f<=R1F); fprintf(stderr, " $"HEX, f); }
+	if ((Obj)NA != (f = asmICodeField(ic, 2))) { assert(f<=R1F); fprintf(stderr, " $"HEX, f); }
+	if ((Obj)NA != (f = asmICodeField(ic, 3))) { assert(f<=R1F); fprintf(stderr, " $"HEX, f); }
+	if ((Obj)NA != (f = asmICodeField(ic, 4))) { fprintf(stderr, " "); objDump(f, stderr); }
+	if ((Obj)NA != (f = asmICodeField(ic, 5))) { fprintf(stderr, " "); objDump(f, stderr); }
 }
-
-void ccDumpICodeFieldsReg (Obj c) {
- Num r;
-	r = (Num)ccICodeField(c, 1);
-	assert(r <= (Num)R1F);
-	fprintf(stderr, "$"HEX, r);
-}
-
-void ccDumpICodeFieldsRegReg (Obj c) {
- Num r;
-	r = (Num)ccICodeField(c, 1);
-	assert(r <= (Num)R1F);
-	fprintf(stderr, "$"HEX" ", r);
-
-	r = (Num)ccICodeField(c, 2);
-	assert(r <= (Num)R1F);
-	fprintf(stderr, "$"HEX, r);
-}
-
-void ccDumpICodeFieldsRegRegReg (Obj c) {
- Num r;
-	r = (Num)ccICodeField(c, 1);
-	assert(r <= (Num)R1F);
-	fprintf(stderr, "$"HEX" ", r);
-
-	r = (Num)ccICodeField(c, 2);
-	assert(r <= (Num)R1F);
-	fprintf(stderr, "$"HEX" ", r);
-
-	r = (Num)ccICodeField(c, 3);
-	assert(r <= (Num)R1F);
-	fprintf(stderr, "$"HEX, r);
-}
-
-void ccDumpICodeFieldsRegImm (Obj c) {
- Obj r;
-	r = ccICodeField(c, 1);
-	assert(r <= R1F);
-	fprintf(stderr, "$"HEX" ", r);
-
-	r = ccICodeField(c, 2);
-	objDump(r, stderr);
-}
-
-void ccDumpICodeFieldsRegImmImm (Obj c) {
- Obj r;
-	r = ccICodeField(c, 1);
-	assert(r <= R1F);
-	fprintf(stderr, "$"HEX" ", r);
-
-	r = ccICodeField(c, 2);
-	objDump(r, stderr);
-
-	fprintf(stderr, " ");
-	r = ccICodeField(c, 3);
-	objDump(r, stderr);
-}
-
-void ccDumpICodeFieldsRegRegImm (Obj c) {
- Obj r;
-	r = ccICodeField(c, 1);
-	assert(r <= R1F);
-	fprintf(stderr, "$"HEX" ", r);
-
-	r = ccICodeField(c, 2);
-	assert(r <= R1F);
-	fprintf(stderr, "$"HEX" ", r);
-
-	r = ccICodeField(c, 3);
-	objDump(r, stderr);
-}
-
 void ccDumpICode (Obj ic) {
 	if (memIsObjectValid(ic)) {
-		switch ((Num)ccICodeField(ic, 0)) {
-			case (Num)MV  : fprintf(stderr, "mv   "); ccDumpICodeFieldsRegReg(ic);    break;
-			case (Num)MVI : fprintf(stderr, "mvi  "); ccDumpICodeFieldsRegImm(ic);    break;
-			case (Num)LDI : fprintf(stderr, "ldi  "); ccDumpICodeFieldsRegRegImm(ic); break;
-			case (Num)LD  : fprintf(stderr, "ld   "); ccDumpICodeFieldsRegRegReg(ic); break;
-			case (Num)STI : fprintf(stderr, "sti  "); ccDumpICodeFieldsRegRegImm(ic); break;
-			case (Num)PUSH: fprintf(stderr, "push "); ccDumpICodeFieldsReg(ic);       break;
-			case (Num)POP : fprintf(stderr, "pop  "); ccDumpICodeFieldsReg(ic);       break;
-			case (Num)ADDI: fprintf(stderr, "addi "); ccDumpICodeFieldsRegImm(ic);    break;
-			case (Num)BLTI: fprintf(stderr, "blti "); ccDumpICodeFieldsRegImmImm(ic); break;
-			case (Num)BEQI: fprintf(stderr, "beqi "); ccDumpICodeFieldsRegImmImm(ic); break;
-			case (Num)BNEI: fprintf(stderr, "bnei "); ccDumpICodeFieldsRegImmImm(ic); break;
-			case (Num)BRTI: fprintf(stderr, "brti "); ccDumpICodeFieldsRegImmImm(ic); break;
-			case (Num)BNTI: fprintf(stderr, "bnti "); ccDumpICodeFieldsRegImmImm(ic); break;
-			case (Num)BRA : fprintf(stderr, "bra  "); ccDumpICodeFieldsImm(ic);       break;
-			case (Num)JMP : fprintf(stderr, "j    "); ccDumpICodeFieldsReg(ic);       break;
-			case (Num)JAL : fprintf(stderr, "jal  "); ccDumpICodeFieldsReg(ic);       break;
-			case (Num)RET : fprintf(stderr, "ret");                             break;
-			case (Num)SYS : fprintf(stderr, "sys  "); ccDumpICodeFieldsReg(ic);       break;
-			case (Num)SYSI: fprintf(stderr, "sysi "); ccDumpICodeFieldsImm(ic);       break;
-			case (Num)NOP : fprintf(stderr, "nop");                             break;
-			case (Num)QUIT: fprintf(stderr, "quit");                            break;
+		switch ((Num)asmICodeField(ic, 0)) {
+			case (Num)MV  : fprintf(stderr, "mv  "); ccDumpICodeFields(ic); break;
+			case (Num)MVI : fprintf(stderr, "mvi "); ccDumpICodeFields(ic); break;
+			case (Num)LDI : fprintf(stderr, "ldi "); ccDumpICodeFields(ic); break;
+			case (Num)LD  : fprintf(stderr, "ld  "); ccDumpICodeFields(ic); break;
+			case (Num)STI : fprintf(stderr, "sti "); ccDumpICodeFields(ic); break;
+			case (Num)PUSH: fprintf(stderr, "push"); ccDumpICodeFields(ic); break;
+			case (Num)POP : fprintf(stderr, "pop "); ccDumpICodeFields(ic); break;
+			case (Num)ADDI: fprintf(stderr, "addi"); ccDumpICodeFields(ic); break;
+			case (Num)BLTI: fprintf(stderr, "blti"); ccDumpICodeFields(ic); break;
+			case (Num)BEQI: fprintf(stderr, "beqi"); ccDumpICodeFields(ic); break;
+			case (Num)BNEI: fprintf(stderr, "bnei"); ccDumpICodeFields(ic); break;
+			case (Num)BRTI: fprintf(stderr, "brti"); ccDumpICodeFields(ic); break;
+			case (Num)BNTI: fprintf(stderr, "bnti"); ccDumpICodeFields(ic); break;
+			case (Num)BRA : fprintf(stderr, "bra "); ccDumpICodeFields(ic); break;
+			case (Num)JMP : fprintf(stderr, "j   "); ccDumpICodeFields(ic); break;
+			case (Num)JAL : fprintf(stderr, "jal "); ccDumpICodeFields(ic); break;
+			case (Num)RET : fprintf(stderr, "ret");                          break;
+			case (Num)SYS : fprintf(stderr, "sys "); ccDumpICodeFields(ic); break;
+			case (Num)SYSI: fprintf(stderr, "sysi"); ccDumpICodeFields(ic); break;
+			case (Num)NOP : fprintf(stderr, "nop");                          break;
+			case (Num)QUIT: fprintf(stderr, "quit");                         break;
 			default:
 				fprintf(stderr, "**UNKNOWN OPCODE**");
 				objDump(ic, stderr);
@@ -1439,7 +1226,7 @@ void ccDumpIBlock (Obj ib) {
 		fprintf(stderr, HEX04, ccIBlockTag(ib));
 
 	/* Default block */
-	block = ccIBlockDefaultBlock(ib);
+	block = ccIBlockDefaultTag(ib);
 	if (false==block)
 		fprintf(stderr, "  [---]");
 	else {
@@ -1450,7 +1237,7 @@ void ccDumpIBlock (Obj ib) {
 	}
 
 	/* Conditional block */
-	block = ccIBlockConditionalBlock(ib);
+	block = ccIBlockConditionalTag(ib);
 	if (false==block)
 		fprintf(stderr, "  [---]");
 	else {

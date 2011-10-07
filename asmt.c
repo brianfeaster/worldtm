@@ -735,7 +735,7 @@ void optimizePopPush (void) {
 			ADDI, R2, (Obj)2,
 			STI, R2, R0, 1l,
 		PUSH, R4,
-		SYSI, cctDumpObjR0,
+		//SYSI, cctDumpObjR0,
 		POP, R0,
 		QUIT
 	);
@@ -767,17 +767,17 @@ int main (int argc, char *argv[]) {
 	memPointerRegister(cctDumpIntegerR0);
 	memPointerRegister(cctDumpObjR0);
 
-	TEST(test1);
-	TEST(test2);
-	TEST(test3);
-	TEST(test4);
-	TEST(test5);
-	TEST(cctAsm);
-	TEST(cctAsmNested);
-	TEST(cctSysCall);
-	TEST(cctJumpAndLink);
-	TEST(opcodes);
-	TEST(myTest);
+	//TEST(test1);
+	//TEST(test2);
+	//TEST(test3);
+	//TEST(test4);
+	//TEST(test5);
+	//TEST(cctAsm);
+	//TEST(cctAsmNested);
+	//TEST(cctSysCall);
+	//TEST(cctJumpAndLink);
+	//TEST(opcodes);
+	//TEST(myTest);
 	TEST(optimizePopPush);
 
 	return 0;

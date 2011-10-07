@@ -3641,3 +3641,16 @@ Scan looking for "push X"
   Stop if op uses X
        if op alters stack
   If found "push X" remove it and the "pop X"
+
+
+
+Fri Oct  7 13:04:37 EDT 2011
+
+Homogonize icode objects:  #icode<opcode r0 r1 r2 imm addr>  This will allow for
+simpler icode queries such as "uses reg" or "is a branch"  Fields will be
+immediate values or false depending on the type of instruction.
+
+This should allow for a cleaner address resolution sequence.  Currrently the
+branch/conditional tags change from false -> label -> iblock -> code-offset ->
+iblock.  The icode's address field value goes from labels -> iblock -> address
+offset.
