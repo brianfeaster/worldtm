@@ -61,7 +61,8 @@
 #define QUIT (Obj)0x35
 
 #define LABEL (Obj)0xfe
-#define END  (Obj)0xff
+#define END   (Obj)0xff
+#define NA    (Obj)-1
 
 
 /***************************************
