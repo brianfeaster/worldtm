@@ -31,8 +31,6 @@ DESIGN
    Flow keeps track of pseudo environment in renv/r1c and used registers in flags
 */
 
-void ccDumpICode (Obj ic);
-void ccDumpIBlock (Obj ib);
 void ccCompileExpr (Num flags);
 void ccInitialize (void);
 
@@ -2086,10 +2084,6 @@ void ccCompile (void) {
 /*******************************************************************************
  Init
 *******************************************************************************/
-void MysyscallDisplay (void) {
-	while (r1--) sysDisplay(vmPop(), stderr);
-}
-
 void ccInitialize (void) {
  static Num shouldInitialize=1;
 	DBBEG();
@@ -2109,58 +2103,13 @@ void ccInitialize (void) {
 		memPointerRegister(ccSysCreateContinuation); 
 		memPointerRegister(osNewThread); 
 		memPointerRegister("Too many arguments to closure"); 
+		memPointerRegister("Illegal Operator Type");
 		memPointerRegister(ccError);
-
-		DB("Creating the global environment with predefined symbols 'x' and 'y'");
-		objNewSymbol((Str)"~TGE~", 5);
-		r1=r0;  r2=null;  objCons12();  renv=rtge=r0;
-
-		sysDefineSyscall(MysyscallDisplay, "display");
-
-		DB("Extending faux local environment");
-		r1=renv; /* Keep track of parent env */
-		objNewVector(4);
-		renv = r0;
-		memVectorSet(renv, 0, r1);
-		r1 = null;
-		objNewSymbol((Str)"yyy", (Num)3); objCons01(); r1 = r0;
-		objNewSymbol((Str)"xxx", (Num)3); objCons01();
-		memVectorSet(renv, 1, r0);
-		objNewInt(420);
-		memVectorSet(renv, 2, r0);
-		objNewInt(690);
-		memVectorSet(renv, 3, r0);
-
-		DB("Extending faux local environment");
-		r1=renv; /* Keep track of parent env */
-		objNewVector(4);
-		renv = r0;
-		memVectorSet(renv, 0, r1);
-		r1 = null;
-		objNewSymbol((Str)"yy", (Num)2); objCons01(); r1 = r0;
-		objNewSymbol((Str)"xx", (Num)2); objCons01();
-		memVectorSet(renv, 1, r0);
-		objNewInt(42);
-		memVectorSet(renv, 2, r0);
-		objNewInt(69);
-		memVectorSet(renv, 3, r0);
-
-		DB("Extending faux local environment");
-		r1=renv; /* Keep track of parent env */
-		objNewVector(4);
-		renv = r0;
-		memVectorSet(renv, 0, r1);
-		r1 = null;
-		objNewSymbol((Str)"y", (Num)1); objCons01(); r1 = r0;
-		objNewSymbol((Str)"x", (Num)1); objCons01();
-		memVectorSet(renv, 1, r0);
-		objNewInt(4);
-		memVectorSet(renv, 2, r0);
-		objNewInt(6);
-		memVectorSet(renv, 3, r0);
-
-		objNewInt(4242); sysDefine ("X"); /* It's always nice to have x and y defined with useful values */
-		objNewInt(6969); sysDefine ("Y"); /* It's always nice to have x and y defined with useful values */
+		memPointerRegister("runtime error");
+		memPointerRegister("Compiler error");
+		memPointerRegister("Too many arguments to function");
+		memPointerRegister("Not enough arguments to closure");
+		memPointerRegister(objNewVector1);
 	} else {
 		DB("Module already activated");
 	}

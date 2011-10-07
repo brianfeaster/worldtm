@@ -13,5 +13,10 @@
 #include "vm.h"
 #include "mem.h"
 
+void empty (void) {
+	DBBEG();
+	DBEND();
+};
+
 #undef DB_DESC
 #undef DEBUG
