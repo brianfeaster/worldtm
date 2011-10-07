@@ -341,8 +341,11 @@ void objDumpR (Obj o, FILE *stream, Num islist) {
 		fprintf(stream, "#<");
 		if ((Int)o < 0l)
 			fprintf(stream, "-"HEX, labs((Int)o));
-		else
+		else {
 			fprintf(stream, HEX, o);
+			/* Dump the object description. */
+			if ((s = memPointerString(o))) fprintf (stream, ":%s", s);
+		}
 		fprintf(stream, ">");
 		return;
 	}
@@ -435,11 +438,7 @@ void objDumpR (Obj o, FILE *stream, Num islist) {
 				fprintf(stream, HEX, o);
 			}
 			/* Dump the object description. */
-			s = memPointerString(o);
-			if (s) {
-				fwrite (":", 1, 1, stream);
-				fwrite (s, 1, strlen((char*)s), stream);
-			}
+			if ((s = memPointerString(o))) fprintf (stream, ":%s", s);
 	}
 }
 

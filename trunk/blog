@@ -3614,3 +3614,30 @@ Sun Oct  2 19:40:29 EDT 2011
 
 The new compiler sets rcode/r1e with the new compiled code block.  The original
 returned the new block in r0.  I need to go back and make the switch.
+
+
+
+Thu Oct  6 19:27:41 EDT 2011
+
+Thinking about optimizations:
+
+The 3 pops and 3 pushes can be removed:
+
+#<01a  7fb2d7d29040  [01b]  [01d]  (018 019 017)
+  00  pop  $19
+  01  pop  $1b
+  02  pop  $1a
+  03  sti  $0 $1c #<3>
+  04  push $1a
+  05  push $1b
+  06  push $19
+  07  mvi  $1 7fb2d728c7c0
+  08  sysi #<40f1bc:sysNewClosure1Env>
+  09  mvi  $1 #<0>
+  0A  brti $0 #<86> #<31>>
+
+Consider "pop X".
+Scan looking for "push X"
+  Stop if op uses X
+       if op alters stack
+  If found "push X" remove it and the "pop X"

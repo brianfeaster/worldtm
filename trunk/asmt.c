@@ -8,8 +8,8 @@
 #include "vm.h"
 #include "mem.h"
 
-void ccIBlockSetDefaultTag (Obj ib, Obj tag);
-void ccIBlockSetConditionalTag (Obj ib, Obj tag);
+void ccIBlockDefaultTagSet (Obj ib, Obj tag);
+void ccIBlockConditionalTagSet (Obj ib, Obj tag);
 extern Num ccGenerateNewIBlock (Num icodeSize);
 #define riblock rb /* The current iblock where new icode is emitted and new iblocks are attached to */
 #define rexpr   rf /* Expression being compiled.  See vm.h */
@@ -28,6 +28,13 @@ void FBInit (void) {
  static Num size;
 	FB = open_memstream(&FBBuff, &size);
 	assert(NULL != FB);
+}
+
+void FBDump () {
+	fflush(FB);
+	fclose(FB);
+	fprintf(stderr, FBBuff);
+	free(FBBuff);
 }
 
 /* Compare character file buffer's contents with string argument */
@@ -81,7 +88,7 @@ void test1 (void) {
 	/* Head iblock of the igraph */
 	ccICodePushNewNOP();
 	ccGenerateIBlockWithPushedIcodes();
-	ccIBlockSetDefaultTag(riblock, true); /* signal this block's default is the next one */
+	ccIBlockDefaultTagSet(riblock, true); /* signal this block's default is the next one */
 
 	/* Create a new iblock as the default block to the iblock specified by
 	   the first parameter.
@@ -114,19 +121,19 @@ void test2 (void) {
 	/* Head iblock of the igraph */
 	ccICodePushNewNOP();
 	ccGenerateIBlockWithPushedIcodes();
-	ccIBlockSetDefaultTag(riblock, true); /* signal this block's default is the next one */
+	ccIBlockDefaultTagSet(riblock, true); /* signal this block's default is the next one */
 
 	ccICodePushNewMVI(R0, (Obj)10);
 	ccGenerateIBlockWithPushedIcodes();
-	ccIBlockSetDefaultTag(riblock, true); /* signal this block's default is the next one */
+	ccIBlockDefaultTagSet(riblock, true); /* signal this block's default is the next one */
 
 	ccICodePushNewSYSI((Obj)cctDumpIntegerR0);
 	ccICodePushNewSYSI((Obj)cctDumpSpace);
 	ccICodePushNewADDI(R0, (Obj)-1);
 	ccICodePushNewBNEI(R0, 0, false);
 	ccGenerateIBlockWithPushedIcodes();
-	ccIBlockSetDefaultTag(riblock, true); /* signal this block's default is the next one */
-	ccIBlockSetConditionalTag(riblock, riblock); /* Set conditional block to self */
+	ccIBlockDefaultTagSet(riblock, true); /* signal this block's default is the next one */
+	ccIBlockConditionalTagSet(riblock, riblock); /* Set conditional block to self */
 
 	ccICodePushNewQUIT();
 	ccGenerateIBlockWithPushedIcodes();
@@ -151,31 +158,31 @@ void test3 (void) {
 	/* Head iblock of the igraph */
 	ccICodePushNewNOP();
 	ccGenerateIBlockWithPushedIcodes();
-	ccIBlockSetDefaultTag(riblock, true); /* signal this block's default is the next one */
+	ccIBlockDefaultTagSet(riblock, true); /* signal this block's default is the next one */
 
 	ccICodePushNewMVI(R1, (Obj)5);
 	ccGenerateIBlockWithPushedIcodes();
-	ccIBlockSetDefaultTag(riblock, true);
+	ccIBlockDefaultTagSet(riblock, true);
 
 	ccICodePushNewSYSI((Obj)cctDumpSpace);
 	ccICodePushNewMV(R0, R1);
 	ccGenerateIBlockWithPushedIcodes();
 	r3 = riblock; /* Keep track of this iblock so we can link to it from an iblock below */
-	ccIBlockSetDefaultTag(riblock, true);
+	ccIBlockDefaultTagSet(riblock, true);
 
 	ccICodePushNewSYSI((Obj)cctDumpIntegerR0);
 	ccICodePushNewSYSI((Obj)cctDumpSpace);
 	ccICodePushNewADDI(R0, (Obj)-1);
 	ccICodePushNewBNEI(R0, 0, false);
 	ccGenerateIBlockWithPushedIcodes();
-	ccIBlockSetDefaultTag(riblock, true);
-	ccIBlockSetConditionalTag(riblock, riblock); /* Set this iblock's conditional link to self */
+	ccIBlockDefaultTagSet(riblock, true);
+	ccIBlockConditionalTagSet(riblock, riblock); /* Set this iblock's conditional link to self */
 
 	ccICodePushNewADDI(R1, (Obj)-1);
 	ccICodePushNewBNEI(R1, 0, false); /* Jump back to another iblock */
 	ccGenerateIBlockWithPushedIcodes();
-	ccIBlockSetDefaultTag(riblock, true);
-	ccIBlockSetConditionalTag(riblock, r3); /* Set this iblock's conditional link to self */
+	ccIBlockDefaultTagSet(riblock, true);
+	ccIBlockConditionalTagSet(riblock, r3); /* Set this iblock's conditional link to self */
 
 	ccICodePushNewQUIT();
 	ccGenerateIBlockWithPushedIcodes();
@@ -199,7 +206,7 @@ void test4 (void) {
 
 	ccICodePushNewNOP();
 	ccGenerateIBlockWithPushedIcodes();
-	ccIBlockSetDefaultTag(riblock, true);
+	ccIBlockDefaultTagSet(riblock, true);
 
 	// 4
 	ccICodePushNewMVI(R1, (Obj)9);
@@ -207,39 +214,39 @@ void test4 (void) {
 	ccICodePushNewBNEI(R0, 0, false); /* Branch forward to 7 for fun which just branches back to 5 */
 	ccGenerateIBlockWithPushedIcodes();
 	r4 = riblock;
-	ccIBlockSetDefaultTag(riblock, true);
+	ccIBlockDefaultTagSet(riblock, true);
 
 	// 5
 	ccICodePushNewSYSI((Obj)cctDumpSpace);
 	ccGenerateIBlockWithPushedIcodes();
 	r5 = riblock;
-	ccIBlockSetDefaultTag(riblock, true);
+	ccIBlockDefaultTagSet(riblock, true);
 
 	ccICodePushNewSYSI((Obj)cctDumpIntegerR0);
 	ccICodePushNewSYSI((Obj)cctDumpSpace);
 	ccICodePushNewADDI(R0, (Obj)-1);
 	ccICodePushNewBNEI(R0, 0, false); /* Loop to self */
 	ccGenerateIBlockWithPushedIcodes();
-	ccIBlockSetDefaultTag(riblock, true);
-	ccIBlockSetConditionalTag(riblock, riblock);
+	ccIBlockDefaultTagSet(riblock, true);
+	ccIBlockConditionalTagSet(riblock, riblock);
 
 	// 6
 	ccICodePushNewBNEI(R0, 0, false); /* Branch to 8 and quit */
 	ccGenerateIBlockWithPushedIcodes();
 	r6 = riblock;
-	ccIBlockSetDefaultTag(riblock, true);
+	ccIBlockDefaultTagSet(riblock, true);
 
 	// 7
 	ccICodePushNewBNEI(R0, 0, false); /* Branch back to 5 */
 	ccGenerateIBlockWithPushedIcodes();
-	ccIBlockSetDefaultTag(riblock, true);
-	ccIBlockSetConditionalTag(r4, riblock);
-	ccIBlockSetConditionalTag(riblock, r5);
+	ccIBlockDefaultTagSet(riblock, true);
+	ccIBlockConditionalTagSet(r4, riblock);
+	ccIBlockConditionalTagSet(riblock, r5);
 
 	// 8
 	ccICodePushNewQUIT();
 	ccGenerateIBlockWithPushedIcodes();
-	ccIBlockSetConditionalTag(r6, riblock);
+	ccIBlockConditionalTagSet(r6, riblock);
 
 	asmAsmIGraph();
 	rcode = r0;
@@ -259,19 +266,19 @@ void test5 (void) {
 
 	ccICodePushNewMVI(R0, (Obj)9);
 	ccGenerateIBlockWithPushedIcodes();
-	ccIBlockSetDefaultTag(riblock, true);
+	ccIBlockDefaultTagSet(riblock, true);
 
 	// id2
 	ccICodePushNewBEQI(R0, (Obj)1, false); /* Branch to id4  */
 	ccGenerateIBlockWithPushedIcodes();
 	r4 = riblock;
-	ccIBlockSetDefaultTag(riblock, true);
+	ccIBlockDefaultTagSet(riblock, true);
 
 	// id3
 	ccICodePushNewBEQI(R0, (Obj)2, false);
 	ccGenerateIBlockWithPushedIcodes();
 	r5 = riblock;
-	ccIBlockSetDefaultTag(riblock, true);
+	ccIBlockDefaultTagSet(riblock, true);
 
 	// id5
 	ccICodePushNewSYSI((Obj)cctDumpIntegerR0);
@@ -279,13 +286,13 @@ void test5 (void) {
 	ccICodePushNewBNEI(R0, 0, false); /* Branch back to id2 */
 	ccGenerateIBlockWithPushedIcodes();
 	r6 = riblock;
-	ccIBlockSetDefaultTag(riblock, true);
-	ccIBlockSetConditionalTag(riblock, r4);
+	ccIBlockDefaultTagSet(riblock, true);
+	ccIBlockConditionalTagSet(riblock, r4);
 
 	// id6
 	ccICodePushNewQUIT();
 	ccGenerateIBlockWithPushedIcodes();
-	ccIBlockSetDefaultTag(riblock, true);
+	ccIBlockDefaultTagSet(riblock, true);
 
 	ccICodePushNewQUIT();
 	ccGenerateIBlockWithPushedIcodes();
@@ -293,9 +300,9 @@ void test5 (void) {
 	// id4
 	ccICodePushNewSYSI((Obj)cctDumpIntegerR0);
 	ccGenerateIBlockWithPushedIcodes();
-	ccIBlockSetConditionalTag(r4, riblock);
-	ccIBlockSetConditionalTag(r5, riblock);
-	ccIBlockSetDefaultTag(riblock, r6);
+	ccIBlockConditionalTagSet(r4, riblock);
+	ccIBlockConditionalTagSet(r5, riblock);
+	ccIBlockDefaultTagSet(riblock, r6);
 
 	asmAsmIGraph();
 	rcode = r0;
@@ -709,6 +716,37 @@ int myTest (void) {
 	return 0;
 }
 
+void optimizePopPush (void) {
+	FBInit();
+
+	asmInit();
+	asmAsm(
+		PUSH, R0,
+		MVI, R1, 3, /* Create a vector */
+		SYSI, objNewVector1,
+		POP, R4,
+			LDI, R2, R0, 0l, /* Consider 1st element, inc and store back */
+			ADDI, R2, (Obj)1,
+			STI, R2, R0, 0l,
+			MV, R1, R0,
+			//MV, R0, R4, /* This would prevent the above pop and below push from being optimized out */
+			MV, R0, R1,
+			LDI, R2, R0, 1l, /* Consider 2nd element, inc and store back */
+			ADDI, R2, (Obj)2,
+			STI, R2, R0, 1l,
+		PUSH, R4,
+		SYSI, cctDumpObjR0,
+		POP, R0,
+		QUIT
+	);
+//ccDumpIBlocks();
+	asmAsmIGraph();
+//vmDebugDumpCode(r0, stderr);
+	rcode = r0;  rip = 0;  vmRun();
+//memDebugDumpObject(rstack, stderr);
+	FBDump();
+}
+
 
 int main (int argc, char *argv[]) {
 	/* Force a failure by passing -f to this program */
@@ -740,6 +778,7 @@ int main (int argc, char *argv[]) {
 	TEST(cctJumpAndLink);
 	TEST(opcodes);
 	TEST(myTest);
+	TEST(optimizePopPush);
 
 	return 0;
 }
