@@ -85,7 +85,7 @@ void fancyHelloWorld (void) {
 		vmMV01,               /* r1-- */
 		vmADDI0, (Obj)-1,
 		vmMV10,
-		vmMV01E, // Or load address of printNumbersSub (r11) then index ptr:  MVI0, &printNumbersSub, LDI00, 0,
+		vmMV01E, // Or load address of printNumbersSub (r9) then index ptr:  MVI0, &printNumbersSub, LDI00, 0,
 		vmJAL0,
 
 		vmPOP1B,               /* Restore return address */

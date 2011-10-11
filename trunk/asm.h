@@ -61,9 +61,11 @@
 #define QUIT (Obj)0x35
 
 #define LABEL (Obj)0xfe
-#define END   (Obj)0xff
-#define NA    (Obj)-1
 
+#define END sasmend
+extern Obj sasmend;
+#define NA sasmna
+extern Obj sasmna;
 
 /***************************************
  ASM
@@ -71,7 +73,7 @@
 void asmInit (void);
 Obj asmNewLabel();
 void asmAsmInternal (Obj f, ...);
-#define asmAsm(...) asmAsmInternal(__VA_ARGS__, END)
+#define asmAsm(...) asmAsmInternal(__VA_ARGS__, sasmend)
 
 
 /***************************************

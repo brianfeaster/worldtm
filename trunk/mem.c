@@ -733,6 +733,7 @@ u8 memArrayObject (Obj obj, Num offset) {
 	return *((u8*)obj+offset);
 }
 
+extern Obj r1e;
 Obj memVectorObject (Obj obj, Num offset) {
 	#if DEBUG_ASSERT
 	if (!memIsObjectValid(obj) && !memIsObjectInHeap(&heapNew, obj)) {
@@ -743,6 +744,8 @@ Obj memVectorObject (Obj obj, Num offset) {
 		printf ("ERROR memVectorObject(obj ["OBJ"] "OBJ" offset "NUM") Not vector class.",
 			memObjectDescriptor(obj),
 		   obj, offset);
+//		objDump(obj, stderr);
+//		vmDebugDumpCode(r1e, stderr);
 		memError();
 	} else if (offset<0 || memObjectLength(obj)<=offset ) {
 		printf ("ERROR memVectorObject(obj "OBJ" offset "NUM") Invalid index.",
@@ -1306,7 +1309,7 @@ void memValidateObject (Obj o) {
  Obj oo, op;
  Int valid=1;
  Num i;
-	DBBEG();
+//	DBBEG();
 	
 	if ((memIsObjectInHeap(&heapOld, o)
 		  || memIsObjectInHeap(&heap, o)
@@ -1358,8 +1361,9 @@ void memValidateObject (Obj o) {
 	if (!valid) {
 		fprintf (stderr, "\nERROR memValidateObject() found bad object:"OBJ NL, o);
 		memDebugDumpObject (o, stderr);
+		*(int*)0=0;
 	}
-	DBEND();
+//	DBEND();
 }
 
 void memValidateHeapStructures (void) {

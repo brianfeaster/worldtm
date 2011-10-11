@@ -71,7 +71,8 @@ void osRemoveThread (Obj t) {
 
 	Requires: r0 code block
 	Mutates: r0 r1 r2
-	Returns: r0 thread descriptor
+	Returns: r1 thread descriptor
+            r0 thread id
 */
 void osNewThread (void) {
  Num tid;
@@ -125,7 +126,8 @@ void osNewThread (void) {
 	memVectorSet(r0, 0, r1);
 	objDoublyLinkedListInsert (rrunning, r0); /* Insert new thread before current thread */
 
-	r0 = r2; /* Return thread ID */
+	r0 = r2;
+	/* Return thread ID in r0 and thread descriptor in r1. */
 done:
 	DBEND("  =>  tid:"NUM, tid);
 } /* osNewThread */
@@ -507,7 +509,7 @@ void osSpawnSignalHandler(void) {
 				osNewThread();
 				/* Set the new thread's r0 register to the closure object as
 				   this is expected state during a procedure application */
-				memStackSet(osThreadDescStack(r0), 0, r3);
+				memStackSet(osThreadDescStack(r1), 0, r3);
 			r3=vmPop();
 			r2=vmPop();
 			r1=vmPop();

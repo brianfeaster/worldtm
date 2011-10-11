@@ -8,11 +8,9 @@
 
 /* Global virtual machine register aliases */
 
-//#define rexpr      re /* was r15 WSCM: Expression being compiled */
-//#define rasmstack   rd /* Vector where new icodes are initially placed before being stuffed into a new iblock */
-#define rexpr       rf /* Expression being compiled.  See vm.h */
+#define rexpr       rf /* Expression being compiled */
 
-#define rasmstack  r10 /* was r16 ASM,COMP: Opcode stack where machine code is emitted (riblock in new compiler) */
+#define rdebug     r11 /* runtime debugging level */
 #define rblocked   r12 /* WSCM: I/O and Semaphore blocked threads */
 #define rthreads   r13 /* WSCM: Thread vector */
 #define rsleeping  r14 /* WSCM: Sleeping thread */

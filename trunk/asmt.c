@@ -748,6 +748,7 @@ void optimizePopPush (void) {
 }
 
 
+
 int main (int argc, char *argv[]) {
 	/* Force a failure by passing -f to this program */
 	if (argc==2 && !strcmp(argv[1], "-f")) return -1;
@@ -767,17 +768,17 @@ int main (int argc, char *argv[]) {
 	memPointerRegister(cctDumpIntegerR0);
 	memPointerRegister(cctDumpObjR0);
 
-	//TEST(test1);
-	//TEST(test2);
-	//TEST(test3);
-	//TEST(test4);
-	//TEST(test5);
-	//TEST(cctAsm);
-	//TEST(cctAsmNested);
-	//TEST(cctSysCall);
-	//TEST(cctJumpAndLink);
-	//TEST(opcodes);
-	//TEST(myTest);
+	TEST(test1);
+	TEST(test2);
+	TEST(test3);
+	TEST(test4);
+	TEST(test5);
+	TEST(cctAsm);
+	TEST(cctAsmNested);
+	TEST(cctSysCall);
+	TEST(cctJumpAndLink);
+	TEST(opcodes);
+	TEST(myTest);
 	TEST(optimizePopPush);
 
 	return 0;
