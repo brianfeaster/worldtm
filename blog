@@ -3654,3 +3654,41 @@ This should allow for a cleaner address resolution sequence.  Currrently the
 branch/conditional tags change from false -> label -> iblock -> code-offset ->
 iblock.  The icode's address field value goes from labels -> iblock -> address
 offset.
+
+
+
+Mon Oct 10 01:42:19 EDT 2011
+
+(fn 1 2 3) If fn is a mutable symbol bound with a closure, it needs to be
+generic and handle any number of args.  If fn is an inlined closure, it can be
+optimized to handle the specific number of arguments passed.
+
+Optimize the last icode by reversing the logic and default/conditional links. The
+branch address field value is never used so it doesn't need to be updated.
+
+#<002  2b6d11db2040  [002]  [003]  (002 001)
+  00  sysi #<400c50:cctDumpIntegerR0>
+  01  addi $0
+  02  beqi $0 #<0> #<3>>
+
+#<002  2b6d11db2040  [003]  [002]  (002 001)
+  00  sysi #<400c50:cctDumpIntegerR0>
+  01  addi $0
+  02  bnei $0 #<0> #<3>>
+
+
+
+Mon Oct 10 17:57:56 EDT 2011
+
+Calling asmAsm() is not GC safe.  Objects passed to it can be collected.  It
+took all this time for this bug to surface.
+
+Bug in my attempt at streamlining the assembler. I thought I could skip adding
+BRA icodes to iblocks and just setting the last default link but that failed for
+previous blocks that have as a target lable the BRA-only iblock I was trying to
+skip creating.  This resulted in (if #t (not #t) 2) returning 2 instead of #f as
+the assembler ended up branching to the "2" after computation of the "not #t"
+code.  I tracked this down by dumping the code block that was causing the run-
+time exception with car then analysing the igraph of the offending code then
+comparing the igraps of simpler code with and without my new incorrect
+"optimizing" changes.

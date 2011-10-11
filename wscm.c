@@ -1333,12 +1333,16 @@ ret:
 }
 
 
-#if 0
+Num wscmDebug=0;
 void syscallToggleDebug (void) {
-	wscmDebug ^= 1;
-	r0 = wscmDebug ? true : false;
+	if (rdebug) {
+		rdebug = 0;
+		r0 = false;
+	} else {
+		rdebug = (Obj)1;
+		r0 = true;
+	}
 }
-#endif
 
 
 void sysDumpCallStackCode (void) {
@@ -2027,7 +2031,7 @@ void wscmInitialize (void) {
 	sysDefineSyscall (syscallSemaphoreDown, "semaphore-down");
 	sysDefineSyscall (syscallSemaphoreUp, "semaphore-up");
 	sysDefineSyscall (syscallSignal, "signal");
-//	sysDefineSyscall (syscallToggleDebug, "toggle-debug");
+	sysDefineSyscall (syscallToggleDebug, "toggle-debug");
 	sysDefineSyscall (sysDumpTGE, "tge");
 
 	/* Create the standard I/O port object */

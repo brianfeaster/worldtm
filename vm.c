@@ -104,8 +104,10 @@ void *vmNOP,
 
 /* Macro which associates the opcode symbol with (1) a goto address (for the virtual machine)
    and (2) a string (for debug dumps):
+  {
     vmOPCODE = &&gOPCODE;
     memPointerRegister(vmOPCODE);
+  }
 */
 #define memRegisterOpcode(OP) vm##OP=&&g##OP; memPointerRegister(vm##OP);
 

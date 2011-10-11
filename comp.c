@@ -27,7 +27,7 @@ TERMS
   I-Code    I-block statement composed of multiple code fields
 
 DESIGN
-   Expression to compile assigned to rexpr/r15
+   Expression to compile assigned to rexpr/rf
    Flow keeps track of pseudo environment in renv/r1c and used registers in flags
 */
 
@@ -53,6 +53,7 @@ void ccError (void) {
 	while (r1--) {
 		fprintf (stderr, " ");
 		sysDisplay(vmPop(), stderr);
+		*(int*)0=0;
 	}
 	exit(-1);
 }
@@ -201,7 +202,7 @@ void ccSetB (Num flags) {
 	DBEND();
 }
 
-void ccIf (Num flags) {
+void compIf (Num flags) {
  Obj L1, L2;
 	DBBEG();
 
@@ -816,7 +817,7 @@ void ccBegin (Num flags) {
 	rexpr = cdr(rexpr); /* Skip symbol 'begin. */
 
 	if (rexpr == null) {
-		asmAsm( MVI, R0, null);
+		asmAsm(MVI, R0, null);
 	} else {
 		while (cdr(rexpr) != null) {
 			DB("begin block's non-tail expression");
@@ -876,7 +877,7 @@ void ccDefine (Num flags) {
 }
 
 
-void ccNot (Num flags) {
+void compNot (Num flags) {
  Obj L1, L2;
 	DBBEG();
 	rexpr = cadr(rexpr);           /* Compile this expression */
@@ -887,9 +888,9 @@ void ccNot (Num flags) {
 		BEQI, R0, false, L1,
 		MVI, R0, false,
 		BRA, L2,
-		LABEL, L1,
+	 LABEL, L1,
 		MVI, R0, true,
-		LABEL, L2
+	 LABEL, L2
 	);
 	DBEND();
 }
@@ -959,60 +960,47 @@ void ccAnd (Num flags) {
 }
 
 
-void ccAsmTailCall () {
- Obj Lsyscall, Lclosure;
-	DBBEG();
+void ccAsmCombination (Num flags) {
+ Num IsTailCall = flags & CCTAILCALL;
+ Obj Lsyscall, Lclosure, Lend;
+	DBBEG("  IsTailCall="NUM, IsTailCall);
 	Lsyscall = asmNewLabel();
 	Lclosure = asmNewLabel();
+
 	asmAsm (
 		BRTI, R0, TSYSCALL, Lsyscall,
 		BRTI, R0, TCLOSURE, Lclosure,
-		/* Illegal operator section.  For now just dump the arguments.  */
-		MVI, R0, "Illegal Operator Type",
-		SYSI, ccError,
-		RET, /* Since tail call, return. */
-		/*  Reference the syscall address then make the system call.  */
-	 LABEL, Lsyscall,
-		LDI, R0, R0, 0l,
-		SYS, R0,
-		RET, /* Since a tail call, return. */
-		/* Closure operator section.  Load jump address into r2.  R1 is
-		   argument count and r0 is the closure (which is needed as it
-		   holds the lexical environment).
-		*/
-	 LABEL, Lclosure,
-		LDI, R2, R0, 0l,
-		JMP, R2
+		MVI, R0, "Illegal Operator Type", /* Illegal operator section.  For now just dump the arguments.  Doesn't return.*/
+		SYSI, ccError
 	);
-	DBEND();
-}
 
-void ccAsmNonTailCall () {
- Obj Lsyscall, Lclosure, Lend;
-	DBBEG();
- 	Lsyscall = asmNewLabel();
- 	Lclosure = asmNewLabel();
- 	Lend = asmNewLabel();
+	/* Syscall operator section.  Reference the syscall address, set the
+  	operand count then make the system call.  */
 	asmAsm (
-		BRTI, R0,  TSYSCALL, Lsyscall,
-		BRTI, R0,  TCLOSURE, Lclosure,
-		/* Illegal operator section.  For now just dump the arguments. */
-		MVI, R0, "Illegal Operator Type",
-		SYSI, ccError,
-	//	SYSI, ccIllegalOperator,
-		BRA,  Lend,
-		/* Syscall operator section.  Reference the syscall address, set the
-	   	operand count then make the system call.  */
-	LABEL, Lsyscall,
-		LDI, R0, R0, 0l,
-		SYS, R0,
-		BRA,  Lend,
-		/* Closure operator section.  */
-	LABEL, Lclosure,
-		LDI, R2, R0, 0l, /* load r2 with code and jump. */
+	 LABEL, Lsyscall,
+		LDI, R0, R0, 0l, /*  Reference the syscall address then make the system call.  */
+		SYS, R0
+	);
+	if (IsTailCall)
+		asmAsm (RET);
+	else {
+ 		Lend = asmNewLabel();
+		asmAsm (BRA, Lend);
+	}
+
+	/* Closure operator section.  Load jump address into r2.  R1 is
+	   argument count and r0 is the closure (which is needed as it
+	   holds the lexical environment).
+	*/
+	asmAsm (
+	 LABEL, Lclosure,
+		LDI, R2, R0, 0l
+	);
+	if (IsTailCall)
+		asmAsm(JMP, R2);
+	else asmAsm(
 		JAL, R2,
-		/* End of block.  */
-	LABEL, Lend,
+	 LABEL, Lend,
 		POP, R19, /* Restores previous environment, ip and code registers. */
 		POP, R1B,
 		POP, R1A
@@ -1023,8 +1011,8 @@ void ccAsmNonTailCall () {
 
 /* Compiles expression of the form (if testExpr (consequentExpr {value of testExpr}) alternateExpr)
 */
-void ccAIf (Num flags) {
- Obj LfalseBraAddr, LtrueContAddr;
+void compAIf (Num flags) {
+ Obj LfalseBraAddr, Lend;
 	DBBEG();
 	rexpr = cdr(rexpr); /* Skip 'aif symbol. */
 	vmPush (cddr(rexpr)); /* Push alternate expressions list.  Will be NULL or a list containing the alternate expression. */
@@ -1053,36 +1041,29 @@ void ccAIf (Num flags) {
 		PUSH, R0 /* Push result of test expression on the stack.  Becomes argument to consequent. */
 	);
 
-	rexpr = vmPop(); /* Compile consequent. */
+	/* Compile consequent. */
+	rexpr = vmPop();
 	ccCompileExpr(flags & ~CCTAILCALL);
-
-	asmAsm(
-		MVI, R1, 1l  /* Set the argument count to 1.  Argument already on the stack. */
-	);
-	
-	if ((Num)flags & CCTAILCALL) ccAsmTailCall();
-	else ccAsmNonTailCall();
+	asmAsm(MVI, R1, 1l);  /* Set the argument count to 1.  Argument already on the stack. */
+	ccAsmCombination(flags);
 
 	DB("compiling end of consequent and beginning of alternate");
-	LtrueContAddr = asmNewLabel();
+	Lend = asmNewLabel();
 	asmAsm(
-		BRA, LtrueContAddr,
+		BRA, Lend,
 	 LABEL, LfalseBraAddr
 	);
 
+	/* Compile alternate expression.  If mising, #f will be returned left over from test condition. */
 	DB("compiling alternate");
 	rexpr = vmPop();
 	if (objIsPair(rexpr)) {
-		 /* Compile alternate expression. */
 		rexpr = car(rexpr);
 		ccCompileExpr(flags);
-	} else {
-		/* No alternate expression so return #f which is in reg 0 from the test condition */
 	}
 
-	asmAsm(
-	 LABEL, LtrueContAddr
-	);
+	asmAsm(LABEL, Lend);
+
 	DBEND();
 }
 
@@ -1516,7 +1497,7 @@ void ccLet (Num flags) {
 	DBBEG();
 	rexpr=cdr(rexpr); /* Skip 'let. */
 
-	/* Transform named-let form (let symbol ...). */
+	/* Transform named-let form (let symbol ...) */
 	if (memObjectType(car(rexpr)) == TSYMBOL)
 		ccTransformNamedLet();
 	/* Transform let form (let (...) ...). */
@@ -1642,8 +1623,7 @@ void ccQuasiquote (Num flags) {
 void ccQuote (void) {
 	DBBEG();
 	asmAsm (
-		MVI, R0,
-		 cadr(rexpr));
+		MVI, R0, cadr(rexpr));
 	DBEND();
 }
 
@@ -1705,15 +1685,8 @@ void ccApply (Num flags) {
 		MV, R0, R3     /* Operator back to r0 */
 	);
 
-	/* Need to asm code that handles operators of type syscall, closure,
-	   continuation and the like.  For now it just assumes a syscall.  Perhaps
-	   a special syscall that handles this all in C for now?
-	   Emit code to check the object type and either SYS the TSYSCALL type
-	   or JAL the TCODE type.  */
 	/* Emit code to that applys args to function/code tail optimized or not. */
-
-	if ((unsigned)flags & CCTAILCALL) ccAsmTailCall();
-	else ccAsmNonTailCall();
+	ccAsmCombination(flags);
 
 	DBEND();
 }
@@ -1914,8 +1887,7 @@ void ccCallcc (Num flags) {
 		MVI, R1, 1l
 	);
 
-	if ((unsigned)flags & CCTAILCALL) ccAsmTailCall();
-	else ccAsmNonTailCall();
+	ccAsmCombination(flags);
 
 	asmAsm(
 		LABEL, Lcontinuationcall
@@ -1985,10 +1957,8 @@ void ccCombination (Num flags) {
 
 	/* Emit code that applys args to function/code (hopefully) */
 	asmAsm (MVI, R1, operandCount);
-	if (flags & CCTAILCALL)
-		ccAsmTailCall();
-	else
-		ccAsmNonTailCall();
+
+	ccAsmCombination(flags);
 
 	DBEND();
 }
@@ -2002,7 +1972,7 @@ void ccSelfEvaluating (Num flags) {
 
 
 /* Recursive scheme expression compiler.  Translates an expression in
-   expr/r15 onto the end of the igraph in igraph/rf.
+   expr/rf into iblocks in riblocks/rc and code blocks.
 */
 void ccCompileExpr (Num flags) {
 	DBBEG();
@@ -2011,7 +1981,7 @@ void ccCompileExpr (Num flags) {
 	switch (memObjectType(rexpr)) {
 		case TSYMBOL: ccSymbol(flags); break;
 		case TPAIR  : if      (ssetb      == car(rexpr)) ccSetB(flags);
-			           else if (sif        == car(rexpr)) ccIf(flags);
+			           else if (sif        == car(rexpr)) compIf(flags);
 			           else if (scons      == car(rexpr)) ccCons(flags);
 			           else if (scar       == car(rexpr)) ccCar(flags);
 			           else if (scdr       == car(rexpr)) ccCdr(flags);
@@ -2022,10 +1992,10 @@ void ccCompileExpr (Num flags) {
 			           else if (slambda    == car(rexpr)) ccLambda(flags);
 			           else if (sbegin     == car(rexpr)) ccBegin(flags);
 			           else if (sdefine    == car(rexpr)) ccDefine(flags);
-			           else if (snot       == car(rexpr)) ccNot(flags);
+			           else if (snot       == car(rexpr)) compNot(flags);
 			           else if (sor        == car(rexpr)) ccOr(flags);
 			           else if (sand       == car(rexpr)) ccAnd(flags);
-			           else if (saif       == car(rexpr)) ccAIf(flags);
+			           else if (saif       == car(rexpr)) compAIf(flags);
 			           else if (scond      == car(rexpr)) ccCond(flags);
 			           else if (sprocedurep== car(rexpr)) ccProcedureP(flags);
 			           else if (snullp     == car(rexpr)) ccNullP(flags);
@@ -2097,6 +2067,7 @@ void ccInitialize (void) {
 
 		DB("Registering static pointer description strings");
 		memPointerRegister(objCons10);
+		memPointerRegister(objCons23);
 		memPointerRegister(sysNewClosure1Env); 
 		memPointerRegister(ccSysCompile); 
 		memPointerRegister(ccSysReinstateContinuation); 

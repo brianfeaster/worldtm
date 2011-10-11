@@ -435,7 +435,7 @@ void objDumpR (Obj o, FILE *stream, Num islist) {
 			if (rtge == o) {
 				fprintf(stream, "#<TGE "OBJ">", o);
 			} else {
-				fprintf(stream, HEX, o);
+				fprintf(stream, "#???<"HEX">", o);
 			}
 			/* Dump the object description. */
 			if ((s = memPointerString(o))) fprintf (stream, ":%s", s);

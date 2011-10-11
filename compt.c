@@ -2,7 +2,7 @@
 #include <string.h>
 #include <assert.h>
 #include "comp.h"
-#include "os.h"
+#include "obj.h"
 #include "sys.h"
 #include "asm.h"
 #include "vm.h"
@@ -29,11 +29,47 @@ void simpleLambda (void) {
 	yyparse(); /* Use the internal parser */
 	ccCompile();
 	rcode=r0;
-//vmDebugDumpCode(rcode, stderr);
-//memDebugDumpAll(stderr);
 	rip=0;
 	vmRun();
 	assert(99 == *(Int*)r0); /* The expression returns the number 99 */
+}
+
+
+void aif (void) {
+	asmInit();
+	ccICodePushNewQUIT();
+	ccICodePushNewQUIT();
+	ccGenerateIBlockWithPushedIcodes();
+	asmAsmIGraph();
+	rretcode = r0;
+	rretip = 0;
+
+	yy_scan_string ((Str)"(let ~ () (=> 9 (lambda (x) x) 8))");
+	yyparse(); /* Use the internal parser */
+	ccCompile();
+	rcode=r0;
+	rip=0;
+	vmRun();
+	assert(9 == *(Int*)r0); /* The expression returns the number 99 */
+}
+
+void testif (void) {
+	asmInit();
+	ccICodePushNewQUIT();
+	ccICodePushNewQUIT();
+	ccGenerateIBlockWithPushedIcodes();
+	asmAsmIGraph();
+	rretcode = r0;
+	rretip = 0;
+
+	yy_scan_string ((Str)"(if #t (not #t) 2)");
+	yyparse(); /* Use the internal parser */
+	ccCompile();
+	rcode=r0;
+	rip=0;
+	vmRun();
+	sysDisplay(r0, stderr);
+	assert(false == r0); /* The expression returns the number 99 */
 }
 
 
@@ -47,6 +83,8 @@ int main (int argc, char *argv[]) {
 	ccInitialize();
 
 	TEST(simpleLambda);
+	TEST(aif);
+	TEST(testif);
 
 	return 0;
 }
