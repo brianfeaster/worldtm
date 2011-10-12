@@ -8,9 +8,12 @@
 #include "vm.h"
 
 
-#define TEST(fn) (printf("Calling test: "#fn"()  "), fn(),printf("PASS\n"))
-
+extern void asmICodePushNewQUIT (void);
+extern void asmGenerateIBlockWithPushedIcodes ();
 #define rexpr       rf /* Expression being compiled.  See vm.h */
+
+
+#define TEST(fn) (printf("Calling test: "#fn"()  "), fn(),printf("PASS\n"))
 
 
 /* Verify a simple lambda expression compiles and evaluates
@@ -18,16 +21,16 @@
 void simpleLambda (void) {
 
 	asmInit();
-	ccICodePushNewQUIT();
-	ccICodePushNewQUIT();
-	ccGenerateIBlockWithPushedIcodes();
+	asmICodePushNewQUIT();
+	asmICodePushNewQUIT();
+	asmGenerateIBlockWithPushedIcodes();
 	asmAsmIGraph();
 	rretcode = r0;
 	rretip = 0;
 
 	yy_scan_string ((Str)"((lambda () 99))");
 	yyparse(); /* Use the internal parser */
-	ccCompile();
+	compCompile();
 	rcode=r0;
 	rip=0;
 	vmRun();
@@ -37,16 +40,16 @@ void simpleLambda (void) {
 
 void aif (void) {
 	asmInit();
-	ccICodePushNewQUIT();
-	ccICodePushNewQUIT();
-	ccGenerateIBlockWithPushedIcodes();
+	asmICodePushNewQUIT();
+	asmICodePushNewQUIT();
+	asmGenerateIBlockWithPushedIcodes();
 	asmAsmIGraph();
 	rretcode = r0;
 	rretip = 0;
 
 	yy_scan_string ((Str)"(let ~ () (=> 9 (lambda (x) x) 8))");
 	yyparse(); /* Use the internal parser */
-	ccCompile();
+	compCompile();
 	rcode=r0;
 	rip=0;
 	vmRun();
@@ -55,16 +58,16 @@ void aif (void) {
 
 void testif (void) {
 	asmInit();
-	ccICodePushNewQUIT();
-	ccICodePushNewQUIT();
-	ccGenerateIBlockWithPushedIcodes();
+	asmICodePushNewQUIT();
+	asmICodePushNewQUIT();
+	asmGenerateIBlockWithPushedIcodes();
 	asmAsmIGraph();
 	rretcode = r0;
 	rretip = 0;
 
 	yy_scan_string ((Str)"(if #t (not #t) 2)");
 	yyparse(); /* Use the internal parser */
-	ccCompile();
+	compCompile();
 	rcode=r0;
 	rip=0;
 	vmRun();
@@ -80,7 +83,7 @@ int main (int argc, char *argv[]) {
 	setbuf(stdout,0);
 	printf ("--Welcome to unit test %s----------------\n", __FILE__);
 
-	ccInitialize();
+	compInitialize();
 
 	TEST(simpleLambda);
 	TEST(aif);

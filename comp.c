@@ -31,8 +31,8 @@ DESIGN
    Flow keeps track of pseudo environment in renv/r1c and used registers in flags
 */
 
-void ccCompileExpr (Num flags);
-void ccInitialize (void);
+void compCompileExpr (Num flags);
+void compInitialize (void);
 
 /* compiler flags
 */
@@ -48,8 +48,8 @@ static const Num CCNODEFINES = (Num)0x00020000;
  functions in this module.
 *******************************************************************************/
 
-void ccError (void) {
-	fprintf(stderr, "ccError: "STR, r0);
+void compErro (void) {
+	fprintf(stderr, "compErro: "STR, r0);
 	while (r1--) {
 		fprintf (stderr, " ");
 		sysDisplay(vmPop(), stderr);
@@ -62,7 +62,7 @@ void ccError (void) {
 /* Run time symbol lookup syscall.  If a symbol in r1 found in TGE mutate code
    to just reference the binding's value rather than make this syscall.
 */
-void ccTGELookup (void) {
+void compTGELookup (void) {
 	DBBEG();
 	sysTGEFind();
 	if (r0 == null) {
@@ -85,7 +85,7 @@ void ccTGELookup (void) {
 /* Run time symbol mutate syscall.  If a symbol in r1 found in TGE mutate code
    to just reference the binding's and mutate binding's value with r0.
 */
-void ccTGEMutate (void) {
+void compTGEMutate (void) {
 	DBBEG();
 	r2=r0; /* Since a syscall, save value we're trying to set!. */
 	sysTGEFind();
@@ -110,7 +110,7 @@ void ccTGEMutate (void) {
 /* Generate assembly which looks up value of symbol in a local or
    global environment and assigns to r0
 */
-void ccSymbol (Num flags) {
+void compSymbol (Num flags) {
  Num d, ret, depth, offset;
 	DBBEG();
 	DBE objDump(rexpr, stderr);
@@ -141,7 +141,7 @@ void ccSymbol (Num flags) {
 			DB("   can't find in TGE...maybe at runtime");
 			asmAsm(
 				MVI, R1, rexpr,
-				SYSI, ccTGELookup);
+				SYSI, compTGELookup);
 		} else {
 			DB("   found in TGE");
 			r3 = r0; /* Keep track of the symbol */
@@ -154,14 +154,14 @@ void ccSymbol (Num flags) {
 }
 
 
-void ccSetB (Num flags) {
+void compSetB (Num flags) {
  Num ret, d,depth, offset;
 	DBBEG();
 	rexpr = cdr(rexpr); /* Consider set! parameter list (S E) */
 	vmPush(car(rexpr)); /* Save S */
 	/* Emit code that evaluates the expression. */
 	rexpr = cadr(rexpr);
-	ccCompileExpr(flags & ~CCTAILCALL);
+	compCompileExpr(flags & ~CCTAILCALL);
 
 	/* Scan local environments.  Returned is a 16 bit number, the high 8 bits
 	   is the environment chain depth, the low 8 bits the binding offset. The
@@ -189,7 +189,7 @@ void ccSetB (Num flags) {
 			DB("   can't find in TGE...maybe at runtime");
 			asmAsm(
 				MVI, R1, rexpr,
-				SYSI, ccTGEMutate);
+				SYSI, compTGEMutate);
 		} else {
 			DB("   found in TGE");
 			r3 = r0; /* Keep track of the symbol */
@@ -215,7 +215,7 @@ void compIf (Num flags) {
 	vmPush(r0); /* Push (CONSEQUENT ALTERNATE) */
 
 	rexpr = car(rexpr); /* Compile TEST expression */
-	ccCompileExpr(flags & ~CCTAILCALL);
+	compCompileExpr(flags & ~CCTAILCALL);
 	rexpr = vmPop(); /* Restore (CONSEQUENT ALTERNATE) */
 
 	/* [TEST]---[BRANCH] */
@@ -225,7 +225,7 @@ void compIf (Num flags) {
 	/* [TEST]---[BRANCH]---[CONSEQUENT] */
 	vmPush(cdr(rexpr)); /* Push (ALTERNATE) */
 	rexpr = car(rexpr); /* Compile CONSEQUENT expression */
-	ccCompileExpr(flags);
+	compCompileExpr(flags);
 	rexpr = vmPop(); /* Restore (ALTERNATE) */
 
 	if (null == rexpr) {
@@ -237,14 +237,14 @@ void compIf (Num flags) {
 		asmAsm(BRA, L2);
 		asmAsm(LABEL, L1);
 		rexpr = car(rexpr); /* Consider alternate */
-		ccCompileExpr(flags); /* Compile ALTERNATE expression.  It becomes the leading alternate block's default */
+		compCompileExpr(flags); /* Compile ALTERNATE expression.  It becomes the leading alternate block's default */
 		asmAsm(LABEL, L2);
 	}
 
 	DBEND();
 }
 
-void ccCons (Num flags) {
+void compCons (Num flags) {
 	DBBEG();
 
 	rexpr = cdr(rexpr); /* Consider cons's parameter list (A B)*/
@@ -253,7 +253,7 @@ void ccCons (Num flags) {
 	vmPush(cdr(rexpr)); /* Save (B) */
 
 	rexpr = car(rexpr); /* Consider and compile A */
-	ccCompileExpr(flags & ~CCTAILCALL);
+	compCompileExpr(flags & ~CCTAILCALL);
 
 	asmAsm(
 		PUSH, R0
@@ -264,7 +264,7 @@ void ccCons (Num flags) {
 	assert(memIsObjectType(cdr(rexpr), TNULL));
 
 	rexpr = car(rexpr); /* Consider and compile B */
-	ccCompileExpr(flags & ~CCTAILCALL);
+	compCompileExpr(flags & ~CCTAILCALL);
 
 	asmAsm(
 		POP, R1,
@@ -278,7 +278,7 @@ void ccCons (Num flags) {
 /* Parse the form (? *) placing * into r1
    Return: 0 success  -1 error
 */
-Int ccParseUnary (void) {
+Int compParseUnary (void) {
 	r0 = cdr(rexpr); /* Consider arguments */
 	if (!objIsPair(r0)) return -1; /* No arguments */
 	r1 = car(r0);
@@ -286,21 +286,21 @@ Int ccParseUnary (void) {
 	return 0;
 }
 
-void ccCar (Num flags) {
+void compCar (Num flags) {
  Obj Lok;
 	DBBEG();
 
 	vmPush(rexpr); /* Save expression. */
 
-	if (ccParseUnary()) {
+	if (compParseUnary()) {
 		r0 = "Compiler error";
 		r1 = (Obj)1;
-		ccError();
+		compErro();
 	}
 
 	rexpr = r1;  /* Consider and compile expression parsed */
 
-	ccCompileExpr(flags & ~CCTAILCALL);
+	compCompileExpr(flags & ~CCTAILCALL);
 	rexpr = vmPop(); /* Restore expression and use in runtime error message */
 	Lok = asmNewLabel();
 	asmAsm(
@@ -309,28 +309,28 @@ void ccCar (Num flags) {
 		PUSH, R0,
 		MVI, R1, 1l,
 		MVI, R0, "runtime error",
-		SYSI, ccError,
+		SYSI, compErro,
 	 LABEL, Lok,
 		LDI, R0, R0, 0l /* Perform car */
 	);
 	DBEND();
 }
 
-void ccCdr (Num flags) {
+void compCdr (Num flags) {
  Obj Lok;
 	DBBEG();
 
 	vmPush(rexpr); /* Save expression. */
 
-	if (ccParseUnary()) {
+	if (compParseUnary()) {
 		r0 = "Compiler error";
 		r1 = (Obj)1;
-		ccError();
+		compErro();
 	}
 
 	rexpr = r1;  /* Consider and compile expression parsed */
 
-	ccCompileExpr(flags & ~CCTAILCALL);
+	compCompileExpr(flags & ~CCTAILCALL);
 	rexpr = vmPop(); /* Restore expression and use in runtime error message */
 	Lok = asmNewLabel();
 	asmAsm(
@@ -339,14 +339,14 @@ void ccCdr (Num flags) {
 		PUSH, R0,
 		MVI, R1, 1l,
 		MVI, R0, "runtime error",
-		SYSI, ccError,
+		SYSI, compErro,
 	 LABEL, Lok,
 		LDI, R0, R0, 1l /* Perform cdr */
 	);
 	DBEND();
 }
 
-void ccSetCarB (Num flags) {
+void compSetCarB (Num flags) {
 	DBBEG();
 	rexpr = cdr(rexpr); /* Skip set-car! symbol. */
 	if (rexpr == null) {
@@ -362,10 +362,10 @@ void ccSetCarB (Num flags) {
 		goto ret;
 	}
 	rexpr = car(rexpr);/* Consider and compile object expression. */
-	ccCompileExpr(flags & ~CCTAILCALL);
+	compCompileExpr(flags & ~CCTAILCALL);
 	asmAsm(PUSH, R0);
 	rexpr = vmPop();
-	ccCompileExpr(flags & ~CCTAILCALL);
+	compCompileExpr(flags & ~CCTAILCALL);
 	asmAsm(
 		POP, R2,
 		STI, R2, R0, 0l);
@@ -373,7 +373,7 @@ ret:
 	DBEND();
 }
 
-void ccSetCdrB (Num flags) {
+void compSetCdrB (Num flags) {
 	DBBEG();
 	rexpr = cdr(rexpr); /* Skip set-cdr! symbol. */
 	if (rexpr == null) {
@@ -389,10 +389,10 @@ void ccSetCdrB (Num flags) {
 		goto ret;
 	}
 	rexpr = car(rexpr);/* Consider and compile object expression. */
-	ccCompileExpr(flags & ~CCTAILCALL);
+	compCompileExpr(flags & ~CCTAILCALL);
 	asmAsm(PUSH, R0);
 	rexpr = vmPop();
-	ccCompileExpr(flags & ~CCTAILCALL);
+	compCompileExpr(flags & ~CCTAILCALL);
 	asmAsm(
 		POP, R2,
 		STI, R2, R0, 1l);
@@ -400,74 +400,74 @@ ret:
 	DBEND();
 }
 
-void ccVerifyVectorRef (void) {
+void compVerifyVectorRef (void) {
 	if (memObjectLength(r1) <= (Num)r2) {
 		vmPush(r2);
 		vmPush(r1);
 		r0 = "vector-ref out of bounds";
 		r1 = (Obj)2;
-		ccError();
+		compErro();
 	}
 }
 
-void ccVerifyVectorSetB (void) {
+void compVerifyVectorSetB (void) {
 	if (memObjectLength(r1) <= (Num)r2) {
 		vmPush(r0);
 		vmPush(r2);
 		vmPush(r1);
 		r0 = "vector-set! out of bounds";
 		r1 = (Obj)3;
-		ccError();
+		compErro();
 	}
 }
 
-void ccVectorRef (Num flags) {
+void compVectorRef (Num flags) {
 	DBBEG();
 	vmPush(car(cddr(rexpr))); /* Save index expression. */
 	rexpr = cadr(rexpr);       /* Compile Vector expression. */
-	ccCompileExpr(flags & ~CCTAILCALL);
+	compCompileExpr(flags & ~CCTAILCALL);
 	rexpr = vmPop();            /* Compile index expression. */
 	if (TINTEGER == memObjectType(rexpr)) {
 		/* Load static integer value into register */
 		asmAsm(
 			MV, R1, R0, /* Move object to r1 */
 			MVI, R2, *(Num*)rexpr,
-			SYSI, ccVerifyVectorRef,
+			SYSI, compVerifyVectorRef,
 			LD, R0, R1, R2);
 	} else {
 		asmAsm(PUSH, R0);
-		ccCompileExpr(flags & ~CCTAILCALL);
+		compCompileExpr(flags & ~CCTAILCALL);
 		asmAsm(
 			POP, R1,
 			/* Load object's integer value into register. */
 			LDI, R2, R0, 0l, /* This fails runtime type check */
-			SYSI, ccVerifyVectorRef,
+			SYSI, compVerifyVectorRef,
 			LD, R0, R1, R2);
 	}
 	DBEND();
 }
 
-void ccVectorSetB (Num flags) {
+void compVectorSetB (Num flags) {
 	DBBEG();
 	rexpr=cdr(rexpr); /* Skip 'vector-set!. */
 	vmPush(car(cddr(rexpr))); /* Save new-value expression. */
 	vmPush(cadr(rexpr));      /* Save index expression. */
 	/* Consider and compile Vector expression. */
 	rexpr = car(rexpr);
-	ccCompileExpr(flags & ~CCTAILCALL);
+	compCompileExpr(flags & ~CCTAILCALL);
 	asmAsm(PUSH, R0);           /* Save vector object. */
 	/* Pop and compile index expression. */
 	rexpr=vmPop();
-	ccCompileExpr(flags & ~CCTAILCALL);
+	compCompileExpr(flags & ~CCTAILCALL);
 	asmAsm(PUSH, R0);           /* Save offset object. */
 	/* Pop and compile new-value expression. */
 	rexpr=vmPop();
-	ccCompileExpr(flags & ~CCTAILCALL);
+	compCompileExpr(flags & ~CCTAILCALL);
 	asmAsm (
 		POP, R2,       /* Pop offset object. */
 		LDI, R2, R2, 0l,   /* Load offset object's integer value into register. */
 		POP, R1,       /* Pop vector object. */
-		SYSI, ccVerifyVectorSetB,
+		SYSI, compVerifyVectorSetB,
 		ST, R0, R1, R2       /* Store new-value object in vector. */
 	);
 	DBEND();
@@ -478,7 +478,7 @@ void ccVectorSetB (Num flags) {
    r0:(fn (lambda formals body)).  No syntic error checking is performed
    yet.  Would rather implement a macro transformation facility.
 */
-void ccTransformDefineFunction (void) {
+void compTransformDefineFunction (void) {
 	DBBEG();
 	r5 = cdr(rexpr);  /* Function's body. */
 	rexpr = car(rexpr);
@@ -498,7 +498,7 @@ void ccTransformDefineFunction (void) {
 /* Transform expr:((define x q) (define y r) body)
        => r0:((lambda (x y) (set! x q) (set! y r) body) () ())
 */
-void ccTransformInternalDefinitions(void) {
+void compTransformInternalDefinitions(void) {
  Int definitionsCount=0;
 	DBBEG();
 
@@ -507,7 +507,7 @@ void ccTransformInternalDefinitions(void) {
 		vmPush(cdr(rexpr));
 		rexpr = cdar(rexpr); // Consider next expression and skip 'define.
 		if (objIsPair(car(rexpr))) {
-			ccTransformDefineFunction(); // Returns (fn (lambda formals body))
+			compTransformDefineFunction(); // Returns (fn (lambda formals body))
 		} else {
 			r0=rexpr;
 		}
@@ -581,7 +581,7 @@ void ccTransformInternalDefinitions(void) {
   (3) A syscall that attempts to locate the named binding which will then
       code modify itslef into case (1).
 */
-void ccLambdaBody (Num flags) {
+void compLambdaBody (Num flags) {
  Obj Lcomment, Lexpectednoargs, LkeepLexicalEnvironment, LnotEnoughArguments, LnormalFormals, LbuildRestList;
 	DBBEG();
 	DBE objDump(rexpr, stdout);
@@ -616,7 +616,7 @@ void ccLambdaBody (Num flags) {
 			PUSH, R0,
 			ADDI, R1, 1l,
 			MVI, R0, "Too many arguments to closure",
-			SYSI, ccError, /* Error correction */
+			SYSI, compErro, /* Error correction */
 			LABEL, Lexpectednoargs
 		);
 	} else {
@@ -656,7 +656,7 @@ void ccLambdaBody (Num flags) {
 				PUSH, R0,
 				ADDI, R1, 1l,
 				MVI, R0, "Too many arguments to function",
-				SYSI, ccError /* Error correction */
+				SYSI, compErro /* Error correction */
 			);
 		}
 
@@ -674,7 +674,7 @@ void ccLambdaBody (Num flags) {
 			PUSH, R0,
 			ADDI, R1, 1l,
 			MVI, R0, "Not enough arguments to closure",
-			SYSI, ccError, /* Error correction */
+			SYSI, compErro, /* Error correction */
 			PUSH, R0,
 			ADDI, R1, 1l,
 			BNEI, R1, r3, LnotEnoughArguments,
@@ -718,23 +718,23 @@ void ccLambdaBody (Num flags) {
 	} else {
 		/* Transform internal definitions, if any, and body into equivalent
 		   expanded letrec and body, ie:(((lambda (f) (set! f ...) body) () () ...)).*/
-		ccTransformInternalDefinitions();
+		compTransformInternalDefinitions();
 		while (cdr(rexpr) != null) {
 			DB("   Lambda non-tail optimization");
 			vmPush(cdr(rexpr)); /* Push next expr. */
 			rexpr = car(rexpr);
-			ccCompileExpr((flags & ~CCTAILCALL) | CCNODEFINES);
+			compCompileExpr((flags & ~CCTAILCALL) | CCNODEFINES);
 			rexpr = vmPop();
 		}
 		DB("   Lambda tail optimization");
 		rexpr = car(rexpr);
-		ccCompileExpr(flags | CCTAILCALL | CCNODEFINES);
+		compCompileExpr(flags | CCTAILCALL | CCNODEFINES);
 	}
 
 	asmAsm(RET);
 
 	/* Assemble igraph and restore previous ASM context */
-//ccDumpIBlocks();
+//asmDumpIBlocks();
 	asmAsmIGraph();
 
 	DBE vmDebugDumpCode(r0, stderr);
@@ -760,7 +760,7 @@ void ccLambdaBody (Num flags) {
            r3   Number of non-dotted formal parameters
            r4   0 or 1 dotted formals
 */
-void ccNormalizeFormals(void) {
+void compNormalizeFormals(void) {
  Num i;
 	r3=0; /* Keep track of non-dotted formal count. */
 
@@ -781,7 +781,7 @@ void ccNormalizeFormals(void) {
 	while (i--) { r2=r0;  r1=vmPop();  objCons12(); }
 }
 
-void ccLambda (Num flags) {
+void compLambda (Num flags) {
 	DBBEG();
 	rexpr = cdr(rexpr); /* Skip 'lambda. */
 
@@ -792,12 +792,12 @@ void ccLambda (Num flags) {
 	   is just the pair (parent-environment . formals-list)*/
 	if (car(rexpr) != null) {
 		r0=car(rexpr);
-		ccNormalizeFormals(); /* Create normalized list in r0, length in r3, dotted-formal bool in r4. */
+		compNormalizeFormals(); /* Create normalized list in r0, length in r3, dotted-formal bool in r4. */
 		r1=renv;  r2=r0;  objCons12();  renv=r0;
 	}
 
 	/* Create closures code block in r0. */
-	ccLambdaBody(flags);
+	compLambdaBody(flags);
 
 	renv = vmPop(); /* Restore env. */
 
@@ -812,7 +812,7 @@ void ccLambda (Num flags) {
 }
 
 
-void ccBegin (Num flags) {
+void compBegin (Num flags) {
 	DBBEG();
 	rexpr = cdr(rexpr); /* Skip symbol 'begin. */
 
@@ -823,18 +823,18 @@ void ccBegin (Num flags) {
 			DB("begin block's non-tail expression");
 			vmPush(cdr(rexpr)); /* Push rest of operands */
 			rexpr = car(rexpr); /* Consider next operand */
-			ccCompileExpr(flags & ~CCTAILCALL);
+			compCompileExpr(flags & ~CCTAILCALL);
 			rexpr = vmPop(); /* Pop rest of expression */
 		}
 		DB("begin block's tail expression");
 		rexpr = car(rexpr);
-		ccCompileExpr(flags);
+		compCompileExpr(flags);
 	}
 	DBEND();
 }
 
 
-void ccDefine (Num flags) {
+void compDefine (Num flags) {
 	DBBEG();
 	if (flags & CCNODEFINES) {
 		//CompError = 1;
@@ -848,7 +848,7 @@ void ccDefine (Num flags) {
 
 		/* If the expression is of the form ((...) body) transform. */
 		if (objIsPair(car(rexpr))) {
-			ccTransformDefineFunction();
+			compTransformDefineFunction();
 			rexpr = r0;
 		}
 
@@ -860,7 +860,7 @@ void ccDefine (Num flags) {
 			if (objIsPair(rexpr)) {
 				vmPush(r0); /* Save binding. */
 				rexpr = car(rexpr); /* Consider this definition's expression and compile. */
-				ccCompileExpr((Num)flags & ~CCTAILCALL);
+				compCompileExpr((Num)flags & ~CCTAILCALL);
 				asmAsm(
 					MVI, R1, vmPop(), /* Load r1 with saved binding. */
 					STI, R0, R1, 0L);    /* Set binding's value. */
@@ -881,7 +881,7 @@ void compNot (Num flags) {
  Obj L1, L2;
 	DBBEG();
 	rexpr = cadr(rexpr);           /* Compile this expression */
-	ccCompileExpr(flags & ~CCTAILCALL);
+	compCompileExpr(flags & ~CCTAILCALL);
  	L1 = asmNewLabel();
  	L2 = asmNewLabel();
 	asmAsm (
@@ -899,7 +899,7 @@ void compNot (Num flags) {
 		exp
 		branch if not false to end
 */
-void ccOr (Num flags) {
+void compOr (Num flags) {
  Obj Lend;
 	DBBEG();
 	rexpr = cdr(rexpr); /* Skip 'or. */
@@ -914,10 +914,10 @@ void ccOr (Num flags) {
 			/* Is this the last expression?  If so it's tail optimized. */
 			if (!objIsPair(cdr(rexpr))) {
 				rexpr = car(rexpr); /* Consider next expression. */
-				ccCompileExpr(flags);
+				compCompileExpr(flags);
 			} else {
 				rexpr = car(rexpr); /* Consider next expression. */
-				ccCompileExpr(flags & ~CCTAILCALL);
+				compCompileExpr(flags & ~CCTAILCALL);
 				asmAsm(BNTI, R0, TFALSE, Lend);
 			}
 			rexpr = vmPop();
@@ -931,7 +931,7 @@ void ccOr (Num flags) {
 		exp
 		branch if false to end
 */
-void ccAnd (Num flags) {
+void compAnd (Num flags) {
  Obj Lend;
 	DBBEG();
 	rexpr = cdr(rexpr); /* Skip 'and. */
@@ -946,10 +946,10 @@ void ccAnd (Num flags) {
 			/* Is this the last expression?  If so it's tail optimized. */
 			if (!objIsPair(cdr(rexpr))) {
 				rexpr = car(rexpr); /* Consider next expression. */
-				ccCompileExpr(flags);
+				compCompileExpr(flags);
 			} else {
 				rexpr = car(rexpr); /* Consider next expression. */
-				ccCompileExpr(flags & ~CCTAILCALL);
+				compCompileExpr(flags & ~CCTAILCALL);
 				asmAsm(BRTI, R0, TFALSE, Lend);
 			}
 			rexpr = vmPop();
@@ -960,7 +960,7 @@ void ccAnd (Num flags) {
 }
 
 
-void ccAsmCombination (Num flags) {
+void compAsmCombination (Num flags) {
  Num IsTailCall = flags & CCTAILCALL;
  Obj Lsyscall, Lclosure, Lend;
 	DBBEG("  IsTailCall="NUM, IsTailCall);
@@ -971,7 +971,7 @@ void ccAsmCombination (Num flags) {
 		BRTI, R0, TSYSCALL, Lsyscall,
 		BRTI, R0, TCLOSURE, Lclosure,
 		MVI, R0, "Illegal Operator Type", /* Illegal operator section.  For now just dump the arguments.  Doesn't return.*/
-		SYSI, ccError
+		SYSI, compErro
 	);
 
 	/* Syscall operator section.  Reference the syscall address, set the
@@ -1020,7 +1020,7 @@ void compAIf (Num flags) {
 
 	DB("compiling test");
 	rexpr = car(rexpr);
-	ccCompileExpr(flags & ~CCTAILCALL);
+	compCompileExpr(flags & ~CCTAILCALL);
 
 	DB("compiling test logic");
 	LfalseBraAddr = asmNewLabel();
@@ -1029,7 +1029,7 @@ void compAIf (Num flags) {
 	);
 
 	DB("compiling consequent");
-	/* Save execution state, possibly, since the following is the equivalent of ccCombination */
+	/* Save execution state, possibly, since the following is the equivalent of compCombination */
 	if (!((Num)flags & CCTAILCALL)) {
 		asmAsm (
 			PUSH, R1A,
@@ -1043,9 +1043,9 @@ void compAIf (Num flags) {
 
 	/* Compile consequent. */
 	rexpr = vmPop();
-	ccCompileExpr(flags & ~CCTAILCALL);
+	compCompileExpr(flags & ~CCTAILCALL);
 	asmAsm(MVI, R1, 1l);  /* Set the argument count to 1.  Argument already on the stack. */
-	ccAsmCombination(flags);
+	compAsmCombination(flags);
 
 	DB("compiling end of consequent and beginning of alternate");
 	Lend = asmNewLabel();
@@ -1059,7 +1059,7 @@ void compAIf (Num flags) {
 	rexpr = vmPop();
 	if (objIsPair(rexpr)) {
 		rexpr = car(rexpr);
-		ccCompileExpr(flags);
+		compCompileExpr(flags);
 	}
 
 	asmAsm(LABEL, Lend);
@@ -1074,7 +1074,7 @@ void compAIf (Num flags) {
                (<test>)
                (else      <expr> ...)
 */
-void ccCond (Num flags) {
+void compCond (Num flags) {
  Num clauses=0;
 	DBBEG();
 	rexpr = cdr(rexpr); /* Skip symbol 'cond */
@@ -1137,11 +1137,11 @@ void ccCond (Num flags) {
 	DB ("compCond translated ");
 	DBE objDump(r0, stdout);
 	rexpr = r0;
-	ccCompileExpr(flags);
+	compCompileExpr(flags);
 	DBEND();
 }
 
-void ccProcedureP (Num flags) {
+void compProcedureP (Num flags) {
  Obj Lend, Ltrue;
 	DBBEG();
 	if (!objIsPair(cdr(rexpr))) {
@@ -1151,7 +1151,7 @@ void ccProcedureP (Num flags) {
 
 	/* Consider and compile expression. */
 	rexpr = cadr(rexpr);
-	ccCompileExpr(flags & ~CCTAILCALL);
+	compCompileExpr(flags & ~CCTAILCALL);
 
 	Lend = asmNewLabel();
 	Ltrue = asmNewLabel();
@@ -1168,7 +1168,7 @@ void ccProcedureP (Num flags) {
 }
 
 
-void ccNullP (Num flags) {
+void compNullP (Num flags) {
  Obj Lend, Ltrue;
 	DBBEG();
 	if (!objIsPair(cdr(rexpr))) {
@@ -1178,7 +1178,7 @@ void ccNullP (Num flags) {
 
 	/* Consider and compile expression. */
 	rexpr = cadr(rexpr);
-	ccCompileExpr(flags & ~CCTAILCALL);
+	compCompileExpr(flags & ~CCTAILCALL);
 
 	Lend = asmNewLabel();
 	Ltrue = asmNewLabel();
@@ -1194,7 +1194,7 @@ void ccNullP (Num flags) {
 	DBEND();
 }
 
-void ccPairP (Num flags) {
+void compPairP (Num flags) {
  Obj Lend, Ltrue;
 	DBBEG();
 	if (!objIsPair(cdr(rexpr))) {
@@ -1204,7 +1204,7 @@ void ccPairP (Num flags) {
 
 	/* Consider and compile expression. */
 	rexpr = cadr(rexpr);
-	ccCompileExpr(flags & ~CCTAILCALL);
+	compCompileExpr(flags & ~CCTAILCALL);
 
 	Lend = asmNewLabel();
 	Ltrue = asmNewLabel();
@@ -1220,7 +1220,7 @@ void ccPairP (Num flags) {
 	DBEND();
 }
 
-void ccVectorP (Num flags) {
+void compVectorP (Num flags) {
  Obj Lend, Ltrue;
 	DBBEG();
 	if (!objIsPair(cdr(rexpr))) {
@@ -1230,7 +1230,7 @@ void ccVectorP (Num flags) {
 
 	/* Consider and compile expression. */
 	rexpr = cadr(rexpr);
-	ccCompileExpr(flags & ~CCTAILCALL);
+	compCompileExpr(flags & ~CCTAILCALL);
 
 	Lend = asmNewLabel();
 	Ltrue = asmNewLabel();
@@ -1247,7 +1247,7 @@ void ccVectorP (Num flags) {
 	DBEND();
 }
 
-void ccStringP (Num flags) {
+void compStringP (Num flags) {
  Obj Lend, Ltrue;
 	DBBEG();
 	if (!objIsPair(cdr(rexpr))) {
@@ -1257,7 +1257,7 @@ void ccStringP (Num flags) {
 
 	/* Consider and compile expression. */
 	rexpr = cadr(rexpr);
-	ccCompileExpr(flags & ~CCTAILCALL);
+	compCompileExpr(flags & ~CCTAILCALL);
 
 	Lend = asmNewLabel();
 	Ltrue = asmNewLabel();
@@ -1274,7 +1274,7 @@ void ccStringP (Num flags) {
 	DBEND();
 }
 
-void ccIntegerP (Num flags) {
+void compIntegerP (Num flags) {
  Obj Lend, Ltrue;
 	DBBEG();
 	if (!objIsPair(cdr(rexpr))) {
@@ -1284,7 +1284,7 @@ void ccIntegerP (Num flags) {
 
 	/* Consider and compile expression. */
 	rexpr = cadr(rexpr);
-	ccCompileExpr(flags & ~CCTAILCALL);
+	compCompileExpr(flags & ~CCTAILCALL);
 
 	Lend = asmNewLabel();
 	Ltrue = asmNewLabel();
@@ -1300,7 +1300,7 @@ void ccIntegerP (Num flags) {
 	DBEND();
 }
 
-void ccSymbolP (Num flags) {
+void compSymbolP (Num flags) {
  Obj Lend, Ltrue;
 	DBBEG();
 	if (!objIsPair(cdr(rexpr))) {
@@ -1310,7 +1310,7 @@ void ccSymbolP (Num flags) {
 
 	/* Consider and compile expression. */
 	rexpr = cadr(rexpr);
-	ccCompileExpr(flags & ~CCTAILCALL);
+	compCompileExpr(flags & ~CCTAILCALL);
 
 	Lend = asmNewLabel();
 	Ltrue = asmNewLabel();
@@ -1326,7 +1326,7 @@ void ccSymbolP (Num flags) {
 	DBEND();
 }
 
-void ccPortP (Num flags) {
+void compPortP (Num flags) {
  Obj Lend, Ltrue;
 	DBBEG();
 	if (!objIsPair(cdr(rexpr))) {
@@ -1336,7 +1336,7 @@ void ccPortP (Num flags) {
 
 	/* Consider and compile expression. */
 	rexpr = cadr(rexpr);
-	ccCompileExpr(flags & ~CCTAILCALL);
+	compCompileExpr(flags & ~CCTAILCALL);
 
 	Lend = asmNewLabel();
 	Ltrue = asmNewLabel();
@@ -1352,7 +1352,7 @@ void ccPortP (Num flags) {
 	DBEND();
 }
 
-void ccEOFObjectP (Num flags) {
+void compEOFObjectP (Num flags) {
  Obj Lend, Ltrue;
 	DBBEG();
 	if (!objIsPair(cdr(rexpr))) {
@@ -1362,7 +1362,7 @@ void ccEOFObjectP (Num flags) {
 
 	/* Consider and compile expression. */
 	rexpr = cadr(rexpr);
-	ccCompileExpr(flags & ~CCTAILCALL);
+	compCompileExpr(flags & ~CCTAILCALL);
 
 	Lend = asmNewLabel();
 	Ltrue = asmNewLabel();
@@ -1379,7 +1379,7 @@ void ccEOFObjectP (Num flags) {
 }
 
 
-void ccTransformLet (void) {
+void compTransformLet (void) {
  Num bindingLen, i;
 	DBBEG();
 	r4=car(rexpr);     /* Consider the let bindings. */
@@ -1430,7 +1430,7 @@ void ccTransformLet (void) {
 	DBE objDump(rexpr, stdout);
 }
 
-void ccTransformNamedLet (void) {
+void compTransformNamedLet (void) {
  Num bindingLen, i;
 	DBBEG();
 	r3=car(rexpr);   /* Consider the named-let name symbol. */
@@ -1493,19 +1493,19 @@ void ccTransformNamedLet (void) {
 	DBE objDump(rexpr, stdout);
 }
 
-void ccLet (Num flags) {
+void compLet (Num flags) {
 	DBBEG();
 	rexpr=cdr(rexpr); /* Skip 'let. */
 
 	/* Transform named-let form (let symbol ...) */
 	if (memObjectType(car(rexpr)) == TSYMBOL)
-		ccTransformNamedLet();
+		compTransformNamedLet();
 	/* Transform let form (let (...) ...). */
 	else
-		ccTransformLet();
+		compTransformLet();
 
 	/* Now compile the transformed form. */
-	ccCompileExpr(flags);
+	compCompileExpr(flags);
 
 	DBEND();
 }
@@ -1514,7 +1514,7 @@ void ccLet (Num flags) {
    (letrec ((v exp)...) body)  =>  (let ((v ())...) (set! v exp)... body)
    Why not:  ((lambda (v ...) (set! v exp) ... body) () ...)
 */
-void ccTransformLetrec (void) {
+void compTransformLetrec (void) {
  Num len;
 	DBBEG();
 	rexpr=cdr(rexpr); /* Skip letrec. */
@@ -1559,17 +1559,17 @@ void ccTransformLetrec (void) {
 	DBE objDump(r0, stdout);
 }
 
-void ccLetrec (Num flags) {
+void compLetrec (Num flags) {
 	DBBEG();
-	ccTransformLetrec();
+	compTransformLetrec();
 	rexpr = r0;
-	ccCompileExpr(flags);
+	compCompileExpr(flags);
 	DBEND();
 }
 
 /* Given <qq template> in rexpr, create cons tree in r0.
 */
-void ccTransformQuasiquote (int depth) {
+void compTransformQuasiquote (int depth) {
  int isUnquote, isQuasiquote;
 	DBBEG();
 	if (objIsPair(rexpr)) { /* Is this (unquote ...) */
@@ -1584,7 +1584,7 @@ void ccTransformQuasiquote (int depth) {
 			/* ((unquote-splicing template) . b) */
 			vmPush(car(cdar(rexpr))); /* Save template */
 			rexpr=cdr(rexpr);  /* Consider b */
-			ccTransformQuasiquote(depth); /* => b' */
+			compTransformQuasiquote(depth); /* => b' */
 			/* (append template b') */
 			r1=r0;     r2=null;  objCons12(); /* => (b') */
 			r1=vmPop();  r2=r0;    objCons12(); /* => (template b') */
@@ -1592,10 +1592,10 @@ void ccTransformQuasiquote (int depth) {
 		} else { /* Transform (a . b) => (cons a' b') */
 			vmPush(cdr(rexpr)); /* Save b */
 			rexpr=car(rexpr);  /* Consider a */
-			ccTransformQuasiquote(depth); /* => a' */
+			compTransformQuasiquote(depth); /* => a' */
 			rexpr=vmPop();      /* Restore b */
 			vmPush(r0);        /* Save a' */
-			ccTransformQuasiquote(depth - isUnquote + isQuasiquote); /* => b' */
+			compTransformQuasiquote(depth - isUnquote + isQuasiquote); /* => b' */
 			r1=r0;     r2=null;  objCons12(); /* => (b') */
 			r1=vmPop();  r2=r0;    objCons12(); /* => (a' b') */
 			r1=scons;  r2=r0;    objCons12(); /* => (cons a' b') */
@@ -1608,19 +1608,19 @@ void ccTransformQuasiquote (int depth) {
 	DBEND();
 }
 
-void ccQuasiquote (Num flags) {
+void compQuasiquote (Num flags) {
 	DBBEG();
 	rexpr = cadr(rexpr); // Given (quasiquote <qq template>) pass <qq template>
-	ccTransformQuasiquote(0);
+	compTransformQuasiquote(0);
 	rexpr = r0;
 	DB("quasiquote transformation => ");
 	DBE objDump (rexpr, stderr);
-	ccCompileExpr(flags);
+	compCompileExpr(flags);
 	DBEND();
 }
 
 
-void ccQuote (void) {
+void compQuote (void) {
 	DBBEG();
 	asmAsm (
 		MVI, R0, cadr(rexpr));
@@ -1630,7 +1630,7 @@ void ccQuote (void) {
 
 /* Compile the form (apply fn argument-list).  This should be similar to
    a combination expression. */
-void ccApply (Num flags) {
+void compApply (Num flags) {
  Num operandCount=0;
  Obj Largcount, Largcountdone;
 	DBBEG();
@@ -1653,7 +1653,7 @@ void ccApply (Num flags) {
 	while (objIsPair(rexpr)) {
 		vmPush (cdr(rexpr)); /* Push rest */
 		rexpr = car(rexpr); /* Consider expression  */
-		ccCompileExpr(flags & ~CCTAILCALL);
+		compCompileExpr(flags & ~CCTAILCALL);
 		asmAsm(PUSH, R0);
 		operandCount++;
 		rexpr = vmPop();
@@ -1661,7 +1661,7 @@ void ccApply (Num flags) {
 
 	/* Restore and compile operator expression. */
 	rexpr=vmPop();
-	ccCompileExpr(flags & ~CCTAILCALL);
+	compCompileExpr(flags & ~CCTAILCALL);
 	asmAsm(MV, R3, R0); /* Save operator in r3 */
 
 	/* At this point stack has the arguments, the argument-list and r3 has function.
@@ -1686,7 +1686,7 @@ void ccApply (Num flags) {
 	);
 
 	/* Emit code to that applys args to function/code tail optimized or not. */
-	ccAsmCombination(flags);
+	compAsmCombination(flags);
 
 	DBEND();
 }
@@ -1695,7 +1695,7 @@ void ccApply (Num flags) {
    a bunch of registers.
 	TODO: does this mangle r19/1a/1b retenv/retip/retcode?
 */
-void ccSysCompile (void) {
+void compSysCompile (void) {
 	DBBEG();
 
 	vmPush(renv); /* Save env vars */
@@ -1705,10 +1705,10 @@ void ccSysCompile (void) {
 	//asmAsm (BRA, 8, rexpr); /* Keep track of original expression for debugging. */
 	rexpr = r0;
 	asmInit();
-	ccCompileExpr(0);
+	compCompileExpr(0);
 	//if (CompError)
 	//{
-	//	r0 = "compSysCompile: ccCompileExpr failed";
+	//	r0 = "compSysCompile: compCompileExpr failed";
 	//	compError();
 	//	goto ret;
 	//}
@@ -1725,11 +1725,11 @@ void ccSysCompile (void) {
 	DBE objDump (r0, stderr);
 }
 
-void ccEval (Num flags) {
+void compEval (Num flags) {
 	DBBEG();
 	rexpr = cadr(rexpr);
-	ccCompileExpr(flags & ~CCTAILCALL);
-	asmAsm(SYSI, (Obj)ccSysCompile);
+	compCompileExpr(flags & ~CCTAILCALL);
+	asmAsm(SYSI, (Obj)compSysCompile);
 	if (flags & CCTAILCALL) {
 		asmAsm(JMP, R0);
 	} else {
@@ -1745,7 +1745,7 @@ void ccEval (Num flags) {
 	DBEND();
 }
 
-void ccMacro (Num flags) {
+void compMacro (Num flags) {
 	DBBEG();
 
 	asmStart();
@@ -1756,7 +1756,7 @@ void ccMacro (Num flags) {
 	asmAsm(
 		PUSH, R1,
 		MVI, R0, r0,
-		SYSI, ccSysCompile,
+		SYSI, compSysCompile,
 		PUSH, R1A, PUSH, R1B, PUSH, R19,
 		JAL, R0,
 		POP, R19, POP, R1B, POP, R1A,
@@ -1780,7 +1780,7 @@ void ccMacro (Num flags) {
 
 /* Stored stack expected in r3.
 */
-void ccSysReinstateContinuation (void) {
+void compSysReinstateContinuation (void) {
  Num length;
 	DBBEG();
 
@@ -1806,7 +1806,7 @@ void ccSysReinstateContinuation (void) {
 	DBEND();
 }
 
-void ccSysCreateContinuation (void) {
+void compSysCreateContinuation (void) {
  Num length;
 	DBBEG();
 	vmPush(rretenv);
@@ -1827,7 +1827,7 @@ void ccSysCreateContinuation (void) {
 	asmStart();
 	asmAsm(
 		MVI, R3, r0,  /* Copy of stack moved to r3 at runtime */
-		SYSI, (Obj)ccSysReinstateContinuation);
+		SYSI, (Obj)compSysReinstateContinuation);
 	asmAsmIGraph();
 	r1 = r0; /* Move new code block to r0 */
 
@@ -1852,10 +1852,7 @@ void ccSysCreateContinuation (void) {
    Emit code that calls the function with the continuation.  This might
    be in a tail context.
 */
-void ccDumpHeapHeaders (void) {
-	memDebugDumpHeapHeaders(stderr);
-}
-void ccCallcc (Num flags) {
+void compCallCC (Num flags) {
  Obj Lcontinuationcall;
 	DBBEG();
 	rexpr = cdr(rexpr); /* Skip over 'call/cc symbol in (call/cc fn)*/
@@ -1863,7 +1860,7 @@ void ccCallcc (Num flags) {
 	Lcontinuationcall = asmNewLabel();
 
 	asmAsm(
-		SYSI, ccSysCreateContinuation,
+		SYSI, compSysCreateContinuation,
 		BEQI, R1, 1l, Lcontinuationcall
 	);
 
@@ -1875,19 +1872,19 @@ void ccCallcc (Num flags) {
 			PUSH, R19);
 
 	asmAsm(
-		/* Push the continuation just create via ccSysCreateContinuation.  This is the argument to the function */
+		/* Push the continuation just create via compSysCreateContinuation.  This is the argument to the function */
 		PUSH, R0
 	);
 
 	rexpr = car(rexpr); /* Consider and compile fn. */
-	ccCompileExpr(flags & ~CCTAILCALL);
+	compCompileExpr(flags & ~CCTAILCALL);
 
 	/* Setup application to fn */
 	asmAsm(
 		MVI, R1, 1l
 	);
 
-	ccAsmCombination(flags);
+	compAsmCombination(flags);
 
 	asmAsm(
 		LABEL, Lcontinuationcall
@@ -1897,16 +1894,16 @@ void ccCallcc (Num flags) {
 }
 
 
-void osUnthread (void); /* Refactor this call or ccThread */
-void osNewThread (void); /* Refactor this call or ccThread */
+void osUnthread (void); /* Refactor this call or compThread */
+void osNewThread (void); /* Refactor this call or compThread */
 
-void ccThread (void) {
+void compThread (void) {
 	DBBEG();
 
 	asmStart(); /* Enter a new assembly context */
 
 	/* Compile parameters passed to thread as a begin block emitting the unthread syscall as the last opcode. */
-	ccBegin(0);
+	compBegin(0);
 
 	asmAsm(
 		SYSI, osUnthread
@@ -1924,7 +1921,7 @@ void ccThread (void) {
 
 
 
-void ccCombination (Num flags) {
+void compCombination (Num flags) {
  Int operandCount=0;
 	DBBEG();
 
@@ -1944,7 +1941,7 @@ void ccCombination (Num flags) {
 		operandCount++;
 		vmPush(cdr(rexpr));
 		rexpr = car(rexpr);
-		ccCompileExpr(flags & ~CCTAILCALL);
+		compCompileExpr(flags & ~CCTAILCALL);
 		//if (CompError) goto ret;
 		asmAsm(PUSH, R0);
 		rexpr = vmPop();
@@ -1952,19 +1949,19 @@ void ccCombination (Num flags) {
 
 	/* Restore and compile operator expression. */
 	rexpr = vmPop();
-	ccCompileExpr(flags & ~CCTAILCALL);
+	compCompileExpr(flags & ~CCTAILCALL);
 	//if (CompError) goto ret;
 
 	/* Emit code that applys args to function/code (hopefully) */
 	asmAsm (MVI, R1, operandCount);
 
-	ccAsmCombination(flags);
+	compAsmCombination(flags);
 
 	DBEND();
 }
 
 
-void ccSelfEvaluating (Num flags) {
+void compIntrinsic (Num flags) {
 	DBBEG();
 	asmAsm(MVI, R0, rexpr);
 	DBEND();
@@ -1974,51 +1971,51 @@ void ccSelfEvaluating (Num flags) {
 /* Recursive scheme expression compiler.  Translates an expression in
    expr/rf into iblocks in riblocks/rc and code blocks.
 */
-void ccCompileExpr (Num flags) {
+void compCompileExpr (Num flags) {
 	DBBEG();
 	DBE sysDisplay(rexpr, stderr);
 
 	switch (memObjectType(rexpr)) {
-		case TSYMBOL: ccSymbol(flags); break;
-		case TPAIR  : if      (ssetb      == car(rexpr)) ccSetB(flags);
+		case TSYMBOL: compSymbol(flags); break;
+		case TPAIR  : if      (ssetb      == car(rexpr)) compSetB(flags);
 			           else if (sif        == car(rexpr)) compIf(flags);
-			           else if (scons      == car(rexpr)) ccCons(flags);
-			           else if (scar       == car(rexpr)) ccCar(flags);
-			           else if (scdr       == car(rexpr)) ccCdr(flags);
-			           else if (ssetcarb   == car(rexpr)) ccSetCarB(flags);
-			           else if (ssetcdrb   == car(rexpr)) ccSetCdrB(flags);
-			           else if (svectorref == car(rexpr)) ccVectorRef(flags);
-			           else if (svectorsetb== car(rexpr)) ccVectorSetB(flags);
-			           else if (slambda    == car(rexpr)) ccLambda(flags);
-			           else if (sbegin     == car(rexpr)) ccBegin(flags);
-			           else if (sdefine    == car(rexpr)) ccDefine(flags);
+			           else if (scons      == car(rexpr)) compCons(flags);
+			           else if (scar       == car(rexpr)) compCar(flags);
+			           else if (scdr       == car(rexpr)) compCdr(flags);
+			           else if (ssetcarb   == car(rexpr)) compSetCarB(flags);
+			           else if (ssetcdrb   == car(rexpr)) compSetCdrB(flags);
+			           else if (svectorref == car(rexpr)) compVectorRef(flags);
+			           else if (svectorsetb== car(rexpr)) compVectorSetB(flags);
+			           else if (slambda    == car(rexpr)) compLambda(flags);
+			           else if (sbegin     == car(rexpr)) compBegin(flags);
+			           else if (sdefine    == car(rexpr)) compDefine(flags);
 			           else if (snot       == car(rexpr)) compNot(flags);
-			           else if (sor        == car(rexpr)) ccOr(flags);
-			           else if (sand       == car(rexpr)) ccAnd(flags);
+			           else if (sor        == car(rexpr)) compOr(flags);
+			           else if (sand       == car(rexpr)) compAnd(flags);
 			           else if (saif       == car(rexpr)) compAIf(flags);
-			           else if (scond      == car(rexpr)) ccCond(flags);
-			           else if (sprocedurep== car(rexpr)) ccProcedureP(flags);
-			           else if (snullp     == car(rexpr)) ccNullP(flags);
-			           else if (spairp     == car(rexpr)) ccPairP(flags);
-			           else if (svectorp   == car(rexpr)) ccVectorP(flags);
-			           else if (sstringp   == car(rexpr)) ccStringP(flags);
-			           else if (sintegerp  == car(rexpr)) ccIntegerP(flags);
-			           else if (ssymbolp   == car(rexpr)) ccSymbolP(flags);
-			           else if (sportp     == car(rexpr)) ccPortP(flags);
-			           else if (seofobjectp== car(rexpr)) ccEOFObjectP(flags);
-			           else if (slet       == car(rexpr)) ccLet(flags);
-			           else if (sletrec    == car(rexpr)) ccLetrec(flags);
-			           else if (squasiquote== car(rexpr)) ccQuasiquote(flags);
-			           else if (squote     == car(rexpr)) ccQuote();
-			           else if (sapply     == car(rexpr)) ccApply(flags);
-			           else if (seval      == car(rexpr)) ccEval(flags);
-			           else if (smacro     == car(rexpr)) ccMacro(flags);
-			           else if (scallcc    == car(rexpr)) ccCallcc(flags);
-			           else if (sthread    == car(rexpr)) ccThread();
+			           else if (scond      == car(rexpr)) compCond(flags);
+			           else if (sprocedurep== car(rexpr)) compProcedureP(flags);
+			           else if (snullp     == car(rexpr)) compNullP(flags);
+			           else if (spairp     == car(rexpr)) compPairP(flags);
+			           else if (svectorp   == car(rexpr)) compVectorP(flags);
+			           else if (sstringp   == car(rexpr)) compStringP(flags);
+			           else if (sintegerp  == car(rexpr)) compIntegerP(flags);
+			           else if (ssymbolp   == car(rexpr)) compSymbolP(flags);
+			           else if (sportp     == car(rexpr)) compPortP(flags);
+			           else if (seofobjectp== car(rexpr)) compEOFObjectP(flags);
+			           else if (slet       == car(rexpr)) compLet(flags);
+			           else if (sletrec    == car(rexpr)) compLetrec(flags);
+			           else if (squasiquote== car(rexpr)) compQuasiquote(flags);
+			           else if (squote     == car(rexpr)) compQuote();
+			           else if (sapply     == car(rexpr)) compApply(flags);
+			           else if (seval      == car(rexpr)) compEval(flags);
+			           else if (smacro     == car(rexpr)) compMacro(flags);
+			           else if (scallcc    == car(rexpr)) compCallCC(flags);
+			           else if (sthread    == car(rexpr)) compThread();
 			           else if (srem       == car(rexpr)) ;
-			           else ccCombination(flags);
+			           else compCombination(flags);
 			           break;
-		default     : ccSelfEvaluating(flags);
+		default     : compIntrinsic(flags);
 	}
 
 	DBEND();
@@ -2033,17 +2030,17 @@ void ccCompileExpr (Num flags) {
   rcodenew/r11 = temp
             r0 => VM code block
 */
-void ccCompile (void) {
+void compCompile (void) {
 	DBBEG();
 
 	rexpr = r0;
 
 	asmInit();
-	ccCompileExpr(0);
+	compCompileExpr(0);
 	/* Finalize the last iblock with the 'ret' opcode */
 	asmAsm(RET);
 	asmAsmIGraph();
-//ccDumpIBlocks();
+//asmDumpIBlocks();
 
 	DBE vmDebugDumpCode(r0, stderr);
 	DBEND();
@@ -2054,7 +2051,7 @@ void ccCompile (void) {
 /*******************************************************************************
  Init
 *******************************************************************************/
-void ccInitialize (void) {
+void compInitialize (void) {
  static Num shouldInitialize=1;
 	DBBEG();
 	if (shouldInitialize) {
@@ -2069,13 +2066,13 @@ void ccInitialize (void) {
 		memPointerRegister(objCons10);
 		memPointerRegister(objCons23);
 		memPointerRegister(sysNewClosure1Env); 
-		memPointerRegister(ccSysCompile); 
-		memPointerRegister(ccSysReinstateContinuation); 
-		memPointerRegister(ccSysCreateContinuation); 
+		memPointerRegister(compSysCompile); 
+		memPointerRegister(compSysReinstateContinuation); 
+		memPointerRegister(compSysCreateContinuation); 
 		memPointerRegister(osNewThread); 
 		memPointerRegister("Too many arguments to closure"); 
 		memPointerRegister("Illegal Operator Type");
-		memPointerRegister(ccError);
+		memPointerRegister(compErro);
 		memPointerRegister("runtime error");
 		memPointerRegister("Compiler error");
 		memPointerRegister("Too many arguments to function");

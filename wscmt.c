@@ -1,6 +1,3 @@
-#define DEBUG 0
-#define DB_DESC "WSCMTEST "
-#include "debug.h"
 #include <stdio.h>
 #include <unistd.h>
 #include <stdlib.h>
@@ -13,6 +10,8 @@
 #include "vm.h"
 #include "mem.h"
 
+extern void asmICodePushNewQUIT (void);
+extern void asmGenerateIBlockWithPushedIcodes ();
 
 /* Verify goto to an address pointer works.
 */
@@ -89,7 +88,7 @@ int main (void) {
 	setbuf(stdout, NULL);
 	testGoto();
 
-	ccInitialize();
+	compInitialize();
 
 	/* Create empty global environment list. */
 	objNewSymbol((Str)"TGE", 3);
@@ -101,9 +100,9 @@ int main (void) {
 
 	/* Create a code block that will be returned to after a 'ret' call */
 	asmInit();
-	ccICodePushNewQUIT();
-	ccICodePushNewQUIT();
-	ccGenerateIBlockWithPushedIcodes();
+	asmICodePushNewQUIT();
+	asmICodePushNewQUIT();
+	asmGenerateIBlockWithPushedIcodes();
 	asmAsmIGraph();
 	rretcode = r0;
 	rretip = 0;
@@ -112,7 +111,7 @@ int main (void) {
 	yy_scan_string((Str)"(let ~ ((i 0)(e 9000)) (display i) (display \"\\r\")(if (= i e) (display \"\n\") (~ (+ i 1) e)))");
 	
 	yyparse();
-	ccCompile();
+	compCompile();
 //vmDebugDumpCode(r0, stderr);
 
 	// Fire up VM.
@@ -122,13 +121,7 @@ int main (void) {
 	vmRun();
 	memGarbageCollect();
 
-	DBE memDebugDumpAll(stdout);
-	DBE vmDebugDumpCode(rcode, stdout);
-
 	objVerifySemaphore();
 
 	return 0;
 }
-
-#undef DB_DESC
-#undef DEBUG

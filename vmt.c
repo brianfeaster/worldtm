@@ -48,7 +48,6 @@ void displayStringR1 (void) {
 */
 void fancyHelloWorld (void) {
  Length codeSize;
- char *baseString;
  /* Registers holding runable code objects */
  #define printNumbersSub r9
  #define helloWorldSub r10

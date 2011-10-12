@@ -1,6 +1,3 @@
-#define DEBUG 0
-#define DB_DESC "CC"
-#include "debug.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

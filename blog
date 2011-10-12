@@ -3725,3 +3725,5 @@ interesting scenarios:
      2BA8CFE6D1D8 0003 bra 0005
      2BA8CFE6D1E8 0005 ret
    * [X] Added asmNextValidIBlock();
+
+[ ] Todo: Fix asm module symbol names.  Start design document.
