@@ -1439,7 +1439,7 @@ void syscallDebugger (void) {
 
 
 void wscmSigAlarmHandler (int sig) {
-	vmInterrupt=1;
+	vmInterrupt = 1;
 }
 void wscmSigAlarmReset (void) {
 	ualarm(10*1000,0); /* 10 miliseconds (100 tics/sec) and no repeat interval set*/
@@ -1474,7 +1474,7 @@ void wscmSignalHandler (int sig) {
 	DBBEG();
 	assert(0 < sig && sig < MAX_SIGNAL_VALUE);
 	caughtSignals[sig]=1;
-	vmInterrupt=1; /* Let virtual machine know an interrupt occured */
+	vmInterrupt = 1; /* Let virtual machine know an interrupt occured */
 	signalFlag=1; /* Let scheduler know a signal handler needs to be instantiated */
 	DBEND();
 }

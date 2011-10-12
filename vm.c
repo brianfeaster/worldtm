@@ -62,16 +62,16 @@ void vmRunSetup (void) {
 
 /* This flag causes the virtual machine to make a call to the interrupt handler.
    It is set in this module by the timer signal handler.  It is also set
-   in the sys module by catchSignal() the generic signaler handling mechanism.
+   in the wscm module by wscmSignalHandler() the generic signaler handling mechanism.
 */
-Int vmInterrupt=0;
+Int vmInterrupt = 0;
 Func vmInterruptHandler = NULL;
 
 void vmProcessInterrupt (void) {
 	DBBEG("  rcode:"OBJ" rip:"OBJ, rcode, rip);
 	assert (vmInterrupt);
 	assert (vmInterruptHandler);
-	vmInterrupt=0;
+	vmInterrupt = 0;
 	vmRunRestore();
 	vmInterruptHandler();
 	vmRunSetup();
@@ -690,8 +690,8 @@ void vmDebugDumpCode (Obj c, FILE *stream) {
 		else if (*i==vmBNTI0) {fprintf(stream, "bnti $0 "HEX" "HEX04, *(i+1), vmOffsetToPosition(c, i)); i+=2;}
 		else if (*i==vmBRA)   {fprintf(stream, "bra "HEX04, vmBraOffsetToPosition(c, i)); i++;}
 
-		else if (*i==vmJ0)    {fprintf(stream, "j    $0 ");}
-		else if (*i==vmJ2)    {fprintf(stream, "j    $2 ");}
+		else if (*i==vmJ0)    {fprintf(stream, "jmp  $0 ");}
+		else if (*i==vmJ2)    {fprintf(stream, "jmp  $2 ");}
 		else if (*i==vmJAL0)  {fprintf(stream, "jal  $0 ");}
 		else if (*i==vmJAL2)  {fprintf(stream, "jal  $2 ");}
 		else if (*i==vmRET)   {fprintf(stream, "ret");}
@@ -699,9 +699,10 @@ void vmDebugDumpCode (Obj c, FILE *stream) {
 		else if (*i==vmSYS0)  {fprintf(stream, "sys  $0 ");}
 		else if (*i==vmQUIT)  {fprintf(stream, "quit");}
 		else {
-			//fprintf(stream, HEX" = ", *i);
+			fprintf(stream, "INVALID ");
 			vmObjectDumper(*i, stream);
 		}
+
 		i++;
 		fflush(stdout);
 	}

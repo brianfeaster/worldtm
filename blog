@@ -3692,3 +3692,36 @@ code.  I tracked this down by dumping the code block that was causing the run-
 time exception with car then analysing the igraph of the offending code then
 comparing the igraps of simpler code with and without my new incorrect
 "optimizing" changes.
+
+
+
+Tue Oct 11 21:04:18 EDT 2011
+
+While writing the unit test for empty iblock optimization, I hit upon a few
+interesting scenarios:
+ * The default and conditional iblocks as the same iblock.  The incoming list
+   has the same parent iblock twice.
+   * [X] Only an issue when dumping.
+ * An unconditional branch to itself.
+   * [X] Skipped.  Not optimized.
+ * The assembler still emits a bra opcode..not because of the nullified icode
+   but because the automatic bra emitting code assumes the next iblock to be
+   emitted is computed by adding 1 to the current ID.  It should add 1 and
+   verify it's not invalid.  A new getNextIBlock() function shold be used
+   instead.
+     Found empty iblock:
+     #<000  2ba8cf638040  [001]  [001]  ()
+       00  beqi $0 #<0> #<0>>
+     #<001  2ba8cf638040  [002]  [---]  (000 000)>
+     #<002  2ba8cf638040  [---]  [---]  (001)
+       00  ret>
+     The result:
+     #<000  2ba8cf638040  [002]  [002]  ()
+       00  beqi $0 #<0> #<0>>
+     #<001  ---  [002]  [---]  (000 000)>
+     #<002  2ba8cf638040  [---]  [---]  (000 000)
+       00  ret>
+     2BA8CFE6D1C0*0000 beqi $0 0 0005
+     2BA8CFE6D1D8 0003 bra 0005
+     2BA8CFE6D1E8 0005 ret
+   * [X] Added asmNextValidIBlock();
