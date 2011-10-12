@@ -10,19 +10,19 @@
 /***************************************
  Compiler
 ***************************************/
-void ccCompile (void);
+void compCompile (void);
 
 
 /***************************************
  Debugging
 ***************************************/
-void ccDumpIBlocks (void);
+void compDumpIBlocks (void);
 
 
 /***************************************
  Init
 ***************************************/
-void ccInitialize (void);
+void compInitialize (void);
 
 
 #endif

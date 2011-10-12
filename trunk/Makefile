@@ -1,15 +1,14 @@
 # Makefile for Wscheme.  It's simple.
 
-CFLAGS = -Wall -ggdb -Wno-format -Wno-trigraphs -march=native -Wconversion -O3
-#CFLAGS = -D_GNU_SOURCE -march=pentium -Wall -Wno-format -Wno-trigraphs -ggdb -Wconversion -O3
-# -Wall            -- Many warnings.
-# -Wno-format      -- Disable the annoying printf warnings.
-# -Wno-parentheses -- If it's valid C why bitch about it?
-# -ggdb -- Debugging.
-# -pg   -- Profiling.
-# -O3   -- Implies:  -malign-loops=2 -malign-jumps=2 -malign-functions=2
-#                    -malign-double -mwide-multiply
-# -Werror -- Warnings prevent compilation.
+CFLAGS = -Wall -ggdb -march=native -Wconversion -Wno-trigraphs -Wno-format -O3
+# -march=native     GCC can figure out the best optimization switches
+# -Wall             Many warnings.
+# -Wno-format       Disable the annoying printf warnings.
+# -Wno-parentheses  If it's valid C why complain?
+# -ggdb             Debugging
+# -pg               Profiling.
+# -O3               -malign-loops=2 -malign-jumps=2 -malign-functions=2 -malign-double -mwide-multiply
+# -Werror           Warnings prevent compilation.
 
 LDFLAGS = -lm
 # -lm       Math library (probably trig functions).

@@ -1886,7 +1886,7 @@ void wscmCreateRepl (void) {
 		/* Done if an #eof parsed. */
 		BRTI, R0, TEOF, Ldone,
 		/* Compile expression. */
-		SYSI, ccCompile, // WAS compSysCompile
+		SYSI, compCompile, // WAS compSysCompile
 		/* Run code. */
 		PUSH, R1A, PUSH, R1B, PUSH, R19,
 		JAL, R0,
@@ -1915,7 +1915,7 @@ void wscmInitialize (void) {
  Num i;
 	DBBEG();
 
-	ccInitialize();
+	compInitialize();
 
 	/* Although already activated, just pass in a scheduler handler callback.
 	   Called when vmInterrupt is set.  */
@@ -2099,7 +2099,7 @@ void wscmCReadEvalPrintLoop (void) {
 		fprintf(stderr, "\n== Compile ======================\n");
 		sysWrite(r0, stderr);
 
-		ccCompile(); /* Compile r0 into VM runable code into r0 */
+		compCompile(); /* Compile r0 into VM runable code into r0 */
 
 		rcode = r0;
 		rip = 0;
@@ -2167,7 +2167,7 @@ void wscmStringReadEvalPrintLoop (void) {
 	yyparse(); /* Use the internal parser */
 	//rexpr = r0;  compCompile();
 	//sysDisplay(r0, stderr);
-	ccCompile();
+	compCompile();
 	//vmDebugDumpCode(r0, stderr);
 	osNewThread(); /* Create a new thread */
 	osScheduler();
