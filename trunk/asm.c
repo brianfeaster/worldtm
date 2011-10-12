@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <stdarg.h>
+#include <fcntl.h>
 #include "asm.h"
 #include "obj.h"
 #include "vm.h"
@@ -22,6 +23,7 @@ TABLE OF CONTENTS
 
 void ccDumpIBlock (Obj ib);
 void ccDumpIBlocks (void);
+void compDumpIBlockParentAndChildren (Obj ib);
 
 /* Local static scheme symbol used to delimit assembly opcodes */
 Obj sasmend;
@@ -122,6 +124,7 @@ void ccICodePushNewQUIT (void)               { asmNewICode(QUIT,NA, NA, NA, NA, 
 
 Num asmICodeOpcodeSize (Obj icode) {
 	assert(ccIsObjectTypeICode(icode));
+	if (NOP == asmICodeField(icode, 0)) return 0; /* Ignore NOPs since they're not emitted */
 	return 1 + (Num)(NA != asmICodeField(icode, 4)) + (Num)(NA != asmICodeField(icode, 5));
 }
 
@@ -203,12 +206,35 @@ void ccIBlockConditionalTagSet (Obj ib, Obj tag) {
      r2 = temp
      r3 = temp
 */
-void ccIBlockIncomingListAdd (Obj ib, Obj in) {
+void ccIBlockIncomingListAdd (Obj ib, Obj o) {
 	r3 = ib;
-	r1 = in;
+	r1 = o;
 	r2 = memVectorObject(r3, IBLOCK_INDEX_INCOMING);
 	objCons12();
 	memVectorSet(r3, IBLOCK_INDEX_INCOMING, r0);
+}
+
+void ccIBlockIncomingListDel (Obj ib, Obj o) {
+ Obj l, n;
+
+	/* Consider list */
+	l = ccIBlockIncomingList(ib);
+
+	/* First element is obj? */
+	if (objIsPair(l) && o == car(l)) {
+		memVectorSet(ib, IBLOCK_INDEX_INCOMING, cdr(l));
+		return;
+	}
+
+	n = cdr(l);
+	while (objIsPair(n)) {
+		if (objIsPair(n) && o == car(n)) {
+			memVectorSet(l, 1, cdr(n));
+			return;
+		}
+		l = n;
+		n = cdr(l);
+	}
 }
 
 void ccIBlockSetICode (Num offset, Obj op) {
@@ -364,14 +390,12 @@ void asmInit (void) {
 */
 void ccGenerateIBlockWithPushedIcodes () {
  Obj ic;
-	if (icodeOffset < ICodeCount) { /* Any icodes to deal with? */
-		/* Create new empty iblock in riblock and 'pop' icodes from stack into it */
-		ccGenerateNewIBlock(ICodeCount - icodeOffset);
+	/* Create new empty iblock in riblock and 'pop' icodes from stack into it */
+	ccGenerateNewIBlock(ICodeCount - icodeOffset);
 
-		while (icodeOffset < ICodeCount) {
-			ic = ccICodePop(); /* This decrement ICodeCount */
-			ccIBlockSetICode(ICodeCount - icodeOffset, ic);
-		}
+	while (icodeOffset < ICodeCount) {
+		ic = ccICodePop(); /* This decrement ICodeCount */
+		ccIBlockSetICode(ICodeCount - icodeOffset, ic);
 	}
 }
 
@@ -492,7 +516,7 @@ void asmAsmInternal (Obj f, ...) {
 		} else if (BRA == obj) {
 			l = asmOpcodesNext();
 			DB("bra ["HEX"]", l);
-			ccICodePushNewBRA(l);
+			//ccICodePushNewBRA(l);
 			ccGenerateIBlockWithPushedIcodes();
 			ccIBlockDefaultTagSet(riblock, l);  /* signal this block's default is a label */
 		} else if (JMP == obj) {
@@ -559,6 +583,7 @@ Num pccode = 0;  /* Pointer into code block */
 
 
 void ccEmitOpcode (Obj op) {
+	if (pccode >= memObjectLength(rcodenew)) vmDebugDumpCode(rcodenew, stderr);
 	assert(pccode < memObjectLength(rcodenew) && "Code object can't fit more icodes.");
 	memVectorSet(rcodenew, pccode++, op);
 }
@@ -567,6 +592,7 @@ void ccEmitOpcode2 (Obj op1, Obj op2) {
 	memVectorSet(rcodenew, pccode++, op1);
 	memVectorSet(rcodenew, pccode++, op2);
 }
+
 
 void ccEmitIblockOpcodes (void) {
  Num i;
@@ -838,6 +864,18 @@ void ccEmitIblockOpcodes (void) {
 	DBEND();
 }
 
+/* Given an iblock ID, return the next valid iblock based on
+   incrementing ID numbers.
+*/
+Obj asmNextValidIBlock (Num id) {
+ Obj ib;
+	while (++id < IBlockCount) {
+		ib = ccIBlock(id);
+		if (true == ccIBlockTag(ib)) return ib;
+	}
+	return false;
+}
+
 /* Emit a jump opcode if the iblock's default iblock will not be emitted after this
    one.  Also set the default/conditional branch field code-block offsets in the
    iblock structure.
@@ -845,6 +883,7 @@ void ccEmitIblockOpcodes (void) {
 void ccPrepareIBlockBranches (void) {
  Obj defBlock, condBlock;
  Num codeBlockOffset, id;
+ Obj nextib;
 	DBBEG("  iblock="NUM, ccIBlockID(riblock));
 	/* If no default block is set then verify no conditional block either as it's
 	   probably the final "quit" iblock. */
@@ -863,10 +902,12 @@ void ccPrepareIBlockBranches (void) {
 		ccIBlockConditionalTagSet(riblock, (Obj)codeBlockOffset);
 	}
 
-	/* if the iblock is the last iblock in the igraph vector or the next iblock is not my default */
+	/* A default iblock exists.  If the iblock is the last iblock in the igraph vector
+	   or the next iblock to emit is not my default, emit a jump opcode. */
 	id = ccIBlockID(riblock);
+	nextib = asmNextValidIBlock(id); /* Consider next iblock to be emitted */
 	defBlock = ccIBlockDefaultTag(riblock);
-	if ((id == IBlockCount - 1) || (defBlock != ccIBlock(id + 1))) {
+	if ((id == IBlockCount - 1) || (defBlock != nextib)) {
 		assert(ccIsObjectTypeIBlock(defBlock));
 		ccEmitOpcode2(vmBRA, false); /* Emit jump opcode */
 		codeBlockOffset = pccode - 1;
@@ -876,7 +917,6 @@ void ccPrepareIBlockBranches (void) {
 ret:
 	DBEND();
 }
-
 
 /* For every iblock in the igraph that has been tagged #t, icode is emitted
    to the code object.  The iblock is tagged with its address in the code
@@ -987,7 +1027,6 @@ void ccResolveBranchOpcodeAddresses (void) {
 /* Set the default/conditional tags to an actual iblock.
    Also add this iblock to the child's incoming list.
 */
-
 void ccIBlockLinkDefault (Num IDparent, Num IDchild) {
  Obj parentib, childib;
 
@@ -1011,7 +1050,6 @@ void ccIBlockLinkConditional (Num IDparent, Num IDchild) {
 	ccIBlockConditionalTagSet(parentib, childib);
 	ccIBlockIncomingListAdd(childib, parentib);
 }
-
 
 /* Initialize iblock default and conditional tags with their child iblocks (if it has them)
     r4 = temp 
@@ -1060,7 +1098,7 @@ void compSetIBlockICodeToNOP (Obj ib, Num icidx) {
  Look for "push reg" icode in iblock in riblock starting at icode start,
  skipping nop and instructions that don't use the same register.
 */
-Num compOptimizePopPushFindPush(Num start, Obj reg) {
+Num compOptimizePeepHolePopPushFindMatchingPush(Num start, Obj reg) {
  Obj ic;
  Num i;
  Obj field0, field1, field2, field3;
@@ -1093,48 +1131,96 @@ Num compOptimizePopPushFindPush(Num start, Obj reg) {
 /* riblock <= iblock to optimize
    return => optimization performed
 */
-Num compOptimizePopPush(void) {
+void compOptimizePeepHolePopPush(void) {
  Obj ic;
- Num ret=0, i;
+ Num idx, i, j;
  Obj field0, field1;
- Num idx;
-	/* Scan every icode in iblock */
-	for (i=0; i<ccIBlockICodeLength(riblock); ++i) {
-		ic = ccIBlockICode(riblock, i);
-		/* Look for a pop instruction */
-		field0 = asmICodeField(ic, 0);
-		if (POP == field0) {
-			/* Consider its register */
-			field1 = asmICodeField(ic, 1);
-			/* And find a matching push that cancels the pop */
-			idx = compOptimizePopPushFindPush(i+1, field1);
-			if (0 != idx) {
-				ret = 1;
-				compSetIBlockICodeToNOP(riblock, i);
-				compSetIBlockICodeToNOP(riblock, idx);
-				break;
+	DBBEG();
+	/* Consider every live iblock  TODO make iteration on igraph cleaner (and everywhere else) */
+	for (i = iblockOffset; i < IBlockCount; ++i) {
+		riblock = ccIBlock(i);
+		if (true == ccIBlockTag(riblock)) do {
+			idx = 0;
+			/* Over every POP instruction */
+			for (j=0; !idx && j<ccIBlockICodeLength(riblock); ++j) {
+				ic = ccIBlockICode(riblock, j);
+				field0 = asmICodeField(ic, 0); /* opcode */
+				field1 = asmICodeField(ic, 1); /* reg 0 */
+				if (POP == field0) {
+					/* Find a matching push that cancels this pop */
+					idx = compOptimizePeepHolePopPushFindMatchingPush(j+1, field1);
+					if (idx) {
+						DB("Omitting "HEX" and "HEX, j, idx);
+						DBE ccDumpIBlock(riblock);
+						compSetIBlockICodeToNOP(riblock, j);
+						compSetIBlockICodeToNOP(riblock, idx);
+					}
+				}
 			}
-		}
+		} while (idx);
 	}
+	DBEND();
+}
 
-	return ret;
+/* Incoming connections moved to outoing connections,
+   outgoing connection removed, iblock invalidated.
+    riblock <= Empty iblock to remove from igraph
+*/
+void compOptimizeEmptyIBlock(void) {
+ Obj mydef, lst, inib;
+	if ((true == ccIBlockTag(riblock)) && (0 == ccIBlockICodeLength(riblock))) {
+		DB("Found empty iblock:");
+
+		assert(false == ccIBlockConditionalTag(riblock)); /* Verify my empty conditional iblock */
+		/* Consider default iblock */
+		mydef = ccIBlockDefaultTag(riblock);
+
+		/* Make sure my default tag is an iblock and not myself */
+		assert(ccIsObjectTypeIBlock(mydef));
+
+		if (riblock == mydef) {
+			DB("Skipping empty blocks that jump to themselves");
+			goto ret;
+		}
+		DBE compDumpIBlockParentAndChildren(riblock);
+
+		/* Remove myself from default iblock */
+		ccIBlockIncomingListDel(mydef, riblock);
+		/* Set incoming blocks' default and/or conditional block to my default */
+		lst = ccIBlockIncomingList(riblock);
+		assert(objIsPair(lst)); /* It's guaranteed to have an incoming list otherwise it wouldn't be tagged #t */
+		while (null != lst) {
+			inib = car(lst); /* Consider an incoming block */
+			if (riblock == ccIBlockDefaultTag(inib)) ccIBlockLinkDefault(ccIBlockID(inib), ccIBlockID(mydef));
+			if (riblock == ccIBlockConditionalTag(inib)) ccIBlockLinkConditional(ccIBlockID(inib), ccIBlockID(mydef));
+			lst = cdr(lst);
+		}
+		ccIBlockTagSet(riblock, false); /* Now invalidate this now unused iblock */
+
+		DB("The result:");
+		DBE compDumpIBlockParentAndChildren(riblock);
+	}
+ret:
+	return;
+}
+
+void compOptimizeEmptyIBlocks(void) {
+ Num i;
+	DBBEG();
+	/* Consider every live iblock  TODO make iteration on igraph cleaner (and everywhere else) */
+	for (i = iblockOffset; i < IBlockCount; ++i) {
+		riblock = ccIBlock(i);
+		compOptimizeEmptyIBlock();
+	}
+	DBEND();
 }
 
 /* riblock = temp
 */
-void compOptimizeAllIBlocks (void) {
- Num ret=0;
- Num i;
+void asmPeepHoleOptimization (void) {
 	DBBEG();
-	for (i=iblockOffset; i < IBlockCount; ++i) { /* TODO make iteration on igraph cleaner (and everywhere else) */
-		/* Consider each live iblock */
-		riblock = ccIBlock(i);
-		if (true == ccIBlockTag(riblock)) {
-			while (compOptimizePopPush()) {
-				ret=1;
-			}
-		}
-	}
+	compOptimizePeepHolePopPush();
+	compOptimizeEmptyIBlocks();
 	DBEND();
 }
 
@@ -1142,33 +1228,51 @@ void compOptimizeAllIBlocks (void) {
 /* Recursively traverse the igraph's iblocks.  Tag each with #t.
    Also resolve default and conditional branch tags.
 */
-Num ccCountIGraphFields (Obj ib) {
- Obj icode;
- Num i, len=0;
-
+void asmPrepareIGraph (Obj ib) {
 	/* Base case.  Not an iblock or the iblock has been traversed already (tagged with #t) */
-	if (!ccIsObjectTypeIBlock(ib) || true == ccIBlockTag(ib)) return 0;
+	if (!ccIsObjectTypeIBlock(ib) || true == ccIBlockTag(ib))
+		return;
 
-	ccIBlockTagSet(ib, true);
+	ccIBlockTagSet(ib, true); /* Tag iblock #t */
 
 	vmPush(ib);
 	ccInitIBlockBranchTagsToIBlocks(ib);
 	ib = vmPop();
 
-	/* Count the number of fields in each icode in this iblock */
-
-	for (i=0; i<ccIBlockICodeLength(ib); ++i) {
-		icode = ccIBlockICode(ib, i);
-		len += asmICodeOpcodeSize(icode);
-	}
-
 	vmPush(ib);
-	len += ccCountIGraphFields(ccIBlockDefaultTag(ib));
+	asmPrepareIGraph(ccIBlockDefaultTag(ib));
 	ib = vmPop();
-	len += ccCountIGraphFields(ccIBlockConditionalTag(ib));
+	asmPrepareIGraph(ccIBlockConditionalTag(ib));
+}
+
+
+Num asmCountIGraphFields (void) {
+ Obj ib, dib, icode, nextib;
+ Num i, j, len=0;
+
+	for (i=iblockOffset; i < IBlockCount; ++i) {
+		ib = ccIBlock(i); /* Consider iblock from vector of all iblocks */
+		/* This means the iblock is not connected to the igraph as it wasn't
+		   recursively found when counting the igraph fields */
+		if (true == ccIBlockTag(ib)) {
+			/* Count the number of fields in each icode in this iblock */
+			for (j=0; j<ccIBlockICodeLength(ib); ++j) {
+				icode = ccIBlockICode(ib, j);
+				len += asmICodeOpcodeSize(icode);
+			}
+			/* Include room for a branch if the default iblock does not come after this iblock */
+			dib = ccIBlockDefaultTag(ib);
+			nextib = asmNextValidIBlock(ccIBlockID(ib)); /* Consider next iblock to be emitted */
+			if (ccIsObjectTypeIBlock(dib) && dib != nextib)
+				len += 2;
+		}
+	}
 	return len;
 }
 
+void asmOptimizeIGraph (void) {
+	asmPeepHoleOptimization();
+}
 
 /* The IGraph's iblocks are found in riblocks.  The icode found in each iblock
    and the links between icodes, are assembled into a VM code object object
@@ -1180,32 +1284,36 @@ void asmAsmIGraph (void) {
  Num len;
 	DBBEG("  ICodeCount="NUM"   iblockOffset="NUM, ICodeCount, iblockOffset);
 
-	/* Might have to create an iblock with remaining icodes on stack */
-	ccGenerateIBlockWithPushedIcodes();
+	/* Might have to create one more last iblock with the remaining new icodes */
+	if (icodeOffset < ICodeCount) ccGenerateIBlockWithPushedIcodes();
 
 	assert((0 < IBlockCount) && "There are no iblocks to assemble");
 
-//ccDumpIBlocks();
-
 	/* Create the code block object which all iblocks are compile to */
-	len = ccCountIGraphFields(ccIBlock(iblockOffset));
-	rcodenew = memNewVector(TCODE, len + 512);
-	pccode = 0;
+	asmPrepareIGraph(ccIBlock(iblockOffset));
+	//ccDumpIBlocks();
+	asmOptimizeIGraph();
+	//ccDumpIBlocks();
 
-//ccDumpIBlocks();
+	if (rdebug) ccDumpIBlocks();
 
-	compOptimizeAllIBlocks();
+	len = asmCountIGraphFields();
+	if (len) {
+		rcodenew = memNewVector(TCODE, len);
+		pccode = 0;
+		ccPlaceAllIBlocks();
 
-//if (rdebug) ccDumpIBlocks();
+		ccResolveBranchOpcodeAddresses();
 
-	ccPlaceAllIBlocks();
+		r0 = rcodenew;
+		//objDump(rlabels,stdout);
+		if (rdebug) vmDebugDumpCode(rcodenew, stderr);
+	} else {
+		r0 = false;
+	}
 
-	ccResolveBranchOpcodeAddresses();
-
-	r0 = rcodenew;
 	ccEnd();
-//objDump(rlabels,stdout);
-//if (rdebug) vmDebugDumpCode(rcodenew, stderr);
+
 	DBEND();
 }
 
@@ -1219,8 +1327,8 @@ void ccDumpICodeFields (Obj ic) {
 	if ((Obj)NA != (f = asmICodeField(ic, 1))) { assert(f<=R1F); fprintf(stderr, " $"HEX, f); }
 	if ((Obj)NA != (f = asmICodeField(ic, 2))) { assert(f<=R1F); fprintf(stderr, " $"HEX, f); }
 	if ((Obj)NA != (f = asmICodeField(ic, 3))) { assert(f<=R1F); fprintf(stderr, " $"HEX, f); }
-	if ((Obj)NA != (f = asmICodeField(ic, 4))) { fprintf(stderr, " "); objDump(f, stderr); }
-	if ((Obj)NA != (f = asmICodeField(ic, 5))) { fprintf(stderr, " "); objDump(f, stderr); }
+	if ((Obj)NA != (f = asmICodeField(ic, 4))) { fprintf(stderr, " "); objDump(f, stderr); fflush(stderr); }
+	if ((Obj)NA != (f = asmICodeField(ic, 5))) { fprintf(stderr, " "); objDump(f, stderr); fflush(stderr); }
 }
 void ccDumpICode (Obj ic) {
 	if (memIsObjectValid(ic)) {
@@ -1306,10 +1414,36 @@ void ccDumpIBlock (Obj ib) {
 
 void ccDumpIBlocks (void) {
  Num i;
+ int fl;
+	/* Temporarily enable blocking I/O */
+	fl = fcntl(0, F_GETFL, 0);
+	fcntl (0, F_SETFL, fl&~O_NONBLOCK);
+
 	DBBEG();
+
 	for (i=iblockOffset; i<IBlockCount; ++i)
 		ccDumpIBlock(ccIBlock(i));
+
 	DBEND();
+
+	fcntl (0, F_SETFL, fl);
+}
+
+void compDumpIBlockParentAndChildren (Obj ib) {
+ Obj lst, last, inib, dib, cib;
+	lst = ccIBlockIncomingList(ib);
+	last = null;
+	while (null != lst) {
+		inib = car(lst); /* Consider an incoming block */
+		if (last != inib) ccDumpIBlock(inib);
+		last = inib;
+		lst = cdr(lst);
+	}
+	ccDumpIBlock(ib);
+	dib = ccIBlockDefaultTag(ib);
+	cib = ccIBlockConditionalTag(ib);
+	if (ccIsObjectTypeIBlock(dib)) ccDumpIBlock(dib);
+	if (ccIsObjectTypeIBlock(cib)) ccDumpIBlock(cib);
 }
 
 

@@ -614,8 +614,8 @@ void opcodes (void) {
 	/* SYSI */
 	asmInit(); L=asmNewLabel(); asmAsm(QUIT); asmAsmIGraph(); assert(vmQUIT == memVectorObject(r0, 0));
 
-	/* NOP This shouldn't be emitted*/
-	asmInit(); L=asmNewLabel(); asmAsm(NOP); asmAsmIGraph(); assert(0 == memVectorObject(r0, 0));
+	/* NOP isn't emitted */
+	asmInit(); L=asmNewLabel(); asmAsm(NOP); asmAsmIGraph(); assert(false == r0);
 
 //ccDumpIBlocks();
 //vmDebugDumpCode(r0, stderr);
@@ -739,14 +739,41 @@ void optimizePopPush (void) {
 		POP, R0,
 		QUIT
 	);
-//ccDumpIBlocks();
+ccDumpIBlocks();
 	asmAsmIGraph();
-//vmDebugDumpCode(r0, stderr);
+vmDebugDumpCode(r0, stderr);
 	rcode = r0;  rip = 0;  vmRun();
-//memDebugDumpObject(rstack, stderr);
+memDebugDumpObject(rstack, stderr);
 	FBDump();
 }
 
+
+void optimizeEmptyIBlock (void) {
+ Obj L, LL, LLL;
+	asmInit();
+	L = asmNewLabel();
+	LL = asmNewLabel();
+	LLL = asmNewLabel();
+	asmAsm(
+		BEQI, R0, 0, L,
+	 LABEL, L,
+		BRA, LL,
+	 LABEL, LL,
+		MV, R0, R1,
+	 LABEL, LLL,
+		BRA, LLL
+	);
+	asmAsmIGraph();
+	/* Expect the following code block:
+	   2AE69E4E7220*0000 beqi $0 0 0003
+	   2AE69E4E7238 0003 mv   $0 $1
+	   2AE69E4E7240 0004 bra 0004
+	*/
+	assert(vmBEQI0 == memVectorObject(r0, 0));
+	assert(vmMV01 == memVectorObject(r0, 3));
+	assert(vmBRA == memVectorObject(r0, 4));
+	assert(-2*8 == memVectorObject(r0, 5));
+}
 
 
 int main (int argc, char *argv[]) {
@@ -780,6 +807,7 @@ int main (int argc, char *argv[]) {
 	TEST(opcodes);
 	TEST(myTest);
 	TEST(optimizePopPush);
+	TEST(optimizeEmptyIBlock);
 
 	return 0;
 }

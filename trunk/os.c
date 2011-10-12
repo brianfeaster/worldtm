@@ -494,11 +494,11 @@ void osSpawnSignalHandler(void) {
  Num i;
 	DBBEG();
 	DBE for (i=0; i<MAX_SIGNAL_VALUE; ++i) { fprintf (stderr, " "NUM, caughtSignals[i]); }
-	signalFlag=0;
+	signalFlag = 0;
 	for (i=0; i<MAX_SIGNAL_VALUE; ++i) {
 		if (caughtSignals[i]) {
 			DB("caughtSignals["NUM"]="NUM, i, caughtSignals[i]);
-			caughtSignals[i]=0;
+			caughtSignals[i] = 0;
 			vmPush(r0); /* Save state */
 			vmPush(r1);
 			vmPush(r2);
