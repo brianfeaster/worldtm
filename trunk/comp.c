@@ -1900,23 +1900,19 @@ void osNewThread (void); /* Refactor this call or compThread */
 void compThread (void) {
 	DBBEG();
 
-	asmStart(); /* Enter a new assembly context */
-
-	/* Compile parameters passed to thread as a begin block emitting the unthread syscall as the last opcode. */
+	/* Start a new assembly context, compiling parameters passed to thread as a
+	   begin block emitting the unthread syscall as the last opcode. */
+	asmStart();
 	compBegin(0);
-
-	asmAsm(
-		SYSI, osUnthread
-	);
-	asmAsmIGraph();
+	asmAsm(SYSI, osUnthread);
+	asmAsmIGraph(); /* End this sub assembly context, with the new assembled code block in r0 */
 
 	asmAsm(
 		MVI, R0, r0,
-		SYSI, osNewThread /* the osNewThread syscall returns thread ID integer object */
+		SYSI, osNewThread /* the osNewThread syscall returns thread ID integer object in r0 at runtime */
 	);
 
-	DBEND("  => ");
-	DBE objDump(r0, stderr);
+	DBEND();
 }
 
 

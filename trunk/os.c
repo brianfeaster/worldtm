@@ -62,7 +62,7 @@ void osRemoveThread (Obj t) {
 		/* Keep running pointer on the ready queue. */
 		if (t==rrunning) rrunning=p;
 	} else {
-		fprintf (stderr, "WARNING: %s: Attempting to remove thread queue head.\r\n", __func__);
+		fprintf (stderr, "WARNING: %s: Attempting to remove thread queue head.\n", __func__);
 	}
 	DBEND();
 }
