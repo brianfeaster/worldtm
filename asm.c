@@ -187,6 +187,19 @@ Num asmIBlockIsValid (Obj ib) {
 }
 
 
+/* Given an iblock ID, return the next valid iblock based on
+   incrementing ID numbers.
+*/
+Obj asmIBlockNextValid (Num id) {
+ Obj ib;
+	while (++id < IBlockCount) {
+		ib = asmIBlock(id);
+		if (true == asmIBlockTag(ib)) return ib;
+	}
+	return false;
+}
+
+
 /* Set iblock's various tag values
 */
 
@@ -569,7 +582,7 @@ void asmAsmInternal (Obj f, ...) {
 //sysWrite(rlabels, stdout);
 //asmDumpIBlocks();
 //sysWrite(rlabels, stdout); printf("\n");
-	DBEND ("  ICodeCount "NUM"   IBlockCount "NUM, ICodeCount, IBlockCount);
+	DBEND("  ICodeCount "NUM"   IBlockCount "NUM, ICodeCount, IBlockCount);
 }
 
 
@@ -864,18 +877,6 @@ void asmEmitIblockOpcodes (void) {
 	DBEND();
 }
 
-/* Given an iblock ID, return the next valid iblock based on
-   incrementing ID numbers.
-*/
-Obj asmNextValidIBlock (Num id) {
- Obj ib;
-	while (++id < IBlockCount) {
-		ib = asmIBlock(id);
-		if (true == asmIBlockTag(ib)) return ib;
-	}
-	return false;
-}
-
 /* Emit a jump opcode if the iblock's default iblock will not be emitted after this
    one.  Also set the default/conditional branch field code-block offsets in the
    iblock structure.
@@ -905,7 +906,7 @@ void asmPrepareIBlockBranches (void) {
 	/* A default iblock exists.  If the iblock is the last iblock in the igraph vector
 	   or the next iblock to emit is not my default, emit a jump opcode. */
 	id = asmIBlockID(riblock);
-	nextib = asmNextValidIBlock(id); /* Consider next iblock to be emitted */
+	nextib = asmIBlockNextValid(id); /* Consider next iblock to be emitted */
 	defBlock = asmIBlockDefaultTag(riblock);
 	if ((id == IBlockCount - 1) || (defBlock != nextib)) {
 		assert(asmIsObjectTypeIBlock(defBlock));
@@ -930,7 +931,7 @@ ret:
 void asmPlaceAllIBlocks (void) {
  Num i;
 	DBBEG();
-	for (i=iblockOffset; i < IBlockCount; ++i) {
+	for (i=iblockOffset; i < IBlockCount; ++i) { // TODO use this asmIBlockNextValid()
 		riblock = asmIBlock(i); /* Consider iblock from vector of all iblocks */
 
 		/* This means the iblock is not connected to the igraph as it wasn't
@@ -1251,9 +1252,9 @@ Num asmCountIGraphFields (void) {
  Num i, j, len=0;
 
 	for (i=iblockOffset; i < IBlockCount; ++i) {
-		ib = asmIBlock(i); /* Consider iblock from vector of all iblocks */
-		/* This means the iblock is not connected to the igraph as it wasn't
-		   recursively found when counting the igraph fields */
+		ib = asmIBlock(i); /* Consider next iblock from vector of all iblocks */
+		/* Only live iblocks are emitted found when performing a recursive walk
+		   on the igraph and possibly removed during optimization */
 		if (true == asmIBlockTag(ib)) {
 			/* Count the number of fields in each icode in this iblock */
 			for (j=0; j<asmIBlockICodeLength(ib); ++j) {
@@ -1262,7 +1263,7 @@ Num asmCountIGraphFields (void) {
 			}
 			/* Include room for a branch if the default iblock does not come after this iblock */
 			dib = asmIBlockDefaultTag(ib);
-			nextib = asmNextValidIBlock(asmIBlockID(ib)); /* Consider next iblock to be emitted */
+			nextib = asmIBlockNextValid(asmIBlockID(ib)); /* Consider next iblock to be emitted */
 			if (asmIsObjectTypeIBlock(dib) && dib != nextib)
 				len += 2;
 		}

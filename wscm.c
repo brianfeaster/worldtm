@@ -1290,7 +1290,7 @@ void syscallSemaphoreDown (void) {
 	sysSemaphoreDown();
 	if (r0 == r1) {
 		/* Block thread on this semaphore.  Semaphore remains in r1. */
-		DB ("Blocking thread "NUM" on semaphore value "NUM, *(Num*)osThreadId(rrunning), *(Int*)r1);
+		DB("Blocking thread "NUM" on semaphore value "NUM, *(Num*)osThreadId(rrunning), *(Int*)r1);
 		osUnRun();
 		osMoveToQueue(rrunning, rblocked, ssemaphore); /* TODO create a separate semaphore blocked queue */
 		osScheduler();
