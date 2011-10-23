@@ -14,7 +14,7 @@
 (load "ultima4.cells")
 (load "scrabble.scm") ; TODO temporary
 
-(define HUB-PORT 8155)
+(define HUB-PORT 7155)
 (define KITTEHBRAIN  #f)
 (define ActivityTime (time))
 (define SHOWBUTTONS #f)
@@ -382,7 +382,7 @@
  ; Return done.  Everything else returns true signalling we want to keep reading the keyboard
  (if (pair? (memv c (list CHAR-ESC TAB #\C #\c #\q #\Q)))
    #f
- ; Fake a mouse event as the mouse handler is contains the bulk of the code.
+ ; Fake a mouse event as the mouse handler contains the bulk of the avatar color change code
  (if (pair? (memv c (list RETURN NEWLINE SPACE)))
    (begin
      (mouseColorsActionHandler 'mouse0 (car CursorYX) (cdr CursorYX))
@@ -675,6 +675,7 @@
          ; Send talk chatter to IPC or evaluate expression
          (if (and (not (eq? "" talkInput))
                   (eq? #\: (string-ref talkInput 0)))
+             ; Evaluate an expression Parse
              (begin (WinChatDisplay "\r\n")
                     (WinChatDisplay talkInput)
                     (WinChatDisplay "=>")

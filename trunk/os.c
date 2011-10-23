@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
+#include <errno.h> /* for errno */
 #include <assert.h>
 #include "os.h"
 #include "sys.h"
@@ -10,8 +11,87 @@
 #include "vm.h"
 #include "mem.h"
 /*
+ Useful
  Scheduling
 */
+
+
+/* Rootset objects
+*/
+Obj rblocked, rthreads, rsleeping, rrunning, rready;
+
+
+/*******************************************************************************
+ Useful
+*******************************************************************************/
+#define DEBUG DEBUG_ALL|0
+#define DB_DESC "OS_USEFUL"
+
+Func ExceptionHandlerDefault = 0;
+
+/* Replace current continuation with error handler function/continuation which
+   must be defined in the global environment in the ERRORS vector indexed by
+   thread ID.
+  str <= Useful string (object or C) to include along with stack args
+   r1 <= stack argument count
+   rf <= stack of arguments
+*/
+void osException (Obj str) {
+	DBBEG();
+
+	/* Force str to a scheme string object if not already */
+	if (!memIsObjectValid(str)) {
+		objNewString(str, strlen(str));
+		r3 = r0;
+	} else {
+		assert(memIsObjectType(str, TSTRING) && "Parameter 'str' not a STRING object");
+		r3 = str;
+	}
+	
+	/* Attach stack arguments to message expression */
+	sysStackToList();
+	r2 = r0;
+	r1 = r3;
+	objCons12();
+	r3 = r0;
+
+	/* Lookup ERRORS binding in TGE.
+	   TODO this should be a static object and global symbol */
+	objNewSymbol ((Str)"ERRORS", 6);  r1=r0;  sysTGEFind();
+
+	if (null == r0) {
+		if (ExceptionHandlerDefault) {
+			r0 = r3;
+			ExceptionHandlerDefault();
+			return;
+		} else {
+			/* No exception handler vector 'ERRORS' so halt process */
+			fprintf (stderr, "A runtime error/exception has occured:");
+			sysWrite(r3, stderr);
+			fprintf (stderr, "\nEntering debugger");
+			syscallDebugger();
+			exit(-1);
+		}
+	}
+
+	/* Consider the ERROR vector from TGE binding then consider the closure */
+	r0 = car(r0);
+	r0 = memVectorObject(r0, *(Num*)osThreadId(rrunning));
+
+	/* r0 needs to remain the closure when a code block is first run since the
+	   called code expects to find a lexical enviroment in the closure in r0.
+	   #closure<code-block lexical-env> */
+	rcode = car(r0);
+	rip=0;
+
+	/* Pass message expression as one argument to the error handler.  r1 = arg count.  */
+	vmPush(r3);
+	r1=(Obj)1;
+	DBEND();
+}
+
+#undef DB_DESC
+#undef DEBUG
 
 
 
@@ -236,7 +316,7 @@ void osScheduleBlocked (void) {
 				r1=objDoublyLinkedListNext(r5);
 				osMoveToQueue(r5, rready, sready);
 				r5=r1;
-			/* Store back registers into thread since sysSend more than likely
+			/* Store back registers into thread since osSend more than likely
 			   changed them and keep this thread blocked. */
 			} else {
 				DB(" not unblocking thread");
@@ -300,7 +380,7 @@ void osRun (void) {
 	DBBEG(" tid="INT, *(Num*)osThreadId(rrunning));
 	if (osThreadState(rrunning) != sready) {
 		fprintf (stderr, "WARNING: osRun: Should be 'ready' thread but is ");
-		sysDisplay(osThreadState(rrunning), stderr);
+		objDump(osThreadState(rrunning), stderr);
 	} else {
 		/* Get stack from descriptor. */
 		rstack = osThreadStack(rrunning);
@@ -321,7 +401,7 @@ void osRun (void) {
 		memVectorSet(osThreadDescriptor(rrunning), 2, srunning);
 	}
 	DBEND(" => ");
-	DBE sysWrite(osThreadDescriptor(rrunning), stderr);
+	DBE objDump(osThreadDescriptor(rrunning), stderr);
 }
 
 
@@ -463,8 +543,8 @@ void osUnblockSemaphoreBlocked (Obj sem, Num all) {
 			/* Look at thread's r1 register stored on its stack. */
 			semaphore = memStackObject(osThreadStack(r4),1);
 			DB("considering blocked thread with sem:");
-			DBE sysWrite(sem, stderr);
-			DBE sysWrite(semaphore, stderr);
+			DBE objDump(sem, stderr);
+			DBE objDump(semaphore, stderr);
 			if (semaphore == sem) {
 				DB("unblocking thread tid:"NUM, *(Num*)osThreadId(r4));
 				/* Set thread's return value (r0 register which is found at the top of the thread's stack)
@@ -478,7 +558,7 @@ void osUnblockSemaphoreBlocked (Obj sem, Num all) {
 	}
 	if (!all && !found) {
 		fprintf (stderr, "ERROR: Couldn't find thread blocked on semaphore:");
-		sysWrite(sem, stderr);
+		objDump(sem, stderr);
 		exit (-1);
 	}
 	DBEND();
@@ -503,7 +583,7 @@ void osSpawnSignalHandler(void) {
 			vmPush(r1);
 			vmPush(r2);
 			vmPush(r3);
-				r1 = signalhandlers;  sysTGEFind(); r0=car(r0); /* Consider vector of signalhandlers. */
+				r1 = ssignalhandlers;  sysTGEFind(); r0=car(r0); /* Consider vector of ssignalhandlers. */
 				r3 = memVectorObject(r0, i); /* Consider the closure */
 				r0 = car(r3);
 				osNewThread();
@@ -536,6 +616,67 @@ void osDebugDumpThreadInfo (void) {
 	DBEND();
 }
 
+
+void osInitialize (Func exceptionHandler) {
+ static Num shouldInitialize=1;
+ Num i;
+	DBBEG();
+	if (shouldInitialize) {
+		DB("Activating module");
+		shouldInitialize = 0;
+		sysInitialize(); /* obj vm mem */
+
+		DB("Registering rootset objects");
+		memRootSetRegister(rblocked);
+		memRootSetRegister(rthreads);
+		memRootSetRegister(rsleeping);
+		memRootSetRegister(rrunning);
+		memRootSetRegister(rready);
+
+		DB("Registering static pointer description strings");
+		memPointerString(osNewThread);
+
+		/* Create empty thread vector.  All active threads are assigned a number
+		   1-1024 and stored here for easy constant time lookup.  The first entry
+		   in the thread table is the thread count as an immediate number. */
+		DB("Creating thread vector");
+		objNewVector(MAX_THREADS+1);  rthreads=r0;
+		memVectorSet(rthreads, 0, 0); /* Initialize thread count. */
+		for (i=1; i<=MAX_THREADS; i++) memVectorSet(rthreads, i, null);
+
+		DB("Creating ready thread list");
+		objNewDoublyLinkedListNode (); rready=r0;
+		rready = r0;
+		memVectorSet(rready, 0, sready);
+		memVectorSet(rready, 1, rready);
+		memVectorSet(rready, 2, rready);
+		/* The running thread register needs to point somewhere */
+		rrunning = rready;
+	
+		DB("Creating sleeping thread list");
+		objNewDoublyLinkedListNode (); rsleeping=r0;
+		memVectorSet(rsleeping, 0, ssleeping);
+		memVectorSet(rsleeping, 1, rsleeping);
+		memVectorSet(rsleeping, 2, rsleeping);
+
+		DB("Creating blocked thread list");
+		objNewDoublyLinkedListNode (); rblocked=r0;
+		memVectorSet(rblocked, 0, sblocked);
+		memVectorSet(rblocked, 1, rblocked);
+		memVectorSet(rblocked, 2, rblocked);
+
+	} else {
+		DB("Module already activated");
+	}
+
+	if (exceptionHandler) {
+		DB("Setting default exception handler callback function");
+		assert(!ExceptionHandlerDefault);
+		ExceptionHandlerDefault = exceptionHandler;
+	}
+
+	DBEND();
+}
 
 #undef DB_DESC
 #undef DEBUG

@@ -4,14 +4,14 @@ Design Document
 Purpose
 History
 Overview
-Module "mem"
-Module "vm"
-Module "obj"
-Module "sys"
-Module "os"
-Module "asm"
-Module "comp"
-Module "wscm"
+Module mem
+Module vm
+Module obj
+Module sys
+Module os
+Module asm
+Module comp
+Module wscm
 
 Purpose
 
@@ -35,17 +35,17 @@ The code base is partitioned into eight modules.  Scheme expressions are read an
 
    Module Hierarchy
    [mem]--[vm]--[obj]--[sys]--[os]--[comp]-[wscm]
-              \--------------[asm]-/
+                     \-------[asm]-/
 
-Module "mem"
+Module mem
 
 Keywords: array vector memory object pointer garbage collector generational stack finalizer heap
 
-The memory module restricts how Linux memory is allocated via Linux mmap() and providing pointers to two different object types: Arrays and vectors.  An array is a fixed length sequence of bytes.  Any value can be stored in the allocated size.  A vector is a fixed length sequence of pointers to other arrays or vector objects.  Once requested and allocated, the memory used by either type of object will eventually be returned back to Linux and unallocated with the pointers becoming invalid.  To prevent this, a C pointer variable's address (as opposed to its value) is registered with the module as a root pointer.  Multiple root pointers can be registered.  All root pointers are dereferenced to object pointers which, again, are pointers to arrays or vectors objects (with vectors pointing to further arrays or vectors, etc).  The entire tree of objects referenced by the root pointer(s) will never be returned to the Linux system.
+The memory module restricts how Linux memory is allocated via Linux mmap() and provides pointers to two different object types: Arrays and vectors.  An array is a fixed length sequence of bytes.  Any value can be stored in the allocated size.  A vector is a fixed length sequence of pointers to other arrays or vector objects.  Once requested and allocated, the memory used by either type of object will eventually be returned back to Linux and unallocated with the pointers becoming invalid.  To prevent this, a C pointer variable's address (as opposed to its pointer value) is registered with the module as a root object/pointer.  Multiple root objects can be registered.  All root objects are dereferenced to object pointers which, again, are pointers to arrays or vectors objects (with vectors pointing to further arrays or vectors, etc).  The entire tree of objects referenced by this root set will never be returned to the Linux system.
 
-The act of reclaiming unreferenced/unused objects is performed by a garbage collector.  Currently it implements a stop and copy collector with generational tendandcies  .  When conditions are met, the memory module takes control of the system and moves all live objects to a newly allocated heap while updating root set pointers as well as vector object pointers.
+The act of reclaiming unreferenced/unused objects is performed by a garbage collector.  Currently it implements a stop and copy collector with generational tendandcies.  When conditions are met, the memory module takes control of the system and moves all live objects to a newly allocated Linux heap while updating root set object/pointer values as well as the references within a vector object.
 
-The module accepts exceptions to vector object values.  Any value not referencing an address in an existing heap is considered a static address or constant value and is ignored.  Object's can be read and written to directly via C expressions or module calls which validate the objects access and values.  The latter is the recommended approach especially with vector objects.  There exist object subtypes the garbage collector handles more specifically than vectors:  stack, pointer and finalizer.
+Object's can be read and written to directly via C expressions or module calls which validate the objects access and values.  The latter is the recommended approach especially with vector objects.  There exist object subtypes the garbage collector handles more specifically than vectors:  stack, pointer and finalizer.
 
 Stacks are self explainitory in behavior and are just vector's with the first element directly referencing the object's subelement managed by push and pop vector object functions.  The garbage collector only concerns itself with sub elements in the vector containing live stack objects.  The other pointers in the vector are ignored and possibly treated as "garbage".
 
@@ -64,9 +64,9 @@ Basic array and vector objects can be typed with user specified values.  During 
 
 After an object is created, either directly by the memory module or indirectly via another module, it must always be reachable in the tree formed from the root set.  If an object is returned and not assigned to an existing vector or root node and instead passed to a C function or assigned to a local C variable, it is possible for the garbage collector to move the object, resulting in the C pointer not referencing the live object or valid heap.
 
-Validation functions exist to verify all live objects are valid or that the pointers are considered constant values.  Constant values are those below a certain address range.  On the current development Linux machine, addresses below 0x430000 have been identified as falling within the range of C function and goto addresses and so those values are ignored when validating valid pointer values.  This allows vector objects which represent code blocks (see the "vm" mdoule section) to contain C pointers to functions and goto labels.  Integer constants (between +/- 0x430000) are also allowed as vector values as immediate numbers for certain virtual machine opcodes.
+Validation functions exist to verify all live objects are valid or that the pointers are considered constant values which the memory module accepts as exceptions to valid object pointers.  Any value not referencing an address in an existing heap is considered a static address or constant value and is ignored during garbage collection.  Constant values are those below a certain address range.  On the current development Linux machine, addresses below 0x430000 have been identified as falling within the range of global C variables, C function addresses, and goto addresses and so those values are ignored when validating valid pointer values.  All new heaps allocated fall above this value.  This allows vector objects which represent code blocks (see the "vm" mdoule section) to contain C pointers to functions and goto labels.  Integer constants (between +/-#x430000) are also allowed as vector values as immediate numbers for certain virtual machine opcodes.
 
-Module "vm"
+Module vm
 
 Keywords: virtual machine VM CPU stack register root set goto pointer opcode program counter PC
 
@@ -97,7 +97,7 @@ Before a system call, the program counter is translated into an index into the c
 
 The jump and link opcode will copy the current code and program counter registers to a return code and return program counter register before setting the current code and program counter to the specified code block and first instruction.  The return value registers are copied back when the opcode "ret" is evaluated.
 
-Module "obj"
+Module obj
 
 The object module abstracts common scheme object creation and interaction and creates common symbols assinged to global C symbols.  This module fully demonstrates the strict requirements of the memory module with respect to passing and storing objects as care must be taken to guarantee new objects are always reference by a root set pointer or other live vector object.
 
@@ -105,7 +105,7 @@ The following scheme primitives can be created with functions in this module: in
 
 A some pair accessors are defined (car, cadr, etc) as well as doubly linked list mutators and traversers.  Symbols are hashed in this module.  Integers between -1024 and 1024 and all 256 character objects are cached.
 
-Module "sys"
+Module sys
 
 Keywords: I/O IO state machine scanner parser read display write serialize environment local global blocking socket port network
 
@@ -121,7 +121,7 @@ Scheme object serialization is performed on most objects allowing for visual or 
 
 To facilitate non-blocking I/O, the file/socket I/O functions in this module will keep track of the bytes processed and port state.  It is up to the caller to deal with unhandled bytes or unopened ports.  The state of the I/O call, be it to open a connection or read a number of bytes, is determined by the object returned in vm register r0.  Virtual machine registers are used as input arguments to these calls and must be stored if these calls are preemted by other threads or calls.  This is handled by thread functions in the os module during runtime.
 
-Module "os"
+Module os
 
 Keywords: thread descriptor code scheduler interrupt sleep queue semaphore blocked ready waiting running sleeping round robin registers signal handler
 
@@ -135,13 +135,15 @@ The sleeping thread list contains threads in order of their time to wake up.  An
 
 Most state and data structures are stored in many of the high (0x12 through 0x16) virtual machine registers mapped to the following C symbols:  rblocked, rthreads, rsleeping, rrunning and rready.  Signal handlers are stored in the scheme global environment mapped to symbol "SIGNALHANDLERS" and to C symbol "signalhandlers".
 
-Module "asm"
+Module asm
 
 Keywords: assemble optimize peephole iblock icode igraph child parent branch jump opcode conditional
 
 The assembler module facilitates the runtime creation and assembly of virtual machine programs.  The assembly programs are embedded in the C code and passed functionally to the assembler.  At runtime the assembler transforms the program into an intermediate graph of intermediate blocks which containing intermediate code objects.  Optimizations are performed on the igraph and iblocks directly in an attempt to increase runtime performance of the resulting virtual machine code objects.
 
-Icode objects represent a virtual machine opcode.  New icodes are stored internally which are eventually transfered to new iblocks.  New iblocks have bidirectional connections to other iblocks which define the possible flow of control of the vm program.  So each iblock will have at least one incoming parent iblock, and zero, one, or two child iblocks.  The child iblocks model the default flow or conditional branch flow.
+Assembly occurs by functionally passing a combination of opcode, opcode fields, and scheme objects which are all translated into icode objects.  Opcodes and opcode fields are enumerated integers of virtual machine instructions and registers.
+
+Icode objects represent a complete virtual machine opcode.  New icodes are stored internally which are eventually transfered to new iblocks triggered on certain opcodes.  New iblocks have bidirectional connections to other iblocks which define the possible flow of control of the vm program.  Each iblock will have at least one incoming parent iblock, and zero, one, or two child iblocks.  Child iblocks model the default flow or conditional branch flow.
 
 Lables can be generated which allow locations in the assembly program to be tagged for conditional and unconditional branch instructions.  Label's are integers which get associated with iblocks once the lable is parsed by the assembler.  Label targets, required for all branch opcodes, are eventually resolved both in the igraph and related code block opcode fields.
 
@@ -151,11 +153,11 @@ The igraph and iblocks are optimized the following ways (with more to be added o
 
 After optimization all icodes are emitted to a new code block with the branch offset values computed and set.  At this point the program can be sent to the virtual machine directly or wrapped in a thread and passed to the scheduler.
 
-Module "comp"
+Module comp
 
 Keywords:  compiler translate program parse assembly code runtime environment combination scheme specification opcode closure continuation special form quasiquote tail optimization syntax
 
-The compiler translates a parsed scheme program into an assembly program.  All syntatic scheme forms are translated into assembly which extend and utilize runtime environments, evaluate combinations, and make system calls to C functions implementing all other scheme features.  The code generated by the compiler returns the computed value in virtual machine register number 0 aliased to C symbol "r0".
+The compiler translates a parsed scheme program into an assembly program and is implemented completely in C as a scheme syscall so will block all threads until it completes.  All syntatic scheme forms are translated into assembly which extend and utilize runtime environments, evaluate combinations, and make system calls to C functions implementing all other scheme features.  The code generated by the compiler, when run by the virtual machine, returns the expression's value in virtual machine register r0.
 
 As a scheme program is compiled, as much of it is translated into the same igraph as possible.  Once a new closure is required to be produced at run time, a new assembly context is created and compilation, in essence, started over for the new code block.  Continuations, threads, lambda and macros begin new compilation contexts.
 
@@ -171,7 +173,7 @@ Tail optimization is managed during compilation and determines if procedure call
 
 All other syntatic forms are compiled into assembly which perform direct mathematical or equivalency checks on objects or make system calls to C functions which perform the required actions on variables or returned sub-expression values.
 
-Module "wscm"
+Module wscm
 
 Keywords: scheme read eval print runtime environment system call primitive excpetion error
 
@@ -181,7 +183,7 @@ C functions are bound to global scheme environment symbols as system calls for s
 
 Runtime error handling, when detected, will halt the process with a relevant message displayed to the standard output port.  An error/exception handler can be registered after the thread is created which is called instead of the default handler.  The registered handler can be a closure of one argument including a continuation.
 
-Module "debug"
+Module debug
 
 Keywords: debug indent trace macro
 

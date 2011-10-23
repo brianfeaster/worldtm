@@ -10,8 +10,6 @@
 #include "vm.h"
 #include "mem.h"
 
-extern void asmICodePushNewQUIT (void);
-extern void asmGenerateIBlockWithPushedIcodes ();
 
 /* Verify goto to an address pointer works.
 */
@@ -88,11 +86,7 @@ int main (void) {
 	setbuf(stdout, NULL);
 	testGoto();
 
-	compInitialize();
-
-	/* Create empty global environment list. */
-	objNewSymbol((Str)"TGE", 3);
-	r1=r0;  r2=null;  objCons12();  renv=rtge=r0;
+	compInitialize(); /* asm vm mem os sys obj */
 
 	sysDefineSyscall (wscmtDisplay, "display");
 	sysDefineSyscall (sysEquals, "=");
@@ -100,10 +94,8 @@ int main (void) {
 
 	/* Create a code block that will be returned to after a 'ret' call */
 	asmInit();
-	asmICodePushNewQUIT();
-	asmICodePushNewQUIT();
-	asmGenerateIBlockWithPushedIcodes();
-	asmAsmIGraph();
+	asmAsm(QUIT, QUIT);
+	asmAssemble();
 	rretcode = r0;
 	rretip = 0;
 

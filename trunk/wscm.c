@@ -1,30 +1,23 @@
 #define DEBUG_ALL 0
 #include "debug.h"
 #include <stdio.h>
-#include <assert.h>
-#include <limits.h>
-#include <math.h>   /* sqrt() */
-#include <termios.h>
+#include <stdlib.h>    /* random() */
 #include <unistd.h>
-#include <fcntl.h>  /* fcntl() */
-#include <stdlib.h> /* random() */
-#include <string.h> /* strlen() */
-#include <sys/time.h> /* gettimeofday() */
-#include <errno.h> /* for errno */
-#include <sys/types.h>  /* for socket() */
-#include <sys/socket.h>
-#include <netinet/in.h> /* for htons() */
-#include <netdb.h>      /* for gethostbyname() */
-#include <arpa/inet.h>  /* for inet_ntoa() */
-#include <time.h>  /* for time() */
-#include <sys/poll.h>
-#include <signal.h>     /* for signal() */
-#include <sys/ioctl.h>  /* for ioctl() and struct winsize*/
+#include <math.h>      /* sqrt() */
+#include <string.h>    /* strlen() */
+#include <fcntl.h>     /* fcntl() */
+#include <sys/time.h>  /* gettimeofday() */
+#include <time.h>      /* time() */
+#include <signal.h>    /* signal() */
+#include <sys/ioctl.h> /* ioctl(), struct winsize*/
+#include <limits.h>
+#include <errno.h>     /* errno() */
+#include <assert.h>
 #include "comp.h"
 #include "os.h"
 #include "sys.h"
-#include "obj.h"
 #include "asm.h"
+#include "obj.h"
 #include "vm.h"
 #include "mem.h"
 #include "cc.h"
@@ -36,19 +29,18 @@
 	Main
 
  Concepts:
-   (Operator operand operand ...)
-   parameters:       Expressions evaluated during a procedure application.
-   arguments:        Evaluated parameters (operand values) a function is applied to.
+   (Operator operand ...)
+   parameters:       Expressions evaluated during a procedure application
+   arguments:        Evaluated parameters (operand values) a function is applied to
    formal arguments: Function variables
 
-   free variable:    Non-local binding.
-   bound variable:   Local binding.
+   free variable:    Non-local binding
+   bound variable:   Local binding
 
-   "A bound variable gets a value stored in it's location"
+   "A bound variable gets a value stored in its location"
 */
 
 extern Num garbageCollectionCount;
-void syscallDebugger (void);
 void osDebugDumpThreadInfo (void);
 
 
@@ -59,75 +51,8 @@ void osDebugDumpThreadInfo (void);
 #define DEBUG DEBUG_ALL|0
 #define DB_DESC "WSCM_USEFUL"
 
-/* Pop stack operand arguments into a new list.
-   Given   r1 operand count
-   Uses    r2
-   Return  r0 new list
-*/
-void wscmStackToList (void) {
- Num count=(Num)r1;
-	assert(count <= 64); /* Don't expect more than 64 args */
-	r0=null;
-	while (count--) { r1=vmPop();  r2=r0;  objCons12(); }
-}
-
-/* Replace current continuation with error handler function/continuation which
-   must be defined in the global environment in the ERRORS vector indexed by
-   thread ID.
-   r0 <= Useful string (object or C) to include along with stack args
-   r1 <= stack argument count
-   r1f<= stack of arguments
-*/
-void wscmException (Obj str) {
-	DBBEG();
-
-	/* Force str to a scheme string object if not already */
-	if (!memIsObjectValid(str)) {
-		objNewString(str, strlen(str));
-		r3 = r0;
-	} else {
-		if (TSTRING != memObjectType(str)) assert(!"str not a STRING object");
-		r3 = str;
-	}
-	
-	/* Attach stack arguments to message expression */
-	wscmStackToList();
-	r2 = r0;
-	r1 = r3;
-	objCons12();
-	r3 = r0;
-
-	/* Lookup ERRORS binding in TGE.
-	   TODO this should be a static object and global symbol */
-	objNewSymbol ((Str)"ERRORS", 6);  r1=r0;  sysTGEFind();
-
-	if (null == r0) {
-		/* No exception handler vector 'ERRORS' so halt process */
-		fprintf (stderr, "An error/exception has occured:");
-		sysWrite(r3, stderr);
-		fprintf (stderr, "\nEntering debugger");
-		syscallDebugger();
-		exit(-1);
-	}
-
-	/* Consider the ERROR vector from TGE binding then consider the closure */
-	r0 = car(r0);
-	r0 = memVectorObject(r0, *(Num*)osThreadId(rrunning));
-
-	/* r0 needs to remain the closure when a code block is first run since the
-	   called code expects to find a lexical enviroment in the closure in r0.
-	   #closure<code-block lexical-env> */
-	rcode = car(r0);
-	rip=0;
-
-	/* Pass message expression as one argument to the error handler.  r1 = arg count.  */
-	vmPush(r3);
-	r1=(Obj)1;
-	DBEND();
-}
-
 /*    r1 <= immedate count of register arguments
-     msg <= message C string
+     msg <= C string message to display
 	    r0 => (Info expression) object
 */
 void wscmError (Num regArgs, char const *msg) {
@@ -144,7 +69,7 @@ void wscmError (Num regArgs, char const *msg) {
 	r1 = (Obj)(regArgs);
 
 	/* Create ("error message" arguments...) object */
-	wscmException((Obj)msg);
+	osException((Obj)msg);
 	DBEND();
 }
 
@@ -155,7 +80,7 @@ Int wscmAssertArgCount0 (char const *funcName) {
 	if (0 == (Num)r1) return 0;
 	fprintf(stderr, "\r\nWSCM-ASSERT::Expect 0 argument");
 	/* Create ("error message" arguments...) object */
-	wscmException((Obj)funcName);
+	osException((Obj)funcName);
 	return -1;
 }
 
@@ -163,7 +88,7 @@ Int wscmAssertArgCount1 (char const *funcName) {
 	if (1 == (Num)r1) return 0;
 	fprintf(stderr, "\r\nWSCM-ASSERT::Expect 1 argument");
 	/* Create ("error message" arguments...) object */
-	wscmException((Obj)funcName);
+	osException((Obj)funcName);
 	return -1;
 }
 
@@ -171,7 +96,7 @@ Int wscmAssertArgCount2 (char const *funcName) {
 	if (2 == (Num)r1) return 0;
 	fprintf(stderr, "\r\nWSCM-ASSERT::Expect 2 arguments");
 	/* Create ("error message" arguments...) object */
-	wscmException((Obj)funcName);
+	osException((Obj)funcName);
 	return -1;
 }
 
@@ -179,7 +104,7 @@ Int wscmAssertArgCount3 (char const *funcName) {
 	if (3 == (Num)r1) return 0;
 	fprintf(stderr, "\r\nWSCM-ASSERT::Expect 3 arguments");
 	/* Create ("error message" arguments...) object */
-	wscmException((Obj)funcName);
+	osException((Obj)funcName);
 	return -1;
 }
 
@@ -187,7 +112,7 @@ Int wscmAssertArgCountRange0To1 (char const *funcName) {
 	if ((0 == (Num)r1) || (1 == (Num)r1)) return 0;
 	fprintf(stderr, "\r\nWSCM-ASSERT::Expect 0 or 1 arguments");
 	/* Create ("error message" arguments...) object */
-	wscmException((Obj)funcName);
+	osException((Obj)funcName);
 	return -1;
 }
 
@@ -195,7 +120,7 @@ Int wscmAssertArgCountRange1To2 (char const *funcName) {
 	if ((1 == (Num)r1) || (2 == (Num)r1)) return 0;
 	fprintf(stderr, "\r\nWSCM-ASSERT::Expect 1 or 2 arguments");
 	/* Create ("error message" arguments...) object */
-	wscmException((Obj)funcName);
+	osException((Obj)funcName);
 	return -1;
 }
 
@@ -203,7 +128,7 @@ Int wscmAssertArgCount1OrMore (char const *funcName) {
 	if (1 <= (Num)r1) return 0;
 	fprintf(stderr, "\r\nWSCM-ASSERT::Expect 1 or more arguments");
 	/* Create ("error message" arguments...) object */
-	wscmException((Obj)funcName);
+	osException((Obj)funcName);
 	return -1;
 }
 
@@ -252,7 +177,6 @@ Int wscmAssertArgType3NoException (Num arg, Type t1, Type t2, Type t3, Obj o) {
 *******************************************************************************/
 #define DEBUG DEBUG_ALL|0
 #define DB_DESC "WSCM_NET"
-
 
 void wscmSocketFinalizer (Obj o) {
 	if (objPortState(o) == sclosed) {
@@ -355,7 +279,7 @@ void syscallFun (void) {
 }
 
 void syscallError (void) {
-	wscmException((Obj)"User Error");
+	osException((Obj)"User Error");
 }
 
 void wscmDumpEnv (void) {
@@ -379,7 +303,7 @@ void syscallString (void) {
 	while (s < (Int)r1) {
 		r0 = memStackObject(rstack, s++);
 		if (wscmAssertArgType3NoException((Num)r1 - s + 1, TSTRING, TCHAR, TNULLSTR, r0)) {
-			wscmException((Obj)__func__);
+			osException((Obj)__func__);
 			goto ret;
 		}
 
@@ -1105,7 +1029,7 @@ void syscallSend (void) {
 	/* Count sent already.  Should be initialized to 0. */
 	r3=0;
 	if (memObjectType(r1) != TSOCKET && memObjectType(r1) != TPORT) {
-		printf ("WARNING: sysSend: not a socket is (type "HEX02"): ", memObjectType(r1));
+		printf ("WARNING: syscallSend: not a socket is (type "HEX02"): ", memObjectType(r1));
 		*(int*)0=0;
 		r0 = eof;
 	} else {
@@ -1155,7 +1079,7 @@ void syscallStringRef (void) {
 	o=vmPop();
 	/* A (negative? offset) implies (absolute offset) from end. */
 	if (offset < 0) offset = (Int)memObjectLength(o)+offset;
-	r0 = memVectorObject(characters, *((Chr*)o+offset));
+	r0 = memVectorObject(scharacters, *((Chr*)o+offset));
 ret:
 	DBEND();
 }
@@ -1204,7 +1128,7 @@ void sysNewString (void) {
 }
 void sysNewCharacter (void) {
 	DBBEG();
-	r0 = memVectorObject(characters, ((u8*)r5)[2]);
+	r0 = memVectorObject(scharacters, ((u8*)r5)[2]);
 	DBEND();
 }
 void sysNewInteger (void) {
@@ -1299,6 +1223,7 @@ ret:
 	DBEND();
 }
 
+
 void syscallSemaphoreUp (void) {
 	DBBEG();
 	if (wscmAssertArgCount1(__func__)) goto ret;
@@ -1314,6 +1239,7 @@ ret:
 	DBEND();
 }
 
+
 void syscallTime (void) {
  struct timeval tv;
 	DBBEG();
@@ -1324,6 +1250,7 @@ ret:
 	DBEND();
 }
 
+
 void syscallUTime (void) {
 	DBBEG();
 	if (wscmAssertArgCount0(__func__)) goto ret;
@@ -1333,114 +1260,16 @@ ret:
 }
 
 
-Num wscmDebug=0;
 void syscallToggleDebug (void) {
-	if (rdebug) {
-		rdebug = 0;
-		r0 = false;
-	} else {
-		rdebug = (Obj)1;
-		r0 = true;
-	}
+	r0 = rdebug = (true == rdebug) ? false : true;
 }
 
-
-void sysDumpCallStackCode (void) {
- Num i;
- Obj o, l=NULL;
-
-	sysDumpEnv(r1c);
-	sysDumpEnv(r19);
-	for (i=0; i<memStackLength(rstack); ++i) {
-		o = memStackObject(rstack, i);
-		printf ("Stack "INT" "HEX016" "OBJ NL, i, memIsObjectValid(o)?memObjectDescriptor(o):0, o);
-	}
-
-	for (i=0; i<memStackLength(rstack); ++i) {
-		o = memStackObject(rstack, i);
-		if (memIsObjectValid(o)) {
-			if (memObjectType(o)==TCODE) {
-				printf (NL "Stack "INT" "HEX016" "OBJ NL, i, memObjectDescriptor(o), o);
-				sysWrite(memVectorObject(o, 2), stdout);
-				if (l!=NULL) sysDumpEnv(l);
-				else printf (NL);
-			}
-		}
-		l = o;
-	}
-}
-
-
-void syscallDebugger (void) {
- struct winsize win;
- int done=0, cmd, fl;
- struct termios tios, tios_orig;
-
-	fflush(stdout);
-
-	/* Force cooked mode. */
-	tcgetattr(1, &tios_orig); /* Backup termios */
-	tcgetattr(1, &tios);
-	tios.c_iflag |= (ICRNL | IXON | IXOFF | IXANY);
-	tios.c_oflag |= OPOST;
-	tios.c_lflag |= (ECHO | ICANON | ISIG | IEXTEN);
-	tcsetattr(1, TCSANOW, &tios);
-
-	/* Force blocking input */
-	fl=fcntl(0, F_GETFL, 0);
-	fcntl (0, F_SETFL, fl&~O_NONBLOCK);
-
-	ioctl(1, TIOCGWINSZ, &win); printf ("\e[0m\e[%dH\n", win.ws_row); /* Move cursor to bottom of screen */
-	while (!done) {
-		printf ("\n\e[1m-------------------------------");
-		printf ("\nc    vmDebugDumpCode(code, stderr)");
-		printf ("\nC a  vmDebugDumpCode(a, stderr)");
-		printf ("\nu    sysDumpCallStackCode()");
-		printf ("\ne    sysDumpEnv(env)");
-		printf ("\ns    sysWrite(stack, stderr)");
-		printf ("\ny    sysWrite(symbols, stderr)");
-		printf ("\nh    memDebugDumpHeapHeaders(stderr)"); 
-		printf ("\n3    memDebugDumpYoungHeap(stderr)"); 
-		printf ("\nw a  sysWrite(a1, stderr)");
-		printf ("\nR    return");
-		printf ("\nX    crash");
-		printf ("\nQ    exit(-1)");
-		printf ("\n-------------------------------\e[0m");
-		printf ("\nwscmdbg>");
-		while (strchr("\r\n \t", cmd=getchar())); /* Skip whitespace */
-		if (cmd=='c') vmDebugDumpCode(rcode, stderr);
-	   if (cmd=='C') {
-			Obj arg;
-			scanf("%lx", &arg);
-			vmDebugDumpCode(arg, stderr);
-		}
-		if (cmd=='u') sysDumpCallStackCode();
-		if (cmd=='e') sysDumpEnv(renv);
-		if (cmd=='s') sysWrite(rstack, stderr);
-		if (cmd=='y') sysWrite(rsymbols, stderr);
-	   if (cmd=='h') memDebugDumpHeapHeaders(stderr);
-	   if (cmd=='3') memDebugDumpYoungHeap (stderr);
-	   if (cmd=='w') {
-			Obj arg;
-			scanf("%lx", &arg);
-			if (memPointerString(arg)) printf ((char*)memPointerString(arg));
-			else sysWrite(arg, stderr);
-		}
-		if (cmd=='R') done=1;
-		if (cmd=='X') *(Int*)0=0;
-		if (cmd=='Q') exit(-1);
-	}
-
-	/* Restore terminal and IO */
-	tcsetattr(1, TCSANOW, &tios_orig);
-	fcntl (0, F_SETFL, fl);
-	r0 = true;
-}
 
 
 void wscmSigAlarmHandler (int sig) {
 	vmInterrupt = 1;
 }
+
 void wscmSigAlarmReset (void) {
 	ualarm(10*1000,0); /* 10 miliseconds (100 tics/sec) and no repeat interval set*/
 }
@@ -1490,7 +1319,6 @@ ret:
 	DBEND();
 }
 
-
 #undef DB_DESC
 #undef DEBUG
 
@@ -1524,7 +1352,7 @@ void wscmSysTransition (void) {
 		/* Push back character to stream if in pushback state and not eof. */
 		if (((Int)r4 & PUSHBACK) && (r3!=eof)) {
 			r6--;
-			memVectorSet(r1, 4, memVectorObject(characters, *(Num*)r3));
+			memVectorSet(r1, 4, memVectorObject(scharacters, *(Num*)r3));
 		}
 		r0=r4;
 	}
@@ -1597,13 +1425,13 @@ void wscmCreateRead (void) {
 		/* dot? */
 		BNEI, R0, SDOT, Leof,
 		PUSH, R7,
-		PUSH, R1A,
-		PUSH, R1B, /* Recurse on this fn (parser) with isList set. */
+		PUSH, RA,
+		PUSH, RB, /* Recurse on this fn (parser) with isList set. */
 		MVI, R7, 1l,
-		MV, R0, R1E,
+		MV, R0, RE,
 		JAL, R0,
-		POP, R1B,
-		POP, R1A,
+		POP, RB,
+		POP, RA,
 		POP, R7,
 		LDI, R0, R0, 0l, /* Only want the car of the list we just parsed. */
 		RET,
@@ -1616,13 +1444,13 @@ void wscmCreateRead (void) {
 	 LABEL, Lvector,
 		BNEI, R0, SVECTOR, Lquote,
 		PUSH, R7,
-		PUSH, R1A,
-		PUSH, R1B, /* Recursive call with isList set */
+		PUSH, RA,
+		PUSH, RB, /* Recursive call with isList set */
 		MVI, R7, 1l,
-		MV, R0, R1E,
+		MV, R0, RE,
 		JAL, R0,
-		POP, R1B,
-		POP, R1A,
+		POP, RB,
+		POP, RA,
 		POP, R7,
 		PUSH, R1, /* Save r1 since objListToVector requires r1. */
 		MV, R1, R0,
@@ -1633,13 +1461,13 @@ void wscmCreateRead (void) {
 	 LABEL, Lquote,
 		BNEI, R0, SQUOTE, Lunquotesplicing,
 		PUSH, R7,
-		PUSH, R1A,
-		PUSH, R1B,
+		PUSH, RA,
+		PUSH, RB,
 		MVI, R7, 0l,
-		MV, R0, R1E,
+		MV, R0, RE,
 		JAL, R0,
-		POP, R1B,
-		POP, R1A, POP, R7,
+		POP, RB,
+		POP, RA, POP, R7,
 		PUSH, R1,
 		PUSH, R2, /* Save r1 and r2 */
 			MV, R1, R0,           /* Car object. */
@@ -1655,13 +1483,13 @@ void wscmCreateRead (void) {
 	 LABEL, Lunquotesplicing,
 		BNEI, R0, SUNQUOTESPLICING, Lunquote,
 		PUSH, R7,
-		PUSH, R1A,
-		PUSH, R1B,
+		PUSH, RA,
+		PUSH, RB,
 		MVI, R7, 0l,
-		MV, R0, R1E,
+		MV, R0, RE,
 		JAL, R0,
-		POP, R1B,
-		POP, R1A,
+		POP, RB,
+		POP, RA,
 		POP, R7,
 		PUSH, R1, PUSH, R2, /* Save r1 and r2 */
 			MV, R1, R0,           /* Car object. */
@@ -1676,11 +1504,11 @@ void wscmCreateRead (void) {
 		/* unquote? */
 	 LABEL, Lunquote,
 		BNEI, R0, SUNQUOTE, Lquasiquote,
-		PUSH, R7, PUSH, R1A, PUSH, R1B,
+		PUSH, R7, PUSH, RA, PUSH, RB,
 		MVI, R7, 0l,
-		MV, R0, R1E,
+		MV, R0, RE,
 		JAL, R0,
-		POP, R1B, POP, R1A, POP, R7,
+		POP, RB, POP, RA, POP, R7,
 		PUSH, R1, PUSH, R2, /* Save r1 and r2 */
 			MV, R1, R0,            /* Car object. */
 			MVI, R2, null,      /* Cdr object. */
@@ -1694,13 +1522,13 @@ void wscmCreateRead (void) {
 	 LABEL, Lquasiquote,
 		BNEI, R0, SQUASIQUOTE, Lopenparen,
 		PUSH, R7,
-		PUSH, R1A,
-		PUSH, R1B,
+		PUSH, RA,
+		PUSH, RB,
 		MVI, R7, 0l,
-		MV, R0, R1E,
+		MV, R0, RE,
 		JAL, R0,
-		POP, R1B,
-		POP, R1A,
+		POP, RB,
+		POP, RA,
 		POP, R7,
 		PUSH, R1,
 		PUSH, R2, /* Save r1 and r2 */
@@ -1716,11 +1544,11 @@ void wscmCreateRead (void) {
 		/* open paren? */
 	 LABEL, Lopenparen,
 		BNEI, R0, SOPENPAREN, Lcharacter,
-		PUSH, R7, PUSH, R1A, PUSH, R1B, /* Recursive call with isList set */
+		PUSH, R7, PUSH, RA, PUSH, RB, /* Recursive call with isList set */
 		MVI, R7, 1l,
-		MV, R0, R1E,
+		MV, R0, RE,
 		JAL, R0,
-		POP, R1B, POP, R1A, POP, R7,
+		POP, RB, POP, RA, POP, R7,
 		BRA, Ldone,
 		/* character? */
 	 LABEL, Lcharacter,
@@ -1780,10 +1608,10 @@ void wscmCreateRead (void) {
 	 LABEL, Ldone,
 		BEQI, R7, 0l, Lret,
 		PUSH, R0, /* Save object just parsed. */
-		PUSH, R1A, PUSH, R1B, /* Recurse. */
-		MV, R0, R1E, /* r0 <- code register*/
+		PUSH, RA, PUSH, RB, /* Recurse. */
+		MV, R0, RE, /* r0 <- code register*/
 		JAL, R0,
-		POP, R1B, POP, R1A,
+		POP, RB, POP, RA,
 		/* Create pair from top of stack and just parsed object.  Since we need
 		   r1 and r2 do a little pushing and moving of objects. */
 		POP, R3, /* Restore object previously parsed. */
@@ -1796,7 +1624,7 @@ void wscmCreateRead (void) {
 	 LABEL, Lret,
 		RET
 	);
-	asmAsmIGraph();
+	asmAssemble();
 	r1=r0;
 
 	/* r5 eventually gets a new token string buffer (copied from this) when the
@@ -1836,16 +1664,16 @@ void wscmCreateRead (void) {
 		POP, R1,
 		/* Call parser. */
 		MVI, R0, r1,  /* Insert code block object directly via r1 from above. */
-		PUSH, R1A,
-		PUSH, R1B,
-		PUSH, R19,
+		PUSH, RA,
+		PUSH, RB,
+		PUSH, R9,
 			JAL, R0,
-		POP, R19,
-		POP, R1B,
-		POP, R1A,
+		POP, R9,
+		POP, RB,
+		POP, RA,
 		RET
 	);
-	asmAsmIGraph();
+	asmAssemble();
 	r1=r0;
 	sysNewClosure1Env();
 	DBEND();
@@ -1854,7 +1682,7 @@ void wscmCreateRead (void) {
 /* Create a read-eval-print-loop closure in machine language.
 */
 void wscmCreateRepl (void) {
- Obj Lrepl, Ldone;
+ Obj Lrepl, Ldone, Lcompileerror;
 	DBBEG();
 	objNewSymbol ((Str)"\nVM>", 4);  r2=r0;
 	objNewSymbol ((Str)"stdin", 5);  r1=r0;  sysTGEFind(); r3=r0; /* The stdin binding, not value incase it changes */
@@ -1864,6 +1692,7 @@ void wscmCreateRepl (void) {
 	asmInit();
 	Lrepl = asmNewLabel();
 	Ldone = asmNewLabel();
+	Lcompileerror = asmNewLabel();
 	asmAsm (
 		MVI, R0, r6, /* "Entering REPL\n" */
 		PUSH, R0,
@@ -1876,22 +1705,24 @@ void wscmCreateRepl (void) {
 		MVI, R1, 1l,
 		SYSI, syscallDisplay,
 		/* Call read. */
-		PUSH, R1A, PUSH, R1B, PUSH, R19,
+		PUSH, RA, PUSH, RB, PUSH, R9,
 		MVI, R0, r3, // in
 		LDI, R0, R0, 0l,
 		PUSH, R0,
 		MVI, R0, r4, // read wscmCreateRead
 		JAL, R0,
-		POP, R19, POP, R1B, POP, R1A,
+		POP, R9, POP, RB, POP, RA,
 		/* Done if an #eof parsed. */
 		BRTI, R0, TEOF, Ldone,
 		/* Compile expression. */
-		SYSI, compCompile, // WAS compSysCompile
+		SYSI, compCompile,
+		BEQI, R0, false, Lcompileerror,
 		/* Run code. */
-		PUSH, R1A, PUSH, R1B, PUSH, R19,
+		PUSH, RA, PUSH, RB, PUSH, R9,
 		JAL, R0,
-		POP, R19, POP, R1B, POP, R1A,
+		POP, R9, POP, RB, POP, RA,
 		/* (display ...) */
+	 LABEL, Lcompileerror,
 		PUSH, R0,
 		MVI, R1, 1l,
 		SYSI, syscallDisplay,
@@ -1904,7 +1735,7 @@ void wscmCreateRepl (void) {
 		//RET,
 		SYSI, osUnthread
 	);
-	asmAsmIGraph();
+	asmAssemble();
 	r1=r0;
 	sysNewClosure1Env();
 	DBEND();
@@ -1912,63 +1743,24 @@ void wscmCreateRepl (void) {
 
 
 void wscmInitialize (void) {
- Num i;
 	DBBEG();
 
-	compInitialize();
+	compInitialize(); /* asm vm mem os sys obj */
 
-	/* Although already activated, just pass in a scheduler handler callback.
-	   Called when vmInterrupt is set.  */
+	/* Although already activated, pass in a virtual machine interrupt handler callback
+	   which eventually calls the schduler.  Called when vmInterrupt is set.  */
 	vmInitialize(wscmSchedule, sysDisplay);
 
 	/* Register objects and pointer addresses with their
 	   C source names for object debug dumps. */
-	memPointerString(sysNewClosure1Env);
-	memPointerString(objNewVector1);
+	DB("Registering static pointer description strings");
 	memPointerString(wscmRecvBlock);
 	memPointerString(wscmSysTransition);
-	memPointerString(objListToVector);
-	memPointerString(objCons12);
-	memPointerString(objCopyString);
-	memPointerString(objCons23);
-	memPointerString(osNewThread);
-	memPointerString(objCopyInteger);
 	memPointerString(sysEnvGet);
 	memPointerString(wscmSocketFinalizer);
 
-	/* Create empty thread vector.  All active threads are assigned a number
-	   1-1024 and stored here for easy constant time lookup.  The first entry
-	   in the thread table is the thread count as an immediate number. */
-	objNewVector(MAX_THREADS+1);  rthreads=r0;
-	memVectorSet(rthreads, 0, 0); /* Initialize thread count. */
-	for (i=1; i<=MAX_THREADS; i++) memVectorSet(rthreads, i, null);
-
-	/* Create empty ready thread doubly linked list. */
-	objNewDoublyLinkedListNode (); rready=r0;
-	rready=r0;
-	memVectorSet(rready, 0, sready);
-	memVectorSet(rready, 1, rready);
-	memVectorSet(rready, 2, rready);
-
-	rrunning = rready;
-
-	/* Create empty sleeping threads doubly linked list. */
-	objNewDoublyLinkedListNode (); rsleeping=r0;
-	memVectorSet(rsleeping, 0, ssleeping);
-	memVectorSet(rsleeping, 1, rsleeping);
-	memVectorSet(rsleeping, 2, rsleeping);
-
-	/* Create empty semaphore/IO blocked threads doubly linked list. */
-	objNewDoublyLinkedListNode (); rblocked=r0;
-	memVectorSet(rblocked, 0, sblocked);
-	memVectorSet(rblocked, 1, rblocked);
-	memVectorSet(rblocked, 2, rblocked);
-
-	/* Create empty global environment list. */
-	objNewSymbol((Str)"TGE", 3);
-	r1=r0;  r2=null;  objCons12();  renv=rtge=r0;
-
 	/* Bind usefull values r2=value r1=symbol. */
+	DB("Registering syscalls");
 	sysDefineSyscall (syscallFun, "fun");
 	sysDefineSyscall (syscallError, "error");
 	sysDefineSyscall (wscmDumpEnv, "env");
@@ -2034,25 +1826,8 @@ void wscmInitialize (void) {
 	sysDefineSyscall (syscallToggleDebug, "toggle-debug");
 	sysDefineSyscall (sysDumpTGE, "tge");
 
-	/* Create the standard I/O port object */
-	r1=(Obj)0; /* Descriptor */
-	objNewSymbol ((Str)"stdin", 5);  r2=r3=r0; /* Address and port */
-	r4 = sopen; /* State */
-	objNewPort(); sysDefine("stdin");
-
-	r1=(Obj)1;
-	objNewSymbol ((Str)"stdout", 6);  r2=r3=r0;
-	r4 = sopen;
-	objNewPort ();  sysDefine("stdout");
-
-	r1=(Obj)2;
-	objNewSymbol ((Str)"stderr", 6);
-	r2=r3=r0;
-	r4 = sopen;
-	objNewPort(); sysDefine("stderr");
-
-	/* For fun assign symbol 'characters the internal character vector. */
-	r0=characters; sysDefine("characters");
+	/* For fun assign TGE symbol to a few internal C obj symbols */
+	r0=scharacters; sysDefine("characters");
 	r0=staticIntegers; sysDefine("integers");
 	r0=rsymbols; sysDefine("symbols");
 	wscmCreateRead();  sysDefine("read");
@@ -2060,12 +1835,9 @@ void wscmInitialize (void) {
 	r0=eof; sysDefine("#eof");
 	objNewInt(42); sysDefine ("y"); /* It's always nice to have x and y defined with useful values */
 	objNewInt(69); sysDefine ("x");
-
-	/* Signal handler vector */
-	i=32;
-	objNewVector(i);
-	while (i--) { memVectorSet(r0, i, null); }
-	sysDefine("SIGNALHANDLERS");
+	objNewSymbol((Str)"a", 1); r1=r0; /* It's also nice to have a pair ready to go */
+	objNewSymbol((Str)"b", 1); r2=r0;
+	objCons12(); sysDefine("c");
 
 	DBEND();
 }
@@ -2087,9 +1859,18 @@ void wscmInitialize (void) {
 void wscmCReadEvalPrintLoop (void) {
  Num i, done=0;
 	DBBEG();
+
 	yyrestart(0);   /* Tell scanner to use stdin/0 as input. */
 	osNewThread();  /* Create a new thread. */
 	osScheduler();  /* Prepare it for the VM. */
+
+	/* Create a code block for the compiled code to return to */
+	asmInit();
+	asmAsm(QUIT, QUIT);
+	asmAssemble();
+	rretcode = r0;
+	rretip = 0;
+
 	while (!done) {
 		renv = rtge; /* Evaluate in TGE */
 		fprintf(stderr, "\n== Read and parse ===============\nWSCM>");
@@ -2103,11 +1884,17 @@ void wscmCReadEvalPrintLoop (void) {
 
 		rcode = r0;
 		rip = 0;
-		vmDebugDumpCode(rcode, stderr);
 
-		fprintf(stderr, "== Execute and return value =====\n");
-		vmRun();
-		sysDisplay(r0, stderr);
+		if (false == r0) {
+			fprintf(stderr, "\n*Compile failed*");
+		} else {
+			vmDebugDumpCode(rcode, stderr);
+			fprintf(stderr, "== Execute and return value =====\n");
+			if (false != r0) {
+				vmRun();
+			}
+			sysDisplay(r0, stderr);
+		}
 
 		DBE fprintf(stderr, "== Debug =======================");
 		DBE memDebugDumpHeapHeaders(stderr);
@@ -2153,8 +1940,6 @@ void wscmASMReadEvalPrintLoop (int argc, char *argv[]) {
 */
 void wscmStringReadEvalPrintLoop (void) {
 	DBBEG();
-	/* Must disable stdio blocking since wscheme implements its own blocking I/O */
-	fcntl (0, F_SETFL, fcntl(0, F_GETFL, 0)|O_NONBLOCK);
 	yy_scan_string ((Str)
 "(let ((FILE:SCM.SCM (open-file \"scm.scm\")))\
   (let wscmLoad~ ((wscmLoadExpr (read FILE:SCM.SCM)))\
@@ -2165,13 +1950,19 @@ void wscmStringReadEvalPrintLoop (void) {
   (send \"\r\nbye.\r\n\" stdout)\
   (quit))");
 	yyparse(); /* Use the internal parser */
-	//rexpr = r0;  compCompile();
 	//sysDisplay(r0, stderr);
-	compCompile();
+	compCompile(); /* Use the internal and only compiler */
 	//vmDebugDumpCode(r0, stderr);
-	osNewThread(); /* Create a new thread */
-	osScheduler();
-	vmRun();
+	if (false == r0) {
+		fprintf(stderr, "Could not compile internal REPL expression.  Calling internal REPL...");
+		wscmCReadEvalPrintLoop();
+	} else {
+		/* Must disable stdio blocking since wscheme implements its own blocking I/O */
+		fcntl (0, F_SETFL, fcntl(0, F_GETFL, 0)|O_NONBLOCK);
+		osNewThread(); /* Create a new thread */
+		osScheduler();
+		vmRun();
+	}
 	DBEND();
 }
 
@@ -2206,7 +1997,6 @@ int main (int argc, char *argv[]) {
 	   from the vm module. */
 	signal(SIGALRM, wscmSigAlarmHandler);
 	wscmSigAlarmReset(); /* Enable scheduler's interrupt timer. */
-
 
 	/* REPL in a blocking C loop */
 	//wscmCReadEvalPrintLoop();  return 0;

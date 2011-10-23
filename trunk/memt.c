@@ -262,9 +262,6 @@ void memtAutomaticGarbageCollect (void) {
 
 
 int main (int argc, char *argv[]) {
-	/* Force a failure by passing -f to this program */
-	if (argc==2 && !strcmp(argv[1], "-f")) return -1;
-
 	setbuf(stdout,0);
 	printf ("--Welcome to unit test %s----------------\n", __FILE__);
 

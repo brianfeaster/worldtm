@@ -314,13 +314,15 @@
       (vector-vector-ref canvas (modulo y size)
                                 (modulo x size)) 2 (+ l (lum y x))))
   (define (glyphSet y x c l)
-    (set-car! (vector-vector-ref canvas (modulo y size) (modulo x size))
-              (illuminate c l)))
+    (vector-set! (vector-vector-ref canvas (modulo y size) (modulo x size))
+                 0
+                 (illuminate c l)))
   (define (heightSet y x h)
-   (set-cdr! (vector-vector-ref canvas
-               (modulo y size)
-               (modulo x size))
-             h))
+   (vector-set! (vector-vector-ref canvas
+                   (modulo y size)
+                   (modulo x size))
+                1
+                h))
   (define (render top y x)
    (let ((z (fieldTopHeight top y x))) ; Get z of first cell starting at top
      (let ((celli (fieldCell z y x))) ; Field might contain an entity's dna
@@ -1159,8 +1161,15 @@
                ; Char-continue scanning a line
                (string-set! buff num ch)
                (~ (recvChar) (+ num 1))))))
+   (define (funChangeColor)
+     (ipcWrite (list 'entity dna
+                      (Glyph
+                        (glyph0bg glyph) (random 256) (glyph0ch glyph)
+                         (glyph1bg glyph) (random 256) (glyph1ch glyph)))))
    (define (cmdPING parameters)
-      (send "PONG " parameters))
+     ; For fun set my color to a random value whenver an IRC ping request comes in
+     ; TODO Change color when pushed as well
+     (send "PONG " parameters))
    (define (cmdTOPIC prefix parameters)
        (speak
         (string (car (strtok prefix #\!)) " changed the topic on "
@@ -1259,6 +1268,9 @@
                  (dist (if entity (distance ((entity 'gps)) (gps)))))
           (if (and entity (not (eq? entity self)) (< dist level))
               (say IRCPRENAME (entity 'name) IRCPOSTNAME " " text)))))
+   (define (IPCHandlerForce fz fy fx dir mag) ; Virtual
+     (funChangeColor)
+     ((parent 'IPCHandlerForce) fz fy fx dir mag))
    (define (say . l)
      (apply send "PRIVMSG " channel " :" (map (lambda (e) (apply string (display->strings e))) l)))
    (define (main)

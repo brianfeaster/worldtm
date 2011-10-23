@@ -3,6 +3,11 @@
 #include "globals.h"
 
 
+/* Rootset objects
+*/
+extern Obj rsymbols, rdebug;
+
+
 /* Scheme object types used by the scanner and obj module.  A byte with
    highest bit signifying the base type which is either a "vector" or "array"
    object.
@@ -28,7 +33,6 @@
 #define TSYSCALL       0x86l
 
 
-
 /* Object constants.
 */
 extern Obj null, nullvec, nullstr, false, true, eof,
@@ -43,8 +47,8 @@ extern Obj null, nullvec, nullstr, false, true, eof,
        sprocedurep, snullp, spairp, svectorp, sstringp, sintegerp, ssymbolp, sportp, sappend,
        seofobjectp, sthread, slet, sletrec, seval, sapply, scallcc,
        ssyntaxrules, seof,
-       snot, sadd, ssub, smul, sdiv, slogand, characters, staticIntegers,
-       signalhandlers;
+       snot, sadd, ssub, smul, sdiv, slogand, scharacters, staticIntegers,
+       ssignalhandlers;
 
 extern Num wscmDebug;
 
@@ -66,6 +70,7 @@ void objNewSymbol  (Str str, Num len);
 void objNewSymbolR5R6 (void); /* Like objNewSymbol only 'str'/'len' are in r5/r6 */
 void objNewSymbolStatic (char *s);
 void objNewSyscall (Func f);
+Obj  objCons   (Obj a, Obj b);
 void objCons01 (void);
 void objCons10 (void); /* New pair using r1 and r0 */
 void objCons12 (void); /* New pair using r1 and r2 */

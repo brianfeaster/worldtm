@@ -2,8 +2,7 @@
 #define DB_DESC "OBJ "
 #include "debug.h"
 #include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
+#include <stdlib.h> /* labs */
 #include <string.h> /* memcpy */
 #include <assert.h>
 #include "obj.h"
@@ -12,6 +11,10 @@
 
 
 const Num HashTableSize=8191;
+
+/* Rootset objects */
+extern Obj rtge;
+Obj rsymbols, rdebug;
 
 /* Static symbol objects. */
 Obj null, nullvec, nullstr, false, true, eof,
@@ -26,7 +29,7 @@ Obj null, nullvec, nullstr, false, true, eof,
     spairp, svectorp, sstringp, sintegerp, ssymbolp, sportp, sappend, seofobjectp,
     sthread, slet, sletrec,
     seval, sapply, scallcc, ssyntaxrules, seof,
-    snot, sadd, ssub, smul, sdiv, slogand, characters, staticIntegers, signalhandlers;
+    snot, sadd, ssub, smul, sdiv, slogand, scharacters, staticIntegers, ssignalhandlers;
 
 
 
@@ -174,6 +177,18 @@ void objNewSyscall (Func f) {
 	memVectorSet(r0, 0, f);
 }
 
+/* Safely creates and returns a new pair from C args
+*/
+Obj objCons (Obj a, Obj b) {
+ Obj o;
+	vmPush(b);
+	vmPush(a);
+	o = memNewVector(TPAIR, 2);
+	memVectorSet(o, 0, vmPop());
+	memVectorSet(o, 1, vmPop());
+	return o;
+}
+
 void objCons01 (void) {
  Obj o;
    o = memNewVector(TPAIR, 2);
@@ -248,7 +263,7 @@ Obj objPortPushback   (Obj o) { return memVectorObject(o, 4); }
 */
 
 Num objIsPair (Obj o) {
-	return memObjectType(o) == TPAIR;
+	return memIsObjectType(o, TPAIR);
 }
 
 
@@ -330,8 +345,6 @@ void objListToVector (void) {
 	}
 }
 
-/* Motivation.
-*/
 void objDumpR (Obj o, FILE *stream, Num islist) {
  Num i;
  char *c;
@@ -453,10 +466,17 @@ void objInitialize (void) {
  Num n;
 	DBBEG();
 	if (shouldInitialize) {
-		DB("Activating module...");
+		DB("Activating module");
 		shouldInitialize=0;
+
+		DB("Initializing submodules");
 		vmInitialize(0, 0);
 		memInitialize(0, 0);
+
+		DB("Registering rootset objects");
+		memRootSetRegister(rsymbols);
+		memRootSetRegister(rdebug);
+
 		DB("Register the internal object types");
 		memTypeRegisterString(TFALSE, "false");
 		memTypeRegisterString(TTRUE, "true");
@@ -477,6 +497,14 @@ void objInitialize (void) {
 		memTypeRegisterString(TSOCKET, "socket");
 		memTypeRegisterString(TSYSCALL, "syscall");
 
+		DB("Registering static pointer description strings");
+		memPointerString(objCopyInteger);
+		memPointerString(objCopyString);
+		memPointerString(objCons12);
+		memPointerString(objCons23);
+		memPointerString(objNewVector1);
+		memPointerString(objListToVector);
+
 		/* These primitive types are also external (display) strings. */
 		null = memNewStatic(TNULL, 2);         memcpy(null, "()", 2);
 		/* This is a strange object with a descriptor and no content.
@@ -488,6 +516,8 @@ void objInitialize (void) {
 
 		rsymbols = memNewVector(TVECTOR, HashTableSize); /* Symbol table */
 		for (n=0; n<HashTableSize; n++) memVectorSet (rsymbols, n, null);
+
+		rdebug = false;
 
 		objNewSymbolStatic("define");       sdefine = r0;
 		objNewSymbolStatic("lambda");       slambda = r0;
@@ -552,25 +582,26 @@ void objInitialize (void) {
 		objNewSymbolStatic("connecting");   sconnecting = r0;
 		objNewSymbolStatic("open");         sopen = r0;
 		objNewSymbolStatic("closed");       sclosed = r0;
-		objNewSymbolStatic("SIGNALHANDLERS");  signalhandlers = r0;
+		objNewSymbolStatic("SIGNALHANDLERS"); ssignalhandlers = r0;
 
 		/* Table of character objects.  The 257th character is the EOF object. */
-		characters = memNewStaticVector(TVECTOR, 257);
+		DB("Creating vector of character constants");
+		scharacters = memNewStaticVector(TVECTOR, 257);
 		for (n=0; n<256; n++) {
 			r0 = memNewStatic(TCHAR, 1);
 			*(Num*)r0 = n;
-			memVectorSet(characters, n, r0);
+			memVectorSet(scharacters, n, r0);
 		}
 
-		/* Treat character number 256 0x100 as a char and as the eof object. */
+		/* Treat character number 256/0x100 as the eof object */
 		eof = memNewStatic(TEOF, 4);
 		*(Int*)eof = 256l;
-		memVectorSet(characters, 256, eof);
+		memVectorSet(scharacters, 256, eof);
 
-		/* Table of integer constants. */
+		DB("Creating vector of integer constants");
 		staticIntegers = memNewStaticVector(TVECTOR, 2048);
 		for (i=-1023l; i<=1024l; ++i) {
-	  	 	r0 = memNewStatic(TINTEGER, sizeof(Int));
+			r0 = memNewStatic(TINTEGER, sizeof(Int));
 			*(Int*)r0 = i;
 			memVectorSet(staticIntegers, (Num)i+1023, r0);
 		}

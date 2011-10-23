@@ -34,10 +34,10 @@ void objtVerifyObjects (void) {
 	assert(0xdeadbeefb00b1355l == *(Int*)r2);
 	assert(-1 == *(Int*)r3);
 	assert(LONG_MAX == *(Int*)r4);
-	assert(3 == memStackLength(r1f));
-	assert(15.0 == *(Real*)memStackObject(r1f, 0));
-	assert(1.3 == *(Real*)memStackObject(r1f, 1));
-	assert(0xdea1f00d == *(Int*)memStackObject(r1f, 2));
+	assert(3 == memStackLength(rf));
+	assert(15.0 == *(Real*)memStackObject(rf, 0));
+	assert(1.3 == *(Real*)memStackObject(rf, 1));
+	assert(0xdea1f00d == *(Int*)memStackObject(rf, 2));
 }
 
 
@@ -48,7 +48,7 @@ void objtVerifyStackMutation (void) {
 	assert(15.0 == *(Real*)vmPop());
 	assert(1.3 == *(Real*)vmPop());
 	assert(0xdea1f00d == *(Int*)vmPop());
-	assert(0 == memStackLength(r1f));
+	assert(0 == memStackLength(rf));
 }
 
 
@@ -87,9 +87,6 @@ void objtDoublyLinkedList (void) {
 
 
 int main (int argc, char *argv[]) {
-	/* Force a failure by passing -f to this program */
-	if (argc==2 && !strcmp(argv[1], "-f")) return -1;
-
 	setbuf(stdout, 0);
 	printf ("--Welcome to unit test %s----------------\n", __FILE__);
 

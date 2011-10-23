@@ -5,7 +5,6 @@
 #include <sys/stat.h> /* mode_t */
 
 
-
 void sysNewClosure1Env (void);
 
 /* Scanner state fields */
@@ -35,6 +34,9 @@ void sysNewClosure1Env (void);
 
 /* Useful */
 s64 sysTime (void);
+void sysStackToList (void);
+void sysListToStack (void);
+void syscallDebugger (void);
 
 /* Scanning_parsing */
 extern Chr yytext[];
