@@ -8,7 +8,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/mman.h>
-#include <unistd.h>
 #include <fcntl.h>
 #include <assert.h>
 #include <errno.h>
@@ -77,6 +76,7 @@ void memGarbageCollectInternal (Descriptor desc, Num byteSize);
 
 void memError (void) {
 	fprintf (stderr, "\nERROR: memError() called: Halting process with a seg fault.\n");
+	fflush(stdout);
 	*(int*)0 = 0; // Force a crash to catch in debugger.
 }
 
@@ -1141,7 +1141,7 @@ void memDebugDumpHeapHeaders (FILE *stream) {
 
 	for (i=0; i<MemRootSetCount; ++i) {
 		if (0 == i%4) printf ("\n");
-		fprintf (stream, "%8s "OBJ, memPointerString(MemRootSet[i]), *MemRootSet[i]);
+		fprintf (stream, "%9s "OBJ, memPointerString(MemRootSet[i]), *MemRootSet[i]);
 	}
 	fprintf (stream, "\n");
 }
@@ -1400,7 +1400,7 @@ void memInitialize (Func preGC, Func postGC) {
  static Num shouldInitialize=1;
 	DBBEG();
 	if (shouldInitialize) {
-		DB("Activating module...");
+		DB("Activating module");
 		shouldInitialize=0;
 		DB("Register the internal object types");
 		memTypeRegisterStringInternal(TSEMAPHORE,"SEM");

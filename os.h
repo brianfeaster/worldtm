@@ -8,6 +8,20 @@
 extern Int signalFlag;
 extern Int caughtSignals[MAX_SIGNAL_VALUE];
 
+/* Rootset objects */
+extern Obj rdebug, rblocked, rthreads, rsleeping, rrunning, rready;
+
+/* Useful
+*/
+void osException (Obj str);
+
+/* IO
+*/
+void osRecv (void);
+void osSend (void);
+
+/* Scheduling
+*/
 void osOpenSemaphore (void);
 Obj osThreadId (Obj t);
 Int osIsQueueEmpty (Obj q);
@@ -19,7 +33,8 @@ void osMoveToQueue (Obj thread, Obj queue, Obj state);
 void osUnRun (void);
 void osSleepThread (void);
 void osUnblockSemaphoreBlocked (Obj sem, Num all);
-void osSpawnSignalHandler(void);
+void osSpawnSignalHandler (void);
 void osCatchSignal (int sig);
+void osInitialize(Func exceptionHandler);
 
 #endif

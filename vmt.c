@@ -23,7 +23,15 @@ void FBInit (void) {
 	assert(NULL != FB);
 }
 
-/* Compare character file buffer's contents with string argument */
+/* Dump character file buffer's contents.  Finalize related objects. */
+void FBDump () {
+	fflush(FB);
+	fclose(FB);
+	fprintf(stderr, FBBuff);
+	free(FBBuff);
+}
+
+/* Compare character file buffer's contents with string argument. Finalize related objects. */
 void FBFinalize (char *goldenString) {
 	fflush(FB);
 	assert(0 == strcmp(FBBuff, goldenString));
@@ -49,8 +57,8 @@ void displayStringR1 (void) {
 void fancyHelloWorld (void) {
  Length codeSize;
  /* Registers holding runable code objects */
- #define printNumbersSub r9
- #define helloWorldSub r10
+ #define printNumbersSub r7
+ #define helloWorldSub r6
 
 	FBInit();
 
@@ -76,19 +84,19 @@ void fancyHelloWorld (void) {
 		vmBRA, (Obj)(1*8),
 		vmRET,
 
-		vmPUSH1A,              /* Save return address */
-		vmPUSH1B,
+		vmPUSHA,              /* Save return address */
+		vmPUSHB,
 
 		vmMVI0, helloWorldSub,
 		vmJAL0,
 		vmMV01,               /* r1-- */
 		vmADDI0, (Obj)-1,
 		vmMV10,
-		vmMV01E, // Or load address of printNumbersSub (r9) then index ptr:  MVI0, &printNumbersSub, LDI00, 0,
+		vmMV0E, // Or load address of printNumbersSub (r9) then index ptr:  MVI0, &printNumbersSub, LDI00, 0,
 		vmJAL0,
 
-		vmPOP1B,               /* Restore return address */
-		vmPOP1A,
+		vmPOPB,               /* Restore return address */
+		vmPOPA,
 		vmRET };
 
 	codeSize = sizeof(printNumbers);
@@ -130,8 +138,8 @@ void fancyHelloWorld (void) {
 
 	/* Verify the machine language program's output against a magic string */
 	FBFinalize("3Hello,World[tm]!2Hello,World[tm]!1Hello,World[tm]!001234\n"
-	              "3Hello,World[tm]!2Hello,World[tm]!1Hello,World[tm]!001234\n"
-	              "3Hello,World[tm]!2Hello,World[tm]!1Hello,World[tm]!001234\n");
+	           "3Hello,World[tm]!2Hello,World[tm]!1Hello,World[tm]!001234\n"
+	           "3Hello,World[tm]!2Hello,World[tm]!1Hello,World[tm]!001234\n");
 }
 
 
@@ -180,15 +188,11 @@ void testScheduler (void) {
 
 
 int main (int argc, char *argv[]) {
-	/* Force a failure by passing -f to this program */
-	if (argc==2 && !strcmp(argv[1], "-f")) return -1;
-
 	setbuf(stdout,0);
 	printf ("--Welcome to unit test %s----------------\n", __FILE__);
 
 	vmInitialize(0, 0);
 
-	//memDebugDumpAll(stdout);
 	TEST(fancyHelloWorld);
 	TEST(testScheduler);
 

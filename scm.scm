@@ -51,14 +51,7 @@
      (if (eq? o #())
        (cons "#()" r)
        (display-list-serialize-vector o r))
- (if (port? o)
-     (list "#PORT<"
-           (serialize-display (vector-ref o 0)) " "
-           (serialize-display (vector-ref o 1)) " "
-           (serialize-display (vector-ref o 2)) " "
-           (serialize-display (vector-ref o 3)) " "
-           (serialize-display (vector-ref o 4)) ">")
- (cons (serialize-display o) r)))))
+ (cons (serialize-display o) r))))
 
 ; Serialize an object into a list of "display" strings.
 (define (display->strings x)
@@ -127,8 +120,7 @@
 
 
 
-(define (socket-port s)
-  (if (port? s) (vector-ref s 2) #f))
+;(define (socket-port s) (if (port? s) (vector-ref s 2) #f))
 
 (define (seek-set port offset) (seek port offset 0))
 (define (seek-current port offset) (seek port offset 1))
@@ -495,6 +487,7 @@
      (begin (display (car l))
             (~ (cdr l))))))
 
+
 (define (++ n) (+ n 1))
 (define (-- n) (- n 1))
 (define (max a b) (if (> a b) a b))
@@ -525,49 +518,48 @@
          lastVal ; Load returns value of last expression
          (~ (read file)
             (eval expr)))))))
-
 ; Default error handlers for all thread IDs:  Shutdown the entire machine.
 ; It is a function of one argument because exception handler could be a
 ; continuation.
 (define ERRORS (make-vector 1024 
   (lambda (o)
-    (display "\nEXCEPTION::")
-    (if (null? o) (display ())
-      (begin
-        (display (car o))
-        (or (null? (cdr o)) (displayl " " (cdr o)))))
-    (debugger)
+    (if (pair? o)
+        (for-each (lambda (e) (display "\r\nEXCEPTION::") (write e))
+                  o)
+        (begin (display "\r\nEXCEPTION::") (write o)))
+    ;(debugger)
     (unthread))))
 
 
 ; The read eval print loop along with an error/exception handler.
-(define (repl . UNUSEDscmReplArgs)
-  (define WELCOME-MESSAGE "Welcome to \e[1;31mW\e[33mO\e[32mR\e[34mL\e[35mD\e[01;m.\e[?25l")
-  (let ((msg (call/cc (lambda (c) (vector-set! ERRORS (tid) c) WELCOME-MESSAGE))))
+(define repl-input ())
+(define (repl)
+  (display "\nwscm>")
+  (set! repl-input (read stdin))
+  (display (eval repl-input))
+  (or (eof-object? repl-input) (repl)))
+(define (start-repl . WELCOME)
+  (set! WELCOME (if (null? WELCOME) "World Scheme" (car WELCOME)))
+  (let ((msg (call/cc (lambda (c) (vector-set! ERRORS (tid) c) WELCOME))))
     ; An exception during the REPL returns to this
     ; point with 'msg' assigned the error/info list
-    (if (eq? WELCOME-MESSAGE msg) (display WELCOME-MESSAGE)
-      (begin
-        (display "\r\nREPL-ERROR::")
+    (if (eq? WELCOME msg)
+        (display WELCOME)
         (if (pair? msg)
-            (begin (display (car msg))
-                   (or (null? (cdr msg)) (displayl " " (cdr msg))))
-            (display ())))))
-  ; The REPL loop
-  (let scmRepl~ ()
-    (display "\nwscm>")
-    (let ((scmReplExpr (read stdin)))
-      (display (eval scmReplExpr))
-      (or (eof-object? scmReplExpr) (scmRepl~)))))
+            (for-each (lambda (e) (displayl "\nREPL-ERROR::" e))
+                      msg)
+            (display msg))))
+  (repl))
 
 
 (define (signal-set num func)
  (vector-set! SIGNALHANDLERS num func)
  (signal num))
 
+
 ; If wscm is run with a command line argument that isn't a switch, then 
 ; assume it's a file to run otherwise begin the REPL.
 (if (and (> (vector-length argv) 1)
          (not (string=? "-" (vector-ref argv 1))))
  (load (vector-ref argv 1))
- (repl))
+ (start-repl "Welcome to \e[1;31mW\e[33mO\e[32mR\e[34mL\e[35mD\e[01;m.\e[?25l"))

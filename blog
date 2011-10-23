@@ -3727,3 +3727,64 @@ interesting scenarios:
    * [X] Added asmNextValidIBlock();
 
 [ ] Todo: Fix asm module symbol names.  Start design document.
+
+
+
+Fri Oct 14 20:45:45 EDT 2011
+
+[X] Sys module contains environment functions so it makes sense that it should
+also initialize the global environment.  Move TGE initialization code from wscm
+to sys.
+
+[ ] Error and exception facility needs work.  It needs to handle runtime and
+compile time errors gracefully.  Use cases:
+
+* Runtime error: Vector reference out of bounds.  Running thread should not
+  continue any longer unless it's an eval loop.
+
+* User error: Runtime exception thrown by user.
+
+* Syntax error: Invalid parameters to vector-ref.  Compilation should halt.
+  Thread halted if not an eval loop.
+
+
+
+Sun Oct 16 22:49:54 EDT 2011
+
+Moving I/O related calls from sys to os.  Moving os before sys in module
+hierarchy?
+
+
+
+Mon Oct 17 15:32:13 EDT 2011
+
+[X] Use global C variables registered as root set objects instead of virtual
+machine registers.  Keep VM register count to 16.
+
+
+
+Tue Oct 18 21:49:49 EDT 2011
+
+Attempted to use longjmp to handle exceptions in the compiler module but it is
+too dependent on the runtime scheme environment to longjump back to the C
+compiler call as the runtime scheme stack would need to be unwound.  It was
+caught by an assertion in the assembler module that noticed an iblock wasn't
+being popped during an assembler context "pop" call to asmEnd().  I'll just
+have to pass around and check for an error state instead.
+
+
+
+Sat Oct 22 15:50:53 EDT 2011
+(cond ((car) 1 2) ((cdr))) => REPL-ERROR::(if (car) (begin 1 2) (or (cdr) ()))
+
+[ ] The compiler needs to report errors based on malformed pre-rewritten
+expressions.
+
+[ ] Runtime errors aren't aware of the derived expression that's erroring.
+  (define (square x) (* x x))
+  (square 1 2)  =>
+    Too many arguments to function
+    2
+    (lambda (x) (* x x))
+    (define (square x) (* x x))
+

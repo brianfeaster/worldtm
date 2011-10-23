@@ -20,22 +20,6 @@
 #define RD (Obj)0xd
 #define RE (Obj)0xe
 #define RF (Obj)0xf
-#define R10 (Obj)0x10
-#define R11 (Obj)0x11
-#define R12 (Obj)0x12
-#define R13 (Obj)0x13
-#define R14 (Obj)0x14
-#define R15 (Obj)0x15
-#define R16 (Obj)0x16
-#define R17 (Obj)0x17
-#define R18 (Obj)0x18
-#define R19 (Obj)0x19
-#define R1A (Obj)0x1a
-#define R1B (Obj)0x1b
-#define R1C (Obj)0x1c
-#define R1D (Obj)0x1d
-#define R1E (Obj)0x1e
-#define R1F (Obj)0x1f
 
 #define MV   (Obj)0x20
 #define MVI  (Obj)0x21
@@ -67,20 +51,31 @@ extern Obj sasmend;
 #define NA sasmna
 extern Obj sasmna;
 
+
+/* Rootset objects */
+extern Obj ropcodes, riblock, riblocks, ricodes, rlabels, rexpr, rcodenew;
+
+
 /***************************************
- ASM
+ Labels
 ***************************************/
-void asmInit (void);
 Obj asmNewLabel();
-void asmAsmInternal (Obj f, ...);
-#define asmAsm(...) asmAsmInternal(__VA_ARGS__, sasmend)
 
 
 /***************************************
  ASM
 ***************************************/
 void asmStart (void);
-void asmAsmIGraph (void);
+void asmInit (void);
+void asmReset (void);
+void asmAsmInternal (Obj f, ...);
+#define asmAsm(...) asmAsmInternal(__VA_ARGS__, sasmend)
+
+
+/***************************************
+ Assemble
+***************************************/
+void asmAssemble (void);
 
 
 /*******************************************************************************
