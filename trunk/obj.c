@@ -189,6 +189,14 @@ Obj objCons (Obj a, Obj b) {
 	return o;
 }
 
+void objCons010(void) {
+ Obj o;
+	o = memNewVector(TPAIR, 2);
+	memVectorSet(o, 0, r1);
+	memVectorSet(o, 1, r0);
+	r0 = o;
+}
+
 void objCons101 (void) {
  Obj o;
 	o = memNewVector(TPAIR, 2);
@@ -203,6 +211,14 @@ void objCons303 (void) {
 	memVectorSet(o, 0, r0);
 	memVectorSet(o, 1, r3);
 	r3 = o;
+}
+
+void objConsStack0 (void) {
+ Obj o;
+   o = memNewVector(TPAIR, 2);
+	memVectorSet(o, 0, vmPop());
+	memVectorSet(o, 1, r0);
+	r0 = o;
 }
 
 void objCons01 (void) {
