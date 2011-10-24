@@ -901,7 +901,7 @@ void syscallOpenNewFile (void) {
  char buff[4096];
 	DBBEG();
 	if (wscmAssertArgCountRange1To2(__func__)) goto ret;
-	if ((Num)r1==2) { /* If an extra argis passed, make it a silent call */
+	if ((Num)r1==2) { /* If an extra arg is passed, make it a silent call */
 		vmPop();
 		silent=1;
 	}

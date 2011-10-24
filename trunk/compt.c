@@ -8,9 +8,14 @@
 #include "sys.h"
 #include "obj.h"
 #include "vm.h"
+#include "mem.h"
 
 
+extern Obj rexpr;
+extern Num compParseOperands (Num count);
 extern void asmICodePushNewQUIT (void);
+extern Num matchArgumentList (void); 
+extern Num compParseLambda (void);
 
 
 #define TEST(fn) (printf("Calling test: "#fn"()  "), fn(),printf("PASS\n"))
@@ -37,19 +42,138 @@ void FBDump () {
 
 /* Compare character file buffer's contents with string argument. Finalize related objects. */
 void FBFinalize (char *goldenString) {
+ Num res;
 	fflush(FB);
-	assert(0 == strcmp(FBBuff, goldenString));
+	res = strcmp(FBBuff, goldenString);
+	if (res) fprintf(stderr, "\nReceived [%s]\nExpected [%s] ", FBBuff, goldenString);
+	assert(0 == res);
 	fclose(FB);
 	free(FBBuff);
 }
 
 
 
+/* Verify the argument list can be parsed and errors detected
+*/
+
+void matchargs (void) {
+	yy_scan_string ((Str)"()"); yyparse();
+	assert(!matchArgumentList());
+	assert(null == r1);
+	assert(null == r2);
+
+	yy_scan_string ((Str)"r"); yyparse();
+	assert(!matchArgumentList());
+	assert(null == r1);
+	objNewSymbol((Str)"r", 1);
+	assert(r0 == r2);
+
+	yy_scan_string ((Str)"(x)"); yyparse();
+	assert(!matchArgumentList());
+	objNewSymbol((Str)"x", 1);
+	assert(r0 == car(r1));
+	assert(null == r2);
+
+	yy_scan_string ((Str)"(x . y)"); yyparse();
+	assert(!matchArgumentList());
+	objNewSymbol((Str)"x", 1);
+	assert(r0 == car(r1));
+	objNewSymbol((Str)"y", 1);
+	assert(r0 == r2);
+
+	yy_scan_string ((Str)"(x y . r)"); yyparse();
+	assert(!matchArgumentList());
+	objNewSymbol((Str)"x", 1);
+	assert(r0 == car(r1));
+	objNewSymbol((Str)"y", 1);
+	assert(r0 == cadr(r1));
+	objNewSymbol((Str)"r", 1);
+	assert(r0 == r2);
+
+	yy_scan_string ((Str)"1"); yyparse();
+	assert(matchArgumentList());
+
+	yy_scan_string ((Str)"(1)"); yyparse();
+	assert(matchArgumentList());
+
+	yy_scan_string ((Str)"(a 1)"); yyparse();
+	assert(matchArgumentList());
+
+	yy_scan_string ((Str)"(1 a)"); yyparse();
+	assert(matchArgumentList());
+
+	yy_scan_string ((Str)"(a b 1)"); yyparse();
+	assert(matchArgumentList());
+
+	yy_scan_string ((Str)"(a . 1)"); yyparse();
+	assert(matchArgumentList());
+
+	yy_scan_string ((Str)"(a b . 1)"); yyparse();
+	assert(matchArgumentList());
+}
+
+/* Verify a lambda expressions can be parsed and errors detected
+*/
+void matchlambda (void) {
+	yy_scan_string ((Str)"(())"); yyparse();
+	assert(!compParseLambda()); // r1=() r2=() r3=() r4=()
+	assert(null == r1);
+	assert(null == r2);
+	assert(null == r3);
+	assert(null == r4);
+
+	yy_scan_string ((Str)"(r b)"); yyparse();
+	assert(!compParseLambda()); // r1=() r2=r r3=() r4=b
+	                           assert(null == r1);
+	objNewSymbol((Str)"r", 1); assert(r0 == r2);
+	                           assert(null == r3);
+	objNewSymbol((Str)"b", 1); assert(r0 == r4);
+
+	yy_scan_string ((Str)"((x) a b)"); yyparse();
+	assert(!compParseLambda()); // r1=(x) r2=() r3=(a) r4=b
+	objNewSymbol((Str)"x", 1); assert(r0 == car(r1));
+	                           assert(null == r2);
+	objNewSymbol((Str)"a", 1); assert(r0 == car(r3));
+	objNewSymbol((Str)"b", 1); assert(r0 == r4);
+
+	yy_scan_string ((Str)"((x) . b)"); yyparse();
+	assert(compParseLambda());
+
+	yy_scan_string ((Str)"((1) . 2)"); yyparse();
+	assert(compParseLambda());
+}
+
+/* Verify a malformed lambda expression can be identified
+*/
+void lambdamalformed (void) {
+	FBInit();
+	yy_scan_string ((Str)"(lambda () . 1)"); yyparse(); compCompile();
+	FBFinalize("(Syntax error 'lambda' body 1 (lambda () . 1))");
+
+	FBInit();
+	yy_scan_string ((Str)"(lambda () 1 . 2)"); yyparse(); compCompile();
+	FBFinalize("(Syntax error 'lambda' body 2 (lambda () 1 . 2))");
+
+	FBInit();
+	yy_scan_string ((Str)"(lambda r . 1)"); yyparse(); compCompile();
+	FBFinalize("(Syntax error 'lambda' body 1 (lambda r . 1))");
+
+	FBInit();
+	yy_scan_string ((Str)"(lambda r 1 . 2)"); yyparse(); compCompile();
+	FBFinalize("(Syntax error 'lambda' body 2 (lambda r 1 . 2))");
+                 
+	FBInit();
+	yy_scan_string ((Str)"(lambda (x) . 1)"); yyparse(); compCompile();
+	FBFinalize("(Syntax error 'lambda' body 1 (lambda (x) . 1))");
+
+	FBInit();
+	yy_scan_string ((Str)"(lambda (x) 1 . 2)"); yyparse(); compCompile();
+	FBFinalize("(Syntax error 'lambda' body 2 (lambda (x) 1 . 2))");
+
+}
+
 /* A C function to verify and parse an s-expression operands
 */
-extern Obj rexpr, rcomperror;
-extern Num compParseOperands (Num count);
-
 void parseOperands (void) {
 	/* Parse a 0 operand expression */
 	yy_scan_string ((Str)"(fun0)"); yyparse();
@@ -188,6 +312,10 @@ void exceptionHandler (void) {
 	sysDisplay(r0, FB);
 }
 
+
+/* 4 unit tests that verify runtime car argument checks occur in
+   various locations in an expression.
+*/
 void errorcar (void) {
 	FBInit();
 	yy_scan_string ((Str)"(car)");
@@ -226,13 +354,14 @@ void errorconscarcarifcar (void) {
 
 void runtimeerrorcarcar (void) {
 	FBInit();
-	yy_scan_string ((Str)"(cons 1 (car (car (if 1 (car 9)))))"); /* This leaves object integer 1 on the stack */
+	yy_scan_string ((Str)"(cons 1 (car (car (if 2 (car 9)))))"); /* This leaves object integer 1 on the stack */
 	yyparse();
 	compCompile();
 	rcode = r0;
 	rip = 0;
 	vmRun();
-	FBFinalize("(car expects pair for target 9 (car 9) (if 1 (car 9)) (car (if 1 (car 9))) (car (car (if 1 (car 9)))) (cons 1 (car (car (if 1 (car 9))))))");
+	FBFinalize("(car expects pair for target 9 (car 9) (if 2 (car 9)) (car (if 2 (car 9))) (car (car (if 2 (car 9)))) (cons 1 (car (car (if 2 (car 9))))))");
+	vmPop();
 
 	FBInit();
 	yy_scan_string ((Str)"(car (car 9))");
@@ -241,9 +370,10 @@ void runtimeerrorcarcar (void) {
 	rcode = r0;
 	rip = 0;
 	vmRun();
-	//FBDump();
 	FBFinalize("(car expects pair for target 9 (car 9) (car (car 9)))");
 }
+
+
 
 
 int main (int argc, char *argv[]) {
@@ -253,6 +383,11 @@ int main (int argc, char *argv[]) {
 	compInitialize();
 	osInitialize(exceptionHandler);
 
+	assert(0 == memStackLength(rstack));
+
+	TEST(matchargs);
+	TEST(matchlambda);
+	TEST(lambdamalformed);
 	TEST(parseOperands);
 	TEST(simpleLambda);
 	TEST(aif);
@@ -261,5 +396,7 @@ int main (int argc, char *argv[]) {
 	TEST(errorbegincar);
 	TEST(errorconscarcarifcar);
 	TEST(runtimeerrorcarcar);
+
+	assert(0 == memStackLength(rstack));
 	return 0;
 }
