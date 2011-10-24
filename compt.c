@@ -59,13 +59,13 @@ void FBFinalize (char *goldenString) {
 void matchargs (void) {
 	yy_scan_string ((Str)"()"); yyparse();
 	assert(!matchArgumentList());
-	assert(null == r1);
+	assert(null == car(r1));
 	assert(null == r2);
 
 	yy_scan_string ((Str)"r"); yyparse();
 	assert(!matchArgumentList());
-	assert(null == r1);
 	objNewSymbol((Str)"r", 1);
+	assert(r0 == car(r1));
 	assert(r0 == r2);
 
 	yy_scan_string ((Str)"(x)"); yyparse();
@@ -116,8 +116,14 @@ void matchargs (void) {
 */
 void matchlambda (void) {
 	yy_scan_string ((Str)"(())"); yyparse();
-	assert(!compParseLambda()); // r1=() r2=() r3=() r4=()
-	assert(null == r1);
+
+	assert(compParseLambda()); // r1=(()) r2=() r3=() r4=()
+sysDisplay(r1, stderr);
+sysDisplay(r2, stderr);
+sysDisplay(r3, stderr);
+sysDisplay(r4, stderr);
+exit(0);
+	assert(null == car(r1));
 	assert(null == r2);
 	assert(null == r3);
 	assert(null == r4);

@@ -315,12 +315,15 @@ void compTransformDefineFunction (void) {
 }
 
 
-/* Transform expr:((define x q) (define y r) body)
-       => r0:((lambda (x y) (set! x q) (set! y r) body) () ())
+/* Transform expr:((a b) (define x q) (define y r) body)
+       => rexpr:((a b)((lambda (x y) (set! x q) (set! y r) body) () ()))
 */
 void compTransformInternalDefinitions(void) {
  Int definitionsCount=0;
 	DBBEG();
+
+	vmPush(car(rexpr)); /* Push arg-list */
+	rexpr = cdr(rexpr); /* Consider lambda'a body */
 
 	/* Save lambda body. */
 	while (objIsPair(rexpr) && objIsPair(car(rexpr)) && sdefine == caar(rexpr)) {
@@ -357,9 +360,12 @@ void compTransformInternalDefinitions(void) {
 		r1=r0;      r2=r6;  objCons12();
 		/* Create list consisting of this new expression. */
 		r1=r0;      r2=null; objCons12();
-		rexpr=r0;
+		rexpr = r0;
 	}
 	
+	r1=vmPop(); r2=rexpr;   objCons12(); /* Re-attach arg list */
+	rexpr=r0;
+
 	DBEND("  =>  ");
 	DBE objDump(rexpr, stdout);
 }
@@ -418,9 +424,21 @@ void compTransformLet (void) {
 
 /* Parse an argument list
      r0 <= argument list (), r, (x), (x y . r)
-      r1 => args, ()
-      r2 => dotted arg, (), bad argument
+      r1 => normalized args list: (args rest), (args ()), (rest), (())
+      r2 => dotted arg, (), the bad argument
   return => 0 success, 1 fail
+
+   Normalize a scheme formals list into an internal normalized formals
+   environment list.  A proper list with a symbol or null as the "rest"
+   formal.
+
+   (x)       ->  (x ())
+   (x y)     ->  (x y ())
+   (x . r)   ->  (x r)
+   (x y . r) ->  (x y r)
+   r         ->  (r)
+   ()        ->  (())
+
 */
 Num matchArgumentList (void) {
  Num count=0;
@@ -433,6 +451,10 @@ Num matchArgumentList (void) {
 	}
 
 	r2 = r0; /* r2 gets the dotted arg */
+
+	/* Include the dotted arg in the args list */
+	vmPush(r2);
+	++count;
 
 	/* r1 gets a new arg list */
 	for (r1 = null ; count-- ; ) {
@@ -481,7 +503,7 @@ Num matchBody (void) {
 
 
 /* Parse a lambda expressioin.
-      r0 <= lambda expression's list (arg-list body)
+   rexpr <= lambda expression's list (arg-list body)
        r1 => args, ()
        r2 => dotted arg, (), invalid arg
        r3 => body butlast, ()
@@ -489,10 +511,13 @@ Num matchBody (void) {
    return => 0 success, 1 arg list syntax fail, 2 body syntax fail
 */
 Num compParseLambda (void) {
+
+	r0 = rexpr;
+
 	/* Empty */
 	if (!objIsPair(r0)) return 1;
 
-	vmPush(cdr(r0)); /* Push arg-list */
+	vmPush(cdr(r0)); /* Push body */
 
 	/* Consider arg-list and parse into r1 and r2 */
 	r0 = car(r0);
@@ -508,45 +533,6 @@ Num compParseLambda (void) {
 	}
 
 	return 0;
-}
-
-/* Normalize a scheme formals list into an internal normalized formals
-   environment list.  A proper list with a symbol or null as the "rest"
-   formal.
-
-   (x)       ->  (x ())
-   (x y)     ->  (x y ())
-   (x . r)   ->  (x r)
-   (x y . r) ->  (x y r)
-   r         ->  (r)
-   ()        ->  (())
-
-   r0 <=  A lambda expression's formals list
-    r0 => Normalized formal parameter list
-    r1 =  temp
-    r2 =  temp
-    r3 => Number of non-dotted formal parameters
-    r4 => 0 or 1 dotted formals
-*/
-void compNormalizeFormals(void) {
- Num i;
-	r3=0; /* Keep track of non-dotted formal count. */
-
-	/* Push formals onto stack. */
-	while (objIsPair(r0)) {
-		r3++;
-		vmPush(car(r0));
-		r0=cdr(r0);
-	}
-
-	/* Keep track of the existence of a dotter formal */
-	r4 = (r0==null) ? (Obj)0 : (Obj)1;
-
-	/* Pop formals from stack creating list of args starting
-      with (()) or (dotted-formal) */
-	r1=r0;  r2=null;  objCons12();
-	i=(Num)r3;
-	while (i--) { r2=r0;  r1=vmPop();  objCons12(); }
 }
 
 
@@ -1104,45 +1090,43 @@ ret:
 }
 
 
-/* Given (lambda-args body) in rexpr, create a new code block that handles
+/* Create a new code block that handles
    a call to a closures function.  The code assumes the closure is in r0.
    A closure is a pair (code . environment) containing the code itself
    and the closure's lexical environment.
 
-   rexpr <= The lambda's REST (lambda-args body)
-    renv <= pseudo extended environment
-    r3   <= non-dotted arg count
-    r4   <= dotted arg flag
+    r1 <= normalized args
+    r2 <= dotted arg
+    r3 <= body butlast
+    r4 <= body last
+ rexpr <= lambda statement's body
+  renv <= pseudo env
+     r0 => code block
 
 	Emitted code assumes the caller's code sets up the stack with all evaluated
    arguments pushed with r1 containing the arg count.  The count includes
-   arguments to be grouped into the dotted formal argument list.
+   arguments to be grouped into the dotted formal argument list.  An active
+   local environment is a vector: #(parent-env (x y rest-or-null) 1 2 (3 4 5))
 
-   Create an extended environment given:
-
-    rf (stack) - arguments on the stack.
-
-   An active local environment is of the form:
-     #(parent-env (x y rest-or-null) 1 2 (3 4 5))
-
-    #(* (a ()))
+    #(* (a ()) 42)
       |
-      #(* (x y z))
+      #(* (x . z) 1 2 3 4 5)
         |
         (TGE (square . #<closure>) (x . 5) (y . 9))
 */
 void compLambdaBody (Num flags) {
  Obj Lexpectednoargs, LkeepLexicalEnvironment, LnotEnoughArguments, LnormalFormals, LbuildRestList;
-	DBBEG(" <= ");
-	DBE objDump(rexpr, stdout);
+ Num nonDottedArgCount;
 
-	/* Since we're creating a new code object, create a new sub-ASM context */
-	asmStart();
+	DBBEG();
+
+	asmStart(); /* Creating a new code object so start a new sub-ASM context */
 
 	/* Emit code that extends stack-stored arguments (Free variables can be
-	   statically compiled?  r2 is assumed to hold the environment to be
-	   extended, r1 the argument count, r3 the formal arguments.) */
-	if (null == car(rexpr)) {
+	   statically compiled?)
+	*/
+
+	if (null == car(r1)) {
 		/* Since a lambda with empty formals list, emit code which doesn't extend
 		   the environment but instead sets env to the containing closure's env
 		   or TGE if this is a top level definition (which will always be for 'lambda
@@ -1155,9 +1139,9 @@ void compLambdaBody (Num flags) {
 			BEQI, R1, 0, Lexpectednoargs,
 			MVI, R0, rsubexpr, /* Error situation.  Add sub s-expressions to stack Was MVI, R1, rsubexpr, PUSH, R1 */
 			SYSI, sysListToStack,
-			MVI, R1, 1l + objListLength(rsubexpr), /* Number of items on stack to dump */
+			ADDI, R1, objListLength(rsubexpr), /* Add the number of sub-expressions just pushed */
 			MVI, R0, "Too many arguments to closure",
-			SYSI,  compSyscallError, /* Error correction */
+			SYSI,  compSyscallError,
 			LABEL, Lexpectednoargs
 		);
 	} else {
@@ -1166,6 +1150,7 @@ void compLambdaBody (Num flags) {
 		   R3 contains the non-dotted formal parameter length (via the Normalize
 		   function above). */
 
+		nonDottedArgCount = objListLength(r1) - 1;
 		/* Temporarily save lexical environment, from closure in r0, or tge, to r5.
 		   The stored environment might be null in which case keep track of
 		   the current/dynamic environment instead of the stored lexical.  Use
@@ -1182,20 +1167,20 @@ void compLambdaBody (Num flags) {
 			MV, R5, RC,
 		 LABEL, LkeepLexicalEnvironment,
 			MVI, R0, null, /* Initial formal argument 'rest' value (empty list). */
-			/* r3 is non-dotted formal argument length. */
-			BLTI, R1, r3, LnotEnoughArguments,
-			BEQI, R1, r3, LnormalFormals
+			/* nonDottedArgCount is non-dotted formal argument length. */
+			BLTI, R1, nonDottedArgCount, LnotEnoughArguments,
+			BEQI, R1, nonDottedArgCount, LnormalFormals
 		);
 
 		/* Emit code for functions lacking a dotted formal argument.  This code
 		   will be reached if there are more values passed to the function than
 		   there are formal arguments.  Otherwise it will just continue to build
 		   the dotted formal list. */
-		if (r4 == 0) {
+		if (r2 == null) {
 			asmAsm (
-				MVI, R0, rsubexpr, /* Error situation.  Add sub s-expressions to stack Was MVI, R1, rsubexpr, PUSH, R1 */
+				MVI, R0, rsubexpr, /* Error situation.  Add sub s-expressions to stack */
 				SYSI, sysListToStack,
-				MVI, R1, 1l + objListLength(rsubexpr), /* Number of items on stack to dump */
+				ADDI, R1, objListLength(rsubexpr), /* Add the number of sub-expressions just pushed */
 				MVI, R0, "Too many arguments to function",
 				SYSI, compSyscallError /* Error correction */
 			);
@@ -1208,24 +1193,24 @@ void compLambdaBody (Num flags) {
 			POP, R2,
 			SYSI, objCons23,
 			ADDI, R1, -1l,
-			BNEI, R1, r3, LbuildRestList,
+			BNEI, R1, nonDottedArgCount, LbuildRestList,
 			BRA, LnormalFormals,
 		LABEL, LnotEnoughArguments,
 			MVI, R0, rsubexpr, /* Error situation.  Add sub s-expressions to stack Was MVI, R1, rsubexpr, PUSH, R1 */
 			SYSI, sysListToStack,
-			MVI, R1, objListLength(rsubexpr), /* Number of items on stack to dump */
+			ADDI, R1, objListLength(rsubexpr), /* Add the number of sub-expressions just pushed */
 			MVI, R0, "Not enough arguments to closure",
 			SYSI, compSyscallError, /* Error correction */
 			PUSH, R0,
 			ADDI, R1, 1l,
-			BNEI, R1, r3, LnotEnoughArguments,
+			BNEI, R1, nonDottedArgCount, LnotEnoughArguments,
 		LABEL, LnormalFormals,
 			PUSH, R0,
-			/* Create the local environment. r1 is the length of the vector.
+			/* Create the local environment. R1 is the length of the vector.
 			   3 is added to account for the parent env, formal argument list
 			   and rest formal argument. */
 			ADDI, R1, 3l,
-			SYSI,  objNewVector1, /* New vector in r0 of size imm:r1. */
+			SYSI,  objNewVector1, /* New vector in r0 of size imm:R1. */
 			STI, R5, R0, 0l, /* Set parent link. */
 			/* Set the environment's normalized formal argument list which was
 			   created before the call to this C function. */
@@ -1235,48 +1220,45 @@ void compLambdaBody (Num flags) {
 
 		/* Emit code that pops arguments off stack and stores into proper
 		   local environment locations.  */
-		r3++;
-		while (r3--) {
+		nonDottedArgCount++;
+		while (nonDottedArgCount--) {
 			asmAsm (
 				POP, R2,
-				STI, R2, R0, r3+2l
+				STI, R2, R0, nonDottedArgCount+2l
 			);
 		}
 		/* Set env register to the newly extended environment. */
 		asmAsm(MV, RC, R0);
 	}
 
-	/* Consider lambda'a BODY */
-	rexpr = cdr(rexpr);
+	/* Compile lambda statements body split into r3/but-last and r4/last */
 
-	/* Compile expressions in lambda block (all but the last).  If the lambda
-	   body is empty, emit code that returns null.  This is not to r5rs
-	   specification which requires body contain a sequence of one or more
-	   expressions. */
-	if (rexpr == null) {
-		asmAsm(MVI, R0, null);
+	if (r4 == null) {
+		/* An empty lambda body will return null.  Not to r5rs spec which requires
+			one or more expressions */
 		DB("Empty function body.");
+		asmAsm(MVI, R0, null);
 	} else {
-		/* Transform internal definitions, if any, and body into equivalent
-		   expanded letrec and body, ie:(((lambda (f) (set! f ...) body) () () ...)).*/
-		// TODO this needs to move earlier in the flow since a new ASM context has already been established
-		compTransformInternalDefinitions();
+		/* Transform internal definitions, if any, and body into equivalent expanded
+		   letrec and body, ie:(((lambda (f) (set! f ...) body) () () ...)) */
 
-		if (objIsPair(rexpr)) {
-			r2 = cdr(rexpr); /* Consier BODY's REST */
-			while (objIsPair(r2)) {
-				DB("Lambda non-tail optimization");
-				vmPush(r2); /* Push REST */
-				rexpr = car(rexpr);
-				compCompileExpr((flags & ~CCTAILCALL) | CCNODEFINES);
-				rexpr = vmPop(); /* Restore REST */
-				r2 = cdr(rexpr);
-				if (compIsError()) goto end;
+		vmPush(r4); /* Save TAIL */
+
+		while (objIsPair(r3)) {
+			DB("Lambda body non-tail expression");
+			vmPush(cdr(r3)); /* Push REST */
+			/* Compile expression */
+			rexpr = car(r3);
+			compCompileExpr((flags & ~CCTAILCALL) | CCNODEFINES);
+			r3 = vmPop(); /* Restore REST */
+			if (compIsError()) {
+				vmPop(); /* Restore TAIL */
+				goto end;
 			}
 		}
 
-		DB("Lambda tail optimization");
-		rexpr = car(rexpr);
+		DB("Lambda body tail expression");
+		rexpr = vmPop(); /* Restore LAST */
 		compCompileExpr(flags | CCTAILCALL | CCNODEFINES);
 	}
 
@@ -1292,27 +1274,24 @@ end:
 		asmAssemble();
 	}
 
-	DB ("lambda sub code block:");
+	DB ("Code block => ");
 	DBE vmDebugDumpCode(r0, stderr);
 	DBEND(STR, compIsError()?" *ERROR*":"");
 }
 
 void compLambda (Num flags) {
  Num ret;
-	DBBEG();
+	DBBEG(" <= ");
+	DBE objDump(rexpr, stdout);
 
-	vmPush(renv); /* Save env. */
+	rexpr = cdr(rexpr); /* Skip lambda */
 
-	rexpr = cdr(rexpr); /* Skip 'lambda' */
+	/* Rewrite lambda expression if it contains internal definitions */
+	compTransformInternalDefinitions();
 
-	/* Parse the lambda expression's body in r0 into:
-	     r1=args         r3=body butlast
-        r2=dotted arg   r4=body last
-	   All could potentially be null */
-	r0 = rexpr;
+	/* Parse lambda expression and check for syntax errors */
 	ret = compParseLambda();
 	if (ret) {
-		vmPop(); /* Pop env */
 		if (ret == 1) {
 			compPushSubExpr(r2);
 			compErrorRaise((Str)"Syntax error 'lambda' args");
@@ -1325,26 +1304,16 @@ void compLambda (Num flags) {
 		goto ret;
 	};
 
-/*
-fprintf(stderr, NL);sysDisplay(r1, stderr);
-fprintf(stderr, NL);sysDisplay(r2, stderr);
-fprintf(stderr, NL);sysDisplay(r3, stderr);
-fprintf(stderr, NL);sysDisplay(r4, stderr);fprintf(stderr, NL);
-*/
+	vmPush(renv); /* Save env. */
 
-	/* Extend pseudo environment only if the formals list is not empty to
-	   mimic the runtime optimized environment chain.   A pseudo environment
-	   is just the pair (parent-environment . formals-list)*/
-	if (null != car(rexpr)) {
-		r0 = car(rexpr);
-		compNormalizeFormals();
-		/* Create normalized list in r0, length in r3, dotted-formal bool in r4. */
-		r1=renv;  r2=r0;  objCons12();  renv=r0;
-	}
+	/* Extend a pseudo environment (parent . formals-list) only if formals
+	   list contains a parameter */
+	if (null != car(r1)) renv = objCons(renv, r1);
 
-	/* Create closures code block in r0 */
+	/* Now have:  r1=normalized args   r3=body butlast
+	              r2=dotted arg        r4=body last
+	              renv=pseudo env   rexpr=lambda expression's body*/
 	compLambdaBody(flags);
-
 	renv = vmPop(); /* Restore env */
 
 	if (compIsError()) goto ret;
