@@ -71,6 +71,8 @@ void objNewSymbolR5R6 (void); /* Like objNewSymbol only 'str'/'len' are in r5/r6
 void objNewSymbolStatic (char *s);
 void objNewSyscall (Func f);
 Obj  objCons   (Obj a, Obj b);
+void objCons101(void);
+void objCons303 (void);
 void objCons01 (void);
 void objCons10 (void); /* New pair using r1 and r0 */
 void objCons12 (void); /* New pair using r1 and r2 */
@@ -85,7 +87,8 @@ Obj objPortState (Obj p);
 
 /* Object operations
  */
-Num objIsPair (Obj o);
+Num objIsPair   (Obj o);
+Num objIsSymbol (Obj o);
 
 Obj car (Obj o);
 Obj caar (Obj o);

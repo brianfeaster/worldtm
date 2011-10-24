@@ -189,6 +189,22 @@ Obj objCons (Obj a, Obj b) {
 	return o;
 }
 
+void objCons101 (void) {
+ Obj o;
+	o = memNewVector(TPAIR, 2);
+	memVectorSet(o, 0, r0);
+	memVectorSet(o, 1, r1);
+	r1 = o;
+}
+
+void objCons303 (void) {
+ Obj o;
+   o = memNewVector(TPAIR, 2);
+	memVectorSet(o, 0, r0);
+	memVectorSet(o, 1, r3);
+	r3 = o;
+}
+
 void objCons01 (void) {
  Obj o;
    o = memNewVector(TPAIR, 2);
@@ -262,9 +278,8 @@ Obj objPortState      (Obj o) { return memVectorObject(o, 3); }
 Obj objPortPushback   (Obj o) { return memVectorObject(o, 4); }
 */
 
-Num objIsPair (Obj o) {
-	return memIsObjectType(o, TPAIR);
-}
+Num objIsPair (Obj o)   { return memIsObjectType(o, TPAIR); }
+Num objIsSymbol (Obj o) { return memIsObjectType(o, TSYMBOL); }
 
 
 Obj  car  (Obj o) { return memVectorObject(o, 0);}

@@ -3444,7 +3444,7 @@ allocated array and vector objects from the corresponding new functions.
 
 [mem]-[vm]-[obj]- - - sys op comp wscm
 
-[ ] New unit test to verify a file can be created, written, read, reopened,
+[X] New unit test to verify a file can be created, written, read, reopened,
 silently and non-silently.  Inadvertantly deleted some map files after removing
 the ability for the open file syscall to take a 2nd parameter forcing silent
 operation.  It must have returned a value signalling the file didn't exist
@@ -3659,7 +3659,7 @@ offset.
 
 Mon Oct 10 01:42:19 EDT 2011
 
-(fn 1 2 3) If fn is a mutable symbol bound with a closure, it needs to be
+[ ] (fn 1 2 3) If fn is a mutable symbol bound with a closure, it needs to be
 generic and handle any number of args.  If fn is an inlined closure, it can be
 optimized to handle the specific number of arguments passed.
 
@@ -3726,7 +3726,7 @@ interesting scenarios:
      2BA8CFE6D1E8 0005 ret
    * [X] Added asmNextValidIBlock();
 
-[ ] Todo: Fix asm module symbol names.  Start design document.
+[X] Todo: Fix asm module symbol names.  Start design document.
 
 
 
@@ -3736,7 +3736,7 @@ Fri Oct 14 20:45:45 EDT 2011
 also initialize the global environment.  Move TGE initialization code from wscm
 to sys.
 
-[ ] Error and exception facility needs work.  It needs to handle runtime and
+[X] Error and exception facility needs work.  It needs to handle runtime and
 compile time errors gracefully.  Use cases:
 
 * Runtime error: Vector reference out of bounds.  Running thread should not
@@ -3788,3 +3788,15 @@ expressions.
     (lambda (x) (* x x))
     (define (square x) (* x x))
 
+
+
+Sun Oct 23 13:58:19 EDT 2011
+
+Added a combination syntax check which immediately found a bug in the cells
+file.  I was missing a close parnthesis for one of the cellSet expressions.
+
+[ ] Compile inlined lambda combinations.  See Oct 10 2011
+Screen resolution (51 113)
+real    0m3.410s 0m3.438s 0m3.483s
+user    0m2.276s 0m2.260s 0m2.232s
+sys     0m1.017s 0m1.064s 0m1.037s
