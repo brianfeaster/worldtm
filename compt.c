@@ -44,7 +44,7 @@ void FBDump () {
 void FBFinalize (char *goldenString) {
  Num res;
 	fflush(FB);
-	res = strcmp(FBBuff, goldenString);
+	res = (Num)strcmp(FBBuff, goldenString);
 	if (res) fprintf(stderr, "\nReceived [%s]\nExpected [%s] ", FBBuff, goldenString);
 	assert(0 == res);
 	fclose(FB);
@@ -90,6 +90,9 @@ void matchargs (void) {
 	objNewSymbol((Str)"r", 1);
 	assert(r0 == r2);
 
+	yy_scan_string ((Str)"(())"); yyparse();
+	assert(matchArgumentList());
+
 	yy_scan_string ((Str)"1"); yyparse();
 	assert(matchArgumentList());
 
@@ -115,37 +118,32 @@ void matchargs (void) {
 /* Verify a lambda expressions can be parsed and errors detected
 */
 void matchlambda (void) {
-	yy_scan_string ((Str)"(())"); yyparse();
+	yy_scan_string ((Str)"(())"); yyparse(); rexpr=r0;
 
-	assert(compParseLambda()); // r1=(()) r2=() r3=() r4=()
-sysDisplay(r1, stderr);
-sysDisplay(r2, stderr);
-sysDisplay(r3, stderr);
-sysDisplay(r4, stderr);
-exit(0);
+	assert(!compParseLambda()); // r1=(()) r2=() r3=() r4=()
 	assert(null == car(r1));
 	assert(null == r2);
 	assert(null == r3);
 	assert(null == r4);
 
-	yy_scan_string ((Str)"(r b)"); yyparse();
-	assert(!compParseLambda()); // r1=() r2=r r3=() r4=b
-	                           assert(null == r1);
-	objNewSymbol((Str)"r", 1); assert(r0 == r2);
+	yy_scan_string ((Str)"(r b)"); yyparse(); rexpr=r0;
+	assert(!compParseLambda()); // r1=(r) r2=r r3=() r4=b
+	objNewSymbol((Str)"r", 1); assert(r0 == car(r1));
+	                           assert(r0 == r2);
 	                           assert(null == r3);
 	objNewSymbol((Str)"b", 1); assert(r0 == r4);
 
-	yy_scan_string ((Str)"((x) a b)"); yyparse();
+	yy_scan_string ((Str)"((x) a b)"); yyparse(); rexpr=r0;
 	assert(!compParseLambda()); // r1=(x) r2=() r3=(a) r4=b
 	objNewSymbol((Str)"x", 1); assert(r0 == car(r1));
 	                           assert(null == r2);
 	objNewSymbol((Str)"a", 1); assert(r0 == car(r3));
 	objNewSymbol((Str)"b", 1); assert(r0 == r4);
 
-	yy_scan_string ((Str)"((x) . b)"); yyparse();
+	yy_scan_string ((Str)"((x) . b)"); yyparse(); rexpr=r0;
 	assert(compParseLambda());
 
-	yy_scan_string ((Str)"((1) . 2)"); yyparse();
+	yy_scan_string ((Str)"((1) . 2)"); yyparse(); rexpr=r0;
 	assert(compParseLambda());
 }
 

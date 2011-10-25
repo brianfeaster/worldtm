@@ -429,6 +429,29 @@ void syscallSerializeDisplay (void) {
 		case TCHAR   : 
 			objNewString(r0, 1); /* Char objects live in static heap so address r0 won't change during a GC */
 			break;
+		case TPORT:
+		case TSOCKET:
+			if (memIsObjectType(memVectorObject(r0, 1), TINTEGER))
+				ret = sprintf((char*)buff, "#SOCKET/PORT<DESC:"NUM" ADDR:"NUM" PORT:"NUM,
+				   (Num)memVectorObject(r0, 0),
+				   *(Num*)memVectorObject(r0, 1),
+				   *(Num*)memVectorObject(r0, 2));
+			else
+				ret = sprintf((char*)buff, "#SOCKET/PORT<DESC:"NUM" ADDR:%.*s PORT:"NUM,
+				   (Num)memVectorObject(r0, 0),
+				   memObjectLength(memVectorObject(r0, 1)), (char*)memVectorObject(r0, 1),
+				   *(Num*)memVectorObject(r0, 2));
+			objNewString(buff, (Num)ret);
+/*
+			count += fprintf(stream, " STATE:");
+			count += sysWriteR(objPortState(a), 0, stream, max);
+			count += fprintf(stream, " NEXT:");
+			count += sysWriteR(memVectorObject(a, 4), 0, stream, max);
+			count += fprintf(stream, " FINALIZER:");
+			count += sysWriteR(memVectorObject(a, 5), 0, stream, max);
+			count += fprintf(stream, ">");
+*/
+			break;
 		default      :
 			ret = sprintf((char*)buff, HEX, (Num*)r0);
 			assert(0<ret);
@@ -826,7 +849,7 @@ void syscallOpenSocket (void) {
 	if (wscmAssertArgCountRange1To2(__func__)) goto ret;
 
 	if (1 == (Int)r1) {
-		r1 = vmPop();
+		r1 = vmPop(); /* Consider socket number */
 		if (wscmAssertArgType (TINTEGER, r1, 1, 1, __func__)) goto ret;
 		sysOpenLocalSocket(); /* pass in port via r1 */
 		if (memObjectType(r0) == TPORT) {

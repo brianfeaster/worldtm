@@ -3800,3 +3800,17 @@ Screen resolution (51 113)
 real    0m3.410s 0m3.438s 0m3.483s
 user    0m2.276s 0m2.260s 0m2.232s
 sys     0m1.017s 0m1.064s 0m1.037s
+
+
+
+Mon Oct 24 20:28:12 EDT 2011
+
+[ ] I think the lambda body compiler wastes time setting an empty rest arg after
+the closure is extended.
+
+[ ] compDefine doesn't catch exceptions yet.
+
+The world map agent when running will lose its REPL thread if an error occurs
+locally because I changed the repl function name to start-repl.  I did this to
+break up the monolithic REPL so that the loop was a simple lambda whos env was
+TGE.

@@ -314,7 +314,6 @@ void compTransformDefineFunction (void) {
 	DBE objDump(rexpr, stderr);
 }
 
-
 /* Transform expr:((a b) (define x q) (define y r) body)
        => rexpr:((a b)((lambda (x y) (set! x q) (set! y r) body) () ()))
 */
@@ -441,7 +440,7 @@ void compTransformLet (void) {
 
 */
 Num matchArgumentList (void) {
- Num count=0;
+ Num count=0, err=0;
 
 	/* Push all args except dotted */
 	while (objIsPair(r0)) {
@@ -450,22 +449,22 @@ Num matchArgumentList (void) {
 		r0 = cdr(r0);
 	}
 
-	r2 = r0; /* r2 gets the dotted arg */
+	/* r2 gets the dotted formal.  Error if not a symbol nor null */
+	r2 = r0;
+	err = (!objIsSymbol(r2) && null != r2);
 
 	/* Include the dotted arg in the args list */
-	vmPush(r2);
-	++count;
+	r1 = objCons(r2, null);
 
 	/* r1 gets a new arg list */
-	for (r1 = null ; count-- ; ) {
+	while (count--) {
 		r0 = vmPop();
-		/* Replace r2 with last non symbol as an error */
-		if (!objIsSymbol(r0)) { r2 = r0; }
+		/* Replace r2 with last invalid variable as an error */
+		if (!objIsSymbol(r0)) { r2 = r0;  err=1; }
 		objCons101(); /* r1 <= (cons r0 r1) */
 	}
 
-	/* Return 1/error if r2 contains a non symbol, 0 if successful */
-	return (!objIsSymbol(r2) && null != r2);
+	return err;
 }
 
 
@@ -523,7 +522,7 @@ Num compParseLambda (void) {
 	r0 = car(r0);
 	if (matchArgumentList()) {
 		vmPop(); /* Pop arg-list */
-		return 1; /* r1 contains bad argument for error reporting */
+		return 1; /* r2 contains bad argument for error reporting */
 	}
 
 	/* Consider and parse body into r3 and r4 */
@@ -531,6 +530,34 @@ Num compParseLambda (void) {
 	if (matchBody()) {
 		return 2; /* r4 contains bad tail for error reporting */
 	}
+
+	return 0;
+}
+
+/* Parse a define expression
+  rexpr <= define expression's body
+         => r1 formal argument symbol
+         => r2 expression
+  return => 0 success, 1 empty syntax error, 2 illegal formal, 3 illegal expression
+*/
+Num compParseDefine (void) {
+	r0 = rexpr;
+
+	/* Empty */
+	if (!objIsPair(r0)) return 1;
+
+	/* If an operand list, then the expression is of the form ((...) body), so transform */
+	if (objIsPair(car(r0))) compTransformDefineFunction();
+
+	r1 = car(r0); /* Consider variable */
+
+	/* Empty */
+	if (!objIsSymbol(r1)) return 2;
+
+	r0 = cdr(r0);
+	if (objIsPair(r0)) r2 = car(r0);
+	else if (null == r0) r2 = null;
+	else return 3;
 
 	return 0;
 }
@@ -1090,10 +1117,9 @@ ret:
 }
 
 
-/* Create a new code block that handles
-   a call to a closures function.  The code assumes the closure is in r0.
-   A closure is a pair (code . environment) containing the code itself
-   and the closure's lexical environment.
+/* Create a new code block that handles a call to a closures function.  The
+   code assumes the closure is in r0.  A closure is a pair (code . environment)
+   containing the code itself and the closure's lexical environment.
 
     r1 <= normalized args
     r2 <= dotted arg
@@ -1233,7 +1259,7 @@ void compLambdaBody (Num flags) {
 
 	/* Compile lambda statements body split into r3/but-last and r4/last */
 
-	if (r4 == null) {
+	if (r4 == null) { /* TAIL expression */
 		/* An empty lambda body will return null.  Not to r5rs spec which requires
 			one or more expressions */
 		DB("Empty function body.");
@@ -1242,13 +1268,12 @@ void compLambdaBody (Num flags) {
 		/* Transform internal definitions, if any, and body into equivalent expanded
 		   letrec and body, ie:(((lambda (f) (set! f ...) body) () () ...)) */
 
-		vmPush(r4); /* Save TAIL */
+		vmPush(r4); /* Save TAIL since compcompileexpr is called again */
 
-		while (objIsPair(r3)) {
+		while (objIsPair(r3)) { /* Loop over body expressoins */
 			DB("Lambda body non-tail expression");
 			vmPush(cdr(r3)); /* Push REST */
-			/* Compile expression */
-			rexpr = car(r3);
+			rexpr = car(r3); /* Consider xpression and compile */
 			compCompileExpr((flags & ~CCTAILCALL) | CCNODEFINES);
 			r3 = vmPop(); /* Restore REST */
 			if (compIsError()) {
@@ -1258,18 +1283,18 @@ void compLambdaBody (Num flags) {
 		}
 
 		DB("Lambda body tail expression");
-		rexpr = vmPop(); /* Restore LAST */
+		rexpr = vmPop(); /* Restore TAIL expression */
 		compCompileExpr(flags | CCTAILCALL | CCNODEFINES);
 	}
 
 end:
 	if (compIsError()) {
-		/* An error occured while compiling the lambda's body so
-		   the current assembler context can be abandoned */
+		/* An error occured while compiling the lambda's body so the
+		   current assemblyer context must be explicitly abandoned */
 		asmReset();
 	} else {
-		/* Successfull compilation of lambda body so continue to
-		   assemble igraph which also restores previous ASM context */
+		/* Successfull compilation of lambda body so continue to assemble
+		   igraph which also restores previous assembler context */
 		asmAsm(RET);
 		asmAssemble();
 	}
@@ -1286,7 +1311,7 @@ void compLambda (Num flags) {
 
 	rexpr = cdr(rexpr); /* Skip lambda */
 
-	/* Rewrite lambda expression if it contains internal definitions */
+	/* Rewrite lambda's body if it contains internal definitions */
 	compTransformInternalDefinitions();
 
 	/* Parse lambda expression and check for syntax errors */
@@ -1361,49 +1386,57 @@ ret:
 }
 
 
+/* Define can be (define var expr) or (define (var args) expr)
+   the latter is transformed to the former
+*/
 void compDefine (Num flags) {
+ Num ret;
 	DBBEG();
+
 	if (flags & CCNODEFINES) {
 		compErrorRaise((Str)"Illegally placed 'define' statement");
-	} else {
-		rexpr = cdr(rexpr); /* Skip 'define symbol. */
-
-		vmPush(renv);
-		renv = rtge;
-
-		/* If the expression is of the form ((...) body) transform. */
-		if (objIsPair(car(rexpr))) {
-			compTransformDefineFunction();
-			rexpr = r0;
-		}
-
-		if (memIsObjectType(r1=car(rexpr), TSYMBOL)) {
-			/* Bind (if not already bound) the symbol and get its binding. */
-			sysTGEBind();
-			/* Emit code to set the binding's value. */
-			rexpr = cdr(rexpr);
-			if (objIsPair(rexpr)) {
-				vmPush(r0); /* Save binding. */
-				rexpr = car(rexpr); /* Consider this definition's expression and compile. */
-
-				/* Call complambda directly if possible.  This This avoids tainting the
-				   sub-expression stack with the transformed s-expression. */
-				if (compMatchLambda()) compLambda(flags & ~CCTAILCALL);
-				else compCompileExpr(flags & ~CCTAILCALL);
-
-				asmAsm(
-					MVI, R1, vmPop(), /* Load r1 with saved binding. */
-					STI, R0, R1, 0L   /* Set binding's value. */
-				);
-			} else {
-				fprintf(stderr, "ERROR: compDefine(): Missing expression.");
-			}
-		} else  {
-			fprintf(stderr, "ERROR: compDefine(): Not a symbol:"); objDump(r1, stderr);
-		}
-
-		renv = vmPop();
+		goto ret;
 	}
+
+	rexpr = cdr(rexpr); /* Skip 'define' symbol */
+
+	ret = compParseDefine();
+	if (2 == ret) {
+		compPushSubExpr(r1);
+		compErrorRaise((Str)"Syntax error 'define' invalid variable");
+		compPopSubExpr();
+		goto ret;
+	} else if (ret) {
+		compErrorRaise((Str)"Syntax error 'define'");
+		goto ret;
+	}
+	/* r1 has VARIABLE  r2 has transformed EXPRESSION */
+
+	vmPush(renv); /* Save current env */
+	renv = rtge; /* Define is always "evaluated" in the top level environment */
+
+	vmPush(r2); /* Save EXPRESSION */
+
+	/* Bind (if not already bound) the symbol and get its binding. */
+	sysTGEBind(); /* Return TGE binding in r0 */
+
+	/* Emit code to set the binding's value. */
+
+	rexpr = vmPop(); /* Restore EXPRESSION */
+	vmPush(r0); /* Save binding for inclusion in emitted code */
+	/* Compile EXPRESSION.  Call complambda directly if possible.  This This avoids tainting the
+	   sub-expression stack with the transformed s-expression. */
+	if (compMatchLambda()) compLambda(flags & ~CCTAILCALL);
+	else compCompileExpr(flags & ~CCTAILCALL);
+
+	asmAsm(
+		MVI, R1, vmPop(), /* Load r1 with saved binding. */
+		STI, R0, R1, 0L   /* Set binding's value. */
+	);
+
+	renv = vmPop(); /* Restore original env */
+
+ret:
 	DBEND(STR, compIsError()?" *ERROR*":"");
 }
 
@@ -1946,7 +1979,7 @@ void compLet (Num flags) {
 		compTransformLet();      /* Transform let form (let (...) ...). */
 
 	/* Compile the transformed form by calling compcombination directly since
-	   it will alwys be a closure combintation. This avoids tainting the sub
+	   it will alwys be a closure combination. This avoids tainting the sub
 	   expression stack with the transformed s-expression. */
 	compCombination(flags);
 
@@ -2274,9 +2307,9 @@ void compCombination (Num flags) {
 
 	r1 = vmPop(); /* Restore OPERATOR */
 
-	/* Check combintation is syntatically correct (not a malformed dotted list) */
+	/* Check combination is syntatically correct (not a malformed dotted list) */
 	if (null != rexpr) {
-		compErrorRaise((Str)"Syntax error combintation");
+		compErrorRaise((Str)"Syntax error combination");
 		goto ret;
 	}
 

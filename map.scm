@@ -442,4 +442,5 @@
         (eval e))
      (~))))
 
-(repl) ; Start up a REPL loop for fun
+; Start up a REPL loop for fun
+(repl "Welcome to \e[1;31mW\e[33mO\e[32mR\e[34mL\e[35mD\e[01;m's map agent console\e[?25l")

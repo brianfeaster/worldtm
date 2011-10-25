@@ -533,12 +533,12 @@
 
 ; The read eval print loop along with an error/exception handler.
 (define repl-input ())
-(define (repl)
+(define (replloop)
   (display "\nwscm>")
   (set! repl-input (read stdin))
   (display (eval repl-input))
-  (or (eof-object? repl-input) (repl)))
-(define (start-repl . WELCOME)
+  (or (eof-object? repl-input) (replloop)))
+(define (repl . WELCOME)
   (set! WELCOME (if (null? WELCOME) "World Scheme" (car WELCOME)))
   (let ((msg (call/cc (lambda (c) (vector-set! ERRORS (tid) c) WELCOME))))
     ; An exception during the REPL returns to this
@@ -549,7 +549,7 @@
             (for-each (lambda (e) (displayl "\nREPL-ERROR::" e))
                       msg)
             (display msg))))
-  (repl))
+  (replloop))
 
 
 (define (signal-set num func)
@@ -562,4 +562,4 @@
 (if (and (> (vector-length argv) 1)
          (not (string=? "-" (vector-ref argv 1))))
  (load (vector-ref argv 1))
- (start-repl "Welcome to \e[1;31mW\e[33mO\e[32mR\e[34mL\e[35mD\e[01;m.\e[?25l"))
+ (repl "Welcome to \e[1;31mW\e[33mO\e[32mR\e[34mL\e[35mD\e[01;m.\e[?25l"))
