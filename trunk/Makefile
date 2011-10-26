@@ -1,6 +1,6 @@
 # Makefile for Wscheme.  It's simple.
 
-CFLAGS = -Wall -ggdb -march=native -Wconversion -Wno-trigraphs -Wno-format
+CFLAGS = -Wall -ggdb -march=native -Wconversion -Wno-trigraphs -Wno-format -O3
 # -march=native     GCC can figure out the best optimization switches
 # -Wall             Many warnings.
 # -Wno-format       Disable the annoying printf warnings.
