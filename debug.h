@@ -22,13 +22,11 @@
 #define BCYN  "\e[0;1;36m"
 #define BWHT  "\e[0;1;37m"
 
-static unsigned DBTab=0;
-#define DBSPACES "                                                                                "
-#define DBSPCLEN ((sizeof(DBSPACES)-1)/2)
+static unsigned DBT=0;
 
-#define DBBEG(FMT,...) if(DEBUG)fprintf(stderr,"\n"DB_DESC"%s::%s"FMT,DBSPACES+2*(DBSPCLEN-(++DBTab>DBSPCLEN?DBSPCLEN:DBTab-1)),__func__,##__VA_ARGS__)
-#define    DB(FMT,...) if(DEBUG)fprintf(stderr,"\n"DB_DESC"%s"    FMT,DBSPACES+2*(DBSPCLEN-(  DBTab>DBSPCLEN?DBSPCLEN:DBTab  )),         ##__VA_ARGS__)
-#define DBEND(FMT,...) if(DEBUG)fprintf(stderr,"\n"DB_DESC"%s--%s"FMT,DBSPACES+2*(DBSPCLEN-(DBTab-->DBSPCLEN?DBSPCLEN:DBTab+1)),__func__,##__VA_ARGS__)
+#define DBBEG(FMT,...) if(DEBUG)fprintf(stderr,"\n"DB_DESC"%*s::%s"FMT,DBT++*2,"",__func__,##__VA_ARGS__)
+#define    DB(FMT,...) if(DEBUG)fprintf(stderr,"\n"DB_DESC"%*s"    FMT,  DBT*2,"",         ##__VA_ARGS__)
+#define DBEND(FMT,...) if(DEBUG)fprintf(stderr,"\n"DB_DESC"%*s--%s"FMT,DBT--*2,"",__func__,##__VA_ARGS__)
 
 #define DBE if(DEBUG)
 

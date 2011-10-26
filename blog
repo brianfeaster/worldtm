@@ -3808,9 +3808,34 @@ Mon Oct 24 20:28:12 EDT 2011
 [ ] I think the lambda body compiler wastes time setting an empty rest arg after
 the closure is extended.
 
-[ ] compDefine doesn't catch exceptions yet.
+[X] compDefine doesn't catch exceptions yet.
 
 The world map agent when running will lose its REPL thread if an error occurs
 locally because I changed the repl function name to start-repl.  I did this to
 break up the monolithic REPL so that the loop was a simple lambda whos env was
 TGE.
+
+
+
+Tue Oct 25 20:19:41 EDT 2011
+
+[ ] If a macro is is generated and memoized and then evaluated, it can be
+mutated which would mutate the internal copy that is compiled and evaluated
+each time the macro is applied.  This is a big issue.  The only way around this
+is to completely reparse/transform the expression before compilation.
+Especially with the macro statement.
+
+wscm>(define s '(macro () 10))
+wscm>(define m (eval s))
+wscm>(m)
+10
+wscm>(set-car! (cddr s) 11)
+(11)
+wscm>(m)
+11
+
+[ ] It's illegal for a formals list to contain the same variable
+
+So all is fine and dandy with parsing and expression transformations during
+compilation but macros delay compilation and so syntatic checks won't happen
+until the macro is called.

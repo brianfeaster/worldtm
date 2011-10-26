@@ -117,7 +117,7 @@ void compSyscallTGELookup (void) {
 		compSyscallError();
 	} else {
 		DB("found in tge @ opcode "HEX, (Num)rip-4);
-		/* Specialization optimization.  Muate code that originally called
+		/* Specialization optimization.  Mutate code that originally called
 		   this function into a code that references the binding's value. */
 		memVectorSet(rcode, (Num)rip-4, vmMVI0);  memVectorSet(rcode, (Num)rip-3, r0);
 		memVectorSet(rcode, (Num)rip-2, vmLDI00); memVectorSet(rcode, (Num)rip-1, 0);
@@ -286,6 +286,7 @@ ret:
 	return ret;
 }
 
+
 /* Verify rexpr contains a (lambda ... ...) s-expression
 */
 Num compMatchLambda (void) {
@@ -294,8 +295,9 @@ Num compMatchLambda (void) {
 	return 1;
 }
 
-/* Transform expr:((fn formals) body) into the form
-   r0:(fn (lambda formals body)).  No syntic error checking is performed
+
+/* Transform expr:((var formals) body) into the form
+   r0:(var (lambda formals body)).  No syntic error checking is performed
    yet.  Would rather implement a macro transformation facility.
 */
 void compTransformDefineFunction (void) {
@@ -314,11 +316,44 @@ void compTransformDefineFunction (void) {
 	DBE objDump(rexpr, stderr);
 }
 
-/* Transform expr:((a b) (define x q) (define y r) body)
-       => rexpr:((a b)((lambda (x y) (set! x q) (set! y r) body) () ()))
+
+/* Parse and transform define expression
+  rexpr <= define expression's body (var expr) or ((var . formals) exp)
+         => r1 formal argument symbol
+         => r2 expression
+  return => 0 success, 1 empty syntax error, 2 illegal formal, 3 illegal expression
 */
-void compTransformInternalDefinitions(void) {
- Int definitionsCount=0;
+Num compParseTransformDefine (void) {
+	r0 = rexpr;
+
+	/* Empty */
+	if (!objIsPair(r0)) return 1;
+
+	/* If a formals list, then the expression is of the form ((...) body), so transform */
+	if (objIsPair(car(r0))) compTransformDefineFunction();
+
+	r1 = car(r0); /* Consider variable */
+
+	/* Empty */
+	if (!objIsSymbol(r1)) return 2;
+
+	r0 = cdr(r0);
+	if (objIsPair(r0)) r2 = car(r0);
+	else if (null == r0) r2 = null;
+	else return 3;
+
+	return 0;
+}
+
+
+/* Transform internal definitions
+    expr <=  ((a b) (define x q) (define y r) body)
+       r0 => ((a b) ((lambda (x y) (set! x q) (set! y r) body) () ()))
+             or bad define statement if an error occured
+   return => 1 if syntax error, 0 success
+*/
+Num compTransformInternalDefinitions (void) {
+ Num ret=0, definitionsCount=0;
 	DBBEG();
 
 	vmPush(car(rexpr)); /* Push arg-list */
@@ -326,17 +361,27 @@ void compTransformInternalDefinitions(void) {
 
 	/* Save lambda body. */
 	while (objIsPair(rexpr) && objIsPair(car(rexpr)) && sdefine == caar(rexpr)) {
-		vmPush(cdr(rexpr));
-		rexpr = cdar(rexpr); // Consider next expression and skip 'define.
-		if (objIsPair(car(rexpr))) {
-			compTransformDefineFunction(); // Returns (fn (lambda formals body))
-		} else {
-			r0=rexpr;
-		}
-		rexpr = vmPop();
-		vmPush(r0);
 		definitionsCount++;
+		vmPush(cdr(rexpr)); /* Push rest */
+
+		vmPush(car(rexpr)); /* Push NEXT (in case of error messages) */
+
+		rexpr = cdar(rexpr); /* Consider next, skipping 'define' symbol */
+		ret = compParseTransformDefine(); /* Returns r1=variable  r2=expression */
+
+		if (ret) {
+			r0 = vmPop(); /* Return NEXT, the offending define statement */
+			while (definitionsCount--) vmPop(); /* Pop pushed definitions */
+			vmPop(); /* Pop arg-list */
+			goto ret;
+		} else vmPop(); /* Pop NEXT */
+
+		rexpr = vmPop(); /* Restore rest (not needed) */
+
+		vmPush(objCons(r1, objCons(r2, null))); /* Push reparsed definition */
 	}
+
+	/* rexpr now the rest of the non internal definition statements */
 
 	/* expr is now pointing at body of function.  If there were any internal
 	   definitions, form an equivalent letrec expression. */
@@ -363,10 +408,11 @@ void compTransformInternalDefinitions(void) {
 	}
 	
 	r1=vmPop(); r2=rexpr;   objCons12(); /* Re-attach arg list */
-	rexpr=r0;
 
 	DBEND("  =>  ");
 	DBE objDump(rexpr, stdout);
+ret:
+	return ret;
 }
 
 void compTransformLet (void) {
@@ -501,7 +547,7 @@ Num matchBody (void) {
 }
 
 
-/* Parse a lambda expressioin.
+/* Parse and transform (internal definitions) lambda expressioin.
    rexpr <= lambda expression's list (arg-list body)
        r1 => args, ()
        r2 => dotted arg, (), invalid arg
@@ -509,12 +555,21 @@ Num matchBody (void) {
        r4 => body last, (), invalid dotted tail
    return => 0 success, 1 arg list syntax fail, 2 body syntax fail
 */
-Num compParseLambda (void) {
-
-	r0 = rexpr;
-
+Num compParseTransformProcedure (void) {
+ Num ret=0;
 	/* Empty */
-	if (!objIsPair(r0)) return 1;
+	if (!objIsPair(rexpr)) {
+		ret = 1;
+		goto reterror;
+	}
+
+	if (compTransformInternalDefinitions()) {
+		r4 = r0; /* r0 has malformed internal define statement */
+		ret = 3; /* Internal definitions malformed */
+		goto reterror;
+	}
+
+	/* r0 has new internal-defines-transformed lambda */
 
 	vmPush(cdr(r0)); /* Push body */
 
@@ -522,46 +577,35 @@ Num compParseLambda (void) {
 	r0 = car(r0);
 	if (matchArgumentList()) {
 		vmPop(); /* Pop arg-list */
-		return 1; /* r2 contains bad argument for error reporting */
+		ret = 1; /* r2 contains bad argument for error reporting */
+		goto reterror;
 	}
+
+	r0 = vmPop(); /* Restore body */
 
 	/* Consider and parse body into r3 and r4 */
-	r0 = vmPop();
 	if (matchBody()) {
-		return 2; /* r4 contains bad tail for error reporting */
+		ret = 2; /* r4 contains bad tail for error reporting */
+		goto reterror;
 	}
 
-	return 0;
+reterror:
+	if (ret) {
+		if (ret == 1) {
+			compPushSubExpr(r2);
+			compErrorRaise((Str)"Syntax error procedure args");
+		} else if (ret == 2) {
+			compPushSubExpr(r4);
+			compErrorRaise((Str)"Syntax error procedure body");
+		} else if (ret == 3) {
+			compPushSubExpr(r4);
+			compErrorRaise((Str)"Syntax error procedure internal definition");
+		} else assert(!"Unexpected parse procedure return value");
+		compPopSubExpr();
+	};
+
+	return ret;
 }
-
-/* Parse a define expression
-  rexpr <= define expression's body
-         => r1 formal argument symbol
-         => r2 expression
-  return => 0 success, 1 empty syntax error, 2 illegal formal, 3 illegal expression
-*/
-Num compParseDefine (void) {
-	r0 = rexpr;
-
-	/* Empty */
-	if (!objIsPair(r0)) return 1;
-
-	/* If an operand list, then the expression is of the form ((...) body), so transform */
-	if (objIsPair(car(r0))) compTransformDefineFunction();
-
-	r1 = car(r0); /* Consider variable */
-
-	/* Empty */
-	if (!objIsSymbol(r1)) return 2;
-
-	r0 = cdr(r0);
-	if (objIsPair(r0)) r2 = car(r0);
-	else if (null == r0) r2 = null;
-	else return 3;
-
-	return 0;
-}
-
 
 void compTransformNamedLet (void) {
  Num bindingLen, i;
@@ -1117,53 +1161,45 @@ ret:
 }
 
 
-/* Create a new code block that handles a call to a closures function.  The
-   code assumes the closure is in r0.  A closure is a pair (code . environment)
-   containing the code itself and the closure's lexical environment.
+/* Create a new code block that handles a call to a closures function
 
     r1 <= normalized args
     r2 <= dotted arg
     r3 <= body butlast
     r4 <= body last
- rexpr <= lambda statement's body
   renv <= pseudo env
-     r0 => code block
+     r0 => code object
 
-	Emitted code assumes the caller's code sets up the stack with all evaluated
-   arguments pushed with r1 containing the arg count.  The count includes
-   arguments to be grouped into the dotted formal argument list.  An active
-   local environment is a vector: #(parent-env (x y rest-or-null) 1 2 (3 4 5))
+   Emitted code assumes stack contain its arguments and the count in R1.
+   The count includes dotted arguments that need grouping for the
+   dotted formal variable.  The code also assumes its containing closure
+   in r0 #(code lexical-environment) which it extends the environment with.
 
-    #(* (a ()) 42)
-      |
-      #(* (x . z) 1 2 3 4 5)
-        |
-        (TGE (square . #<closure>) (x . 5) (y . 9))
+    #(PARENT-ENV (a ()) 42)
+            |
+            #(PARENT-ENV (x r) 1 (2 3 4 5))
+                    |
+                    (TGE (square . #<closure>) (x . 5) (y . 9))
 */
 void compLambdaBody (Num flags) {
- Obj Lexpectednoargs, LkeepLexicalEnvironment, LnotEnoughArguments, LnormalFormals, LbuildRestList;
  Num nonDottedArgCount;
-
+ Obj Lexpectednoargs, LkeepLexicalEnvironment, LnotEnoughArguments, LnormalFormals, LbuildRestList;
 	DBBEG();
 
 	asmStart(); /* Creating a new code object so start a new sub-ASM context */
 
-	/* Emit code that extends stack-stored arguments (Free variables can be
-	   statically compiled?)
-	*/
-
 	if (null == car(r1)) {
 		/* Since a lambda with empty formals list, emit code which doesn't extend
 		   the environment but instead sets env to the containing closure's env
-		   or TGE if this is a top level definition (which will always be for 'lambda
-		   and not 'macro) */
+		   or TGE if this is a top level definition.  A closure representing a
+		   macro will have null as its environment value. */
 		if (renv == rtge) asmAsm(MV, RC, R8); /* env = tge */
 		else asmAsm(LDI, RC, R0, 1l);
 
 		Lexpectednoargs = asmNewLabel();
 		asmAsm (
 			BEQI, R1, 0, Lexpectednoargs,
-			MVI, R0, rsubexpr, /* Error situation.  Add sub s-expressions to stack Was MVI, R1, rsubexpr, PUSH, R1 */
+			MVI, R0, rsubexpr, /* Error situation.  Add sub s-expressions to stack S*/
 			SYSI, sysListToStack,
 			ADDI, R1, objListLength(rsubexpr), /* Add the number of sub-expressions just pushed */
 			MVI, R0, "Too many arguments to closure",
@@ -1174,9 +1210,10 @@ void compLambdaBody (Num flags) {
 		/* Emit code that extends the environment.  Pops the top most arguments
 		   into a list for the 'rest' formal parameter  (lambda (a b . rest)...).
 		   R3 contains the non-dotted formal parameter length (via the Normalize
-		   function above). */
+		   function above). (TODO Free variables can be statically compiled?) */
 
 		nonDottedArgCount = objListLength(r1) - 1;
+
 		/* Temporarily save lexical environment, from closure in r0, or tge, to r5.
 		   The stored environment might be null in which case keep track of
 		   the current/dynamic environment instead of the stored lexical.  Use
@@ -1190,7 +1227,7 @@ void compLambdaBody (Num flags) {
 		LnormalFormals = asmNewLabel();
 		asmAsm (
 			BNEI, R5, null, LkeepLexicalEnvironment,
-			MV, R5, RC,
+			MV, R5, RC, /* Must be a macro */
 		 LABEL, LkeepLexicalEnvironment,
 			MVI, R0, null, /* Initial formal argument 'rest' value (empty list). */
 			/* nonDottedArgCount is non-dotted formal argument length. */
@@ -1257,7 +1294,7 @@ void compLambdaBody (Num flags) {
 		asmAsm(MV, RC, R0);
 	}
 
-	/* Compile lambda statements body split into r3/but-last and r4/last */
+	/* Compile lambda statements body contained in r3/buttail and r4/tail */
 
 	if (r4 == null) { /* TAIL expression */
 		/* An empty lambda body will return null.  Not to r5rs spec which requires
@@ -1265,15 +1302,12 @@ void compLambdaBody (Num flags) {
 		DB("Empty function body.");
 		asmAsm(MVI, R0, null);
 	} else {
-		/* Transform internal definitions, if any, and body into equivalent expanded
-		   letrec and body, ie:(((lambda (f) (set! f ...) body) () () ...)) */
-
 		vmPush(r4); /* Save TAIL since compcompileexpr is called again */
 
 		while (objIsPair(r3)) { /* Loop over body expressoins */
 			DB("Lambda body non-tail expression");
 			vmPush(cdr(r3)); /* Push REST */
-			rexpr = car(r3); /* Consider xpression and compile */
+			rexpr = car(r3); /* Consider expression and compile */
 			compCompileExpr((flags & ~CCTAILCALL) | CCNODEFINES);
 			r3 = vmPop(); /* Restore REST */
 			if (compIsError()) {
@@ -1281,7 +1315,6 @@ void compLambdaBody (Num flags) {
 				goto end;
 			}
 		}
-
 		DB("Lambda body tail expression");
 		rexpr = vmPop(); /* Restore TAIL expression */
 		compCompileExpr(flags | CCTAILCALL | CCNODEFINES);
@@ -1305,40 +1338,25 @@ end:
 }
 
 void compLambda (Num flags) {
- Num ret;
 	DBBEG(" <= ");
 	DBE objDump(rexpr, stdout);
 
-	rexpr = cdr(rexpr); /* Skip lambda */
+	rexpr = cdr(rexpr); /* Skip 'lambda' */
 
-	/* Rewrite lambda's body if it contains internal definitions */
-	compTransformInternalDefinitions();
+	/* Parse lambda expression and check for syntax errors
+	   Gives:     r1=normalized args   r3=body butlast
+	              r2=dotted arg        r4=body last
+	              renv=pseudo env  */
+	if (compParseTransformProcedure()) goto ret;
 
-	/* Parse lambda expression and check for syntax errors */
-	ret = compParseLambda();
-	if (ret) {
-		if (ret == 1) {
-			compPushSubExpr(r2);
-			compErrorRaise((Str)"Syntax error 'lambda' args");
-		} else if (ret == 2) {
-			compPushSubExpr(r4);
-			compErrorRaise((Str)"Syntax error 'lambda' body");
-		} else
-			assert("!Unexpected parse lambda return value");
-		compPopSubExpr();
-		goto ret;
-	};
+	vmPush(renv); /* Save env since a temporary pseudo env might be created */
 
-	vmPush(renv); /* Save env. */
-
-	/* Extend a pseudo environment (parent . formals-list) only if formals
-	   list contains a parameter */
+	/* Create a temporary extended pseudo environment (parent . formals-list) only
+	   if the parsed formals list in r1 contains a parameter */
 	if (null != car(r1)) renv = objCons(renv, r1);
 
-	/* Now have:  r1=normalized args   r3=body butlast
-	              r2=dotted arg        r4=body last
-	              renv=pseudo env   rexpr=lambda expression's body*/
 	compLambdaBody(flags);
+
 	renv = vmPop(); /* Restore env */
 
 	if (compIsError()) goto ret;
@@ -1400,7 +1418,7 @@ void compDefine (Num flags) {
 
 	rexpr = cdr(rexpr); /* Skip 'define' symbol */
 
-	ret = compParseDefine();
+	ret = compParseTransformDefine();
 	if (2 == ret) {
 		compPushSubExpr(r1);
 		compErrorRaise((Str)"Syntax error 'define' invalid variable");
@@ -2112,13 +2130,31 @@ ret:
 	DBEND(STR, compIsError()?" *ERROR*":"");
 }
 
+// Show when a macro is called
+//void myfun  (void) { fprintf(stderr, "."); }
+
 void compMacro (Num flags) {
 	DBBEG();
 
-	/* Transform (macro ... ...) => (lambda ... ...) assigned to r0 */
-	r1=slambda;  r2 = cdr(rexpr);  objCons12();
+	/* Parse lambda expression and check for syntax errors */
+	rexpr = cdr(rexpr); /* Skip 'macro' */
+
+	vmPush(rexpr); /* Save original macro expression */
+
+	if (compParseTransformProcedure()) {
+		vmPop(); /* Pop original macro expression */
+		goto ret;
+	}
+
+	/* r1 contains normalized formals and (r3 . (r4))  the body.  Hmmm */
+	/* Transform (macro ... ...) => (lambda . transformed-macro-body) assigned to r0 */
+
+	rexpr = vmPop(); /* Restore original macro expression...ignore all the parsing just done (for now) TODO */
+	r1=slambda;  r2 = rexpr;  objCons12();
+
 	asmStart();
 	asmAsm(
+		//SYSI, myfun,
 		PUSH, R1, /* Save the argument count in R1 */
 		MVI, R0, r0, /* The transformed (lambda ... ...) expression */
 		SYSI, compSyscallCompile,
@@ -2129,15 +2165,15 @@ void compMacro (Num flags) {
 		LDI, R2, R0, 0l, /* load r2 with code block and call it.  it will return a closure.  */
 		JMP, R2);
 	asmAssemble();
+	/* Sub ASM context ends */
 
 	/* Generate code that generates a closure.  Closure returned in r0 created
-	   from r1 (code) and r1c (current environment). */
+	   from r1 (code) and rc (current/dynamic environment). */
 	asmAsm(
 		MVI, R1, r0, /* Load r1 with code block just compiled. */
-		SYSI, sysNewClosure1Env, /* Create closure from r1 and env (rc) */
-		MVI, R2, null, /* Replace stored lexical environment with null so dynamic environment is used when applied */
+		SYSI, sysNewClosure1Env, /* Create closure from r1 and env (rc, which isn't used by the code block just generated) */
 		STI, R2, R0, 1l);
-
+ret:
 	DBEND(STR, compIsError()?" *ERROR*":"");
 }
 
@@ -2316,7 +2352,7 @@ void compCombination (Num flags) {
 	/* Consider and compile OPERATOR.  Call complambda directly if possible.This
 	   This avoids tainting the sub expression stack with the transformed
 	   s-expression. */
-	// TODO handle inlined lambda operators
+	// TODO handle inlined lambda expression operators
 	rexpr = r1;
 	if (compMatchLambda()) compLambda(flags & ~CCTAILCALL);
 	else compCompileExpr(flags & ~CCTAILCALL);

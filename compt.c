@@ -15,7 +15,8 @@ extern Obj rexpr;
 extern Num compParseOperands (Num count);
 extern void asmICodePushNewQUIT (void);
 extern Num matchArgumentList (void); 
-extern Num compParseLambda (void);
+extern Num compParseTransformProcedure (void);
+extern Num compParseTransformDefine (void);
 
 
 #define TEST(fn) (printf("Calling test: "#fn"()  "), fn(),printf("PASS\n"))
@@ -117,63 +118,38 @@ void matchargs (void) {
 
 /* Verify a lambda expressions can be parsed and errors detected
 */
-void matchlambda (void) {
+void parselambda (void) {
 	yy_scan_string ((Str)"(())"); yyparse(); rexpr=r0;
 
-	assert(!compParseLambda()); // r1=(()) r2=() r3=() r4=()
+	assert(!compParseTransformProcedure()); // r1=(()) r2=() r3=() r4=()
 	assert(null == car(r1));
 	assert(null == r2);
 	assert(null == r3);
 	assert(null == r4);
 
 	yy_scan_string ((Str)"(r b)"); yyparse(); rexpr=r0;
-	assert(!compParseLambda()); // r1=(r) r2=r r3=() r4=b
+	assert(!compParseTransformProcedure()); // r1=(r) r2=r r3=() r4=b
 	objNewSymbol((Str)"r", 1); assert(r0 == car(r1));
 	                           assert(r0 == r2);
 	                           assert(null == r3);
 	objNewSymbol((Str)"b", 1); assert(r0 == r4);
 
 	yy_scan_string ((Str)"((x) a b)"); yyparse(); rexpr=r0;
-	assert(!compParseLambda()); // r1=(x) r2=() r3=(a) r4=b
+	assert(!compParseTransformProcedure()); // r1=(x) r2=() r3=(a) r4=b
 	objNewSymbol((Str)"x", 1); assert(r0 == car(r1));
 	                           assert(null == r2);
 	objNewSymbol((Str)"a", 1); assert(r0 == car(r3));
 	objNewSymbol((Str)"b", 1); assert(r0 == r4);
 
+	/* Malformed lambda expression body */
+	compErrorReset();
 	yy_scan_string ((Str)"((x) . b)"); yyparse(); rexpr=r0;
-	assert(compParseLambda());
+	assert(compParseTransformProcedure());
 
+	/* Malformed lambda expression formals and body */
+	compErrorReset();
 	yy_scan_string ((Str)"((1) . 2)"); yyparse(); rexpr=r0;
-	assert(compParseLambda());
-}
-
-/* Verify a malformed lambda expression can be identified
-*/
-void lambdamalformed (void) {
-	FBInit();
-	yy_scan_string ((Str)"(lambda () . 1)"); yyparse(); compCompile();
-	FBFinalize("(Syntax error 'lambda' body 1 (lambda () . 1))");
-
-	FBInit();
-	yy_scan_string ((Str)"(lambda () 1 . 2)"); yyparse(); compCompile();
-	FBFinalize("(Syntax error 'lambda' body 2 (lambda () 1 . 2))");
-
-	FBInit();
-	yy_scan_string ((Str)"(lambda r . 1)"); yyparse(); compCompile();
-	FBFinalize("(Syntax error 'lambda' body 1 (lambda r . 1))");
-
-	FBInit();
-	yy_scan_string ((Str)"(lambda r 1 . 2)"); yyparse(); compCompile();
-	FBFinalize("(Syntax error 'lambda' body 2 (lambda r 1 . 2))");
-                 
-	FBInit();
-	yy_scan_string ((Str)"(lambda (x) . 1)"); yyparse(); compCompile();
-	FBFinalize("(Syntax error 'lambda' body 1 (lambda (x) . 1))");
-
-	FBInit();
-	yy_scan_string ((Str)"(lambda (x) 1 . 2)"); yyparse(); compCompile();
-	FBFinalize("(Syntax error 'lambda' body 2 (lambda (x) 1 . 2))");
-
+	assert(compParseTransformProcedure());
 }
 
 /* A C function to verify and parse an s-expression operands
@@ -247,9 +223,77 @@ void parseOperands (void) {
 }
 
 
+/* Verify a malformed lambda expression can be identified
+*/
+void lambdamalformed (void) {
+	FBInit();
+	yy_scan_string ((Str)"(lambda () . 1)"); yyparse(); compCompile();
+	FBFinalize("(Syntax error procedure body 1 (lambda () . 1))");
+
+	FBInit();
+	yy_scan_string ((Str)"(lambda () 1 . 2)"); yyparse(); compCompile();
+	FBFinalize("(Syntax error procedure body 2 (lambda () 1 . 2))");
+
+	FBInit();
+	yy_scan_string ((Str)"(lambda r . 1)"); yyparse(); compCompile();
+	FBFinalize("(Syntax error procedure body 1 (lambda r . 1))");
+
+	FBInit();
+	yy_scan_string ((Str)"(lambda r 1 . 2)"); yyparse(); compCompile();
+	FBFinalize("(Syntax error procedure body 2 (lambda r 1 . 2))");
+                 
+	FBInit();
+	yy_scan_string ((Str)"(lambda (x) . 1)"); yyparse(); compCompile();
+	FBFinalize("(Syntax error procedure body 1 (lambda (x) . 1))");
+
+	FBInit();
+	yy_scan_string ((Str)"(lambda (x) 1 . 2)"); yyparse(); compCompile();
+	FBFinalize("(Syntax error procedure body 2 (lambda (x) 1 . 2))");
+
+}
+
+
+void parseDefine (void) {
+	yy_scan_string ((Str)"(x 9)"); yyparse();  rexpr=r0;
+	assert(!compParseTransformDefine());
+	objNewSymbol((Str)"x", 1); assert(r0 == r1);
+	objNewInt(9); assert(r0 == r2); /* Works because integers are cached between +/- 1024 */
+
+	FBInit();
+	yy_scan_string ((Str)"((f) 9)"); yyparse();  rexpr=r0;
+	assert(!compParseTransformDefine());
+	objNewSymbol((Str)"f", 1); assert(r0 == r1);
+	sysDisplay(r2, FB);  FBFinalize("(lambda () 9)");
+
+	FBInit();
+	yy_scan_string ((Str)"((f g) 9 8)"); yyparse();  rexpr=r0;
+	assert(!compParseTransformDefine());
+	objNewSymbol((Str)"f", 1); assert(r0 == r1);
+	sysDisplay(r2, FB);  FBFinalize("(lambda (g) 9 8)");
+
+	FBInit();
+	yy_scan_string ((Str)"((f . a) 9)"); yyparse();  rexpr=r0;
+	assert(!compParseTransformDefine());
+	objNewSymbol((Str)"f", 1); assert(r0 == r1);
+	sysDisplay(r2, FB);  FBFinalize("(lambda a 9)");
+
+	FBInit();
+	yy_scan_string ((Str)"((f . a) 9)"); yyparse();  rexpr=r0;
+	assert(!compParseTransformDefine());
+	objNewSymbol((Str)"f", 1); assert(r0 == r1);
+	sysDisplay(r2, FB);  FBFinalize("(lambda a 9)");
+
+	FBInit();
+	yy_scan_string ((Str)"((f . a))"); yyparse();  rexpr=r0;
+	assert(!compParseTransformDefine());
+	objNewSymbol((Str)"f", 1); assert(r0 == r1);
+	sysDisplay(r2, FB);  FBFinalize("(lambda a)");
+}
+
+
 /* Verify a simple lambda expression compiles and evaluates
 */
-void simpleLambda (void) {
+void compilerunsimpleLambda (void) {
 
 	asmInit();
 	asmICodePushNewQUIT();
@@ -268,7 +312,7 @@ void simpleLambda (void) {
 }
 
 
-void aif (void) {
+void compilerunaif (void) {
 	asmInit();
 	asmICodePushNewQUIT();
 	asmICodePushNewQUIT();
@@ -286,7 +330,7 @@ void aif (void) {
 }
 
 
-void testif (void) {
+void compilerunif (void) {
 	asmInit();
 	asmICodePushNewQUIT();
 	asmICodePushNewQUIT();
@@ -390,12 +434,13 @@ int main (int argc, char *argv[]) {
 	assert(0 == memStackLength(rstack));
 
 	TEST(matchargs);
-	TEST(matchlambda);
-	TEST(lambdamalformed);
+	TEST(parselambda);
 	TEST(parseOperands);
-	TEST(simpleLambda);
-	TEST(aif);
-	TEST(testif);
+	TEST(lambdamalformed);
+	TEST(parseDefine);
+	TEST(compilerunsimpleLambda);
+	TEST(compilerunaif);
+	TEST(compilerunif);
 	TEST(errorcar);
 	TEST(errorbegincar);
 	TEST(errorconscarcarifcar);
