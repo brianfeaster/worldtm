@@ -1363,24 +1363,24 @@ void wscmSysTransition (void) {
 
 	/* Make the transition on char in r3 given state in r4. */
 	r4 = (Obj)transition(*(Num*)r3, (Num)r4);
-	DB("transition to state => "HEX, r4);
+	DB("transition() returned new state => "HEX, r4);
 
 	/* Append char to scanned token and inc yylen. */
 	*((u8*)r5+(Num)r6++) = *(u8*)r3;
 
 	/*  Reset yylen to 0 if we ever end up back to the initial state.*/
-	if ((Int)r4 == 0x00)
-		r6=0;
-	else if ((Int)r4 & FINALSTATE) {
+	if ((Num)r4 == 0x00l) {
+		r6 = 0l;
+	} else if ((Int)r4 & FINALSTATE) {
 		/* Push back character to stream if in pushback state and not eof. */
-		if (((Int)r4 & PUSHBACK) && (r3!=eof)) {
+		if (((Num)r4 & PUSHBACK) && (eof != r3)) {
 			r6--;
 			memVectorSet(r1, 4, memVectorObject(scharacters, *(Num*)r3));
 		}
-		r0=r4;
+		r0 = r4;
 	}
 
-	DBEND(" final state r0="HEX, r0);
+	DBEND(" final state r4="HEX"  r0="HEX, r4, r0);
 }
 
 
@@ -1397,6 +1397,8 @@ void wscmSysTransition (void) {
 	              use: r4
 	              out: r0 string
 */
+
+
 void wscmCreateRead (void) {
  Obj Lscan, Ldot, Leof, Lvector, Ldone, Lquote, Lunquotesplicing, Lunquote, Lquasiquote, Lopenparen, Lcharacter, Lsymbol, Lstring, Linteger, Lreal, Loct, Lhex, Lbinary, Lfalse, Ltrue, Ldefault, Lret;
 	DBBEG();
@@ -1425,8 +1427,6 @@ void wscmCreateRead (void) {
 	Ldefault = asmNewLabel();
 	Lret = asmNewLabel();
 	asmAsm (
-		//BRA, 8l,
-		//r0, /* Label */
 		MVI, R4, 0l,             /* r4 <- Initial state. */
 		MVI, R6, 0l,             /* r6 <- initial yylength. */
 	 LABEL, Lscan,
@@ -1755,8 +1755,8 @@ void wscmCreateRepl (void) {
 		PUSH, R0,
 		MVI, R1, 1l,
 		SYSI, syscallDisplay,
-		//RET,
-		SYSI, osUnthread
+		SYSI, osUnthread,
+		NOP /* TODO Need this to avoid assembler crash.  the SYSI call requires a next block */
 	);
 	asmAssemble();
 	r1=r0;
@@ -1889,10 +1889,10 @@ void wscmCReadEvalPrintLoop (void) {
 
 	/* Create a code block for the compiled code to return to */
 	asmInit();
-	asmAsm(QUIT, QUIT);
+	asmAsm(QUIT);
 	asmAssemble();
 	rretcode = r0;
-	rretip = 0;
+	rretip = (Obj)(-1 * 8);
 
 	while (!done) {
 		renv = rtge; /* Evaluate in TGE */
@@ -1911,7 +1911,7 @@ void wscmCReadEvalPrintLoop (void) {
 		if (false == r0) {
 			fprintf(stderr, "\n*Compile failed*");
 		} else {
-			vmDebugDumpCode(rcode, stderr);
+			//vmDebugDumpCode(rcode, stderr);
 			fprintf(stderr, "== Execute and return value =====\n");
 			if (false != r0) {
 				vmRun();
@@ -1960,6 +1960,8 @@ void wscmASMReadEvalPrintLoop (int argc, char *argv[]) {
 
 /* Uses legacy C-based parsing code to parse a string.  It's then compiled
    into a thread and the virtual machine started up.
+      ;(sdisplay wscmLoadExpr)\
+      ;(sdisplay \"\\n\")\
 */
 void wscmStringReadEvalPrintLoop (void) {
 	DBBEG();

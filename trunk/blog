@@ -3839,3 +3839,21 @@ wscm>(m)
 So all is fine and dandy with parsing and expression transformations during
 compilation but macros delay compilation and so syntatic checks won't happen
 until the macro is called.
+
+Inlined Lambda Operators
+
+Starts in compCombination.  Operands are currently compiled before the
+operator.  If the operator is obviously a lambda expression, it should be
+compiled along with the operands so the formals can be assigned as operands
+are evaluated.
+
+
+
+Thu Oct 27 15:50:12 EDT 2011
+
+[ ] The optimizer didn't know SYSI icodes could result in any register being
+mutated so it optimized out PUSH, SYSI, POP which was keeping track of register
+r4 during scanning.  The hack was to add SYSI to illegal instructions but what
+I need to do is have SYSI and SYS icodes be iblock delimiters.
+
+[ ] Add unit tests for the currently two assembly optimizers.

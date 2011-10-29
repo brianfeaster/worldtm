@@ -18,6 +18,7 @@ extern Num matchArgumentList (void);
 extern Num compParseTransformProcedure (void);
 extern Num compParseTransformDefine (void);
 
+Num compIsError (void);
 
 #define TEST(fn) (printf("Calling test: "#fn"()  "), fn(),printf("PASS\n"))
 
@@ -326,7 +327,7 @@ void compilerunaif (void) {
 	rcode=r0;
 	rip=0;
 	vmRun();
-	assert(9 == *(Int*)r0); /* The expression returns the number 99 */
+	assert(9 == *(Int*)r0); /* The expression returns the number 9 */
 }
 
 
@@ -421,7 +422,35 @@ void runtimeerrorcarcar (void) {
 	FBFinalize("(car expects pair for target 9 (car 9) (car (car 9)))");
 }
 
+extern Obj rcomperrortrace;
+extern Obj rcomperrormessage;
+void parsepushoperands (void) {
+ Num operandCount;
 
+	FBInit();
+	yy_scan_string ((Str)"((lambda 1))");  yyparse();  rexpr = r0;
+	compCompile();
+	assert(compIsError());
+	FBFinalize("(Syntax error procedure args 1 ((lambda 1)))");
+
+	renv = rtge;
+	FBInit();
+	yy_scan_string ((Str)"((lambda (x) x)z)");  yyparse();  rexpr = r0;
+	compCompile();
+	assert(!compIsError());
+	rcode = r0;
+	rip = 0;
+	vmRun();
+	FBFinalize("(Unbound symbol z)");
+
+	yy_scan_string ((Str)"((lambda (x) x)99)");  yyparse();  rexpr = r0;
+	compCompile();
+	assert(!compIsError());
+	rcode = r0;
+	rip = 0;
+	vmRun();
+	assert(*(Num*)r0 == 99l);
+}
 
 
 int main (int argc, char *argv[]) {
@@ -445,6 +474,7 @@ int main (int argc, char *argv[]) {
 	TEST(errorbegincar);
 	TEST(errorconscarcarifcar);
 	TEST(runtimeerrorcarcar);
+	TEST(parsepushoperands);
 
 	assert(0 == memStackLength(rstack));
 	return 0;

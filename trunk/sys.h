@@ -9,7 +9,7 @@ void sysNewClosure1Env (void);
 
 /* Scanner state fields */
 #define FINALSTATE  0x80l
-#define PUSHBACK    0x40
+#define PUSHBACK    0x40l
 
 /* Scanner final states including states requiring a character push-back */
 #define SOPENPAREN        FINALSTATE|0x00
