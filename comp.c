@@ -28,6 +28,11 @@ DESIGN
    Compiler error/exception handling handled by each sub-compiler.
 */
 
+/* Compiler flags
+*/
+static const Num CCTAILCALL  = (Num)0x00010000l;
+static const Num CCNODEFINES = (Num)0x00020000l;
+
 
 void compCompileExpr (Num flags);
 void compCombination (Num flags);
@@ -202,7 +207,8 @@ void compSyscallCompile (void) {
 	compErrorReset();
 	asmInit();
 	rexpr = r0;
-	compCompileExpr(0); /* Pass empty flags */
+	//compCompileExpr(0); /* Pass empty flags */
+	compCompileExpr(CCTAILCALL);
 	if (compIsError()) {
 		asmReset();
 		compThrowCompilerError();
@@ -765,11 +771,6 @@ void compTransformQuasiquote (int depth) {
 /*******************************************************************************
  Compilers
 *******************************************************************************/
-/* Compiler flags
-*/
-static const Num CCTAILCALL  = (Num)0x00010000;
-static const Num CCNODEFINES = (Num)0x00020000;
-
 
 /* Generate assembly which looks up value of symbol in a local or
    global environment and assigns to r0.  A symbol lookup will be:
@@ -794,7 +795,7 @@ void compSymbol (Num flags) {
 	if (ret) {
 		depth = ret >> 8;
 		offset = ret & 0xff;
-		DB("   found in a local environment depth:"NUM" offset:"NUM, depth, offset);
+		DB("Found in a local environment depth:"NUM" offset:"NUM, depth, offset);
 		/* Emit code that traverses the environment chain and references the proper binding. */
 		if (depth == 0) {
 			asmAsm(LDI, R0, RC, (Obj)offset);
@@ -807,12 +808,12 @@ void compSymbol (Num flags) {
 		/* Scan tge... */
 		sysTGEFind();
 		if (null == r0) {
-			DB("   can't find in TGE...maybe at runtime");
+			DB("Can't find in TGE...maybe at runtime");
 			asmAsm(
 				MVI, R1, rexpr,
 				SYSI, compSyscallTGELookup);
 		} else {
-			DB("   found in TGE");
+			DB("Found in TGE");
 			r3 = r0; /* Keep track of the symbol */
 			asmAsm(
 				MVI, R0, r3,
@@ -1183,7 +1184,7 @@ ret:
 */
 void compLambdaBody (Num flags) {
  Num nonDottedArgCount;
- Obj Lexpectednoargs, LkeepLexicalEnvironment, LnotEnoughArguments, LnormalFormals, LbuildRestList;
+ Obj Lexpectednoargs, LnotEnoughArguments, LnormalFormals, LbuildRestList;
 	DBBEG();
 
 	asmStart(); /* Creating a new code object so start a new sub-ASM context */
@@ -1191,10 +1192,9 @@ void compLambdaBody (Num flags) {
 	if (null == car(r1)) {
 		/* Since a lambda with empty formals list, emit code which doesn't extend
 		   the environment but instead sets env to the containing closure's env
-		   or TGE if this is a top level definition.  A closure representing a
-		   macro will have null as its environment value. */
+		   or TGE if this is a top level definition. */
 		if (renv == rtge) asmAsm(MV, RC, R8); /* env = tge */
-		else asmAsm(LDI, RC, R0, 1l);
+		else asmAsm(LDI, RC, R0, 1l); /* Since macro is always compiled before evaluation, this will be the dynamic environment */
 
 		Lexpectednoargs = asmNewLabel();
 		asmAsm (
@@ -1215,20 +1215,14 @@ void compLambdaBody (Num flags) {
 		nonDottedArgCount = objListLength(r1) - 1;
 
 		/* Temporarily save lexical environment, from closure in r0, or tge, to r5.
-		   The stored environment might be null in which case keep track of
-		   the current/dynamic environment instead of the stored lexical.  Use
-		   TGE when a top level definition.  See also the similar situation in this
-		   if block's true clause with the empty formals case. */
+		   Use TGE when a top level definition.  See also the similar situation in
+		   this if block's true clause with the empty formals case. */
 		if (car(renv) == rtge) asmAsm(MV, R5, R8);
-		else asmAsm(LDI, R5, R0, 1l);
+		else asmAsm(LDI, R5, R0, 1l);/* Since macro is always compiled before evaluation, this will be the dynamic environment */
 
-		LkeepLexicalEnvironment = asmNewLabel();
 		LnotEnoughArguments = asmNewLabel();
 		LnormalFormals = asmNewLabel();
 		asmAsm (
-			BNEI, R5, null, LkeepLexicalEnvironment,
-			MV, R5, RC, /* Must be a macro */
-		 LABEL, LkeepLexicalEnvironment,
 			MVI, R0, null, /* Initial formal argument 'rest' value (empty list). */
 			/* nonDottedArgCount is non-dotted formal argument length. */
 			BLTI, R1, nonDottedArgCount, LnotEnoughArguments,
@@ -1369,6 +1363,174 @@ void compLambda (Num flags) {
 	);
 ret:
 	DBEND(STR, compIsError()?" *ERROR*":"");
+}
+
+
+/* Expects the lambda expression operator and list of operands
+	 rexpr <= (lambda-expression  args  ...)
+*/
+void compLambdaInline (Num flags) {
+ Num operandCount=0, formalsCount, index=0, dottedLength, hasDotted=0;
+ Num isTailCall;
+	DBBEG();
+
+
+	isTailCall = (flags & CCTAILCALL);
+//fprintf(stderr, "[LambdaInline"NUM"]", isTailCall);
+
+	vmPush(renv); /* Save environment */
+	vmPush(rexpr); /* Save combination */
+
+	/* Verify operand list syntax */
+	r0 = cdr(rexpr); /* Skip operator, consider operands list */
+	while (objIsPair(r0)) { ++operandCount;  r0 = cdr(r0); }
+	if (null != r0) {
+		vmPop(); /* Pop combination */
+		goto ret;
+	}
+
+	rexpr = vmPop(); /* restore combination */
+
+	vmPush(cdr(rexpr)); /* Save operands */
+
+	rexpr = cdar(rexpr); /* Consider lambda's formals/body */
+	if (compParseTransformProcedure()) {
+		vmPop(); /* Pop operands */
+		goto ret;
+	}
+
+	rexpr = vmPop(); /* Pop operands */
+
+	/* rexpr = operands list
+	   r1 => args, ()
+      r2 => dotted arg, (), invalid arg
+      r3 => body butlast, ()
+      r4 => body last, (), invalid dotted tail */
+
+	/* Verify operand and formals counts */
+	formalsCount = objListLength(r1) - 1; /* Don't count dotted formal */
+	hasDotted = null != r2;
+	dottedLength = operandCount - formalsCount;
+
+	if (operandCount < formalsCount) {
+		compErrorRaise((Str)"Combination requires more operands");
+		goto ret;
+	}
+
+	if (formalsCount < operandCount && !hasDotted) {
+		compErrorRaise((Str)"Combination given excess operands");
+		goto ret;
+	}
+
+	/* Push body and tail */
+	vmPush(r4);
+	vmPush(r3);
+
+	/* Create extended environment and keep track of it while operands are evaluated
+		Emit code to set the environment's formal values as I compile */
+
+	if (formalsCount || hasDotted) {
+
+		/* Create and push a temporary extended pseudo environment (parent . formals-list)
+		   for compile time only there is an environment to extend */
+		vmPush(objCons(renv, r1)); /* Save environment */
+
+		asmAsm(
+			/* Create the local environment. R1 is the length of the vector.
+			   2 is added to account for the parent env and formals list */
+			MVI, R1, (Obj)((Num)formalsCount + (Num)hasDotted + 2l),
+			SYSI, objNewVector1, /* New vector in r0 of size imm:R1. */
+			MV, R5, RC,
+			STI, R5, R0, 0l, /* Set current env as parent link */
+			MVI, R5, r1, /* Set normalized formals list */
+			STI, R5, R0, 1l,
+			MV, R5, R0,
+			PUSH, R5
+		);
+
+		/* Compile each operand */
+		while (objIsPair(rexpr)) {
+			vmPush(cdr(rexpr)); /* Push rest */
+			rexpr = car(rexpr); /* Consider next operand */
+			compCompileExpr(flags & ~CCTAILCALL);
+			rexpr = vmPop(); /* Pop rest */
+
+			if (compIsError()) {
+				vmPop(); /* Pop body and tail */
+				vmPop();
+				goto ret;
+			}
+
+			if (index < formalsCount) {
+				asmAsm(
+					/* Set the formal's value in the new non-live extended environment */
+					POP, R5,
+					STI, R0, R5, (Obj)(index++ + 2l),
+					PUSH, R5
+				);
+			} else {
+				/* Save the operand's value for the dotted formal's value */
+				asmAsm(PUSH, R0);
+			}
+		}
+
+		/* Create dotted formal's value from pushed values */
+		if (hasDotted) {
+			asmAsm(
+				MVI, R0, null); /* Dotted formal will be null if no extra arguments are passed */
+			while (dottedLength--)
+				asmAsm(
+					POP, R1,
+					SYSI, objCons10
+				);
+			asmAsm(
+				POP, R5,
+				/* Set the dotted formal's value in the new non-live extended environment */
+				STI, R0, R5, (Obj)(index++ + 2l)
+			);
+		} else asmAsm(POP, R5);
+
+		if (!isTailCall) asmAsm(PUSH, RC);
+		asmAsm(MV, RC, R5); /* Set register to the newly created one */
+
+		renv = vmPop(); /* Restore pseudo extended environment */
+	}
+
+	/* Compile lambda statements body contained in r3/buttail and r4/tail */
+	r3 = vmPop();
+	r4 = vmPop();
+
+	if (r4 == null) { /* TAIL expression */
+		/* An empty lambda body will return null.  Not to r5rs spec which requires
+			one or more expressions */
+		DB("Empty function body.");
+		asmAsm(MVI, R0, null);
+	} else {
+		vmPush(r4); /* Save TAIL since compcompileexpr is called again */
+
+		while (objIsPair(r3)) { /* Loop over body expressoins */
+			DB("Lambda body non-tail expression");
+			vmPush(cdr(r3)); /* Push REST */
+			rexpr = car(r3); /* Consider expression and compile */
+			compCompileExpr((flags & ~CCTAILCALL) | CCNODEFINES);
+			r3 = vmPop(); /* Restore REST */
+			if (compIsError()) {
+				vmPop(); /* Restore TAIL */
+				goto ret;
+			}
+		}
+		DB("Lambda body tail expression");
+		rexpr = vmPop(); /* Restore TAIL expression */
+		compCompileExpr(flags | CCNODEFINES);
+	}
+
+	if (!isTailCall && (formalsCount || hasDotted)) {
+		asmAsm(POP, RC); /* Restore environment if one was extended */
+	}
+
+ret:
+	renv = vmPop(); /* Restore environment */
+	return;
 }
 
 
@@ -2222,7 +2384,9 @@ void compSyscallCreateContinuation (void) {
 	asmStart();
 	asmAsm(
 		MVI, R3, r0,  /* Copy of stack moved to r3 at runtime */
-		SYSI, (Obj)compSysReinstateContinuation);
+		SYSI, (Obj)compSysReinstateContinuation, /* This never returns */
+		RET
+	);
 	asmAssemble();
 	r1 = r0; /* Move new code block to r0 */
 
@@ -2297,7 +2461,7 @@ void compThread (Num flags) {
 	if (compIsError()) {
 		asmReset();
 	} else {
-		asmAsm(SYSI, osUnthread);
+		asmAsm(SYSI, osUnthread, RET); /* Need a RET so assembler creates a default iblock for the SYSI's iblock */
 		asmAssemble(); /* End this sub assembly context, with the new assembled code block in r0 */
 
 		asmAsm(
@@ -2311,57 +2475,66 @@ void compThread (Num flags) {
 
 
 /* Compile (OPERATOR OPERAND ...)
+   expr <= combination expression
 */
 void compCombination (Num flags) {
- Int operandCount=0;
+ Num operandCount=0;
 	DBBEG();
 
-	if (!((Num)flags & CCTAILCALL)) {
-		asmAsm (
-			PUSH, RA, // ip
-			PUSH, RB, // code
-			PUSH, R9  // env
-		);
-	}
+	vmPush(rexpr); /* Save expression*/
+	rexpr = car(rexpr);
+	if (compMatchLambda()) {
+		/* This combination's operator is a lambda expression so compile the procedure's
+		   body inline with the current assembly context */
+		rexpr = vmPop(); /* Restore expression */
+		compLambdaInline(flags);
+	} else {
+		rexpr = vmPop(); /* Restore expression */
+		if (!(flags & CCTAILCALL)) {
+			asmAsm (
+				PUSH, RA, // ip
+				PUSH, RB, // code
+				PUSH, R9  // env
+			);
+		}
 
-	vmPush(car(rexpr)); /* Save OPERATOR */
+		vmPush(car(rexpr)); /* Save OPERATOR */
 
-	/* Compile (OPERAND . REST)*/
-	rexpr = cdr(rexpr);
-	while (objIsPair(rexpr)) {
-		operandCount++;
-		vmPush(cdr(rexpr)); /* Save REST */
-		rexpr = car(rexpr); /* Consider and compile OPERAND */
+		/* Compile (OPERAND . REST)*/
+		rexpr = cdr(rexpr);
+		while (objIsPair(rexpr)) {
+			operandCount++;
+			vmPush(cdr(rexpr)); /* Save REST */
+			rexpr = car(rexpr); /* Consider and compile OPERAND */
 
+			compCompileExpr(flags & ~CCTAILCALL);
+
+			asmAsm(PUSH, R0);
+			rexpr = vmPop(); /* Restore REST */
+
+			if (compIsError()) { vmPop(); goto ret; } /* Pop operator */
+		}
+
+		r1 = vmPop(); /* Restore OPERATOR */
+
+		/* Check combination is syntatically correct (not a malformed dotted list) */
+		if (null != rexpr) {
+			compErrorRaise((Str)"Syntax error combination");
+			goto ret;
+		}
+
+		/* Consider and compile OPERATOR.  Call complambda directly if possible.This
+	   	This avoids tainting the sub expression stack with the transformed
+	   	s-expression. */
+		rexpr = r1; /* Consider OPERATOR and compile */
 		compCompileExpr(flags & ~CCTAILCALL);
 
-		asmAsm(PUSH, R0);
-		rexpr = vmPop(); /* Restore REST */
+		if (compIsError()) goto ret;
 
-		if (compIsError()) { vmPop(); goto ret; } /* Pop operator */
+		/* Emit code that applys args to syscall/closure (hopefully) operator */
+		asmAsm (MVI, R1, operandCount); /* At runtime, r1 contains the stack argument count */
+		compAsmCombination(flags);
 	}
-
-	r1 = vmPop(); /* Restore OPERATOR */
-
-	/* Check combination is syntatically correct (not a malformed dotted list) */
-	if (null != rexpr) {
-		compErrorRaise((Str)"Syntax error combination");
-		goto ret;
-	}
-
-	/* Consider and compile OPERATOR.  Call complambda directly if possible.This
-	   This avoids tainting the sub expression stack with the transformed
-	   s-expression. */
-	// TODO handle inlined lambda expression operators
-	rexpr = r1;
-	if (compMatchLambda()) compLambda(flags & ~CCTAILCALL);
-	else compCompileExpr(flags & ~CCTAILCALL);
-
-	if (compIsError()) goto ret;
-
-	/* Emit code that applys args to syscall/closure (hopefully) operator */
-	asmAsm (MVI, R1, operandCount); /* At runtime, r1 contains the stack argument count */
-	compAsmCombination(flags);
 
 ret:
 	DBEND(STR, compIsError()?" *ERROR*":"");
@@ -2385,6 +2558,7 @@ void compCompileExpr (Num flags) {
 	DBBEG(" <= ");
 	DBE sysDisplay(rexpr, stderr);
 
+//fprintf(stderr, "[CompileExpr:"NUM"]", flags & CCTAILCALL);
 	compPushSubExpr(rexpr);
 
 	switch (memObjectType(rexpr)) {
@@ -2449,7 +2623,7 @@ void compCompile (void) {
 	compErrorReset();
 	asmInit();
 	rexpr = r0;
-	compCompileExpr(0);
+	compCompileExpr(CCTAILCALL);
 
 	if (compIsError()) {
 		asmReset();

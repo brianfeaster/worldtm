@@ -94,10 +94,10 @@ int main (void) {
 
 	/* Create a code block that will be returned to after a 'ret' call */
 	asmInit();
-	asmAsm(QUIT, QUIT);
+	asmAsm(QUIT);
 	asmAssemble();
 	rretcode = r0;
-	rretip = 0;
+	rretip = (Obj)(-1 * 8);
 
 	//yy_scan_string((Str)"(display (eval '(+ 1 2)))");
 	yy_scan_string((Str)"(let ~ ((i 0)(e 9000)) (display i) (display \"\\r\")(if (= i e) (display \"\n\") (~ (+ i 1) e)))");

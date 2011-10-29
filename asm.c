@@ -187,7 +187,7 @@ Num asmIBlockIsValid (Obj ib) {
 }
 
 
-/* Given an iblock ID, return the next valid iblock based on
+/* Given an iblock ID, return the next valid live iblock based on
    incrementing ID numbers.
 */
 Obj asmIBlockNextValid (Num id) {
@@ -354,6 +354,20 @@ Obj asmOpcodesNext (void) {
 Num icodeOffset=0;
 Num iblockOffset=0;
 
+/* Get number of iblocks in current context/frame
+*/
+Num asmIBlockFrameCount (void) {
+	return IBlockCount - iblockOffset;
+}
+
+/* Get iblocks indexed in current assembly context/frame
+*/
+Obj asmIBlockFrame (Num i) {
+	assert(i < asmIBlockFrameCount());
+	return asmIBlock(iblockOffset + i);
+}
+
+
 /* Begin a new ASM context saving the current context state on the stack
 */
 void asmStart (void) {
@@ -382,7 +396,7 @@ void asmEnd (void) {
 }
 
 
-/* Prepare aassembler for multiple calls to asmAsm()
+/* Prepare assembler for multiple calls to asmAsm()
 */
 void asmInit (void) {
 	DBBEG();
@@ -497,7 +511,7 @@ void asmAsmInternal (Obj f, ...) {
 			asmICodePushNewBLTI(r, i, l);
 			asmGenerateIBlockWithPushedIcodes();
 			asmIBlockDefaultTagSet(riblock, true); /* signal this block's default is the next one */
-			asmIBlockConditionalTagSet(riblock, l);  /* signal this block conditional is a label */
+			asmIBlockConditionalTagSet(riblock, l); /* signal this block conditional is a label */
 		} else if (BEQI == obj) {
 			r = asmOpcodesNext();
 			i = asmOpcodesNext();
@@ -506,7 +520,7 @@ void asmAsmInternal (Obj f, ...) {
 			asmICodePushNewBEQI(r, i, l);
 			asmGenerateIBlockWithPushedIcodes();
 			asmIBlockDefaultTagSet(riblock, true); /* signal this block's default is the next one */
-			asmIBlockConditionalTagSet(riblock, l);  /* signal this block conditional is a label */
+			asmIBlockConditionalTagSet(riblock, l); /* signal this block conditional is a label */
 		} else if (BNEI == obj) {
 			r = asmOpcodesNext();
 			i = asmOpcodesNext();
@@ -515,7 +529,7 @@ void asmAsmInternal (Obj f, ...) {
 			asmICodePushNewBNEI(r, i, l);
 			asmGenerateIBlockWithPushedIcodes();
 			asmIBlockDefaultTagSet(riblock, true); /* signal this block's default is the next one */
-			asmIBlockConditionalTagSet(riblock, l);  /* signal this block conditional is a label */
+			asmIBlockConditionalTagSet(riblock, l); /* signal this block conditional is a label */
 		} else if (BRTI == obj) {
 			r = asmOpcodesNext();
 			i = asmOpcodesNext();
@@ -524,7 +538,7 @@ void asmAsmInternal (Obj f, ...) {
 			asmICodePushNewBRTI(r, i, l);
 			asmGenerateIBlockWithPushedIcodes();
 			asmIBlockDefaultTagSet(riblock, true); /* signal this block's default is the next one */
-			asmIBlockConditionalTagSet(riblock, l);  /* signal this block conditional is a label */
+			asmIBlockConditionalTagSet(riblock, l); /* signal this block conditional is a label */
 		} else if (BNTI == obj) {
 			r = asmOpcodesNext();
 			i = asmOpcodesNext();
@@ -533,13 +547,13 @@ void asmAsmInternal (Obj f, ...) {
 			asmICodePushNewBNTI(r, i, l);
 			asmGenerateIBlockWithPushedIcodes();
 			asmIBlockDefaultTagSet(riblock, true); /* signal this block's default is the next one */
-			asmIBlockConditionalTagSet(riblock, l);  /* signal this block conditional is a label */
+			asmIBlockConditionalTagSet(riblock, l); /* signal this block conditional is a label */
 		} else if (BRA == obj) {
 			l = asmOpcodesNext();
 			DB("bra ["HEX"]", l);
 			//asmICodePushNewBRA(l);
 			asmGenerateIBlockWithPushedIcodes();
-			asmIBlockDefaultTagSet(riblock, l);  /* signal this block's default is a label */
+			asmIBlockDefaultTagSet(riblock, l); /* Set next block as the default */
 		} else if (JMP == obj) {
 			r = asmOpcodesNext();
 			DB("jmp ["HEX"]", r);
@@ -551,26 +565,32 @@ void asmAsmInternal (Obj f, ...) {
 			DB("jal ["HEX"]", r);
 			asmICodePushNewJAL(r);
 			asmGenerateIBlockWithPushedIcodes();
-			asmIBlockDefaultTagSet(riblock, true);  /* default block is next */
+			asmIBlockDefaultTagSet(riblock, true); /* Set next block as the default */
 		} else if (RET == obj) {
 			DB("ret []");
 			asmICodePushNewRET();
 			asmGenerateIBlockWithPushedIcodes();
-			// no default block after a ret
+			/* no default block after a ret */
 		} else if (SYS == obj) {
 			r = asmOpcodesNext();
 			DB("sys ["HEX"]",r);
 			asmICodePushNewSYS(r);
+			asmGenerateIBlockWithPushedIcodes();
+			asmIBlockDefaultTagSet(riblock, true); /* Set next block as the default */
 		} else if (SYSI == obj) {
 			o = asmOpcodesNext();
 			DB("sysi["HEX"]", o);
 			asmICodePushNewSYSI(o);
+			asmGenerateIBlockWithPushedIcodes();
+			asmIBlockDefaultTagSet(riblock, true); /* Set next block as the default */
 		} else if (NOP == obj) {
 			DB("nop[]");
 			asmICodePushNewNOP();
 		} else if (QUIT == obj) {
 			DB("quit[]");
 			asmICodePushNewQUIT();
+			asmGenerateIBlockWithPushedIcodes();
+			/* no default block after a QUIT */
 		} else if (LABEL == obj) {
 			l = asmOpcodesNext();
 			DB("label["HEX"]", l);
@@ -590,6 +610,7 @@ void asmAsmInternal (Obj f, ...) {
 //	asmDumpIBlocks();
 	DBEND("  ICodeCount "NUM"   IBlockCount "NUM, ICodeCount, IBlockCount);
 }
+
 
 
 
@@ -635,7 +656,7 @@ void asmEmitIblockOpcodes (void) {
 				               case (Num)R1 : asmEmitOpcode(vmMV01); break;
 				               case (Num)R3 : asmEmitOpcode(vmMV03); break;
 				               case (Num)R4 : asmEmitOpcode(vmMV04); break;
-				               case (Num)RE: asmEmitOpcode(vmMV0E); break;
+				               case (Num)RE : asmEmitOpcode(vmMV0E); break;
 				               default : assert(!"Unsuported icode MV $0 ??"); } break;
 				case (Num)R1 : switch ((Num)field2) {
 				               case (Num)R0 : asmEmitOpcode(vmMV10); break;
@@ -648,12 +669,13 @@ void asmEmitIblockOpcodes (void) {
 				               case (Num)R0 : asmEmitOpcode(vmMV30); break;
 				               default : assert(!"Unsuported icode MV $3 ??"); } break;
 				case (Num)R5 : switch ((Num)field2) {
-				               case (Num)R0  : asmEmitOpcode(vmMV50); break;
+				               case (Num)R0 : asmEmitOpcode(vmMV50); break;
 				               case (Num)R8 : asmEmitOpcode(vmMV58); break;
 				               case (Num)RC : asmEmitOpcode(vmMV5C); break;
 				               default : assert(!"Unsuported icode MV $5 ??"); } break;
 				case (Num)RC: switch ((Num)field2) {
-				               case (Num)R0  : asmEmitOpcode(vmMVC0); break;
+				               case (Num)R0 : asmEmitOpcode(vmMVC0); break;
+				               case (Num)R5 : asmEmitOpcode(vmMVC5); break;
 				               case (Num)R8 : asmEmitOpcode(vmMVC8); break;
 				               default : assert(!"Unsuported icode MV $C ??"); } break;
 				default : assert(!"Unsuported icode MV ?? reg"); }
@@ -667,6 +689,7 @@ void asmEmitIblockOpcodes (void) {
 				case (Num)R2 : asmEmitOpcode(vmMVI2); break;
 				case (Num)R3 : asmEmitOpcode(vmMVI3); break;
 				case (Num)R4 : asmEmitOpcode(vmMVI4); break;
+				case (Num)R5 : asmEmitOpcode(vmMVI5); break;
 				case (Num)R6 : asmEmitOpcode(vmMVI6); break;
 				case (Num)R7 : asmEmitOpcode(vmMVI7); break;
 				default : assert(!"Unsuported field MVI ?reg? imm"); }
@@ -718,6 +741,7 @@ void asmEmitIblockOpcodes (void) {
 			switch ((Num)field1) {
 				case (Num)R0 : switch ((Num)field2) {
 				               case (Num)R1 : asmEmitOpcode(vmSTI01); break;
+				               case (Num)R5: asmEmitOpcode(vmSTI05); break;
 				               case (Num)RC: asmEmitOpcode(vmSTI0C); break;
 				               default : assert(!"Unsuported field STI $0 ?reg? imm"); } break;
 				case (Num)R2 : switch ((Num)field2) {
@@ -752,10 +776,12 @@ void asmEmitIblockOpcodes (void) {
 				case (Num)R1 : asmEmitOpcode(vmPUSH1); break;
 				case (Num)R2 : asmEmitOpcode(vmPUSH2); break;
 				case (Num)R4 : asmEmitOpcode(vmPUSH4); break;
+				case (Num)R5 : asmEmitOpcode(vmPUSH5); break;
 				case (Num)R7 : asmEmitOpcode(vmPUSH7); break;
 				case (Num)R9: asmEmitOpcode(vmPUSH9); break;
 				case (Num)RA: asmEmitOpcode(vmPUSHA); break;
 				case (Num)RB: asmEmitOpcode(vmPUSHB); break;
+				case (Num)RC: asmEmitOpcode(vmPUSHC); break;
 				default : assert(!"Unsuported field PUSH ?reg?"); }
 			break;
 		case (Num)POP:
@@ -766,10 +792,12 @@ void asmEmitIblockOpcodes (void) {
 				case (Num)R2 : asmEmitOpcode(vmPOP2); break;
 				case (Num)R3 : asmEmitOpcode(vmPOP3); break;
 				case (Num)R4 : asmEmitOpcode(vmPOP4); break;
+				case (Num)R5 : asmEmitOpcode(vmPOP5); break;
 				case (Num)R7 : asmEmitOpcode(vmPOP7); break;
 				case (Num)R9: asmEmitOpcode(vmPOP9); break;
 				case (Num)RA: asmEmitOpcode(vmPOPA); break;
 				case (Num)RB: asmEmitOpcode(vmPOPB); break;
+				case (Num)RC: asmEmitOpcode(vmPOPC); break;
 				default : assert(!"Unsuported field POP ?reg?"); }
 			break;
 		case (Num)ADDI:
@@ -925,7 +953,7 @@ ret:
 	DBEND();
 }
 
-/* For every iblock in the igraph that has been tagged #t, icode is emitted
+/* For every live (tagged #t) iblock in the igraph, icode is emitted
    to the code object.  The iblock is tagged with its address in the code
    block.  The branch field for branch instruction are also stored so when
    the offset can be determined, the branch opcode's field can be set quickly.
@@ -937,8 +965,8 @@ ret:
 void asmPlaceAllIBlocks (void) {
  Num i;
 	DBBEG();
-	for (i=iblockOffset; i < IBlockCount; ++i) { // TODO use this asmIBlockNextValid()
-		riblock = asmIBlock(i); /* Consider iblock from vector of all iblocks */
+	for (i=0; i < asmIBlockFrameCount(); ++i) { // TODO use this asmIBlockNextValid()?
+		riblock = asmIBlockFrame(i); /* Consider iblock from vector of all iblocks */
 
 		/* This means the iblock is not connected to the igraph as it wasn't
 		   recursively found when counting the igraph fields */
@@ -975,7 +1003,7 @@ void asmResolveDefault (void) {
 		defBlock = memVectorObject(rcodenew, opcodeFieldAddr);
 		assert(false != defBlock);
 		defBlockAddr = asmIBlockTag(defBlock);
-		assert(true != defBlockAddr); /* If it wasn't placed, it would be tagged #t */
+		assert(true != defBlockAddr); /* If it wasn't placed, it wouldn't be tagged #t */
  		/* Set the jump-opcode's offset */
 		memVectorSet(rcodenew, opcodeFieldAddr, (Obj)(((Int)defBlockAddr-(Int)opcodeFieldAddr-1)*8));
 		asmIBlockDefaultTagSet(riblock, defBlock); /* Set default tag back to target iblock */
@@ -1014,9 +1042,8 @@ void asmResolveBranchOpcodeAddresses (void) {
  Num i;
 	DBBEG();
 	/* Resolve branch offsets for the current iblock segment */
-	for (i=iblockOffset; i < IBlockCount; ++i) {
-		riblock = asmIBlock(i); /* Consider iblock from vector of all iblocks */
-
+	for (i=0; i< asmIBlockFrameCount(); ++i) {
+		riblock = asmIBlockFrame(i); /* Consider iblock from vector of all iblocks */
 		/* This means the iblock is not connected to the igraph as it wasn't
 		   recursively found when counting the igraph fields */
 		if (false != asmIBlockTag(riblock)) {
@@ -1066,7 +1093,7 @@ void asmInitIBlockBranchTagsToIBlocks (Obj ib) {
 	DBBEG();
 	DBE asmDumpIBlock(ib);
 
-	r4 = ib; /* TODO this iblock being passed around in C land is incorrect.  Use a register instead. */
+	r4 = ib; /* Protect object reference from garbage collector */
 	tag = asmIBlockDefaultTag(r4);
 	if (false != tag) {
 		if (true == tag) {
@@ -1102,6 +1129,43 @@ void asmSetIBlockICodeToNOP (Obj ib, Num icidx) {
 /* riblock <= iblock
      start <= index
        reg <= register field
+ Look for "pop reg" icode in iblock in riblock starting at icode start,
+ skipping nop and instructions that don't use the same register.
+*/
+Num asmOptimizePeepHolePushPopFindMatchingPop(Num start, Obj reg) {
+ Obj ic;
+ Num i;
+ Obj field0, field1, field2, field3;
+
+	for (i=start; i<asmIBlockICodeLength(riblock); ++i) {
+
+		/* Consider next instruction and its fields */
+		ic = asmIBlockICode(riblock, i);
+		field0 = asmICodeField(ic, 0);
+		field1 = asmICodeField(ic, 1);
+		field2 = asmICodeField(ic, 2);
+		field3 = asmICodeField(ic, 3);
+
+		/* Found a matching push so stop looking and succeed passing index back */
+		if ((POP == field0) && (reg == field1))
+			return i;
+
+		/* Found an instruction that alters the stack so stop looking and fail*/
+		// TODO SYSI should delimt blocks
+		if ((PUSH == field0) || (POP == field0) || (SYSI == field0))
+			return 0;
+
+		/* Found instruction that requires register, stop looking and fail */
+		if ((reg == field1) || (reg == field2) || (reg == field3))
+			return 0;
+	}
+
+	return 0;
+}
+
+/* riblock <= iblock
+     start <= index
+       reg <= register field
  Look for "push reg" icode in iblock in riblock starting at icode start,
  skipping nop and instructions that don't use the same register.
 */
@@ -1124,7 +1188,8 @@ Num asmOptimizePeepHolePopPushFindMatchingPush(Num start, Obj reg) {
 			return i;
 
 		/* Found an instruction that alters the stack so stop looking and fail*/
-		if ((PUSH == field0) || (POP == field0))
+		// TODO SYSI should delimt blocks
+		if ((PUSH == field0) || (POP == field0) || (SYSI == field0))
 			return 0;
 
 		/* Found instruction that requires register, stop looking and fail */
@@ -1135,17 +1200,48 @@ Num asmOptimizePeepHolePopPushFindMatchingPush(Num start, Obj reg) {
 	return 0;
 }
 
-/* riblock <= iblock to optimize
+/* Two functions which optimize simple push/pop and pop/push redundant icodes in all active iblocks
+   riblock <= iblock to optimize
    return => optimization performed
 */
+void asmOptimizePeepHolePushPop(void) {
+ Obj ic;
+ Num idx, i, j;
+ Obj field0, field1;
+	DBBEG();
+	/* Consider every live iblock */
+	for (i=0; i< asmIBlockFrameCount(); ++i) {
+		riblock = asmIBlockFrame(i);
+		if (true == asmIBlockTag(riblock)) do {
+			idx = 0;
+			/* Over every POP instruction */
+			for (j=0; !idx && j<asmIBlockICodeLength(riblock); ++j) {
+				ic = asmIBlockICode(riblock, j);
+				field0 = asmICodeField(ic, 0); /* opcode */
+				field1 = asmICodeField(ic, 1); /* reg 0 */
+				if (PUSH == field0) {
+					/* Find a matching push that cancels this pop */
+					idx = asmOptimizePeepHolePushPopFindMatchingPop(j+1, field1);
+					if (idx) {
+						DB("Omitting "HEX" and "HEX, j, idx);
+						DBE asmDumpIBlock(riblock);
+						asmSetIBlockICodeToNOP(riblock, j);
+						asmSetIBlockICodeToNOP(riblock, idx);
+					}
+				}
+			}
+		} while (idx);
+	}
+	DBEND();
+}
 void asmOptimizePeepHolePopPush(void) {
  Obj ic;
  Num idx, i, j;
  Obj field0, field1;
 	DBBEG();
-	/* Consider every live iblock  TODO make iteration on igraph cleaner (and everywhere else) */
-	for (i = iblockOffset; i < IBlockCount; ++i) {
-		riblock = asmIBlock(i);
+	/* Consider every live iblock */
+	for (i=0; i< asmIBlockFrameCount(); ++i) {
+		riblock = asmIBlockFrame(i);
 		if (true == asmIBlockTag(riblock)) do {
 			idx = 0;
 			/* Over every POP instruction */
@@ -1214,9 +1310,9 @@ ret:
 void asmOptimizeEmptyIBlocks(void) {
  Num i;
 	DBBEG();
-	/* Consider every live iblock  TODO make iteration on igraph cleaner (and everywhere else) */
-	for (i = iblockOffset; i < IBlockCount; ++i) {
-		riblock = asmIBlock(i);
+	/* Consider every live iblock */
+	for (i=0; i< asmIBlockFrameCount(); ++i) {
+		riblock = asmIBlockFrame(i);
 		asmOptimizeEmptyIBlock();
 	}
 	DBEND();
@@ -1226,6 +1322,7 @@ void asmOptimizeEmptyIBlocks(void) {
 */
 void asmPeepHoleOptimization (void) {
 	DBBEG();
+	asmOptimizePeepHolePushPop();
 	asmOptimizePeepHolePopPush();
 	asmOptimizeEmptyIBlocks();
 	DBEND();
@@ -1257,8 +1354,8 @@ Num asmCountIGraphFields (void) {
  Obj ib, dib, icode, nextib;
  Num i, j, len=0;
 
-	for (i=iblockOffset; i < IBlockCount; ++i) {
-		ib = asmIBlock(i); /* Consider next iblock from vector of all iblocks */
+	for (i=0; i< asmIBlockFrameCount(); ++i) {
+		ib = asmIBlockFrame(i); /* Consider next iblock from vector of all iblocks */
 		/* Only live iblocks are emitted found when performing a recursive walk
 		   on the igraph and possibly removed during optimization */
 		if (true == asmIBlockTag(ib)) {

@@ -519,6 +519,7 @@ void opcodes (void) {
 	asmInit(); asmAsm(MV, R5, R8); asmAssemble(); assert(vmMV58 == memVectorObject(r0, 0));
 	asmInit(); asmAsm(MV, R5, RC); asmAssemble(); assert(vmMV5C == memVectorObject(r0, 0));
 	asmInit(); asmAsm(MV, RC, R0); asmAssemble(); assert(vmMVC0 == memVectorObject(r0, 0));
+	asmInit(); asmAsm(MV, RC, R5); asmAssemble(); assert(vmMVC5 == memVectorObject(r0, 0));
 	asmInit(); asmAsm(MV, RC, R8); asmAssemble(); assert(vmMVC8 == memVectorObject(r0, 0));
 
 	/* MVI */
@@ -527,6 +528,7 @@ void opcodes (void) {
 	asmInit(); asmAsm(MVI, R2, 97); asmAssemble(); assert(vmMVI2 == memVectorObject(r0, 0)); assert(97 == (Num)memVectorObject(r0, 1));
 	asmInit(); asmAsm(MVI, R3, 96); asmAssemble(); assert(vmMVI3 == memVectorObject(r0, 0)); assert(96 == (Num)memVectorObject(r0, 1));
 	asmInit(); asmAsm(MVI, R4, 95); asmAssemble(); assert(vmMVI4 == memVectorObject(r0, 0)); assert(95 == (Num)memVectorObject(r0, 1));
+	asmInit(); asmAsm(MVI, R5, 95); asmAssemble(); assert(vmMVI5 == memVectorObject(r0, 0)); assert(95 == (Num)memVectorObject(r0, 1));
 	asmInit(); asmAsm(MVI, R6, 94); asmAssemble(); assert(vmMVI6 == memVectorObject(r0, 0)); assert(94 == (Num)memVectorObject(r0, 1));
 	asmInit(); asmAsm(MVI, R7, 93); asmAssemble(); assert(vmMVI7 == memVectorObject(r0, 0)); assert(93 == (Num)memVectorObject(r0, 1));
 
@@ -546,6 +548,7 @@ void opcodes (void) {
 
 	/* STI */
 	asmInit(); asmAsm(STI, R0, R1, 99); asmAssemble(); assert(vmSTI01 == memVectorObject(r0, 0)); assert(99 == (Num)memVectorObject(r0, 1));
+	asmInit(); asmAsm(STI, R0, R5, 99); asmAssemble(); assert(vmSTI05 == memVectorObject(r0, 0)); assert(99 == (Num)memVectorObject(r0, 1));
 	asmInit(); asmAsm(STI, R0, RC, 98); asmAssemble(); assert(vmSTI0C == memVectorObject(r0, 0)); assert(98 == (Num)memVectorObject(r0, 1));
 	asmInit(); asmAsm(STI, R2, R0, 97); asmAssemble(); assert(vmSTI20 == memVectorObject(r0, 0)); assert(97 == (Num)memVectorObject(r0, 1));
 	asmInit(); asmAsm(STI, R2, R1, 96); asmAssemble(); assert(vmSTI21 == memVectorObject(r0, 0)); assert(96 == (Num)memVectorObject(r0, 1));
@@ -560,10 +563,12 @@ void opcodes (void) {
 	asmInit(); asmAsm(PUSH, R1); asmAssemble(); assert(vmPUSH1  == memVectorObject(r0, 0));
 	asmInit(); asmAsm(PUSH, R2); asmAssemble(); assert(vmPUSH2  == memVectorObject(r0, 0));
 	asmInit(); asmAsm(PUSH, R4); asmAssemble(); assert(vmPUSH4  == memVectorObject(r0, 0));
+	asmInit(); asmAsm(PUSH, R5); asmAssemble(); assert(vmPUSH5  == memVectorObject(r0, 0));
 	asmInit(); asmAsm(PUSH, R7); asmAssemble(); assert(vmPUSH7  == memVectorObject(r0, 0));
 	asmInit(); asmAsm(PUSH, R9); asmAssemble(); assert(vmPUSH9 == memVectorObject(r0, 0));
 	asmInit(); asmAsm(PUSH, RA); asmAssemble(); assert(vmPUSHA == memVectorObject(r0, 0));
 	asmInit(); asmAsm(PUSH, RB); asmAssemble(); assert(vmPUSHB == memVectorObject(r0, 0));
+	asmInit(); asmAsm(PUSH, RC); asmAssemble(); assert(vmPUSHC == memVectorObject(r0, 0));
 
 	/* POP */
 	asmInit(); asmAsm(POP, R0);  asmAssemble(); assert(vmPOP0  == memVectorObject(r0, 0));
@@ -575,6 +580,7 @@ void opcodes (void) {
 	asmInit(); asmAsm(POP, R9); asmAssemble(); assert(vmPOP9 == memVectorObject(r0, 0));
 	asmInit(); asmAsm(POP, RA); asmAssemble(); assert(vmPOPA == memVectorObject(r0, 0));
 	asmInit(); asmAsm(POP, RB); asmAssemble(); assert(vmPOPB == memVectorObject(r0, 0));
+	asmInit(); asmAsm(POP, RC); asmAssemble(); assert(vmPOPC == memVectorObject(r0, 0));
 
 	/* ADDI */
 	asmInit(); asmAsm(ADDI, R0, 99);  asmAssemble(); assert(vmADDI0 == memVectorObject(r0, 0)); assert(99 == (Num)memVectorObject(r0, 1));
@@ -613,19 +619,19 @@ void opcodes (void) {
 	asmInit(); L=asmNewLabel(); asmAsm(JAL, R2, NOP); asmAssemble(); assert(vmJAL2 == memVectorObject(r0, 0));
 
 	/* RET */
-	asmInit(); L=asmNewLabel(); asmAsm(RET); asmAssemble(); assert(vmRET == memVectorObject(r0, 0));
+	asmInit(); asmAsm(RET, NOP); asmAssemble(); assert(vmRET == memVectorObject(r0, 0));
 
 	/* SYS */
-	asmInit(); L=asmNewLabel(); asmAsm(SYS, R0); asmAssemble(); assert(vmSYS0 == memVectorObject(r0, 0));
+	asmInit(); asmAsm(SYS, R0, NOP); asmAssemble(); assert(vmSYS0 == memVectorObject(r0, 0));
 
 	/* SYSI */
-	asmInit(); L=asmNewLabel(); asmAsm(SYSI, 99); asmAssemble(); assert(vmSYSI == memVectorObject(r0, 0)); assert(99 == (Num)memVectorObject(r0, 1));
+	asmInit(); asmAsm(SYSI, 99, NOP); asmAssemble(); assert(vmSYSI == memVectorObject(r0, 0)); assert(99 == (Num)memVectorObject(r0, 1));
 
 	/* SYSI */
-	asmInit(); L=asmNewLabel(); asmAsm(QUIT); asmAssemble(); assert(vmQUIT == memVectorObject(r0, 0));
+	asmInit(); asmAsm(QUIT); asmAssemble(); assert(vmQUIT == memVectorObject(r0, 0));
 
 	/* NOP isn't emitted */
-	asmInit(); L=asmNewLabel(); asmAsm(NOP); asmAssemble(); assert(false == r0);
+	asmInit(); asmAsm(NOP); asmAssemble(); assert(false == r0);
 
 //asmDumpIBlocks();
 //vmDebugDumpCode(r0, stderr);
@@ -740,6 +746,7 @@ void optimizePopPush (void) {
 			STI, R2, R0, 0l,
 			MV, R1, R0,
 			//MV, R0, R4, /* This would prevent the above pop and below push from being optimized out */
+			//SYSI, cctDumpObjR0, /* So should this */
 			MV, R0, R1,
 			LDI, R2, R0, 1l, /* Consider 2nd element, inc and store back */
 			ADDI, R2, (Obj)2,
@@ -772,6 +779,7 @@ void optimizeEmptyIBlock (void) {
 	 LABEL, LLL,
 		BRA, LLL
 	);
+	/* Call asmPrepareIGraph() directly and verify igraph connectivity */
 	asmAssemble();
 	/* Expect the following code block:
 	   2AE69E4E7220*0000 beqi $0 0 0003

@@ -82,15 +82,15 @@ void *vmNOP,
      *vmMVI0, *vmMVI1, *vmMVI2, *vmMVI3, *vmMVI4, *vmMVI5, *vmMVI6, *vmMVI7,
      *vmMV01, *vmMV02, *vmMV03, *vmMV04, *vmMV07, *vmMV0E, *vmMV10, *vmMV13,
      *vmMV20, *vmMV23, *vmMV30, *vmMV5C, *vmMV58,
-     *vmMV50, *vmMVC0, *vmMVC8,
+     *vmMV50, *vmMVC0, *vmMVC5, *vmMVC8,
      *vmMV61, *vmMV72,
      *vmLDI00, *vmLDI02, *vmLDI0C, *vmLDI11, *vmLDI20, *vmLDI22, *vmLDI50, *vmLDIC0, *vmLDI1C,
      *vmLD012,
-     *vmSTI01, *vmSTI0C, *vmSTI21, *vmSTI20, *vmSTI30, *vmSTI40, *vmSTI50,
+     *vmSTI01, *vmSTI05, *vmSTI0C, *vmSTI21, *vmSTI20, *vmSTI30, *vmSTI40, *vmSTI50,
      *vmST012, *vmST201,
      *vmPUSH0, *vmPUSH1, *vmPUSH2, *vmPUSH3, *vmPUSH4, *vmPUSH5, *vmPUSH7, *vmPUSH9,
-     *vmPUSHA, *vmPUSHB,
-     *vmPOP0,  *vmPOP1,  *vmPOP2,  *vmPOP3,  *vmPOP4,  *vmPOP7, *vmPOP9, *vmPOPA,  *vmPOPB,
+     *vmPUSHA, *vmPUSHB, *vmPUSHC,
+     *vmPOP0, *vmPOP1, *vmPOP2, *vmPOP3, *vmPOP4, *vmPOP5, *vmPOP7, *vmPOP9, *vmPOPA, *vmPOPB, *vmPOPC,
      *vmADDI0, *vmADDI1, *vmADDI2, *vmADD10, *vmMUL10,
      *vmBLTI1,
      *vmBEQI0, *vmBEQI1, *vmBEQI7, *vmBNEI0, *vmBNEI1, *vmBNEI2, *vmBNEI5, *vmBRTI0, *vmBNTI0, *vmBRA,
@@ -123,7 +123,7 @@ void vmVm (void) {
 		memRegisterOpcode(MV50); memRegisterOpcode(MV5C); memRegisterOpcode(MV58);
 		memRegisterOpcode(MV61);
 		memRegisterOpcode(MV72);
-		memRegisterOpcode(MVC0); memRegisterOpcode(MVC8);
+		memRegisterOpcode(MVC0); memRegisterOpcode(MVC5); memRegisterOpcode(MVC8);
 
 		memRegisterOpcode(LDI00); memRegisterOpcode(LDI02); memRegisterOpcode(LDI0C);
 		memRegisterOpcode(LDI11); memRegisterOpcode(LDI1C);
@@ -133,7 +133,7 @@ void vmVm (void) {
 
 		memRegisterOpcode(LD012);
 
-		memRegisterOpcode(STI01); memRegisterOpcode(STI0C);
+		memRegisterOpcode(STI01); memRegisterOpcode(STI05); memRegisterOpcode(STI0C);
 		memRegisterOpcode(STI20); memRegisterOpcode(STI21);
 		memRegisterOpcode(STI30);
 		memRegisterOpcode(STI40);
@@ -144,11 +144,11 @@ void vmVm (void) {
 
 		memRegisterOpcode(PUSH0); memRegisterOpcode(PUSH1); memRegisterOpcode(PUSH2); memRegisterOpcode(PUSH3);
 		memRegisterOpcode(PUSH4); memRegisterOpcode(PUSH5); memRegisterOpcode(PUSH7);
-		memRegisterOpcode(PUSH9); memRegisterOpcode(PUSHA); memRegisterOpcode(PUSHB);
+		memRegisterOpcode(PUSH9); memRegisterOpcode(PUSHA); memRegisterOpcode(PUSHB); memRegisterOpcode(PUSHC);
 
 		memRegisterOpcode(POP0); memRegisterOpcode(POP1); memRegisterOpcode(POP2); memRegisterOpcode(POP3);
-		memRegisterOpcode(POP4); memRegisterOpcode(POP7);
-		memRegisterOpcode(POP9); memRegisterOpcode(POPA); memRegisterOpcode(POPB);
+		memRegisterOpcode(POP4); memRegisterOpcode(POP5); memRegisterOpcode(POP7);
+		memRegisterOpcode(POP9); memRegisterOpcode(POPA); memRegisterOpcode(POPB); memRegisterOpcode(POPC);
 
 		memRegisterOpcode(ADDI0); memRegisterOpcode(ADDI1); memRegisterOpcode(ADDI2);
 
@@ -224,6 +224,7 @@ void vmVm (void) {
 	gMV61: OPDB("mv61"); r6=r1; goto **(void**)(rip+=8);
 	gMV72: OPDB("mv72"); r7=r2; goto **(void**)(rip+=8);
 	gMVC0: OPDB("mvc0"); rc=r0; goto **(void**)(rip+=8);
+	gMVC5: OPDB("mvc5"); rc=r5; goto **(void**)(rip+=8);
 	gMVC8: OPDB("mvc8"); rc=r8; goto **(void**)(rip+=8);
 
 	/* Load r2 <- *(r0 + immediate) */
@@ -266,6 +267,11 @@ void vmVm (void) {
 		if (!(0 <= *(Num*)(rip+8) && *(Num*)(rip+8) < memObjectLength(r1))) fprintf (stderr, "[ERROR opcode sti01 %d < %d", memObjectLength(r1), *(Num*)(rip+8));
 #endif
 		*((Obj*)r1 + *(Num*)(rip+=8))=r0; goto **(void**)(rip+=8);
+	gSTI05:OPDB("sti05");
+#if VALIDATE
+		if (!(0 <= *(Num*)(rip+8) && *(Num*)(rip+8) < memObjectLength(r5))) fprintf (stderr, "[ERROR opcode sti05 %d < %d", memObjectLength(r5), *(Num*)(rip+8));
+#endif
+		*((Obj*)r5 + *(Num*)(rip+=8))=r0; goto **(void**)(rip+=8);
 	gSTI0C:OPDB("sti0c");
 #if VALIDATE
 		if (!(0 <= *(Num*)(rip+8) && *(Num*)(rip+8) < memObjectLength(rc))) fprintf (stderr, "[ERROR opcode sti01c %d < %d", memObjectLength(rc), *(Num*)(rip+8));
@@ -316,6 +322,7 @@ void vmVm (void) {
 	gPUSH9: OPDB("push9");  vmPush(r9);  goto **(void**)(rip+=8);
 	gPUSHA: OPDB("pusha");  vmPush(ra);  goto **(void**)(rip+=8);
 	gPUSHB: OPDB("pushb");  vmPush(rb);  goto **(void**)(rip+=8);
+	gPUSHC: OPDB("pushc");  vmPush(rc);  goto **(void**)(rip+=8);
 
 
 	/* Pop into a register. */
@@ -324,10 +331,12 @@ void vmVm (void) {
 	gPOP2: OPDB("pop2");  r2 = vmPop();  goto **(void**)(rip+=8);
 	gPOP3: OPDB("pop3");  r3 = vmPop();  goto **(void**)(rip+=8);
 	gPOP4: OPDB("pop4");  r4 = vmPop();  goto **(void**)(rip+=8);
+	gPOP5: OPDB("pop5");  r5 = vmPop();  goto **(void**)(rip+=8);
 	gPOP7: OPDB("pop7");  r7 = vmPop();  goto **(void**)(rip+=8);
 	gPOP9: OPDB("pop9");  r9 = vmPop();  goto **(void**)(rip+=8);
 	gPOPA: OPDB("popa");  ra = vmPop();  goto **(void**)(rip+=8);
 	gPOPB: OPDB("popb");  rb = vmPop();  goto **(void**)(rip+=8);
+	gPOPC: OPDB("popc");  rc = vmPop();  goto **(void**)(rip+=8);
 
 	/* Add immediate to r0. */
 	gADDI0: OPDB("addi0"); r0 += *(Int*)(rip+=8); goto **(void**)(rip+=8);
@@ -630,6 +639,7 @@ void vmDebugDumpCode (Obj c, FILE *stream) {
 		else if (*i==vmMV5C)  {fprintf(stream, "mv   $5 $c ");}
 		else if (*i==vmMV58)  {fprintf(stream, "mv   $5 $8 ");}
 		else if (*i==vmMVC0)  {fprintf(stream, "mv   $c $0 ");}
+		else if (*i==vmMVC5)  {fprintf(stream, "mv   $c $5 ");}
 		else if (*i==vmMVC8)  {fprintf(stream, "mv   $c $8 ");}
 		else if (*i==vmMV61)  {fprintf(stream, "mv   $6 $1 ");}
 		else if (*i==vmMV72)  {fprintf(stream, "mv   $7 $2 ");}
@@ -644,6 +654,7 @@ void vmDebugDumpCode (Obj c, FILE *stream) {
 		else if (*i==vmLDIC0) {fprintf(stream, "ldi  $c $0 "); vmObjectDumper(*++i, stream);}
 		else if (*i==vmLD012) {fprintf(stream, "ld0  $1 $2");}
 		else if (*i==vmSTI01) {fprintf(stream, "sti  $0 $1 "); vmObjectDumper(*++i, stream);}
+		else if (*i==vmSTI05) {fprintf(stream, "sti  $0 $5 "); vmObjectDumper(*++i, stream);}
 		else if (*i==vmSTI0C){fprintf(stream, "sti  $0 $c "); vmObjectDumper(*++i, stream);}
 		else if (*i==vmSTI20) {fprintf(stream, "sti  $2 $0 "); vmObjectDumper(*++i, stream);}
 		else if (*i==vmSTI21) {fprintf(stream, "sti  $2 $1 "); vmObjectDumper(*++i, stream);}
@@ -662,15 +673,18 @@ void vmDebugDumpCode (Obj c, FILE *stream) {
 		else if (*i==vmPUSH9) {fprintf(stream, "push $9 ");}
 		else if (*i==vmPUSHA) {fprintf(stream, "push $a ");}
 		else if (*i==vmPUSHB) {fprintf(stream, "push $b ");}
+		else if (*i==vmPUSHC) {fprintf(stream, "push $c ");}
 		else if (*i==vmPOP0)  {fprintf(stream, "pop  $0 ");}
 		else if (*i==vmPOP1)  {fprintf(stream, "pop  $1 ");}
 		else if (*i==vmPOP2)  {fprintf(stream, "pop  $2 ");}
 		else if (*i==vmPOP3)  {fprintf(stream, "pop  $3 ");}
 		else if (*i==vmPOP4)  {fprintf(stream, "pop  $4 ");}
+		else if (*i==vmPOP5)  {fprintf(stream, "pop  $5 ");}
 		else if (*i==vmPOP7)  {fprintf(stream, "pop  $7 ");}
 		else if (*i==vmPOP9)  {fprintf(stream, "pop  $9 ");}
 		else if (*i==vmPOPA)  {fprintf(stream, "pop  $a ");}
 		else if (*i==vmPOPB)  {fprintf(stream, "pop  $b ");}
+		else if (*i==vmPOPC)  {fprintf(stream, "pop  $c ");}
 		else if (*i==vmADDI0) {fprintf(stream, "addi $0 %ld", *(i+1)); i++; }
 		else if (*i==vmADDI1) {fprintf(stream, "addi $1 %ld", *(i+1)); i++; }
 		else if (*i==vmADDI2) {fprintf(stream, "addi $2 %ld", *(i+1)); i++; }

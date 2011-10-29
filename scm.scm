@@ -551,11 +551,9 @@
             (display msg))))
   (replloop))
 
-
 (define (signal-set num func)
  (vector-set! SIGNALHANDLERS num func)
  (signal num))
-
 
 ; If wscm is run with a command line argument that isn't a switch, then 
 ; assume it's a file to run otherwise begin the REPL.

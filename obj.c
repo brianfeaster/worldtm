@@ -144,7 +144,7 @@ void objNewSymbol (Str str, Num len) {
 }
 
 void objNewSymbolR5R6 (void) {
-	if (objNewSymbolBase (r5, (Num)r6, 0)) // 0 tells fn to not copy the str
+	if (objNewSymbolBase(r5, (Num)r6, 0)) // 0 tells fn to not copy the str
 		memcpy((char*)r0, r5, (Num)r6);
 }
 
