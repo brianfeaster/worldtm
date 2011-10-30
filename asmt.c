@@ -631,7 +631,7 @@ void opcodes (void) {
 	asmInit(); asmAsm(QUIT); asmAssemble(); assert(vmQUIT == memVectorObject(r0, 0));
 
 	/* NOP isn't emitted */
-	asmInit(); asmAsm(NOP); asmAssemble(); assert(false == r0);
+	asmInit(); asmAsm(NOP); asmAssemble(); assert(vmNOP == memVectorObject(r0, 0));
 
 //asmDumpIBlocks();
 //vmDebugDumpCode(r0, stderr);
@@ -733,13 +733,12 @@ int myTest (void) {
 }
 
 void optimizePopPush (void) {
-	FBInit();
-
 	asmInit();
 	asmAsm(
 		PUSH, R0,
 		MVI, R1, 3, /* Create a vector */
 		SYSI, objNewVector1,
+		PUSH, R3,
 		POP, R4,
 			LDI, R2, R0, 0l, /* Consider 1st element, inc and store back */
 			ADDI, R2, (Obj)1,
@@ -752,15 +751,15 @@ void optimizePopPush (void) {
 			ADDI, R2, (Obj)2,
 			STI, R2, R0, 1l,
 		PUSH, R4,
-		//SYSI, cctDumpObjR0,
+		POP, R3,
 		POP, R0,
 		QUIT
 	);
 //asmDumpIBlocks();
 	asmAssemble();
+	assert(21==memObjectLength(r0)); /* Verify 21 opcodes emitted */
 //vmDebugDumpCode(r0, stderr);
 	rcode = r0;  rip = 0;  vmRun();
-	FBDump();
 }
 
 
@@ -777,7 +776,8 @@ void optimizeEmptyIBlock (void) {
 	 LABEL, LL,
 		MV, R0, R1,
 	 LABEL, LLL,
-		BRA, LLL
+		BRA, LLL,
+		NOP
 	);
 	/* Call asmPrepareIGraph() directly and verify igraph connectivity */
 	asmAssemble();

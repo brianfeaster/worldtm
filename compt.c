@@ -17,6 +17,7 @@ extern void asmICodePushNewQUIT (void);
 extern Num matchArgumentList (void); 
 extern Num compParseTransformProcedure (void);
 extern Num compParseTransformDefine (void);
+extern void compErrorReset (void);
 
 Num compIsError (void);
 
@@ -425,7 +426,6 @@ void runtimeerrorcarcar (void) {
 extern Obj rcomperrortrace;
 extern Obj rcomperrormessage;
 void parsepushoperands (void) {
- Num operandCount;
 
 	FBInit();
 	yy_scan_string ((Str)"((lambda 1))");  yyparse();  rexpr = r0;
