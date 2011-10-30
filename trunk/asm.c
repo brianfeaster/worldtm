@@ -35,8 +35,7 @@ Obj ropcodes, riblock, riblocks, ricodes, rlabels, rexpr, rcodenew;
 
 
 /* Local static scheme symbol used to delimit assembly opcodes */
-Obj sasmend;
-Obj sasmna;
+Obj sasmend, sasmna;
 
 
 /* Object types used by compiler
@@ -124,7 +123,7 @@ void asmICodePushNewQUIT (void)               { asmNewICode(QUIT,NA, NA, NA, NA,
 
 Num asmICodeOpcodeSize (Obj icode) {
 	assert(asmIsObjectTypeICode(icode));
-	if (NOP == asmICodeField(icode, 0)) return 0; /* Ignore NOPs since they're not emitted */
+	if (NA == asmICodeField(icode, 0)) return 0; /* Ignore NAs since they're not emitted */
 	return 1 + (Num)(NA != asmICodeField(icode, 4)) + (Num)(NA != asmICodeField(icode, 5));
 }
 
@@ -623,7 +622,10 @@ Num pccode = 0;  /* Pointer into code block */
 
 
 void asmEmitOpcode (Obj op) {
-	if (pccode >= memObjectLength(rcodenew)) vmDebugDumpCode(rcodenew, stderr);
+	if (pccode >= memObjectLength(rcodenew)) {
+		asmDumpIBlocks();
+		//vmDebugDumpCode(rcodenew, stderr);
+	}
 	assert(pccode < memObjectLength(rcodenew) && "Code object can't fit more icodes.");
 	memVectorSet(rcodenew, pccode++, op);
 }
@@ -775,6 +777,7 @@ void asmEmitIblockOpcodes (void) {
 				case (Num)R0 : asmEmitOpcode(vmPUSH0); break;
 				case (Num)R1 : asmEmitOpcode(vmPUSH1); break;
 				case (Num)R2 : asmEmitOpcode(vmPUSH2); break;
+				case (Num)R3 : asmEmitOpcode(vmPUSH3); break;
 				case (Num)R4 : asmEmitOpcode(vmPUSH4); break;
 				case (Num)R5 : asmEmitOpcode(vmPUSH5); break;
 				case (Num)R7 : asmEmitOpcode(vmPUSH7); break;
@@ -899,9 +902,10 @@ void asmEmitIblockOpcodes (void) {
 			asmEmitOpcode(vmQUIT);
 			break;
 		case (Num)NOP:
-			/* NOP opcodes are not emitted */
+			asmEmitOpcode(vmNOP);
 			break;
 		default:
+			if (field0 == NA) break; /* The NA fake opcode is OK.  It's an opcode removed during optimization. */
 			fprintf(stderr, "\nCan't assemble opcode ");
 			objDump(r3, stderr);
 			assert(!"Unsuported opcode");
@@ -1116,14 +1120,17 @@ void asmInitIBlockBranchTagsToIBlocks (Obj ib) {
 }
 
 
-void asmSetIBlockICodeToNOP (Obj ib, Num icidx) {
+/* Set's the iblock's icode op field to NA.  Used to remove
+   icodes from an iblock during optimization.
+*/
+void asmIBlockDeleteICode (Obj ib, Num icidx) {
  Obj ic;
 	assert(asmIsObjectTypeIBlock(ib));
 
 	ic = asmIBlockICode(riblock, icidx);
 	assert(asmIsObjectTypeICode(ic));
 
-	memVectorSet(ic, 0, NOP);
+	memVectorSet(ic, 0, NA);
 }
 
 /* riblock <= iblock
@@ -1204,7 +1211,8 @@ Num asmOptimizePeepHolePopPushFindMatchingPush(Num start, Obj reg) {
    riblock <= iblock to optimize
    return => optimization performed
 */
-void asmOptimizePeepHolePushPop(void) {
+Num asmOptimizePeepHolePushPop(void) {
+ Num changed=0;
  Obj ic;
  Num idx, i, j;
  Obj field0, field1;
@@ -1224,17 +1232,21 @@ void asmOptimizePeepHolePushPop(void) {
 					idx = asmOptimizePeepHolePushPopFindMatchingPop(j+1, field1);
 					if (idx) {
 						DB("Omitting "HEX" and "HEX, j, idx);
+						changed = 1;
 						DBE asmDumpIBlock(riblock);
-						asmSetIBlockICodeToNOP(riblock, j);
-						asmSetIBlockICodeToNOP(riblock, idx);
+						asmIBlockDeleteICode(riblock, j);
+						asmIBlockDeleteICode(riblock, idx);
 					}
 				}
 			}
 		} while (idx);
 	}
-	DBEND();
+	DBEND(" => ", changed);
+	return changed;
 }
-void asmOptimizePeepHolePopPush(void) {
+
+Num asmOptimizePeepHolePopPush(void) {
+ Num changed=0;
  Obj ic;
  Num idx, i, j;
  Obj field0, field1;
@@ -1254,15 +1266,17 @@ void asmOptimizePeepHolePopPush(void) {
 					idx = asmOptimizePeepHolePopPushFindMatchingPush(j+1, field1);
 					if (idx) {
 						DB("Omitting "HEX" and "HEX, j, idx);
+						changed = 1;
 						DBE asmDumpIBlock(riblock);
-						asmSetIBlockICodeToNOP(riblock, j);
-						asmSetIBlockICodeToNOP(riblock, idx);
+						asmIBlockDeleteICode(riblock, j);
+						asmIBlockDeleteICode(riblock, idx);
 					}
 				}
 			}
 		} while (idx);
 	}
-	DBEND();
+	DBEND(" => ", changed);
+	return changed;
 }
 
 /* Incoming connections moved to outoing connections,
@@ -1321,10 +1335,15 @@ void asmOptimizeEmptyIBlocks(void) {
 /* riblock = temp
 */
 void asmPeepHoleOptimization (void) {
+ Num changed, optimizeLoop=0;
 	DBBEG();
-	asmOptimizePeepHolePushPop();
-	asmOptimizePeepHolePopPush();
-	asmOptimizeEmptyIBlocks();
+	do {
+		assert(optimizeLoop < 100);
+		changed = 0;
+		if (asmOptimizePeepHolePushPop()) changed = 1;
+		if (asmOptimizePeepHolePopPush()) changed = 1;
+	} while (changed);
+	
 	DBEND();
 }
 
@@ -1376,6 +1395,7 @@ Num asmCountIGraphFields (void) {
 
 void asmOptimizeIGraph (void) {
 	asmPeepHoleOptimization();
+	asmOptimizeEmptyIBlocks();
 }
 
 /* The IGraph's iblocks are found in riblocks.  The icode found in each iblock
@@ -1395,9 +1415,10 @@ void asmAssemble (void) {
 
 	/* Create the code block object which all iblocks are compile to */
 	asmPrepareIGraph(asmIBlock(iblockOffset));
-	//asmDumpIBlocks();
+
+	if (false != rdebug) asmDumpIBlocks();
+
 	asmOptimizeIGraph();
-	//asmDumpIBlocks();
 
 	if (false != rdebug) asmDumpIBlocks();
 
@@ -1436,8 +1457,10 @@ void asmDumpICodeFields (Obj ic) {
 	if ((Obj)NA != (f = asmICodeField(ic, 5))) { fprintf(stderr, " "); objDump(f, stderr); fflush(stderr); }
 }
 void asmDumpICode (Obj ic) {
+ Obj field;
 	if (memIsObjectValid(ic)) {
-		switch ((Num)asmICodeField(ic, 0)) {
+		field = asmICodeField(ic, 0);
+		switch ((Num)field) {
 			case (Num)MV  : fprintf(stderr, "mv  "); asmDumpICodeFields(ic); break;
 			case (Num)MVI : fprintf(stderr, "mvi "); asmDumpICodeFields(ic); break;
 			case (Num)LDI : fprintf(stderr, "ldi "); asmDumpICodeFields(ic); break;
@@ -1461,6 +1484,7 @@ void asmDumpICode (Obj ic) {
 			case (Num)NOP : fprintf(stderr, "nop");                          break;
 			case (Num)QUIT: fprintf(stderr, "quit");                         break;
 			default:
+				if (field == NA) { fprintf(stderr, "---"); break; }
 				fprintf(stderr, "**UNKNOWN OPCODE**");
 				objDump(ic, stderr);
 		}
@@ -1510,6 +1534,7 @@ void asmDumpIBlock (Obj ib) {
 		if (null != o) fprintf(stderr, " ");
 	}
 	fprintf(stderr, ")");
+
 	/* Code */
 	for (i=0; i<asmIBlockICodeLength(ib); ++i) {
 		fprintf(stderr, "\n  "HEX02"  ", i);
