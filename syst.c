@@ -67,7 +67,7 @@ void verifyLocalStreamBlocks () {
 	assert(saccepting == memVectorObject(r5, 3));
 
 	//printf("\nOpening stream: ");
-	r0=false;
+	r0=ofalse;
 	r1=r5;
 	sysAcceptLocalStream();
 	assert(r0==r5);
@@ -93,8 +93,8 @@ void networkingWriteStuff (void) {
 
 	/* Read whatever was sent */
 	r1 = r5;
-	r2 = false;
-	r3 = nullstr;
+	r2 = ofalse;
+	r3 = onullstr;
 	r4 = 0;
 	sysRecv();
 
@@ -117,8 +117,8 @@ void networkingReadStuff (void) {
 	sysAcceptLocalStream();
 
 	r1 = r0;
-	r2 = false;
-	r3 = nullstr;
+	r2 = ofalse;
+	r3 = onullstr;
 	r4 = 0;
 	sysRecv();
 
@@ -135,7 +135,7 @@ int main (int argc, char *argv[]) {
 	setbuf(stdout,0);
 	printf ("--Welcome to unit test %s----------------\n", __FILE__);
 
-	objInitialize();
+	sysInitialize();
 
 	/* Perform a full garbage collection to move module related objects to old
 	   heap for easier visual debugging of newly created young heap objects */

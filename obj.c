@@ -10,14 +10,17 @@
 #include "mem.h"
 
 
-const Num HashTableSize=8191;
+const Num HashTableSize=8191; /* Best if prime */
 
-/* Rootset objects */
-extern Obj rtge;
-Obj rsymbols, rdebug;
 
-/* Static symbol objects. */
-Obj null, nullvec, nullstr, false, true, eof,
+/* Objects */
+Obj onull, ofalse, otrue, oeof, onullvec, onullstr; /* Intrinsic static objects */
+Obj ocharacters, ointegers; /* Intrinsic static aggregates */
+Obj odebug; /* Mutable */
+Obj osymbols; /* Intrinsic mutable aggregates */
+
+/* Symbol objects */
+Obj snull, sfalse, strue, seof, 
     srem, srunning, sready, ssleeping, sblocked, sdead, ssemaphore,
     sopenblocked, sreadblocked, swriteblocked,
     saccepting, sconnecting, sopen, sclosed,
@@ -26,10 +29,10 @@ Obj null, nullvec, nullstr, false, true, eof,
     svectorref, svectorvectorref, svectorvectorsetb, svectorsetb, svectorlength,
     scons, scar, scdr, ssetcarb, ssetcdrb,
     sprocedurep, snullp,
-    spairp, svectorp, sstringp, sintegerp, ssymbolp, sportp, sappend, seofobjectp,
+    spairp, svectorp, scharp, sstringp, sintegerp, ssymbolp, sportp, sappend, seofobjectp,
     sthread, slet, sletrec,
-    seval, sapply, scallcc, ssyntaxrules, seof,
-    snot, sadd, ssub, smul, sdiv, slogand, scharacters, staticIntegers, ssignalhandlers;
+    seval, sapply, scallcc, ssyntaxrules,
+    snot, sadd, ssub, smul, sdiv, slogand, ssignalhandlers;
 
 
 
@@ -66,9 +69,9 @@ void tree_copy (void) { /* COPIES TREE ACC INTO ACC */
    integers are cached and used instead.
 */
 void objNewInt  (Int i) {
-	if (-1023l<=i && i<=1024l) {
+	if (-1024l<=i && i<=1023l) {
 		/* Lookup cached integer */
-		r0 = ((Obj*)staticIntegers)[i+1023];
+		r0 = ((Obj*)ointegers)[i+1024];
 	} else {
 		/* Generate a new integer object */
    	r0 = memNewArray(TINTEGER, sizeof(Int));
@@ -119,12 +122,12 @@ Num objNewSymbolBase (Str str, Num len, Num copyStrP) {
  static Num hash, i;
 	i = hash = hashpjw(str, len) % HashTableSize;
 	do {
-		r0 = memVectorObject(rsymbols, i);
+		r0 = memVectorObject(osymbols, i);
 		/* Bucket empty so insert into symbol table. */
-		if (r0 == null) {
+		if (r0 == onull) {
 			r0 = memNewArray(TSYMBOL, len);
 			if (copyStrP) memcpy(r0, str, len);
-			memVectorSet(rsymbols, i, r0);
+			memVectorSet(osymbols, i, r0);
 			return 1;
 		}
 		/* If something here, check if it's the symbol */
@@ -153,12 +156,12 @@ void objNewSymbolStatic (char *s) {
  Num len = strlen(s);
 	i = hash = hashpjw((Str)s, len) % HashTableSize;
 	do {
-		r0 = memVectorObject(rsymbols, i);
+		r0 = memVectorObject(osymbols, i);
 		/* Bucket empty so insert into symbol table. */
-		if (r0 == null) {
+		if (r0 == onull) {
 			r0 = memNewStatic(TSYMBOL, len); /* r0 now holds new symbol */
 			memcpy(r0, s, len);
-			memVectorSet(rsymbols, i, r0);
+			memVectorSet(osymbols, i, r0);
 			return;
 		}
 		/* If something here, check if it's the symbol */
@@ -251,7 +254,7 @@ void objCons23 (void) {
 
 void objNewDoublyLinkedListNode (void) {
 	r0 = memNewVector(TVECTOR, 3);
-	memVectorSet(r0, 0, null);
+	memVectorSet(r0, 0, onull);
 	memVectorSet(r0, 1, r0); /* Next */
 	memVectorSet(r0, 2, r0); /* Prev */
 }
@@ -274,8 +277,8 @@ void objNewPort (void) {
 	memVectorSet(r0, 1, r2); /* Path or internet address string. */
 	memVectorSet(r0, 2, r3); /* Flags or port number. */
 	memVectorSet(r0, 3, r4); /* State: accepting, connecting, open, closed. */
-	memVectorSet(r0, 4, false); /* Push back or next available character. */
-	memVectorSet(r0, 5, false); /* Can hold a finalizer if you want. */
+	memVectorSet(r0, 4, ofalse); /* Push back or next available character. */
+	memVectorSet(r0, 5, ofalse); /* Can hold a finalizer if you want. */
 }
 
 int objPortDescriptor (Obj p) {
@@ -293,6 +296,11 @@ Obj objPortFlags      (Obj o) { return memVectorObject(o, 2); }
 Obj objPortState      (Obj o) { return memVectorObject(o, 3); }
 Obj objPortPushback   (Obj o) { return memVectorObject(o, 4); }
 */
+
+Obj objIntegerToChar (Num i) {
+	assert(i < 256);
+	return memVectorObject(ocharacters, i);
+}
 
 Num objIsPair (Obj o)   { return memIsObjectType(o, TPAIR); }
 Num objIsSymbol (Obj o) { return memIsObjectType(o, TSYMBOL); }
@@ -372,7 +380,7 @@ void objListToVector (void) {
 			r1 = cdr(r1);
 		}
 	} else {
-		r0 = nullvec;
+		r0 = onullvec;
 	}
 }
 
@@ -395,17 +403,18 @@ void objDumpR (Obj o, FILE *stream, Num islist) {
 	}
 
 	switch (memObjectType(o)) {
-		case TNULL   :
-		case TNULLSTR:
-		case TNULLVEC:
-		case TFALSE  :
-		case TTRUE   :
-		case TEOF    :
+		case TINTRINSIC : /* null false true eof = "()" "#f" "#t" "#eof" */
+			if      (onull == o)  fwrite("()", 1, 2, stream);
+			else if (ofalse == o) fwrite("#f", 1, 2, stream);
+			else if (otrue == o)  fwrite("#t", 1, 2, stream);
+			else if (oeof == o)   fwrite("#eof", 1, 4, stream);
+			else assert(!"Unknown intrinsic object to dump");
+			break;
+		case TCHAR :
+			fwrite(o, 1, 1, stream);
+			break;
 		case TSYMBOL :
 			fwrite (o, 1, memObjectLength(o), stream);
-			break;
-		case TINTEGER:
-			fprintf(stream, INT, *(Int*)o);
 			break;
 		case TSTRING : 
 			fwrite ("\"", 1, 1, stream);
@@ -426,11 +435,11 @@ void objDumpR (Obj o, FILE *stream, Num islist) {
 			}
 			fwrite ("\"", 1, 1, stream);
 			break;
-		case TCLOSURE :
-			if (cdr(o) == rtge)
-				fprintf(stream, "#CLOSURE<CODE:"OBJ" TGE:"OBJ">", car(o), cdr(o));
-			else
-				fprintf(stream, "#CLOSURE<CODE:"OBJ" ENV:"OBJ">", car(o), cdr(o));
+		case TINTEGER:
+			fprintf(stream, INT, *(Int*)o);
+			break;
+		case TREAL:
+			fprintf(stream, REAL, *(Real*)o);
 			break;
 		case TPAIR :
 			if (!islist) fwrite ("(", 1, 1, stream);
@@ -440,7 +449,7 @@ void objDumpR (Obj o, FILE *stream, Num islist) {
 				fwrite (" ", 1, 1, stream);
 				objDumpR(cdr(o), stream, 1);
 			} else {
-				if (cdr(o) != null) {
+				if (cdr(o) != onull) {
 					fwrite (" . ", 1, 3, stream);
 					objDumpR(cdr(o), stream, 0);
 				}
@@ -457,8 +466,11 @@ void objDumpR (Obj o, FILE *stream, Num islist) {
 			}
 			fwrite (")", 1, 1, stream);
 			break;
-		case TSYSCALL :
-			fprintf(stream, "#<SYSCALL "OBJ">", *(Obj*)o);
+		case TCLOSURE :
+			if (cdr(o) == rtge)
+				fprintf(stream, "#CLOSURE<CODE:"OBJ" TGE:"OBJ">", car(o), cdr(o));
+			else
+				fprintf(stream, "#CLOSURE<CODE:"OBJ" ENV:"OBJ">", car(o), cdr(o));
 			break;
 		case TPORT :
 			fprintf(stream, "#<PORT ");
@@ -474,6 +486,9 @@ void objDumpR (Obj o, FILE *stream, Num islist) {
 			fprintf(stream, " ");
 			objDumpR(memVectorObject(o, 5), stream, 0);
 			fprintf(stream, ">");
+			break;
+		case TSYSCALL :
+			fprintf(stream, "#<SYSCALL "OBJ">", *(Obj*)o);
 			break;
 		default :
 			if (rtge == o) {
@@ -502,54 +517,54 @@ void objInitialize (void) {
 
 		DB("Initializing submodules");
 		vmInitialize(0, 0);
-		memInitialize(0, 0);
+		memInitialize(0, 0, 0);
 
-		DB("Registering rootset objects");
-		memRootSetRegister(rsymbols);
-		memRootSetRegister(rdebug);
+		//DB("Registering rootset objects");
+		//memRootSetRegister(rdebug);
 
 		DB("Register the internal object types");
-		memTypeRegisterString(TFALSE, "false");
-		memTypeRegisterString(TTRUE, "true");
-		memTypeRegisterString(TNULL, "null");
-		memTypeRegisterString(TNULLVEC, "nullvec");
-		memTypeRegisterString(TNULLSTR, "nullstr");
-		memTypeRegisterString(TEOF, "eof");
-		memTypeRegisterString(TCHAR, "chr");
-		memTypeRegisterString(TSTRING, "str");
-		memTypeRegisterString(TSYMBOL, "symb");
-		memTypeRegisterString(TINTEGER, "int");
-		memTypeRegisterString(TREAL, "real");
-		memTypeRegisterString(TPAIR, "pair");
-		memTypeRegisterString(TVECTOR, "vector");
-		memTypeRegisterString(TCLOSURE, "closure");
-		memTypeRegisterString(TCONTINUATION, "contin");
-		memTypeRegisterString(TPORT, "port");
-		memTypeRegisterString(TSOCKET, "socket");
-		memTypeRegisterString(TSYSCALL, "syscall");
+		memTypeRegisterString(TINTRINSIC, (Str)"intrinsic");
+		memTypeRegisterString(TCHAR, (Str)"chr");
+		memTypeRegisterString(TSTRING, (Str)"str");
+		memTypeRegisterString(TSYMBOL, (Str)"symb");
+		memTypeRegisterString(TINTEGER, (Str)"int");
+		memTypeRegisterString(TREAL, (Str)"real");
+		memTypeRegisterString(TPAIR, (Str)"pair");
+		memTypeRegisterString(TVECTOR, (Str)"vector");
+		memTypeRegisterString(TCLOSURE, (Str)"closure");
+		memTypeRegisterString(TCONTINUATION, (Str)"contin");
+		memTypeRegisterString(TPORT, (Str)"port");
+		memTypeRegisterString(TSOCKET, (Str)"socket");
+		memTypeRegisterString(TSYSCALL, (Str)"syscall");
 
-		DB("Registering static pointer description strings");
-		memPointerString(objCopyInteger);
-		memPointerString(objCopyString);
-		memPointerString(objCons12);
-		memPointerString(objCons23);
-		memPointerString(objNewVector1);
-		memPointerString(objListToVector);
+		/* Intrinsic objects are defined by their static object pointer address.
+		   Their display/write strings are also stored, even though their official
+		   length is zero, using format string "%.2s".  */
+		onull  = memNewStatic(TINTRINSIC, 0); memPointerRegisterString(onull, (Str)"()");
+		ofalse = memNewStatic(TINTRINSIC, 0); memPointerRegisterString(ofalse, (Str)"#f");
+		otrue  = memNewStatic(TINTRINSIC, 0); memPointerRegisterString(otrue, (Str)"#t");
+		oeof   = memNewStatic(TINTRINSIC, 0); memPointerRegisterString(oeof, (Str)"#eof");
+		onullvec = memNewStatic(TVECTOR, 0);  memPointerRegisterString(onullvec, (Str)"#()");
+		onullstr = memNewStatic(TSTRING, 0);  memPointerRegisterString(onullstr, (Str)"\"\"");
 
-		/* These primitive types are also external (display) strings. */
-		null = memNewStatic(TNULL, 2);         memcpy(null, "()", 2);
-		/* This is a strange object with a descriptor and no content.
-		   Since little endian a valid pointer to empty C string.  */
-		nullstr = memNewStatic(TNULLSTR, 0);
-		nullvec = memNewStatic(TNULLVEC, 3);  memcpy(nullvec, "#()", 3);
-		false = memNewStatic(TFALSE, 2);      memcpy(false, "#f", 2);
-		true = memNewStatic(TTRUE, 2);        memcpy(true, "#t", 2);
+		/* Table of character objects.  The 257th character is the EOF object. */
+		DB("Creating vector of character constants");
+		ocharacters = memNewStaticVector(TVECTOR, 256);
+		for (n=0; n<256; n++) {
+			r0 = memNewStatic(TCHAR, 1);
+			*(Num*)r0 = n;
+			memVectorSet(ocharacters, n, r0);
+		}
 
-		rsymbols = memNewVector(TVECTOR, HashTableSize); /* Symbol table */
-		for (n=0; n<HashTableSize; n++) memVectorSet (rsymbols, n, null);
+		DB("Creating global symbol table and initial symbols");
+		memRootSetRegister(osymbols);
+		osymbols = memNewVector(TVECTOR, HashTableSize);
+		for (n=0; n<HashTableSize; n++) memVectorSet (osymbols, n, onull);
 
-		rdebug = false;
-
+		objNewSymbolStatic("()");           snull = r0;
+		objNewSymbolStatic("#t");           strue = r0;
+		objNewSymbolStatic("#f");           sfalse = r0;
+		objNewSymbolStatic("#eof");         seof = r0;
 		objNewSymbolStatic("define");       sdefine = r0;
 		objNewSymbolStatic("lambda");       slambda = r0;
 		objNewSymbolStatic("macro");        smacro = r0;
@@ -579,6 +594,7 @@ void objInitialize (void) {
 		objNewSymbolStatic("null?");        snullp = r0;
 		objNewSymbolStatic("pair?");        spairp = r0;
 		objNewSymbolStatic("vector?");      svectorp = r0;
+		objNewSymbolStatic("char?");        scharp = r0;
 		objNewSymbolStatic("string?");      sstringp = r0;
 		objNewSymbolStatic("integer?");     sintegerp = r0;
 		objNewSymbolStatic("symbol?");      ssymbolp = r0;
@@ -592,7 +608,6 @@ void objInitialize (void) {
 		objNewSymbolStatic("apply");        sapply = r0;
 		objNewSymbolStatic("call/cc");      scallcc = r0;
 		objNewSymbolStatic("syntax-rules"); ssyntaxrules = r0;
-		objNewSymbolStatic("#eof");         seof = r0;
 		objNewSymbolStatic("not");          snot = r0;
 		objNewSymbolStatic("+");            sadd = r0;
 		objNewSymbolStatic("-");            ssub = r0;
@@ -615,27 +630,24 @@ void objInitialize (void) {
 		objNewSymbolStatic("closed");       sclosed = r0;
 		objNewSymbolStatic("SIGNALHANDLERS"); ssignalhandlers = r0;
 
-		/* Table of character objects.  The 257th character is the EOF object. */
-		DB("Creating vector of character constants");
-		scharacters = memNewStaticVector(TVECTOR, 257);
-		for (n=0; n<256; n++) {
-			r0 = memNewStatic(TCHAR, 1);
-			*(Num*)r0 = n;
-			memVectorSet(scharacters, n, r0);
-		}
-
-		/* Treat character number 256/0x100 as the eof object */
-		eof = memNewStatic(TEOF, 4);
-		*(Int*)eof = 256l;
-		memVectorSet(scharacters, 256, eof);
-
 		DB("Creating vector of integer constants");
-		staticIntegers = memNewStaticVector(TVECTOR, 2048);
-		for (i=-1023l; i<=1024l; ++i) {
+		ointegers = memNewStaticVector(TVECTOR, 2048);
+		for (i=-1024l; i<=1023l; ++i) {
 			r0 = memNewStatic(TINTEGER, sizeof(Int));
 			*(Int*)r0 = i;
-			memVectorSet(staticIntegers, (Num)i+1023, r0);
+			memVectorSet(ointegers, (Num)i+1024, r0);
 		}
+
+		DB("Registering static pointer description strings");
+		memPointerString(objCopyInteger);
+		memPointerString(objCopyString);
+		memPointerString(objCons12);
+		memPointerString(objCons23);
+		memPointerString(objNewVector1);
+		memPointerString(objListToVector);
+
+		odebug = ofalse;
+
 	} else {
 		DB("Module already activated");
 	}

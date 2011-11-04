@@ -527,12 +527,12 @@
 (define ButtonsSymbols ())
 
 (define (setButton ch exp)
- (if (symbol? ch)
+ (if (char? ch)
+   (vector-set! Buttons ch exp) ; For now characters are also integer constants.
    (let ((bs (assq ch ButtonsSymbols)))
      (if (pair? bs)
        (set-cdr! bs exp)
-       (set! ButtonsSymbols (cons (cons ch exp) ButtonsSymbols))))
-   (vector-set! Buttons ch exp))) ; For now characters are also integer constants.
+       (set! ButtonsSymbols (cons (cons ch exp) ButtonsSymbols))))))
 
 ; Consider the expression associated with this button value.  If data just return the expression.  Otherwise
 ; assume a closure.  Consider the closure -> closure's code -> the code's pre-compiled

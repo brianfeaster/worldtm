@@ -2,11 +2,14 @@
 #define _MEM_H
 #include "globals.h"
 /*
-  Descriptors
-  Object_creation
-  Garbage_collector
-  Debugging_aids
-  External_calls
+ Pointer_Strings
+ Type_stuff
+ Descriptors
+ Root_Set
+ Object_creation
+ Garbage_collector
+ Debugging_aids
+ Init
 
    Automatic compacting object heap system
    Allows one to create one of two basic automatically memory managed heap
@@ -15,7 +18,7 @@
    removal of objects are required.  Currently, a generational bi-heap collector
    is implemented.
 */ 
-#define TSTACK         0xfel
+#define TSTACK         0xfbl
 
 
 /* Byte count of a Linux virtual memory block and the resolution of mmap.
@@ -35,32 +38,29 @@ typedef Num Type;       /* Highest byte of descriptor */
 typedef Num Length; /* Remaining bytes of descriptor */
 
 
-
 /***************************************
  Pointer_Strings
 
  Mechanism to associate a C pointer address with a string.  A macro is
  provided to associate a pointer addresses and its string representation.
- char* must be the type (instead of my Str type) due to how the preprocessor
- generates symbols.
 ***************************************/
 void memPointerRegisterString (Obj obj, Str str);
 #define memPointerRegister(o) memPointerRegisterString(o, (Str)#o)
 
 Str memPointerString (Obj obj);
 
+void memPointerStringDumpAll (FILE *stream);
 
 
 /***************************************
  Type_stuff
 ***************************************/
-void memTypeRegisterString (Type type, char *description);
+void memTypeRegisterString (Type type, Str description);
 #define memTypeRegister(t) memTypeRegisterString(t, (Str)#t)
 
 Str memTypeString (Type t);
 
-void memDebugDumpAllTypes(void);
-
+void memTypeStringDumpAll (FILE *stream);
 
 
 /***************************************
@@ -83,7 +83,6 @@ Num memVectorLengthToObjectSize  (Length length);
 ***************************************/
 void memRootSetRegisterString (Obj *objp, Str desc);
 #define memRootSetRegister(op) memRootSetRegisterString(&op, (Str)#op)
-
 
 
 /***************************************
@@ -118,13 +117,11 @@ Obj  memStackObject  (Obj obj, Num topOffset);
 Num  memStackLength  (Obj obj);
 
 
-
 /***************************************
  Garbage_collector
 ***************************************/
 extern Num GarbageCollectionMode;
 void memGarbageCollect ();
-
 
 
 /***************************************
@@ -141,7 +138,6 @@ void memValidateObject (Obj o);
 void memValidateHeapStructures (void);
 
 
-
 /***************************************
  Init
 
@@ -150,8 +146,7 @@ void memValidateHeapStructures (void);
  It sets up the various heaps.  These include static, old and current the
  current generational collector.
 ***************************************/
-void memInitialize (Func preGC, Func postGC);
-
+void memInitialize (Func preGC, Func postGC, Func exceptionHandlerCallback);
 
 
 #endif /* _MEM_H */

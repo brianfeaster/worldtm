@@ -5,26 +5,59 @@
 #include <sys/mman.h> /* mmap() */
 #include "mem.h"
 
-#define TEST(fn) (printf("Calling test: "#fn"()  "), fn(),printf("PASS\n"))
 
+/* Mem module declarations missing in mem.h
+*/
 Num memHeapLength (Num h);
 
+
+/* Root objects similar to vm's
+*/
 Obj r0, r1, r2, r3, r4, r1f;
 
-Num TSYMBOL =0x01;
-Num TINTEGER=0x02;
-Num TSTRING =0x03;
 
-Num TPAIR   =0x80;
-Num TVECTOR =0x81;
+/* Object types similar to obj's
+*/
+Num TSYMBOL = 0x01;
+Num TINTEGER= 0x02;
+Num TSTRING = 0x03;
+Num TPAIR   = 0x80;
+Num TVECTOR = 0x81;
 
+
+/* Abstractions
+*/
 void push (Obj o) { memStackPush(r1f, o); }
-Obj   pop (Obj o) { return memStackPop(r1f); }
+Obj   pop (void) { return memStackPop(r1f); }
 
+
+
+/*******************************************************************************
+ TESTS
+*******************************************************************************/
+#define TEST(fn) (printf("Calling test: "#fn"()  "), fn(),printf("PASS\n"))
+
+
+/* Pre-garbage collection callback.  Registred with memInitialize.
+*/
+Num PreGarbageCollectFlag = 0;
+
+void memtPreGarbageCollect (void) {
+	PreGarbageCollectFlag = 1;
+}
+
+
+/* Exception handler callback.  Registred with memInitialize.
+*/
+Num ExceptionHandlerFlag = 0;
+
+void memtExceptionHandler (void) {
+	ExceptionHandlerFlag = 1;
+}
 
 
 /* Verify the expected number of objects in each heap
- */
+*/
 Num memtVerifyHeapLengths (Num staticLen, Num oldLen, Num youngLen, Num newLen) {
  Num ret;
 	ret = 
@@ -39,10 +72,9 @@ Num memtVerifyHeapLengths (Num staticLen, Num oldLen, Num youngLen, Num newLen) 
 }
 
 
-
 /* Verify expected variable sizes
 */
-void memtSizeof (void) {
+void TESTSizeof (void) {
 	// Verify typedefs are the correct byte size.
 	assert(sizeof(u8)==1);
 	assert(sizeof(u16)==2);
@@ -68,7 +100,7 @@ void memtSizeof (void) {
 /* Verify mmap returns a memory block size of 4Kb/#x1000 bytes.
    It does this by differencing the addresses of two consecutive calls.
 */
-void memtMmap (void) {
+void TESTMmap (void) {
  u8 *p1, *p2;
 	p1 = mmap(0x0, 1, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, 0, 0);
 	p2 = mmap(0x0, 1, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, 0, 0);
@@ -83,7 +115,7 @@ void memtMmap (void) {
    byte size on IA64.  The size includes the object type descriptor field.
    TODO This fails on IA32 and Commodore 64s.
 */
-void memtObjectSize (void) {
+void TESTObjectSize (void) {
 	assert(memArrayLengthToObjectSize(0)==8);
 	assert(memArrayLengthToObjectSize(1)==16);
 	assert(memArrayLengthToObjectSize(8)==16);
@@ -102,7 +134,7 @@ void memtObjectSize (void) {
 
 /* Create some objects and push/pop them to the stack.
 */
-void memtVerifyObjectCreationAndCollection (void) {
+void TESTVerifyObjectCreationAndCollection (void) {
  Chr i, j;
 	assert(memtVerifyHeapLengths(0, 0, 1, 0));
 
@@ -131,7 +163,7 @@ void memtVerifyObjectCreationAndCollection (void) {
 	assert(memStackLength(r1f) == 21);
 
 
-	for (i=0; i<16; i++) memStackPop(r1f);
+	for (i=0; i<16; i++) pop();
 	assert(memtVerifyHeapLengths(0, 0, 21, 0));
 
 	memGarbageCollect();
@@ -162,7 +194,9 @@ void callbackFinalizerFunction (Obj o) {
 	MyFinalizerFlag=1;
 }
 
-void memtFinalizer (void) {
+void TESTFinalizer (void) {
+
+	memPointerRegister(callbackFinalizerFunction);
 
 	/* The integer */
 	r1 = memNewArray(TINTEGER, 4);
@@ -190,7 +224,7 @@ void memtFinalizer (void) {
 
 /* Verify a pointer survives a garbage collection and
    still points to the same location in the object */
-void memtPointer (void) {
+void TESTPointer (void) {
 	r1 = memNewArray(TINTEGER, 4);
 	*(Int*)r1 = 0xfedcba98;
 
@@ -200,8 +234,8 @@ void memtPointer (void) {
 
 	memGarbageCollect();
 
-	assert(((Obj*)r0)[0] == r1+3);
-	assert(((Obj*)r0)[1] == r1);
+	assert( memVectorObject(r0, 0) == r1+3);
+	assert( memVectorObject(r0, 1) == r1);
 
 	r0 = r1 = 0;
 	GarbageCollectionMode = 1;
@@ -212,7 +246,7 @@ void memtPointer (void) {
 
 /* Verify a large array and large vector object can be created and collected.
 */
-void memtNewLargeVectorObject (void) {
+void TESTNewLargeVectorObject (void) {
 	r1 = memNewArray(TSTRING, 0x1000000 - 16); /* 16Mb sized array object */
 	r0 = memNewVector(TVECTOR,  0x1000000/8 - 2); /* 16Mb sized vector object */
 
@@ -238,17 +272,9 @@ void memtNewLargeVectorObject (void) {
 /* Allocate a simple object repeatedly until the garbage collector is triggered.
    One object should exist after collecting.
 */
-
-/* Pre-garbage collection callback.  Must be registred with memInitialize.
-*/
-Num GarbageCollectCalled=0;
-void memtPreGarbageCollect (void) {
-	GarbageCollectCalled=1;
-}
-
-void memtAutomaticGarbageCollect (void) {
+void TESTAutomaticGarbageCollect (void) {
 	/* Called 0x40000 times */
-	for (GarbageCollectCalled=0; !GarbageCollectCalled ; memNewArray(TSYMBOL, 8));
+	for (PreGarbageCollectFlag=0; !PreGarbageCollectFlag ; memNewArray(TSYMBOL, 8));
 	/* Better be just one object in the heap, the one that triggered the GC */
 	assert(memtVerifyHeapLengths(0, 0, 1, 0));
 
@@ -265,7 +291,7 @@ int main (int argc, char *argv[]) {
 	setbuf(stdout,0);
 	printf ("--Welcome to unit test %s----------------\n", __FILE__);
 
-	memInitialize(memtPreGarbageCollect, 0);
+	memInitialize(memtPreGarbageCollect, 0, memtExceptionHandler);
 
 	/* Register root set object.  These are the "registers" or
 	   machine's global variables */
@@ -276,23 +302,22 @@ int main (int argc, char *argv[]) {
 	memRootSetRegister(r4);
 	memRootSetRegister(r1f);
 
+	memTypeRegisterString(TSYMBOL,  (Str)"sym");
+	memTypeRegisterString(TINTEGER, (Str)"int");
+	memTypeRegisterString(TPAIR,    (Str)"pair");
+	memTypeRegisterString(TSTRING,  (Str)"str");
+	memTypeRegisterString(TVECTOR,  (Str)"vec");
+
 	r1f = memNewStack(); /* Create the stack for the machine */
 
-	memTypeRegisterString(TSYMBOL,  "sym");
-	memTypeRegisterString(TINTEGER, "int");
-	memTypeRegisterString(TPAIR,    "pair");
-	memTypeRegisterString(TSTRING,  "str");
-	memTypeRegisterString(TVECTOR,  "vec");
-	memPointerRegister(callbackFinalizerFunction);
-
-	TEST(memtSizeof);
-	TEST(memtMmap);
-	TEST(memtObjectSize);
-	TEST(memtVerifyObjectCreationAndCollection);
-	TEST(memtFinalizer);
-	TEST(memtPointer);
-	TEST(memtNewLargeVectorObject);
-	TEST(memtAutomaticGarbageCollect);
+	TEST(TESTSizeof);
+	TEST(TESTMmap);
+	TEST(TESTObjectSize);
+	TEST(TESTVerifyObjectCreationAndCollection);
+	TEST(TESTFinalizer);
+	TEST(TESTPointer);
+	TEST(TESTNewLargeVectorObject);
+	TEST(TESTAutomaticGarbageCollect);
 
 	//memDebugDumpAll(stdout);
 	return 0;

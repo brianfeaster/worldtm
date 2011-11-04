@@ -40,8 +40,8 @@ Obj sasmend, sasmna;
 
 /* Object types used by compiler
 */
-#define TICODE  0x87l
-#define TIBLOCK 0x88l
+#define TICODE  0x89l
+#define TIBLOCK 0x8Al
 Num asmIsObjectTypeICode  (Obj ic) { return memIsObjectType(ic, TICODE); }
 Num asmIsObjectTypeIBlock (Obj ib) { return memIsObjectType(ib, TIBLOCK); }
 
@@ -193,9 +193,9 @@ Obj asmIBlockNextValid (Num id) {
  Obj ib;
 	while (++id < IBlockCount) {
 		ib = asmIBlock(id);
-		if (true == asmIBlockTag(ib)) return ib;
+		if (otrue == asmIBlockTag(ib)) return ib;
 	}
-	return false;
+	return ofalse;
 }
 
 
@@ -266,14 +266,14 @@ void asmGenerateNewIBlock (Num icodeSize) {
 	memVectorSet(riblock, IBLOCK_INDEX_ID, (Obj)IBlockCount);
 
 	/* Tag defaults to #f */
-	memVectorSet(riblock, IBLOCK_INDEX_TAG, false);
+	memVectorSet(riblock, IBLOCK_INDEX_TAG, ofalse);
 
 	/* Incoming iblock list defaults to empty list */
-	memVectorSet(riblock, IBLOCK_INDEX_INCOMING, null);
+	memVectorSet(riblock, IBLOCK_INDEX_INCOMING, onull);
 
 	/* Outgoing default and conditional branch tags */
-	memVectorSet(riblock, IBLOCK_INDEX_DEFAULT, false);
-	memVectorSet(riblock, IBLOCK_INDEX_CONDITIONAL, false);
+	memVectorSet(riblock, IBLOCK_INDEX_DEFAULT, ofalse);
+	memVectorSet(riblock, IBLOCK_INDEX_CONDITIONAL, ofalse);
 
 	/* Append to igraph vector */
 	memVectorSet(riblocks, IBlockCount, riblock);
@@ -509,7 +509,7 @@ void asmAsmInternal (Obj f, ...) {
 			DB("blti["HEX" "HEX" "HEX"]", r, i, l);
 			asmICodePushNewBLTI(r, i, l);
 			asmGenerateIBlockWithPushedIcodes();
-			asmIBlockDefaultTagSet(riblock, true); /* signal this block's default is the next one */
+			asmIBlockDefaultTagSet(riblock, otrue); /* signal this block's default is the next one */
 			asmIBlockConditionalTagSet(riblock, l); /* signal this block conditional is a label */
 		} else if (BEQI == obj) {
 			r = asmOpcodesNext();
@@ -518,7 +518,7 @@ void asmAsmInternal (Obj f, ...) {
 			DB("beqi["HEX" "HEX" "HEX"]", r, i, l);
 			asmICodePushNewBEQI(r, i, l);
 			asmGenerateIBlockWithPushedIcodes();
-			asmIBlockDefaultTagSet(riblock, true); /* signal this block's default is the next one */
+			asmIBlockDefaultTagSet(riblock, otrue); /* signal this block's default is the next one */
 			asmIBlockConditionalTagSet(riblock, l); /* signal this block conditional is a label */
 		} else if (BNEI == obj) {
 			r = asmOpcodesNext();
@@ -527,7 +527,7 @@ void asmAsmInternal (Obj f, ...) {
 			DB("bnei["HEX" "HEX" "HEX"]", r, i, l);
 			asmICodePushNewBNEI(r, i, l);
 			asmGenerateIBlockWithPushedIcodes();
-			asmIBlockDefaultTagSet(riblock, true); /* signal this block's default is the next one */
+			asmIBlockDefaultTagSet(riblock, otrue); /* signal this block's default is the next one */
 			asmIBlockConditionalTagSet(riblock, l); /* signal this block conditional is a label */
 		} else if (BRTI == obj) {
 			r = asmOpcodesNext();
@@ -536,7 +536,7 @@ void asmAsmInternal (Obj f, ...) {
 			DB("brti["HEX" "HEX" "HEX"]", r, i, l);
 			asmICodePushNewBRTI(r, i, l);
 			asmGenerateIBlockWithPushedIcodes();
-			asmIBlockDefaultTagSet(riblock, true); /* signal this block's default is the next one */
+			asmIBlockDefaultTagSet(riblock, otrue); /* signal this block's default is the next one */
 			asmIBlockConditionalTagSet(riblock, l); /* signal this block conditional is a label */
 		} else if (BNTI == obj) {
 			r = asmOpcodesNext();
@@ -545,7 +545,7 @@ void asmAsmInternal (Obj f, ...) {
 			DB("bnti["HEX" "HEX" "HEX"]", r, i, l);
 			asmICodePushNewBNTI(r, i, l);
 			asmGenerateIBlockWithPushedIcodes();
-			asmIBlockDefaultTagSet(riblock, true); /* signal this block's default is the next one */
+			asmIBlockDefaultTagSet(riblock, otrue); /* signal this block's default is the next one */
 			asmIBlockConditionalTagSet(riblock, l); /* signal this block conditional is a label */
 		} else if (BRA == obj) {
 			l = asmOpcodesNext();
@@ -564,7 +564,7 @@ void asmAsmInternal (Obj f, ...) {
 			DB("jal ["HEX"]", r);
 			asmICodePushNewJAL(r);
 			asmGenerateIBlockWithPushedIcodes();
-			asmIBlockDefaultTagSet(riblock, true); /* Set next block as the default */
+			asmIBlockDefaultTagSet(riblock, otrue); /* Set next block as the default */
 		} else if (RET == obj) {
 			DB("ret []");
 			asmICodePushNewRET();
@@ -575,13 +575,13 @@ void asmAsmInternal (Obj f, ...) {
 			DB("sys ["HEX"]",r);
 			asmICodePushNewSYS(r);
 			asmGenerateIBlockWithPushedIcodes();
-			asmIBlockDefaultTagSet(riblock, true); /* Set next block as the default */
+			asmIBlockDefaultTagSet(riblock, otrue); /* Set next block as the default */
 		} else if (SYSI == obj) {
 			o = asmOpcodesNext();
 			DB("sysi["HEX"]", o);
 			asmICodePushNewSYSI(o);
 			asmGenerateIBlockWithPushedIcodes();
-			asmIBlockDefaultTagSet(riblock, true); /* Set next block as the default */
+			asmIBlockDefaultTagSet(riblock, otrue); /* Set next block as the default */
 		} else if (NOP == obj) {
 			DB("nop[]");
 			asmICodePushNewNOP();
@@ -595,7 +595,7 @@ void asmAsmInternal (Obj f, ...) {
 			DB("label["HEX"]", l);
 			if (0 < ICodeCount - icodeOffset) {
 				asmGenerateIBlockWithPushedIcodes();
-				asmIBlockDefaultTagSet(riblock, true);  /* default block is next */
+				asmIBlockDefaultTagSet(riblock, otrue);  /* default block is next */
 			}
 			/* Set the next block's ID in the label/iblockID table */
 			asmLabelsSet((Num)l, IBlockCount);
@@ -642,7 +642,7 @@ void asmEmitIblockOpcodes (void) {
 	DBBEG("      iblock="NUM, asmIBlockID(riblock));
 
 	/* Re-tag the iblock with its initial location in the code block */
-	assert(true == asmIBlockTag(riblock));
+	assert(otrue == asmIBlockTag(riblock));
 	asmIBlockTagSet (riblock, (Obj)pccode);
 
 	for (i=0; i<asmIBlockICodeLength(riblock); ++i) {
@@ -926,15 +926,15 @@ void asmPrepareIBlockBranches (void) {
 	DBBEG("  iblock="NUM, asmIBlockID(riblock));
 	/* If no default block is set then verify no conditional block either as it's
 	   probably the final "quit" iblock. */
-	if (false == asmIBlockDefaultTag(riblock)) {
-		assert(false == asmIBlockConditionalTag(riblock));
+	if (ofalse == asmIBlockDefaultTag(riblock)) {
+		assert(ofalse == asmIBlockConditionalTag(riblock));
 		goto ret;
 	}
 
 	/* If the iblock has a conditional iblock, cache the branch opcode's offset-field location and
 	   set the field value to the target iblock temporarily */
 	condBlock = asmIBlockConditionalTag(riblock);
-	if (false != condBlock) {
+	if (ofalse != condBlock) {
 		assert(asmIsObjectTypeIBlock(condBlock));
 		codeBlockOffset = pccode - 1;
 		memVectorSet(rcodenew, codeBlockOffset, condBlock);
@@ -948,7 +948,7 @@ void asmPrepareIBlockBranches (void) {
 	defBlock = asmIBlockDefaultTag(riblock);
 	if ((id == IBlockCount - 1) || (defBlock != nextib)) {
 		assert(asmIsObjectTypeIBlock(defBlock));
-		asmEmitOpcode2(vmBRA, false); /* Emit jump opcode */
+		asmEmitOpcode2(vmBRA, ofalse); /* Emit jump opcode */
 		codeBlockOffset = pccode - 1;
 		memVectorSet(rcodenew, codeBlockOffset, defBlock);
 		asmIBlockDefaultTagSet(riblock, (Obj)codeBlockOffset);
@@ -974,7 +974,7 @@ void asmPlaceAllIBlocks (void) {
 
 		/* This means the iblock is not connected to the igraph as it wasn't
 		   recursively found when counting the igraph fields */
-		if (false != asmIBlockTag(riblock)) {
+		if (ofalse != asmIBlockTag(riblock)) {
 
 			/* Translate and emit the icodes as virtual machine opcodes */
 			asmEmitIblockOpcodes();
@@ -1005,9 +1005,9 @@ void asmResolveDefault (void) {
 	if (!memIsObjectValid((Obj)opcodeFieldAddr)) {
 		/* Consider default block and it's address in the code block*/
 		defBlock = memVectorObject(rcodenew, opcodeFieldAddr);
-		assert(false != defBlock);
+		assert(ofalse != defBlock);
 		defBlockAddr = asmIBlockTag(defBlock);
-		assert(true != defBlockAddr); /* If it wasn't placed, it wouldn't be tagged #t */
+		assert(otrue != defBlockAddr); /* If it wasn't placed, it wouldn't be tagged #t */
  		/* Set the jump-opcode's offset */
 		memVectorSet(rcodenew, opcodeFieldAddr, (Obj)(((Int)defBlockAddr-(Int)opcodeFieldAddr-1)*8));
 		asmIBlockDefaultTagSet(riblock, defBlock); /* Set default tag back to target iblock */
@@ -1029,9 +1029,9 @@ void asmResolveConditional (void) {
 	if (!memIsObjectValid((Obj)opcodeFieldAddr)) {
 		/* Consider default block and it's address in the code block*/
 		condBlock = memVectorObject(rcodenew, opcodeFieldAddr);
-		assert(false != condBlock);
+		assert(ofalse != condBlock);
 		condBlockAddr = asmIBlockTag(condBlock);
-		assert(true != condBlockAddr); /* If it wasn't placed, it would be tagged #t */
+		assert(otrue != condBlockAddr); /* If it wasn't placed, it would be tagged #t */
  		/* Set the jump-opcode's offset */
 		memVectorSet(rcodenew, opcodeFieldAddr, (Obj)(((Int)condBlockAddr-(Int)opcodeFieldAddr-1)*8));
 		asmIBlockConditionalTagSet(riblock, condBlock); /* Set conditional tag back to target iblock */
@@ -1050,7 +1050,7 @@ void asmResolveBranchOpcodeAddresses (void) {
 		riblock = asmIBlockFrame(i); /* Consider iblock from vector of all iblocks */
 		/* This means the iblock is not connected to the igraph as it wasn't
 		   recursively found when counting the igraph fields */
-		if (false != asmIBlockTag(riblock)) {
+		if (ofalse != asmIBlockTag(riblock)) {
 			/* Resolve my branch opcode offsets */
 			asmResolveDefault();
 			asmResolveConditional();
@@ -1099,8 +1099,8 @@ void asmInitIBlockBranchTagsToIBlocks (Obj ib) {
 
 	r4 = ib; /* Protect object reference from garbage collector */
 	tag = asmIBlockDefaultTag(r4);
-	if (false != tag) {
-		if (true == tag) {
+	if (ofalse != tag) {
+		if (otrue == tag) {
 			/* Default block is via 'next logical' */
 			asmIBlockLinkDefault(asmIBlockID(r4), 1 + asmIBlockID(r4)); 
 		} else if (!asmIsObjectTypeIBlock(tag)) { /* Could already be connected if non ASM flow */
@@ -1110,7 +1110,7 @@ void asmInitIBlockBranchTagsToIBlocks (Obj ib) {
 	}
 
 	tag = asmIBlockConditionalTag(r4);
-	if (false != tag) {
+	if (ofalse != tag) {
 		/* Conditional block is a labeled block */
 		if (!asmIsObjectTypeIBlock(tag)) { /* Could already be connected if non ASM flow */
 			asmIBlockLinkConditional(asmIBlockID(r4), asmLabels((Num)tag)); 
@@ -1220,7 +1220,7 @@ Num asmOptimizePeepHolePushPop(void) {
 	/* Consider every live iblock */
 	for (i=0; i< asmIBlockFrameCount(); ++i) {
 		riblock = asmIBlockFrame(i);
-		if (true == asmIBlockTag(riblock)) do {
+		if (otrue == asmIBlockTag(riblock)) do {
 			idx = 0;
 			/* Over every POP instruction */
 			for (j=0; !idx && j<asmIBlockICodeLength(riblock); ++j) {
@@ -1254,7 +1254,7 @@ Num asmOptimizePeepHolePopPush(void) {
 	/* Consider every live iblock */
 	for (i=0; i< asmIBlockFrameCount(); ++i) {
 		riblock = asmIBlockFrame(i);
-		if (true == asmIBlockTag(riblock)) do {
+		if (otrue == asmIBlockTag(riblock)) do {
 			idx = 0;
 			/* Over every POP instruction */
 			for (j=0; !idx && j<asmIBlockICodeLength(riblock); ++j) {
@@ -1285,10 +1285,10 @@ Num asmOptimizePeepHolePopPush(void) {
 */
 void asmOptimizeEmptyIBlock(void) {
  Obj mydef, lst, inib;
-	if ((true == asmIBlockTag(riblock)) && (0 == asmIBlockICodeLength(riblock))) {
+	if ((otrue == asmIBlockTag(riblock)) && (0 == asmIBlockICodeLength(riblock))) {
 		DB("Found empty iblock:");
 
-		assert(false == asmIBlockConditionalTag(riblock)); /* Verify my empty conditional iblock */
+		assert(ofalse == asmIBlockConditionalTag(riblock)); /* Verify my empty conditional iblock */
 		/* Consider default iblock */
 		mydef = asmIBlockDefaultTag(riblock);
 
@@ -1306,13 +1306,13 @@ void asmOptimizeEmptyIBlock(void) {
 		/* Set incoming blocks' default and/or conditional block to my default */
 		lst = asmIBlockIncomingList(riblock);
 		assert(objIsPair(lst)); /* It's guaranteed to have an incoming list otherwise it wouldn't be tagged #t */
-		while (null != lst) {
+		while (onull != lst) {
 			inib = car(lst); /* Consider an incoming block */
 			if (riblock == asmIBlockDefaultTag(inib)) asmIBlockLinkDefault(asmIBlockID(inib), asmIBlockID(mydef));
 			if (riblock == asmIBlockConditionalTag(inib)) asmIBlockLinkConditional(asmIBlockID(inib), asmIBlockID(mydef));
 			lst = cdr(lst);
 		}
-		asmIBlockTagSet(riblock, false); /* Now invalidate this now unused iblock */
+		asmIBlockTagSet(riblock, ofalse); /* Now invalidate this now unused iblock */
 
 		DB("The result:");
 		DBE asmDumpIBlockParentAndChildren(riblock);
@@ -1353,10 +1353,10 @@ void asmPeepHoleOptimization (void) {
 */
 void asmPrepareIGraph (Obj ib) {
 	/* Base case.  Not an iblock or the iblock has been traversed already (tagged with #t) */
-	if (!asmIsObjectTypeIBlock(ib) || true == asmIBlockTag(ib))
+	if (!asmIsObjectTypeIBlock(ib) || otrue == asmIBlockTag(ib))
 		return;
 
-	asmIBlockTagSet(ib, true); /* Tag iblock #t */
+	asmIBlockTagSet(ib, otrue); /* Tag iblock #t */
 
 	vmPush(ib);
 	asmInitIBlockBranchTagsToIBlocks(ib);
@@ -1377,7 +1377,7 @@ Num asmCountIGraphFields (void) {
 		ib = asmIBlockFrame(i); /* Consider next iblock from vector of all iblocks */
 		/* Only live iblocks are emitted found when performing a recursive walk
 		   on the igraph and possibly removed during optimization */
-		if (true == asmIBlockTag(ib)) {
+		if (otrue == asmIBlockTag(ib)) {
 			/* Count the number of fields in each icode in this iblock */
 			for (j=0; j<asmIBlockICodeLength(ib); ++j) {
 				icode = asmIBlockICode(ib, j);
@@ -1416,11 +1416,11 @@ void asmAssemble (void) {
 	/* Create the code block object which all iblocks are compile to */
 	asmPrepareIGraph(asmIBlock(iblockOffset));
 
-	if (false != rdebug) asmDumpIBlocks();
+	if (ofalse != odebug) asmDumpIBlocks();
 
 	asmOptimizeIGraph();
 
-	if (false != rdebug) asmDumpIBlocks();
+	if (ofalse != odebug) asmDumpIBlocks();
 
 	len = asmCountIGraphFields();
 	if (len) {
@@ -1432,10 +1432,10 @@ void asmAssemble (void) {
 
 		r0 = rcodenew;
 
-//		if (false != rdebug) objDump(rlabels, stdout);
-		if (false != rdebug) vmDebugDumpCode(rcodenew, stderr);
+//		if (ofalse != odebug) objDump(rlabels, stdout);
+		if (ofalse != odebug) vmDebugDumpCode(rcodenew, stderr);
 	} else {
-		r0 = false;
+		r0 = ofalse;
 	}
 
 	asmEnd();
@@ -1500,14 +1500,14 @@ void asmDumpIBlock (Obj ib) {
 
 	/* Tag */
 	o = asmIBlockTag(ib);
-	if (false == o)
+	if (ofalse == o)
 		fprintf(stderr, "---");
 	else
 		fprintf(stderr, HEX04, asmIBlockTag(ib));
 
 	/* Default block */
 	block = asmIBlockDefaultTag(ib);
-	if (false==block)
+	if (ofalse==block)
 		fprintf(stderr, "  [---]");
 	else {
 		fprintf (stderr, "  [");
@@ -1518,7 +1518,7 @@ void asmDumpIBlock (Obj ib) {
 
 	/* Conditional block */
 	block = asmIBlockConditionalTag(ib);
-	if (false==block)
+	if (ofalse==block)
 		fprintf(stderr, "  [---]");
 	else {
 		fprintf (stderr, "  [");
@@ -1528,10 +1528,10 @@ void asmDumpIBlock (Obj ib) {
 	}
 	/* Incoming block IDs */
 	fprintf(stderr, "  (");
-	for (o = asmIBlockIncomingList(ib); null != o; ) {
+	for (o = asmIBlockIncomingList(ib); onull != o; ) {
 		fprintf(stderr, HEX03, asmIBlockID(car(o)));
 		o = cdr(o);
-		if (null != o) fprintf(stderr, " ");
+		if (onull != o) fprintf(stderr, " ");
 	}
 	fprintf(stderr, ")");
 
@@ -1563,8 +1563,8 @@ void asmDumpIBlocks (void) {
 void asmDumpIBlockParentAndChildren (Obj ib) {
  Obj lst, last, inib, dib, cib;
 	lst = asmIBlockIncomingList(ib);
-	last = null;
-	while (null != lst) {
+	last = onull;
+	while (onull != lst) {
 		inib = car(lst); /* Consider an incoming block */
 		if (last != inib) asmDumpIBlock(inib);
 		last = inib;
@@ -1601,8 +1601,8 @@ void asmInitialize (void) {
 		memRootSetRegister(rcodenew);
 
 		DB("Registering types");
-		memTypeRegisterString(TICODE, "icode");
-		memTypeRegisterString(TIBLOCK, "iblock");
+		memTypeRegisterString(TICODE, (Str)"icode");
+		memTypeRegisterString(TIBLOCK, (Str)"iblock");
 
 		DB("Initializing compiler related objects");
 		objNewSymbolStatic("sasmend"); sasmend = r0;

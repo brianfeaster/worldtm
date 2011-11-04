@@ -154,10 +154,10 @@ Int wscmAssertArgType2 (Type t1, Type t2, Obj o, Num arg, Num argCount, char con
 
 /* Special case assert returns false, skipping error/exception call
 */
-Int wscmAssertArgType3NoException (Num arg, Type t1, Type t2, Type t3, Obj o) {
-	if (t1 == memObjectType(o) || t2 == memObjectType(o) || t3 == memObjectType(o)) return 0;
+Int wscmAssertArgType2NoException (Num arg, Type t1, Type t2, Obj o) {
+	if (t1 == memObjectType(o) || t2 == memObjectType(o)) return 0;
 	fprintf(stderr, "\r\nWSCM-ASSERT::Expect '"STR"', '"STR"' or '"STR"' type for argument "NUM,
-		memTypeString(t1), memTypeString(t2), memTypeString(t3), arg);
+		memTypeString(t1), memTypeString(t2), arg);
 	return -1;
 }
 
@@ -204,7 +204,7 @@ void wscmRecvBlock (void) {
 
 	/* Time can be false meaning wait forever or the time the thread
 	   should be woken up regardless of character availability. */
-	if (r2 != false) {
+	if (r2 != ofalse) {
 		wakeupTime = sysTime() + *(Int*)r2;
 		objNewInt(wakeupTime);
 		r2=r0;
@@ -213,8 +213,8 @@ void wscmRecvBlock (void) {
 	r4 = 0; /* Character read count initialized to 0. */
 
 	sysRecv();
-	timedOut = (r2!=false) && (*(Int*)r2 <= sysTime());
-	if (r0 == false)
+	timedOut = (r2!=ofalse) && (*(Int*)r2 <= sysTime());
+	if (r0 == ofalse)
 		if (!timedOut) {
 			/* Nothing read and haven't timed out yet so block thread */
 			osUnRun();
@@ -225,7 +225,9 @@ void wscmRecvBlock (void) {
 			objNewString(NULL, (Num)r4);
    		memcpy(r0, r3, (Num)r4);
 		}
-	DBEND("  =>  r0:"OBJ, r0);
+
+	DBEND("  =>  r0:");
+	DBE memDebugDumpObject(r0, stderr);
 }
 
 
@@ -233,7 +235,7 @@ void wscmOpenRemoteStream (void) {
 	DBBEG();
 	if (objPortState(r1) == sconnecting) sysAcceptRemoteStream();
 
-	if (r1!=eof && objPortState(r1) == sconnecting) {
+	if (r1!=oeof && objPortState(r1) == sconnecting) {
 		DB("SYS    blocking on a remote connecting socket...");
 		osUnRun();
 		osMoveToQueue(rrunning, rblocked, sopenblocked);
@@ -275,7 +277,8 @@ void wscmOpenLocalStream (void) {
 /* This can do anything.  I change it mainly for debugging and prototyping. */
 void syscallFun (void) {
 	vmDebugDumpCode(rcode, stderr);
-	r0 = true;
+	memTypeStringDumpAll(stderr);
+	r0 = otrue;
 }
 
 void syscallError (void) {
@@ -284,7 +287,7 @@ void syscallError (void) {
 
 void wscmDumpEnv (void) {
 	sysDumpEnv(renv);
-	r0 = null;
+	r0 = onull;
 }
 
 void syscallQuit (void) {
@@ -302,7 +305,7 @@ void syscallString (void) {
 	/* Verify each arg is a string and sum the lengths */
 	while (s < (Int)r1) {
 		r0 = memStackObject(rstack, s++);
-		if (wscmAssertArgType3NoException((Num)r1 - s + 1, TSTRING, TCHAR, TNULLSTR, r0)) {
+		if (wscmAssertArgType2NoException((Num)r1 - s + 1, TSTRING, TCHAR, r0)) {
 			osException((Obj)__func__);
 			goto ret;
 		}
@@ -311,7 +314,7 @@ void syscallString (void) {
 	}
 	/* New string is built in reverse.  Even works if
 	   substrings are "" since strcpy length is 0. */
-	r0 = totalLen ? memNewArray(TSTRING, totalLen) : nullstr;
+	r0 = totalLen ? memNewArray(TSTRING, totalLen) : onullstr;
 	while (s--) {
 		totalLen -= (len = memObjectLength(r1=vmPop()));
 		memcpy(r0+totalLen, r1, len);
@@ -371,7 +374,7 @@ void syscallSubString (void) {
 		memcpy(r0, r1+start, end-start);
 	} else if (end == start) {
 		DB("Zero len");
-		r0 = nullstr;
+		r0 = onullstr;
 	} else {
 		DB("invalid range");
 		wscmError(3, "Substring range invalid");
@@ -399,24 +402,28 @@ ret:
 void syscallSerializeDisplay (void) {
  static u8 buff[8192];
  Int ret;
-	DBBEG();
+	DBBEG(" <= ");
+
 	if (wscmAssertArgCount1(__func__)) goto ret;
 	r0 = vmPop();
+
+	DBE objDump(r0, stderr);
+
 	if ((Num)r0 < 0x100000l) {
 		ret = sprintf((char*)buff, "#"OBJ, (Num)r0);
 		assert(0 < ret);
 		objNewString(buff, (Num)ret);
 	} else switch (memObjectType(r0)) {
-		case TSTRING : 
-		case TSYMBOL : 
-		case TNULL   :
-		case TNULLSTR:
-		case TNULLVEC:
-		case TFALSE  :
-		case TTRUE   :
+		case TINTRINSIC :
+			if      (onull == r0)  r0 = snull;
+			else if (ofalse == r0) r0 = sfalse;
+			else if (otrue == r0)  r0 = strue;
+			else if (oeof == r0)   r0 = seof;
+			else assert(!"Unknown intrinsic object to serialize");
 			break;
-		case TEOF    :
-			r0 = seof;
+		case TCHAR   : 
+		case TSYMBOL : 
+		case TSTRING : 
 			break;
 		case TINTEGER:
 			sysSerializeInteger(*(Int*)r0, 10);
@@ -425,9 +432,6 @@ void syscallSerializeDisplay (void) {
 			ret = sprintf((char*)buff, "%.2f", *(Real*)r0);
 			assert(0<ret);
 			objNewString(buff, (Num)ret);
-			break;
-		case TCHAR   : 
-			objNewString(r0, 1); /* Char objects live in static heap so address r0 won't change during a GC */
 			break;
 		case TPORT:
 		case TSOCKET:
@@ -475,14 +479,14 @@ void syscallSerializeWrite (void) {
 		assert(0<ret);
 		objNewString(buff, (Num)ret);
 	} else switch (memObjectType(r0)) {
-		case TSYMBOL : 
-		case TNULL   :
-		case TNULLVEC:
-		case TFALSE  :
-		case TTRUE   :
+		case TINTRINSIC :
+			if      (onull == r0)  r0 = snull;
+			else if (ofalse == r0) r0 = sfalse;
+			else if (otrue == r0)  r0 = strue;
+			else if (oeof == r0)   r0 = seof;
+			else assert(!"Unknown intrinsic object to serialize");
 			break;
-		case TEOF    :
-			r0 = seof;
+		case TSYMBOL : 
 			break;
 		case TINTEGER:
 			sysSerializeInteger(*(Int*)r0, 10);
@@ -497,7 +501,6 @@ void syscallSerializeWrite (void) {
 			assert(0<ret);
 			objNewString(buff, (Num)ret);
 			break;
-		case TNULLSTR:
 		case TSTRING : 
 			len = 0;
 			buff[len++] = '"';
@@ -584,7 +587,7 @@ ret:
 void syscallVector (void) {
  Num l=(Num)r1;
 	DBBEG();
-	if (l==0) r0=nullvec;
+	if (l==0) r0=onullvec;
 	else {
 		objNewVector(l);
 		while (l--) memVectorSet(r0, l, vmPop());
@@ -600,11 +603,11 @@ void syscallMakeVector (void) {
 		r1 = vmPop(); /* length */
 		if (wscmAssertArgType (TINTEGER, r1, 1, 1, __func__)) goto ret;
 		len = *(Num*)r1;
-		if (0 < len) {
+		if (0 < len && len <= 0x100000) { /* TODO magic vector size limit */
 			objNewVector(len);
 			while (len--) memVectorSet(r0, len, r2);
 		} else if (0 == len) {
-			r0 = nullvec;
+			r0 = onullvec;
 		} else {
 			wscmError(1, "make-vector invalid size");
 		}
@@ -617,7 +620,7 @@ void syscallMakeVector (void) {
 			objNewVector(len);
 			while (len--) memVectorSet(r0, len, r2);
 		} else if (0 == len) {
-			r0 = nullvec;
+			r0 = onullvec;
 		} else {
 			wscmError(2, "make-vector invalid size");
 		}
@@ -640,7 +643,7 @@ ret:
 void syscallEqP (void) {
 	DBBEG();
 	if (wscmAssertArgCount2(__func__)) goto ret;
-	r0 = (vmPop() == vmPop()) ? true : false;
+	r0 = (vmPop() == vmPop()) ? otrue : ofalse;
 ret:
 	DBEND();
 }
@@ -654,11 +657,11 @@ void syscallEquals (void) {
 	r0 = TINTEGER == memObjectType(r1)
 	     && TINTEGER == memObjectType(r2)
 	     && *(Int*)r1 == *(Int*)r2
-		? true : false;
+		? otrue : ofalse;
 	/*
 	if (wscmAssertArgType(TINTEGER, r1, 1, 2, __func__) ||
 	    wscmAssertArgType(TINTEGER, r2, 2, 2, __func__)) goto ret;
-	r0 = *(Int*)r1 == *(Int*)r2 ? true : true;
+	r0 = *(Int*)r1 == *(Int*)r2 ? otrue : otrue;
 	*/
 ret:
 	DBEND();
@@ -672,11 +675,11 @@ void syscallNotEquals (void) {
 	r0 = TINTEGER == memObjectType(r1)
 	     && TINTEGER == memObjectType(r2)
 	     && *(Int*)r1 == *(Int*)r2
-		? false : true;
+		? ofalse : otrue;
 	/*
 	if (wscmAssertArgType(TINTEGER, r1, 1, 2, __func__) ||
 	    wscmAssertArgType(TINTEGER, r2, 2, 2, __func__)) goto ret;
-	r0 = *(Int*)r1 == *(Int*)r2 ? false : true;
+	r0 = *(Int*)r1 == *(Int*)r2 ? false : otrue;
 	*/
 ret:
 	DBEND();
@@ -691,7 +694,7 @@ void syscallStringEqualsP (void) {
 	r0 = TSTRING == memObjectType(r0)
 	     && TSTRING == memObjectType(r1)
 	     && memObjectLength(r0) == (len=memObjectLength(r1))
-	     && !strncmp (r0, r1, len) ? true : false;
+	     && !strncmp (r0, r1, len) ? otrue : ofalse;
 ret:
 	DBEND();
 }
@@ -699,7 +702,7 @@ ret:
 void syscallLessThan (void) {
 	DBBEG();
 	if (wscmAssertArgCount2(__func__)) goto ret;
-	r0 = (*(Int*)vmPop() > *(Int*)vmPop()) ? true : false;
+	r0 = (*(Int*)vmPop() > *(Int*)vmPop()) ? otrue : ofalse;
 ret:
 	DBEND();
 }
@@ -707,7 +710,7 @@ ret:
 void syscallLessEqualThan (void) {
 	DBBEG();
 	if (wscmAssertArgCount2(__func__)) goto ret;
-	r0 = (*(Int*)vmPop() >= *(Int*)vmPop()) ? true : false;
+	r0 = (*(Int*)vmPop() >= *(Int*)vmPop()) ? otrue : ofalse;
 ret:
 	DBEND();
 }
@@ -718,9 +721,9 @@ void syscallGreaterThan (void) {
 	r1 = vmPop();
 	r0 = vmPop();
 	if (TREAL == memObjectType(r0) && TREAL == memObjectType(r1))
-		r0 = (*(Real*)r1 < *(Real*)r0) ? true : false;
+		r0 = (*(Real*)r1 < *(Real*)r0) ? otrue : ofalse;
 	else
-		r0 = (*(Int*)r1 < *(Int*)r0) ? true : false;
+		r0 = (*(Int*)r1 < *(Int*)r0) ? otrue : ofalse;
 ret:
 	DBEND();
 }
@@ -731,9 +734,9 @@ void syscallGreaterEqualThan (void) {
 	r1 = vmPop();
 	r0 = vmPop();
 	if (TREAL == memObjectType(r0) && TREAL == memObjectType(r1))
-		r0 = (*(Real*)r1 <= *(Real*)r0) ? true : false;
+		r0 = (*(Real*)r1 <= *(Real*)r0) ? otrue : ofalse;
 	else
-		r0 = (*(Int*)r1 <= *(Int*)r0) ? true : false;
+		r0 = (*(Int*)r1 <= *(Int*)r0) ? otrue : ofalse;
 ret:
 	DBEND();
 }
@@ -887,7 +890,7 @@ void syscallOpenStream (void) {
 	else if (objPortState(r1) == saccepting)
 		wscmOpenLocalStream();
 	else if (objPortState(r1) == sclosed)
-		r0=eof;
+		r0=oeof;
 	else {
 		wscmError(1, "Invalid port state to open-stream");
 	}
@@ -909,7 +912,7 @@ void syscallOpenFile (void) {
 	r1 = vmPop();
 	sysOpenFile(O_RDWR, S_IRUSR|S_IWUSR, silent); /* r1 contains filename object */
 
-	if (false == r0 && !silent) {
+	if (ofalse == r0 && !silent) {
 		len = sprintf(buff, "Unable to open file \""STR"\".  ["INT":"STR"]", r2, errno, strerror(errno));
 		assert(len<0x1000);
 		wscmError(0, buff);
@@ -931,7 +934,7 @@ void syscallOpenNewFile (void) {
 	r1 = vmPop();
 	sysOpenFile(O_CREAT|O_TRUNC|O_RDWR, S_IRUSR|S_IWUSR, silent);
 
-	if (false == r0 && !silent) {
+	if (ofalse == r0 && !silent) {
 		len = sprintf(buff, "Unable to open new file \""STR"\".  \"("INT")"STR"\"", r2, errno, strerror(errno));
 		assert(len<4095);
 		wscmError(0, buff);
@@ -975,14 +978,14 @@ void syscallRecv (void) {
 		r0 = memNewArray(TSTRING, (Num)r3);
 		r3=r0;
 	} else {
-		r3 = nullstr;
+		r3 = onullstr;
 	}
 
 	if (memObjectType(r1) != TSOCKET
 		 && memObjectType(r1) != TPORT) {
 		fprintf (stderr, "WARNING: syscallRecv: not a socket: ");
 		sysDisplay(r1, stdout);
-		r0 = eof;
+		r0 = oeof;
 	} else {
 		wscmRecvBlock();
 	}
@@ -998,9 +1001,9 @@ void syscallReadChar (void) {
 	    && memObjectType(r1) != TPORT) {
 		printf ("WARNING: syscallReadChar: not a socket: ");
 		sysDisplay(r1, stdout);
-		r0 = eof;
+		r0 = oeof;
 	} else {
-		r3=null;  /* tells recv that we just want a character. */
+		r3=onull;  /* tells recv that we just want a character. */
 		wscmRecvBlock();
 	}
 ret:
@@ -1015,11 +1018,11 @@ void syscallUnreadChar (void) {
 	if (memObjectType(r1) != TSOCKET && memObjectType(r1) != TPORT) {
 		printf ("WARNING: syscallUnreadChar: arg2 not a socket: ");
 		sysDisplay(r1, stdout);
-		r0 = eof;
+		r0 = oeof;
 	} else if (memObjectType(r0) != TCHAR) {
 		printf ("WARNING: syscallUnreadChar: arg1 not a char: ");
 		sysDisplay(r0, stdout);
-		r0 = eof;
+		r0 = oeof;
 	} else
 		memVectorSet(r1, 4, r0);
 ret:
@@ -1054,17 +1057,23 @@ void syscallSend (void) {
 	if (memObjectType(r1) != TSOCKET && memObjectType(r1) != TPORT) {
 		printf ("WARNING: syscallSend: not a socket is (type "HEX02"): ", memObjectType(r1));
 		*(int*)0=0;
-		r0 = eof;
-	} else {
+		r0 = oeof;
+	} else if (memIsObjectValid(r2)) {
 		sysSend();
-		if (r0 == false) { /* Still more to send. */
+		if (r0 == ofalse) { /* Still more to send. */
 			osUnRun();
 			osMoveToQueue(rrunning, rblocked, swriteblocked);
 			osScheduler();
 		}
+	} else {
+		fprintf (stderr, "WARNING: trying to send:");
+		memDebugDumpObject(r2, stderr);
+		syscallDebugger();
+		r0 = ofalse;
 	}
 ret:
-	DBEND();
+	DBEND(" => r0:");
+	DBE memDebugDumpObject(r0, stderr);
 }
 
 void syscallSeek (void) {
@@ -1102,7 +1111,7 @@ void syscallStringRef (void) {
 	o=vmPop();
 	/* A (negative? offset) implies (absolute offset) from end. */
 	if (offset < 0) offset = (Int)memObjectLength(o)+offset;
-	r0 = memVectorObject(scharacters, *((Chr*)o+offset));
+	r0 = objIntegerToChar(*((Chr*)o+offset));
 ret:
 	DBEND();
 }
@@ -1128,7 +1137,7 @@ void syscallVectorLength (void) {
 	DBBEG();
 	if (wscmAssertArgCount1(__func__)) goto ret;
 	r0 = vmPop();
-	objNewInt(r0==nullvec?0:(Int)memObjectLength(r0));
+	objNewInt(r0==onullvec?0:(Int)memObjectLength(r0));
 ret:
 	DBEND();
 }
@@ -1142,7 +1151,7 @@ void sysNewSymbol (void) {
 void sysNewString (void) {
  Num len = parseString(r5); /* Mutates the string & returns the new length. */
 	DBBEG();
-	if ((Int)r6 == 2) r0 = nullstr;
+	if ((Int)r6 == 2) r0 = onullstr;
 	else {
 		objNewString(NULL, len);
    	memcpy(r0, r5, len);
@@ -1151,7 +1160,7 @@ void sysNewString (void) {
 }
 void sysNewCharacter (void) {
 	DBBEG();
-	r0 = memVectorObject(scharacters, ((u8*)r5)[2]);
+	r0 = objIntegerToChar(((u8*)r5)[2]);
 	DBEND();
 }
 void sysNewInteger (void) {
@@ -1198,7 +1207,7 @@ void syscallDisassemble (void) {
 	DBBEG();
 	r0 = vmPop();
 	if (memObjectType(r0) == TCLOSURE) {
-		if (cdr(r0) != null) sysDumpEnv(cdr(r0));
+		if (cdr(r0) != onull) sysDumpEnv(cdr(r0));
 		r0 = car(r0); /* Consider closure's code block */
 	}
 	vmDebugDumpCode(r0, stderr);
@@ -1219,12 +1228,12 @@ void syscallCloseSemaphore (void) {
 	DBBEG();
 	if (wscmAssertArgCount1(__func__)) goto ret;
 	r0 = vmPop();
-	if (memVectorObject(r0,0)==false) /* TODO this vector-ref should be abstracted using semaphore accessors */
-		r0 = false; /* Semaphore already closed so return failure */
+	if (memVectorObject(r0,0)==ofalse) /* TODO this vector-ref should be abstracted using semaphore accessors */
+		r0 = ofalse; /* Semaphore already closed so return failure */
 	else {
-		memVectorSet(r0, 0, false);
+		memVectorSet(r0, 0, ofalse);
 		osUnblockSemaphoreBlocked(r0, 1); /* 1 means unblock all threads on this semaphore */
-		r0 = true;
+		r0 = otrue;
 	}
 ret:
 	DBEND();
@@ -1284,7 +1293,7 @@ ret:
 
 
 void syscallToggleDebug (void) {
-	r0 = rdebug = (true == rdebug) ? false : true;
+	r0 = odebug = (otrue == odebug) ? ofalse : otrue;
 }
 
 
@@ -1353,16 +1362,20 @@ ret:
 #define DEBUG DEBUG_ALL|0
 #define DB_DESC "WSCM_INIT "
 
-/* Given  - r1:port object  r3:pointer to char
+/* Given  - r1:port object  r3:char object or eof
             r4:current state (see scanner.c)   r5:yytext  r6:yylen
    Return - r4:next state   r5:yytext   r6:yylen
             r0:final state if complete token scanned (reached final state).
 */
 void wscmSysTransition (void) {
-	DBBEG(" *r3="HEX" state:r4="HEX, *(Chr*)r3, r4);
+	DBBEG(" <= state:r4="HEX"  char:r3=", r4);
+	DBE memDebugDumpObject(r3, stderr);
 
 	/* Make the transition on char in r3 given state in r4. */
-	r4 = (Obj)transition(*(Num*)r3, (Num)r4);
+	if (oeof == r3)
+		r4 = (Obj)transition(256, (Num)r4); /* 256 is treated as the EOF character */
+	else
+		r4 = (Obj)transition(*(Num*)r3, (Num)r4);
 	DB("transition() returned new state => "HEX, r4);
 
 	/* Append char to scanned token and inc yylen. */
@@ -1373,9 +1386,9 @@ void wscmSysTransition (void) {
 		r6 = 0l;
 	} else if ((Int)r4 & FINALSTATE) {
 		/* Push back character to stream if in pushback state and not eof. */
-		if (((Num)r4 & PUSHBACK) && (eof != r3)) {
+		if (((Num)r4 & PUSHBACK) && (oeof != r3)) {
 			r6--;
-			memVectorSet(r1, 4, memVectorObject(scharacters, *(Num*)r3));
+			memVectorSet(r1, 4, objIntegerToChar(*(Num*)r3));
 		}
 		r0 = r4;
 	}
@@ -1431,18 +1444,18 @@ void wscmCreateRead (void) {
 		MVI, R6, 0l,             /* r6 <- initial yylength. */
 	 LABEL, Lscan,
 		/* Call recv block to read one char */
-		MVI, R2, false, /* tell recv to not timeout */
-		MVI, R3, null, /* tell recv that we want a character */
+		MVI, R2, ofalse, /* tell recv to not timeout */
+		MVI, R3, onull, /* tell recv that we want a character */
 		PUSH, R4,
 			SYSI, wscmRecvBlock, /* Syscall to read char. */
 		POP, R4,
-		MV, R3, R0,                     /* move char to r3 */
+		MV, R3, R0,                     /* move char object to r3 */
 		MVI, R0, 0l, /* Initialize final state to 0.  Will return 0 when still in non-final state. */
 		SYSI, wscmSysTransition, /* Syscall to get next state. */
 		BEQI, R0, 0l, Lscan,
 		/* close paren? */
 		BNEI, R0, SCLOSEPAREN, Ldot,
-		MVI, R0, null,
+		MVI, R0, onull,
 		RET,
 	 LABEL, Ldot,
 		/* dot? */
@@ -1461,7 +1474,7 @@ void wscmCreateRead (void) {
 		/* eof? */
 	 LABEL, Leof,
 		BNEI, R0, SEOF, Lvector,
-		MVI, R0, eof,
+		MVI, R0, oeof,
 		RET,
 		/* vector? */
 	 LABEL, Lvector,
@@ -1494,7 +1507,7 @@ void wscmCreateRead (void) {
 		PUSH, R1,
 		PUSH, R2, /* Save r1 and r2 */
 			MV, R1, R0,           /* Car object. */
-			MVI, R2, null,/* Cdr object. */
+			MVI, R2, onull,/* Cdr object. */
 			SYSI, objCons12,
 			MVI, R1, squote,/* Car object. */
 			MV, R2, R0,            /* Cdr object. */
@@ -1516,7 +1529,7 @@ void wscmCreateRead (void) {
 		POP, R7,
 		PUSH, R1, PUSH, R2, /* Save r1 and r2 */
 			MV, R1, R0,           /* Car object. */
-			MVI, R2, null,/* Cdr object. */
+			MVI, R2, onull,/* Cdr object. */
 			SYSI, objCons12,
 			MVI, R1, sunquotesplicing,/* Car object. */
 			MV, R2, R0,            /* Cdr object. */
@@ -1534,7 +1547,7 @@ void wscmCreateRead (void) {
 		POP, RB, POP, RA, POP, R7,
 		PUSH, R1, PUSH, R2, /* Save r1 and r2 */
 			MV, R1, R0,            /* Car object. */
-			MVI, R2, null,      /* Cdr object. */
+			MVI, R2, onull,      /* Cdr object. */
 			SYSI, objCons12,
 			MVI, R1, sunquote,  /* Car object. */
 			MV, R2, R0,            /* Cdr object. */
@@ -1556,7 +1569,7 @@ void wscmCreateRead (void) {
 		PUSH, R1,
 		PUSH, R2, /* Save r1 and r2 */
 			MV, R1, R0,             /* Car object. */
-			MVI, R2, null,       /* Cdr object. */
+			MVI, R2, onull,       /* Cdr object. */
 			SYSI, objCons12,
 			MVI, R1, squasiquote,/* Car object. */
 			MV, R2, R0,             /* Cdr object. */
@@ -1616,16 +1629,16 @@ void wscmCreateRead (void) {
 		/* false? */
 	 LABEL, Lfalse,
 		BNEI, R0, SFALSE, Ltrue,
-		MVI, R0, false,
+		MVI, R0, ofalse,
 		BRA, Ldone,
 		/* true? */
 	 LABEL, Ltrue,
 		BNEI, R0, STRUE, Ldefault,
-		MVI, R0, true,
+		MVI, R0, otrue,
 		BRA, Ldone,
 		/* default to null? */
 	 LABEL, Ldefault,
-		MVI, R0, null,
+		MVI, R0, onull,
 
 		/* List context?  If so recurse and contruct pair. */
 	 LABEL, Ldone,
@@ -1736,10 +1749,10 @@ void wscmCreateRepl (void) {
 		JAL, R0,
 		POP, R9, POP, RB, POP, RA,
 		/* Done if an #eof parsed. */
-		BRTI, R0, TEOF, Ldone,
+		BEQI, R0, oeof, Ldone,
 		/* Compile expression. */
 		SYSI, compCompile,
-		BEQI, R0, false, Lcompileerror,
+		BEQI, R0, ofalse, Lcompileerror,
 		/* Run code. */
 		PUSH, RA, PUSH, RB, PUSH, R9,
 		JAL, R0,
@@ -1850,12 +1863,12 @@ void wscmInitialize (void) {
 	sysDefineSyscall (sysDumpTGE, "tge");
 
 	/* For fun assign TGE symbol to a few internal C obj symbols */
-	r0=scharacters; sysDefine("characters");
-	r0=staticIntegers; sysDefine("integers");
-	r0=rsymbols; sysDefine("symbols");
+	r0=ocharacters; sysDefine("characters");
+	//r0=otaticIntegers; sysDefine("integers");
+	//r0=osymbols; sysDefine("symbols");
 	wscmCreateRead();  sysDefine("read");
 	wscmCreateRepl();  sysDefine("repl2");
-	r0=eof; sysDefine("#eof");
+	r0=oeof; sysDefine("#eof");
 	objNewInt(42); sysDefine ("y"); /* It's always nice to have x and y defined with useful values */
 	objNewInt(69); sysDefine ("x");
 	objNewSymbol((Str)"a", 1); r1=r0; /* It's also nice to have a pair ready to go */
@@ -1898,7 +1911,7 @@ void wscmCReadEvalPrintLoop (void) {
 		renv = rtge; /* Evaluate in TGE */
 		fprintf(stderr, "\n== Read and parse ===============\nWSCM>");
 		yyparse();/* Expr read into r0. */
-		if (eof == r0) done=1;
+		if (oeof == r0) done=1;
 
 		fprintf(stderr, "\n== Compile ======================\n");
 		sysWrite(r0, stderr);
@@ -1908,12 +1921,12 @@ void wscmCReadEvalPrintLoop (void) {
 		rcode = r0;
 		rip = 0;
 
-		if (false == r0) {
+		if (ofalse == r0) {
 			fprintf(stderr, "\n*Compile failed*");
 		} else {
 			//vmDebugDumpCode(rcode, stderr);
 			fprintf(stderr, "== Execute and return value =====\n");
-			if (false != r0) {
+			if (ofalse != r0) {
 				vmRun();
 			}
 			sysDisplay(r0, stderr);
@@ -1941,7 +1954,7 @@ void wscmASMReadEvalPrintLoop (int argc, char *argv[]) {
 		objNewSymbol((Str)argv[1], strlen(argv[1]));
 		vmPush(r0);  r1=(Obj)1;  syscallOpenFile();  r2=r0;
 		/* Assign port to existing binding. */
-		if (r2 != eof) {
+		if (r2 != oeof) {
 			objNewSymbol ((Str)"stdin", 5);  r1=r0;  sysTGEFind();
 			memVectorSet(r0, 0, r2); /* Rebind stdin with the new port */
 		}
@@ -1978,7 +1991,7 @@ void wscmStringReadEvalPrintLoop (void) {
 	//sysDisplay(r0, stderr);
 	compCompile(); /* Use the internal and only compiler */
 	//vmDebugDumpCode(r0, stderr);
-	if (false == r0) {
+	if (ofalse == r0) {
 		fprintf(stderr, "Could not compile internal REPL expression.  Calling internal REPL...");
 		wscmCReadEvalPrintLoop();
 	} else {
@@ -2030,7 +2043,8 @@ int main (int argc, char *argv[]) {
 	//wscmASMReadEvalPrintLoop(argc, argv);  return 0;
 
 	/* REPL as compiled inlined scheme with asynchronous threads */
-	wscmStringReadEvalPrintLoop();  return 0;
+	wscmStringReadEvalPrintLoop();
+	return 0;
 }
 
 #undef DB_DESC

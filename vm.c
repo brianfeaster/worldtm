@@ -734,7 +734,7 @@ void vmInitialize (Func interruptHandler, void(*vmObjDumper)(Obj, FILE*)) {
 	if (shouldInitialize) {
 		DB("Activating module");
 		shouldInitialize=0;
-		memInitialize(0, 0);
+		memInitialize(0, 0, 0);
 		DB("Registering rootset objects");
 		memRootSetRegister(r0);  memRootSetRegister(r1);  memRootSetRegister(r2);  memRootSetRegister(r3);
 		memRootSetRegister(r4);  memRootSetRegister(r5);  memRootSetRegister(r6);  memRootSetRegister(r7);
@@ -743,7 +743,7 @@ void vmInitialize (Func interruptHandler, void(*vmObjDumper)(Obj, FILE*)) {
 		DB("Create the stack");
 		rf = memNewStack();
 		DB("Register the internal object types");
-		memTypeRegisterString (TCODE, "code");
+		memTypeRegisterString(TCODE, (Str)"code");
 		DB("Initialize opcode values");
 		vmVm(); /* The first call to vmVm() initializes opcode values */
 	} else {

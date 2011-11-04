@@ -59,7 +59,7 @@ void osException (Obj str) {
 	   TODO this should be a static object and global symbol */
 	objNewSymbol ((Str)"ERRORS", 6);  r1=r0;  sysTGEFind();
 
-	if (null == r0) {
+	if (onull == r0) {
 		if (ExceptionHandlerDefault) {
 			r0 = r3;
 			ExceptionHandlerDefault();
@@ -160,10 +160,10 @@ void osNewThread (void) {
 
 	/* Find next available thread id.  Thread table's first entry
 	   is the count so index range is 1 to MAX_THREADS inclusive. */
-	for (tid=1; memVectorObject(rthreads, tid) != null; ++tid)
+	for (tid=1; memVectorObject(rthreads, tid) != onull; ++tid)
 		if (MAX_THREADS <= tid) {
 			fprintf (stderr, "WARNING: osNewThread: Too many rthreads.");
-			r0 = false;
+			r0 = ofalse;
 			goto done;
 		}
 
@@ -280,10 +280,10 @@ void osScheduleBlocked (void) {
 			r3 = memStackObject(osThreadStack(r5), 3l); /* buffer */
 			r4 = memStackObject(osThreadStack(r5), 4l); /* count */
 			sysRecv();
-			timedOut = (r2!=false) && (*(Int*)r2 <= sysTime());
-			if (r0 != false || timedOut) {
+			timedOut = (r2!=ofalse) && (*(Int*)r2 <= sysTime());
+			if (r0 != ofalse || timedOut) {
 				/* If timed out but partial read, return the partial string */
-				if (r0==false && timedOut && 0<(Num)r4) {
+				if (r0==ofalse && timedOut && 0<(Num)r4) {
 					objNewString(NULL, (Num)r4);
    				memcpy(r0, r3, (Num)r4);
 				}
@@ -308,7 +308,7 @@ void osScheduleBlocked (void) {
 			r2 = memStackObject(osThreadStack(r5), 2);
 			r3 = memStackObject(osThreadStack(r5), 3);
 			sysSend();
-			if (r0 != false) {
+			if (r0 != ofalse) {
 				DB(" unblocking thread");
 				/* Set thread's return value (r0 register top of stack) with
 			   	sent string. */
@@ -348,7 +348,7 @@ void osScheduleBlocked (void) {
 			} else if (memVectorObject(r1, 3) == sconnecting) {
 				DB(" dealing with a new remote stream connection thread");
 				sysAcceptRemoteStream();
-				if (r1==eof || memVectorObject(r1, 3) != sconnecting) {
+				if (r1==oeof || memVectorObject(r1, 3) != sconnecting) {
 					memStackSet(osThreadStack(r5), 0, r1);
 					r1=objDoublyLinkedListNext(r5);
 					osMoveToQueue(r5, rready, sready);
@@ -357,7 +357,7 @@ void osScheduleBlocked (void) {
 					r5=objDoublyLinkedListNext(r5);
 				}
 			} else if (memVectorObject(r1, 3) == sclosed) {
-				memStackSet(osThreadStack(r5), 0, eof);
+				memStackSet(osThreadStack(r5), 0, oeof);
 				r1=objDoublyLinkedListNext(r5);
 				osMoveToQueue(r5, rready, sready);
 				r5=r1;
@@ -447,7 +447,7 @@ void osScheduler (void) {
 void osUnthread (void) {
 	DBBEG("  thread ID "NUM, *(Num*)osThreadId(rrunning));
 	/* Remove from thread vector table. */
-	memVectorSet(rthreads, *(Num*)osThreadId(rrunning), null);
+	memVectorSet(rthreads, *(Num*)osThreadId(rrunning), onull);
 	/* Decrement thread count. */
 	memVectorSet(rthreads, 0, osThreadCount()-1); /* TODO Race condition? */
 	osRemoveThread(rrunning);
@@ -549,7 +549,7 @@ void osUnblockSemaphoreBlocked (Obj sem, Num all) {
 				DB("unblocking thread tid:"NUM, *(Num*)osThreadId(r4));
 				/* Set thread's return value (r0 register which is found at the top of the thread's stack)
 				   to #t if another thread down'ed the semaphore and #f if close-semaphore called. */
-				memStackSet(osThreadStack(r4), 0, all?false:true);
+				memStackSet(osThreadStack(r4), 0, all?ofalse:otrue);
 				osMoveToQueue(r4, rready, sready);
 				if (!all) found=1;
 			}
@@ -642,7 +642,7 @@ void osInitialize (Func exceptionHandler) {
 		DB("Creating thread vector");
 		objNewVector(MAX_THREADS+1);  rthreads=r0;
 		memVectorSet(rthreads, 0, 0); /* Initialize thread count. */
-		for (i=1; i<=MAX_THREADS; i++) memVectorSet(rthreads, i, null);
+		for (i=1; i<=MAX_THREADS; i++) memVectorSet(rthreads, i, onull);
 
 		DB("Creating ready thread list");
 		objNewDoublyLinkedListNode (); rready=r0;

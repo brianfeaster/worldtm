@@ -38,8 +38,11 @@ void FBDump () {
 
 /* Compare character file buffer's contents with string argument. Finalize related objects. */
 void FBFinalize (char *goldenString) {
+ Num res;
 	fflush(FB);
-	assert(0 == strcmp(FBBuff, goldenString));
+	res = (Num)strcmp(FBBuff, goldenString);
+	if (res) fprintf(stderr, "\nReceived [%s]\nExpected [%s] ", FBBuff, goldenString);
+	assert(0 == res);
 	fclose(FB);
 	free(FBBuff);
 }
@@ -84,7 +87,7 @@ void test1 (void) {
 	asmICodePushNewNOP();
 	asmGenerateIBlockWithPushedIcodes();
 
-	asmIBlockDefaultTagSet(riblock, true); /* signal this block's default is the next one */
+	asmIBlockDefaultTagSet(riblock, otrue); /* signal this block's default is the next one */
 
 	/* Create a new iblock as the default block to the iblock specified by
 	   the first parameter.
@@ -117,18 +120,18 @@ void test2 (void) {
 	/* Head iblock of the igraph */
 	asmICodePushNewNOP();
 	asmGenerateIBlockWithPushedIcodes();
-	asmIBlockDefaultTagSet(riblock, true); /* signal this block's default is the next one */
+	asmIBlockDefaultTagSet(riblock, otrue); /* signal this block's default is the next one */
 
 	asmICodePushNewMVI(R0, (Obj)10);
 	asmGenerateIBlockWithPushedIcodes();
-	asmIBlockDefaultTagSet(riblock, true); /* signal this block's default is the next one */
+	asmIBlockDefaultTagSet(riblock, otrue); /* signal this block's default is the next one */
 
 	asmICodePushNewSYSI((Obj)cctDumpIntegerR0);
 	asmICodePushNewSYSI((Obj)cctDumpSpace);
 	asmICodePushNewADDI(R0, (Obj)-1);
-	asmICodePushNewBNEI(R0, 0, false);
+	asmICodePushNewBNEI(R0, 0, ofalse);
 	asmGenerateIBlockWithPushedIcodes();
-	asmIBlockDefaultTagSet(riblock, true); /* signal this block's default is the next one */
+	asmIBlockDefaultTagSet(riblock, otrue); /* signal this block's default is the next one */
 	asmIBlockConditionalTagSet(riblock, riblock); /* Set conditional block to self */
 
 	asmICodePushNewQUIT();
@@ -154,30 +157,30 @@ void test3 (void) {
 	/* Head iblock of the igraph */
 	asmICodePushNewNOP();
 	asmGenerateIBlockWithPushedIcodes();
-	asmIBlockDefaultTagSet(riblock, true); /* signal this block's default is the next one */
+	asmIBlockDefaultTagSet(riblock, otrue); /* signal this block's default is the next one */
 
 	asmICodePushNewMVI(R1, (Obj)5);
 	asmGenerateIBlockWithPushedIcodes();
-	asmIBlockDefaultTagSet(riblock, true);
+	asmIBlockDefaultTagSet(riblock, otrue);
 
 	asmICodePushNewSYSI((Obj)cctDumpSpace);
 	asmICodePushNewMV(R0, R1);
 	asmGenerateIBlockWithPushedIcodes();
 	r3 = riblock; /* Keep track of this iblock so we can link to it from an iblock below */
-	asmIBlockDefaultTagSet(riblock, true);
+	asmIBlockDefaultTagSet(riblock, otrue);
 
 	asmICodePushNewSYSI((Obj)cctDumpIntegerR0);
 	asmICodePushNewSYSI((Obj)cctDumpSpace);
 	asmICodePushNewADDI(R0, (Obj)-1);
-	asmICodePushNewBNEI(R0, 0, false);
+	asmICodePushNewBNEI(R0, 0, ofalse);
 	asmGenerateIBlockWithPushedIcodes();
-	asmIBlockDefaultTagSet(riblock, true);
+	asmIBlockDefaultTagSet(riblock, otrue);
 	asmIBlockConditionalTagSet(riblock, riblock); /* Set this iblock's conditional link to self */
 
 	asmICodePushNewADDI(R1, (Obj)-1);
-	asmICodePushNewBNEI(R1, 0, false); /* Jump back to another iblock */
+	asmICodePushNewBNEI(R1, 0, ofalse); /* Jump back to another iblock */
 	asmGenerateIBlockWithPushedIcodes();
-	asmIBlockDefaultTagSet(riblock, true);
+	asmIBlockDefaultTagSet(riblock, otrue);
 	asmIBlockConditionalTagSet(riblock, r3); /* Set this iblock's conditional link to self */
 
 	asmICodePushNewQUIT();
@@ -202,40 +205,40 @@ void test4 (void) {
 
 	asmICodePushNewNOP();
 	asmGenerateIBlockWithPushedIcodes();
-	asmIBlockDefaultTagSet(riblock, true);
+	asmIBlockDefaultTagSet(riblock, otrue);
 
 	// 4
 	asmICodePushNewMVI(R1, (Obj)9);
 	asmICodePushNewMV(R0, R1);
-	asmICodePushNewBNEI(R0, 0, false); /* Branch forward to 7 for fun which just branches back to 5 */
+	asmICodePushNewBNEI(R0, 0, ofalse); /* Branch forward to 7 for fun which just branches back to 5 */
 	asmGenerateIBlockWithPushedIcodes();
 	r4 = riblock;
-	asmIBlockDefaultTagSet(riblock, true);
+	asmIBlockDefaultTagSet(riblock, otrue);
 
 	// 5
 	asmICodePushNewSYSI((Obj)cctDumpSpace);
 	asmGenerateIBlockWithPushedIcodes();
 	r5 = riblock;
-	asmIBlockDefaultTagSet(riblock, true);
+	asmIBlockDefaultTagSet(riblock, otrue);
 
 	asmICodePushNewSYSI((Obj)cctDumpIntegerR0);
 	asmICodePushNewSYSI((Obj)cctDumpSpace);
 	asmICodePushNewADDI(R0, (Obj)-1);
-	asmICodePushNewBNEI(R0, 0, false); /* Loop to self */
+	asmICodePushNewBNEI(R0, 0, ofalse); /* Loop to self */
 	asmGenerateIBlockWithPushedIcodes();
-	asmIBlockDefaultTagSet(riblock, true);
+	asmIBlockDefaultTagSet(riblock, otrue);
 	asmIBlockConditionalTagSet(riblock, riblock);
 
 	// 6
-	asmICodePushNewBNEI(R0, 0, false); /* Branch to 8 and quit */
+	asmICodePushNewBNEI(R0, 0, ofalse); /* Branch to 8 and quit */
 	asmGenerateIBlockWithPushedIcodes();
 	r6 = riblock;
-	asmIBlockDefaultTagSet(riblock, true);
+	asmIBlockDefaultTagSet(riblock, otrue);
 
 	// 7
-	asmICodePushNewBNEI(R0, 0, false); /* Branch back to 5 */
+	asmICodePushNewBNEI(R0, 0, ofalse); /* Branch back to 5 */
 	asmGenerateIBlockWithPushedIcodes();
-	asmIBlockDefaultTagSet(riblock, true);
+	asmIBlockDefaultTagSet(riblock, otrue);
 	asmIBlockConditionalTagSet(r4, riblock);
 	asmIBlockConditionalTagSet(riblock, r5);
 
@@ -262,33 +265,33 @@ void test5 (void) {
 
 	asmICodePushNewMVI(R0, (Obj)9);
 	asmGenerateIBlockWithPushedIcodes();
-	asmIBlockDefaultTagSet(riblock, true);
+	asmIBlockDefaultTagSet(riblock, otrue);
 
 	// id2
-	asmICodePushNewBEQI(R0, (Obj)1, false); /* Branch to id4  */
+	asmICodePushNewBEQI(R0, (Obj)1, ofalse); /* Branch to id4  */
 	asmGenerateIBlockWithPushedIcodes();
 	r4 = riblock;
-	asmIBlockDefaultTagSet(riblock, true);
+	asmIBlockDefaultTagSet(riblock, otrue);
 
 	// id3
-	asmICodePushNewBEQI(R0, (Obj)2, false);
+	asmICodePushNewBEQI(R0, (Obj)2, ofalse);
 	asmGenerateIBlockWithPushedIcodes();
 	r5 = riblock;
-	asmIBlockDefaultTagSet(riblock, true);
+	asmIBlockDefaultTagSet(riblock, otrue);
 
 	// id5
 	asmICodePushNewSYSI((Obj)cctDumpIntegerR0);
 	asmICodePushNewADDI(R0, (Obj)-1);
-	asmICodePushNewBNEI(R0, 0, false); /* Branch back to id2 */
+	asmICodePushNewBNEI(R0, 0, ofalse); /* Branch back to id2 */
 	asmGenerateIBlockWithPushedIcodes();
 	r6 = riblock;
-	asmIBlockDefaultTagSet(riblock, true);
+	asmIBlockDefaultTagSet(riblock, otrue);
 	asmIBlockConditionalTagSet(riblock, r4);
 
 	// id6
 	asmICodePushNewQUIT();
 	asmGenerateIBlockWithPushedIcodes();
-	asmIBlockDefaultTagSet(riblock, true);
+	asmIBlockDefaultTagSet(riblock, otrue);
 
 	asmICodePushNewQUIT();
 	asmGenerateIBlockWithPushedIcodes();
@@ -347,12 +350,12 @@ void cctAsm() {
 
 	asmAsm (
 	LABEL, L4,
-		MVI, R0, false,
-		BNEI, R0, true, L5,
-		MVI, R0, false,
+		MVI, R0, ofalse,
+		BNEI, R0, otrue, L5,
+		MVI, R0, ofalse,
 		BRA, L6,
 	LABEL, L5,
-		MVI, R0, true,
+		MVI, R0, otrue,
 	LABEL, L6,
 		SYSI, cctDumpObjR0,
 		MVI, R1, (Obj)2,
@@ -367,12 +370,12 @@ void cctAsm() {
 
 	/* Verify output */
 	FBFinalize("87654321\n"
-	             "87654321\n"
-	             "87654321\n"
-	             "#t87654321\n"
-	             "87654321\n"
-	             "#t87654321\n"
-	             "87654321\n#t");
+	           "87654321\n"
+	           "87654321\n"
+	           "#t87654321\n"
+	           "87654321\n"
+	           "#t87654321\n"
+	           "87654321\n#t");
 }
 
 
