@@ -64,8 +64,8 @@ void sysSerializeInteger (Int theint, Num base);
 Int sysWriteR (Obj a, Num islist, FILE *stream, Int max);
 Num sysWrite (Obj a, FILE *stream);
 Num sysWriteMax (Obj a, FILE *stream, Int max);
-void sysDisplayR (Obj a, Num islist, FILE *stream);
-void sysDisplay (Obj a, FILE *stream);
+void sysDisplayR (Obj o, Num islist, FILE *stream);
+void sysDisplay (Obj o, FILE *stream);
 void sysDumpTGE (void);
 void sysDumpEnv (Obj e);
 

@@ -8,17 +8,51 @@
 #include "vm.h"
 #include "mem.h"
 
+/* A character file buffer and the functions that print to it
+*/
+FILE *FB;
+char *FBBuff=NULL;
+
+/* Initialize character file buffer */
+void FBInit (void) {
+ static Num size;
+	FB = open_memstream(&FBBuff, &size);
+	assert(NULL != FB);
+}
+
+/* Dump character file buffer's contents.  Finalize related objects. */
+void FBDump () {
+	fflush(FB);
+	fclose(FB);
+	fprintf(stderr, FBBuff);
+	free(FBBuff);
+}
+
+/* Compare character file buffer's contents with string argument. Finalize related objects. */
+void FBFinalize (char *goldenString) {
+ Num res;
+	fflush(FB);
+	res = (Num)strcmp(FBBuff, goldenString);
+	if (res) fprintf(stderr, "\nReceived [%s]\nExpected [%s] ", FBBuff, goldenString);
+	assert(0 == res);
+	fclose(FB);
+	free(FBBuff);
+}
+
+
+
+/*******************************************************************************
+ TESTS
+*******************************************************************************/
 #define TEST(fn) (printf("Calling test: "#fn"()  "), fn(),printf("PASS\n"))
-
-
 
 /* Create some objects and assign to registers and
    create a stack with objects pushed on.
 */
-void objtCreateObjects (void) {
+void TESTCreateObjects (void) {
 	objNewInt((Int)0xdeadbeefb00b1355l); r1=r0;
 	objCopyInteger(); r2=r1;
-	objNewInt(-1); r3=r0;
+	objNewInt(-1l); r3=r0;
 	objNewInt(LONG_MAX); r4=r0;
 	objNewInt(0xdea1f00d); vmPush(r0);
 	objNewReal(1.3);  vmPush(r0);
@@ -29,10 +63,10 @@ void objtCreateObjects (void) {
 
 /* Verify registers and stack contain expected object values.
 */
-void objtVerifyObjects (void) {
+void TESTVerifyObjects (void) {
 	assert(0xdeadbeefb00b1355l == *(Int*)r1);
 	assert(0xdeadbeefb00b1355l == *(Int*)r2);
-	assert(-1 == *(Int*)r3);
+	assert(-1l == *(Int*)r3);
 	assert(LONG_MAX == *(Int*)r4);
 	assert(3 == memStackLength(rf));
 	assert(15.0 == *(Real*)memStackObject(rf, 0));
@@ -44,7 +78,7 @@ void objtVerifyObjects (void) {
 
 /* Mutate the stack and verify behavior.
 */
-void objtVerifyStackMutation (void) {
+void TESTVerifyStackMutation (void) {
 	assert(15.0 == *(Real*)vmPop());
 	assert(1.3 == *(Real*)vmPop());
 	assert(0xdea1f00d == *(Int*)vmPop());
@@ -53,8 +87,7 @@ void objtVerifyStackMutation (void) {
 
 
 
-void objtDoublyLinkedList (void) {
-
+void TESTDoublyLinkedList (void) {
 	/* Create doubly linked list in r4 */
 	objNewDoublyLinkedListNode(); r4=r0;
 	assert(1 == objDoublyLinkedListLength(r4)); /* Verify length */
@@ -85,6 +118,19 @@ void objtDoublyLinkedList (void) {
 }
 
 
+void TESTDump (void) {
+	FBInit();
+	objDump(ofalse, FB);
+	objDump(otrue, FB);
+	objDump(onull, FB);
+	objDump(onullvec, FB);
+	objDump(oeof, FB);
+	objNewInt(69); objDump(r0, FB);
+	objNewInt(-69); objDump(r0, FB);
+	objNewSymbol((Str)"donuts", 6); objDump(r0, FB);
+	FBFinalize("#f#t()#()#eof69-69donuts");
+}
+
 
 int main (int argc, char *argv[]) {
 	setbuf(stdout, 0);
@@ -97,10 +143,11 @@ int main (int argc, char *argv[]) {
 	GarbageCollectionMode = 1;
 	memGarbageCollect();
 
-	TEST(objtCreateObjects);
-	TEST(objtVerifyObjects);
-	TEST(objtVerifyStackMutation);
-	TEST(objtDoublyLinkedList);
+	TEST(TESTCreateObjects);
+	TEST(TESTVerifyObjects);
+	TEST(TESTVerifyStackMutation);
+	TEST(TESTDoublyLinkedList);
+	TEST(TESTDump);
 
 	return 0;
 }

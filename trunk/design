@@ -12,6 +12,7 @@ Module os
 Module asm
 Module comp
 Module wscm
+Testing
 
 Purpose
 
@@ -188,3 +189,7 @@ Module debug
 Keywords: debug indent trace macro
 
 The debugging facility is a set of macros which provide functionality to display indented messages while entering, inside, and leaving C functions useful for tracing the running World Scheme process.  The calls behave like printf except automatic indentation is incremented for all debug message after a DBBEG() call, decremented after DBEND(), and remains the same with DB().  An macro variable toggles the debug facility at runtime preventing the C code from compiling into the binary.  Another macro variables sets the message prefix string which is always aligned to the left.
+
+Testing
+
+Testing involved three coverage types: Unit, integration, and system.  Unit tests cover individual functions with as little to no intermodule interaction.  All unit tests will verify behavior in a few seconds.  Integration tests cover functionality requiring full module interaction as well as interaction with other modules running within unbounded time limits.  System tests expect a full runtime environment and run within unbounded time limits.

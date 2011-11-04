@@ -33,8 +33,11 @@ void FBDump () {
 
 /* Compare character file buffer's contents with string argument. Finalize related objects. */
 void FBFinalize (char *goldenString) {
+ Num res;
 	fflush(FB);
-	assert(0 == strcmp(FBBuff, goldenString));
+	res = (Num)strcmp(FBBuff, goldenString);
+	if (res) fprintf(stderr, "\nReceived [%s]\nExpected [%s] ", FBBuff, goldenString);
+	assert(0 == res);
 	fclose(FB);
 	free(FBBuff);
 }

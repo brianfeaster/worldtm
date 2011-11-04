@@ -62,8 +62,8 @@ void FBFinalize (char *goldenString) {
 void matchargs (void) {
 	yy_scan_string ((Str)"()"); yyparse();
 	assert(!matchArgumentList());
-	assert(null == car(r1));
-	assert(null == r2);
+	assert(onull == car(r1));
+	assert(onull == r2);
 
 	yy_scan_string ((Str)"r"); yyparse();
 	assert(!matchArgumentList());
@@ -75,7 +75,7 @@ void matchargs (void) {
 	assert(!matchArgumentList());
 	objNewSymbol((Str)"x", 1);
 	assert(r0 == car(r1));
-	assert(null == r2);
+	assert(onull == r2);
 
 	yy_scan_string ((Str)"(x . y)"); yyparse();
 	assert(!matchArgumentList());
@@ -124,22 +124,22 @@ void parselambda (void) {
 	yy_scan_string ((Str)"(())"); yyparse(); rexpr=r0;
 
 	assert(!compParseTransformProcedure()); // r1=(()) r2=() r3=() r4=()
-	assert(null == car(r1));
-	assert(null == r2);
-	assert(null == r3);
-	assert(null == r4);
+	assert(onull == car(r1));
+	assert(onull == r2);
+	assert(onull == r3);
+	assert(onull == r4);
 
 	yy_scan_string ((Str)"(r b)"); yyparse(); rexpr=r0;
 	assert(!compParseTransformProcedure()); // r1=(r) r2=r r3=() r4=b
 	objNewSymbol((Str)"r", 1); assert(r0 == car(r1));
 	                           assert(r0 == r2);
-	                           assert(null == r3);
+	                           assert(onull == r3);
 	objNewSymbol((Str)"b", 1); assert(r0 == r4);
 
 	yy_scan_string ((Str)"((x) a b)"); yyparse(); rexpr=r0;
 	assert(!compParseTransformProcedure()); // r1=(x) r2=() r3=(a) r4=b
 	objNewSymbol((Str)"x", 1); assert(r0 == car(r1));
-	                           assert(null == r2);
+	                           assert(onull == r2);
 	objNewSymbol((Str)"a", 1); assert(r0 == car(r3));
 	objNewSymbol((Str)"b", 1); assert(r0 == r4);
 
@@ -347,7 +347,7 @@ void compilerunif (void) {
 	rip=0;
 	vmRun();
 	//sysDisplay(r0, stderr);
-	assert(false == r0);
+	assert(ofalse == r0);
 }
 
 
@@ -371,7 +371,7 @@ void errorcar (void) {
 	yy_scan_string ((Str)"(car)");
 	yyparse();
 	compCompile();
-	assert(false == r0);
+	assert(ofalse == r0);
 	FBFinalize("(Syntax error 'car' (car))");
 }
 
@@ -380,7 +380,7 @@ void errorbegincar (void) {
 	yy_scan_string ((Str)"(begin 1 (car))");
 	yyparse();
 	compCompile();
-	assert(false == r0);
+	assert(ofalse == r0);
 	FBFinalize("(Syntax error 'car' (car) (begin 1 (car)))");
 
 
@@ -388,7 +388,7 @@ void errorbegincar (void) {
 	yy_scan_string ((Str)"(begin (car) 2)");
 	yyparse();
 	compCompile();
-	assert(false == r0);
+	assert(ofalse == r0);
 	FBFinalize("(Syntax error 'car' (car) (begin (car) 2))");
 }
 
@@ -397,7 +397,7 @@ void errorconscarcarifcar (void) {
 	yy_scan_string ((Str)"(cons 1 (car (car (if 1 (car)))))");
 	yyparse();
 	compCompile();
-	assert(false == r0);
+	assert(ofalse == r0);
 	FBFinalize("(Syntax error 'car' (car) (if 1 (car)) (car (if 1 (car))) (car (car (if 1 (car)))) (cons 1 (car (car (if 1 (car))))))");
 
 }

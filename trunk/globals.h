@@ -79,6 +79,7 @@ typedef void (*Func2) (Obj a, Obj b);
 
 
 #define NL "\n"
+#define SP " "
 
 
 #endif

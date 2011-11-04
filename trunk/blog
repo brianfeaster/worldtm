@@ -3857,3 +3857,16 @@ r4 during scanning.  The hack was to add SYSI to illegal instructions but what
 I need to do is have SYSI and SYS icodes be iblock delimiters.
 
 [ ] Add unit tests for the currently two assembly optimizers.
+
+
+
+Wed Nov  2 15:43:26 EDT 2011
+
+Experimenting with zero length objects.  Some bits of code aren't expecting it.
+The send system call gets stuck in an endless loop.  I added an assert that
+verifies the object in question to display is not zero length.
+
+C symbol nomenclature:
+ rreg    - Root node object pointers to dynamic scheme objects
+ oobject - Object pointers to static scheme objects
+ ssymbol - scheme symbols used in C land includingm syntatic and function names

@@ -35,7 +35,7 @@ void objVerifySemaphore (void) {
 	assert(1 == (Int)car(r1));
 
 	sysSemaphoreDown();
-	assert(r0 = true);
+	assert(r0 = otrue);
 	assert(0 == (Int)car(r1));
 
 	sysSemaphoreDown();
@@ -47,7 +47,7 @@ void objVerifySemaphore (void) {
 	assert(0 == (Int)car(r1));
 
 	sysSemaphoreUp();
-	assert(r0 = true);
+	assert(r0 = otrue);
 	assert(1 == (Int)car(r1));
 }
 
@@ -57,7 +57,7 @@ void sysEquals (void) {
 	r0 = TINTEGER == memObjectType(r0)
 	     && TINTEGER == memObjectType(r1)
 	     && *(Int*)r0 == *(Int*)r1
-	     ? true : false;
+	     ? otrue : ofalse;
 }
 
 void sysAdd (void) {

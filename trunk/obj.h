@@ -3,29 +3,24 @@
 #include "globals.h"
 
 
-/* Rootset objects
+/* Useful objects
 */
-extern Obj rsymbols, rdebug;
+extern Obj symbols, debug;
 
 
 /* Scheme object types used by the scanner and obj module.  A byte with
    highest bit signifying the base type which is either a "vector" or "array"
    object.
 */
-#define TFALSE         0x00l
-#define TTRUE          0x01l
-#define TNULL          0x02l
-#define TNULLVEC       0x03l
-#define TNULLSTR       0x04l
-#define TEOF           0x05l
-#define TCHAR          0x06l
-#define TSTRING        0x07l
-#define TSYMBOL        0x08l
-#define TINTEGER       0x09l
-#define TREAL          0x0al
+#define TINTRINSIC     0x00l /* false true null eof */
+#define TCHAR          0x01l
+#define TSYMBOL        0x02l
+#define TSTRING        0x03l
+#define TINTEGER       0x04l
+#define TREAL          0x05l
 
-#define TPAIR          0x80l
-#define TVECTOR        0x81l
+#define TVECTOR        0x80l
+#define TPAIR          0x81l
 #define TCLOSURE       0x82l
 #define TCONTINUATION  0x83l
 #define TPORT          0x84l
@@ -33,9 +28,16 @@ extern Obj rsymbols, rdebug;
 #define TSYSCALL       0x86l
 
 
-/* Object constants.
+/* Objects */
+extern Obj onull, onullvec, onullstr, ofalse, otrue, oeof; /* Intrinsic objects */
+extern Obj ocharacters, ointegers; /* Intrinsic aggregates */
+extern Obj odebug; /* Mutable */
+extern Obj osymbols; /* Intrinsic mutable aggregates */
+
+
+/* Symbol objects
 */
-extern Obj null, nullvec, nullstr, false, true, eof,
+extern Obj snull, sfalse, strue, seof, 
        srem, srunning, sready, ssleeping, sblocked, sdead, ssemaphore,
        sopenblocked, sreadblocked, swriteblocked,
        saccepting, sconnecting, sopen, sclosed,
@@ -44,10 +46,10 @@ extern Obj null, nullvec, nullstr, false, true, eof,
        svectorref, svectorvectorref, svectorvectorsetb, svectorsetb,
        svectorlength,
        scons, scar, scdr, ssetcarb, ssetcdrb,
-       sprocedurep, snullp, spairp, svectorp, sstringp, sintegerp, ssymbolp, sportp, sappend,
+       sprocedurep, snullp, spairp, svectorp, scharp, sstringp, sintegerp, ssymbolp, sportp, sappend,
        seofobjectp, sthread, slet, sletrec, seval, sapply, scallcc,
-       ssyntaxrules, seof,
-       snot, sadd, ssub, smul, sdiv, slogand, scharacters, staticIntegers,
+       ssyntaxrules, //seof,
+       snot, sadd, ssub, smul, sdiv, slogand,
        ssignalhandlers;
 
 extern Num wscmDebug;
@@ -86,6 +88,8 @@ void objNewVector1 ();
 void objNewPort (void);
 int objPortDescriptor (Obj p);
 Obj objPortState (Obj p);
+
+Obj objIntegerToChar (Num i);
 
 /* Object operations
  */

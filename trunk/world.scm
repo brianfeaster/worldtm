@@ -291,7 +291,8 @@
                    (celli (fieldCell t y x)))
             (vector-set! c 0 (if (cellValidIndex? celli)
                                  (illuminate (cellGlyph (cellRef celli)) (+ SUN i)) ; A cell's glyph
-                                 (((anEntityDB 'get) celli) 'glyph))) ; An entity's glyph
+                                 (let ((ent ((anEntityDB 'get) celli))) ; An entity's glyph which might be #f
+                                    (if ent (ent 'glyph) glyphUNKNOWN))))
             (vector-set! c 1 t)))))
 )
   ; Consider the canvas cell at this position which is the #(glyph height illumination) vector
