@@ -7,58 +7,13 @@
 #include "obj.h"
 #include "vm.h"
 #include "mem.h"
+#include "test.h"
 
-#define TEST(fn) (printf("Calling test: "#fn"()  "), fn(),printf("PASS\n"))
 
-
-void asmIBlockDefaultTagSet (Obj ib, Obj tag);
-void asmIBlockConditionalTagSet (Obj ib, Obj tag);
+extern void asmIBlockDefaultTagSet (Obj ib, Obj tag);
+extern void asmIBlockConditionalTagSet (Obj ib, Obj tag);
 extern Num asmGenerateNewIBlock (Num icodeSize);
 
-
-/* A character file buffer and the functions that print to it
-*/
-FILE *FB;
-char *FBBuff=NULL;
-
-/* Initialize character file buffer */
-void FBInit (void) {
- static Num size;
-	FB = open_memstream(&FBBuff, &size);
-	assert(NULL != FB);
-}
-
-/* Dump character file buffer's contents.  Finalize related objects. */
-void FBDump () {
-	fflush(FB);
-	fclose(FB);
-	fprintf(stderr, FBBuff);
-	free(FBBuff);
-}
-
-/* Compare character file buffer's contents with string argument. Finalize related objects. */
-void FBFinalize (char *goldenString) {
- Num res;
-	fflush(FB);
-	res = (Num)strcmp(FBBuff, goldenString);
-	if (res) fprintf(stderr, "\nReceived [%s]\nExpected [%s] ", FBBuff, goldenString);
-	assert(0 == res);
-	fclose(FB);
-	free(FBBuff);
-}
-
-
-
-void cctDumpSpace (void) { fprintf(FB, " "); }
-void cctDumpNewline (void) { fprintf(FB, "\n"); }
-void cctDumpIntegerR0 (void) { fprintf(FB, INT, r0); }
-void cctDumpIntegerR0stderr (void) { fprintf(stderr, INT, r0); }
-void cctDumpObjR0 (void) { objDump(r0, FB); }
-
-
-
-/* Emit a new icode object to the current iblock.
-*/
 extern void asmICodePushNewMV (Obj rega, Obj regb);
 extern void asmICodePushNewMVI (Obj r, Obj o);
 extern void asmICodePushNewLDI (Obj rega, Obj regb, Obj o);
@@ -75,6 +30,15 @@ extern void asmICodePushNewQUIT (void);
 
 void asmGenerateIBlockWithPushedIcodes ();
 
+
+/*******************************************************************************
+ TESTS
+*******************************************************************************/
+void cctDumpSpace (void) { fprintf(FB, " "); }
+void cctDumpNewline (void) { fprintf(FB, "\n"); }
+void cctDumpIntegerR0 (void) { fprintf(FB, INT, r0); }
+void cctDumpIntegerR0stderr (void) { fprintf(stderr, INT, r0); }
+void cctDumpObjR0 (void) { objDump(r0, FB); }
 
 /* Create simple icode program of one iblock then compile the
    iblock and run the code block in the VM
@@ -797,16 +761,9 @@ void optimizeEmptyIBlock (void) {
 
 
 int main (int argc, char *argv[]) {
-	/* Force a failure by passing -f to this program */
-	if (argc==2 && !strcmp(argv[1], "-f")) return -1;
-
-	setbuf(stdout,0);
-	printf ("--Welcome to unit test %s----------------\n", __FILE__);
-
 	asmInitialize();
-
-	/* Register display with the VM code dumper */
-	vmInitialize(NULL, objDump);
+	vmInitialize(NULL, objDump); /* Register display with the VM code dumper */
+	testInitialize();
 
 	memPointerRegister(syscallAdd);
 	memPointerRegister(syscallMul);

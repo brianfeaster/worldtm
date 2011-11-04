@@ -9,6 +9,7 @@
 #include "obj.h"
 #include "vm.h"
 #include "mem.h"
+#include "test.h"
 
 
 extern Obj rexpr;
@@ -19,43 +20,11 @@ extern Num compParseTransformProcedure (void);
 extern Num compParseTransformDefine (void);
 extern void compErrorReset (void);
 
-Num compIsError (void);
+extern Num compIsError (void);
 
-#define TEST(fn) (printf("Calling test: "#fn"()  "), fn(),printf("PASS\n"))
-
-/* A character file buffer and the functions that print to it
-*/
-FILE *FB;
-char *FBBuff=NULL;
-
-/* Initialize character file buffer */
-void FBInit (void) {
- static Num size;
-	FB = open_memstream(&FBBuff, &size);
-	assert(NULL != FB);
-}
-
-/* Dump character file buffer's contents.  Finalize related objects. */
-void FBDump () {
-	fflush(FB);
-	fclose(FB);
-	fprintf(stderr, FBBuff);
-	free(FBBuff);
-}
-
-/* Compare character file buffer's contents with string argument. Finalize related objects. */
-void FBFinalize (char *goldenString) {
- Num res;
-	fflush(FB);
-	res = (Num)strcmp(FBBuff, goldenString);
-	if (res) fprintf(stderr, "\nReceived [%s]\nExpected [%s] ", FBBuff, goldenString);
-	assert(0 == res);
-	fclose(FB);
-	free(FBBuff);
-}
-
-
-
+/*******************************************************************************
+ TESTS
+*******************************************************************************/
 /* Verify the argument list can be parsed and errors detected
 */
 
@@ -454,11 +423,9 @@ void parsepushoperands (void) {
 
 
 int main (int argc, char *argv[]) {
-	setbuf(stdout,0);
-	printf ("--Welcome to unit test %s----------------\n", __FILE__);
-
 	compInitialize();
 	osInitialize(exceptionHandler);
+	testInitialize();
 
 	assert(0 == memStackLength(rstack));
 

@@ -7,32 +7,12 @@
 #include "obj.h"
 #include "vm.h"
 #include "mem.h"
+#include "test.h"
 
 
-#define TEST(fn) (printf("Calling test: "#fn"()  "), fn(),printf("PASS\n"))
-
-
-/* A character file buffer and the functions that print to it
-*/
-FILE *FB;
-char *FBBuff=NULL;
-
-/* Initialize character file buffer */
-void FBInit (void) {
- static Num size;
-	FB = open_memstream(&FBBuff, &size);
-	assert(NULL != FB);
-}
-
-/* Compare character file buffer's contents with string argument */
-void FBFinalize (char *goldenString) {
-	fflush(FB);
-	assert(0 == strcmp(FBBuff, goldenString));
-	fclose(FB);
-	free(FBBuff);
-}
-
-
+/*******************************************************************************
+ TESTS
+*******************************************************************************/
 void ccDumpString (char *str) { fprintf(FB, "%s", str); }
 
 void mytest (void) {
@@ -43,10 +23,8 @@ void mytest (void) {
 
 
 int main (int argc, char *argv[]) {
-	setbuf(stdout,0);
-	printf ("--Welcome to unit test %s----------------\n", __FILE__);
-
 	//ccInitialize();
+	testInitialize();
 	TEST(mytest);
 
 	return 0;

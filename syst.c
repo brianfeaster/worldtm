@@ -6,12 +6,13 @@
 #include "obj.h"
 #include "vm.h"
 #include "mem.h"
-
-#define TEST(fn) (printf("Calling test: "#fn"()  "), fn(),printf("PASS\n"))
-
+#include "test.h"
 
 
-void scantTest (void) {
+/*******************************************************************************
+ TESTS
+*******************************************************************************/
+void TESTscantTest (void) {
 	yy_scan_string((Str)"(let  ~  ( (i 0) (e 9000) ) (displayl i #\a #t #f #( )) (display \"\\r\") (if (= i e) (display \"\n\" #(1 #(2 3) `(4 ,5)) ) (~ (+ i 1) e)))");
 	yyparse();
 	//memDebugDumpAll(stdout);
@@ -20,7 +21,7 @@ void scantTest (void) {
 
 
 /* Open a local socket port and connect to it with another socket port */
-void networkLocalClientServerConnection (void) {
+void TESTnetworkLocalClientServerConnection (void) {
 	r0=0;
 
 	//printf("\nOpening listening socket:  ");
@@ -58,7 +59,7 @@ void networkLocalClientServerConnection (void) {
 
 /* Verify opening a stream on an unconnected local listener socket
    will signal a fail by returning the original listener socket */
-void verifyLocalStreamBlocks () {
+void TESTverifyLocalStreamBlocks () {
 
 	//printf("\nOpening listening socket:  ");
 	objNewInt(8080); r1=r0;
@@ -128,23 +129,19 @@ void networkingReadStuff (void) {
 	//memDebugDumpYoungHeap(stdout);
 }
 
+
 int main (int argc, char *argv[]) {
-	/* Force a failure by passing -f to this program */
-	if (argc==2 && !strcmp(argv[1], "-f")) return -1;
-
-	setbuf(stdout,0);
-	printf ("--Welcome to unit test %s----------------\n", __FILE__);
-
 	sysInitialize();
+	testInitialize();
 
 	/* Perform a full garbage collection to move module related objects to old
 	   heap for easier visual debugging of newly created young heap objects */
 	GarbageCollectionMode = 1;
 	memGarbageCollect();
 
-	TEST(scantTest);
-	TEST(networkLocalClientServerConnection);
-	TEST(verifyLocalStreamBlocks);
+	TEST(TESTscantTest);
+	TEST(TESTnetworkLocalClientServerConnection);
+	TEST(TESTverifyLocalStreamBlocks);
 	//TEST(networkingReadStuff);
 	//TEST(networkingWriteStuff);
 
