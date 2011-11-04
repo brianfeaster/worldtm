@@ -4,6 +4,7 @@
 #include <assert.h>
 #include <sys/mman.h> /* mmap() */
 #include "mem.h"
+#include "test.h"
 
 
 /* Mem module declarations missing in mem.h
@@ -35,9 +36,6 @@ Obj   pop (void) { return memStackPop(r1f); }
 /*******************************************************************************
  TESTS
 *******************************************************************************/
-#define TEST(fn) (printf("Calling test: "#fn"()  "), fn(),printf("PASS\n"))
-
-
 /* Pre-garbage collection callback.  Registred with memInitialize.
 */
 Num PreGarbageCollectFlag = 0;
@@ -288,10 +286,8 @@ void TESTAutomaticGarbageCollect (void) {
 
 
 int main (int argc, char *argv[]) {
-	setbuf(stdout,0);
-	printf ("--Welcome to unit test %s----------------\n", __FILE__);
-
 	memInitialize(memtPreGarbageCollect, 0, memtExceptionHandler);
+	testInitialize();
 
 	/* Register root set object.  These are the "registers" or
 	   machine's global variables */

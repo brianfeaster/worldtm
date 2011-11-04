@@ -7,44 +7,12 @@
 #include "obj.h"
 #include "vm.h"
 #include "mem.h"
-
-/* A character file buffer and the functions that print to it
-*/
-FILE *FB;
-char *FBBuff=NULL;
-
-/* Initialize character file buffer */
-void FBInit (void) {
- static Num size;
-	FB = open_memstream(&FBBuff, &size);
-	assert(NULL != FB);
-}
-
-/* Dump character file buffer's contents.  Finalize related objects. */
-void FBDump () {
-	fflush(FB);
-	fclose(FB);
-	fprintf(stderr, FBBuff);
-	free(FBBuff);
-}
-
-/* Compare character file buffer's contents with string argument. Finalize related objects. */
-void FBFinalize (char *goldenString) {
- Num res;
-	fflush(FB);
-	res = (Num)strcmp(FBBuff, goldenString);
-	if (res) fprintf(stderr, "\nReceived [%s]\nExpected [%s] ", FBBuff, goldenString);
-	assert(0 == res);
-	fclose(FB);
-	free(FBBuff);
-}
-
+#include "test.h"
 
 
 /*******************************************************************************
  TESTS
 *******************************************************************************/
-#define TEST(fn) (printf("Calling test: "#fn"()  "), fn(),printf("PASS\n"))
 
 /* Create some objects and assign to registers and
    create a stack with objects pushed on.
@@ -58,7 +26,6 @@ void TESTCreateObjects (void) {
 	objNewReal(1.3);  vmPush(r0);
 	objNewReal(15.0); vmPush(r0);
 }
-
 
 
 /* Verify registers and stack contain expected object values.
@@ -75,7 +42,6 @@ void TESTVerifyObjects (void) {
 }
 
 
-
 /* Mutate the stack and verify behavior.
 */
 void TESTVerifyStackMutation (void) {
@@ -84,7 +50,6 @@ void TESTVerifyStackMutation (void) {
 	assert(0xdea1f00d == *(Int*)vmPop());
 	assert(0 == memStackLength(rf));
 }
-
 
 
 void TESTDoublyLinkedList (void) {
@@ -133,21 +98,16 @@ void TESTDump (void) {
 
 
 int main (int argc, char *argv[]) {
-	setbuf(stdout, 0);
-	printf ("--Welcome to unit test %s----------------\n", __FILE__);
-
 	objInitialize();
-
+	testInitialize();
 	/* Perform a full garbage collection to move module related objects to old
 	   heap for easier visual debugging of newly created young heap objects */
 	GarbageCollectionMode = 1;
 	memGarbageCollect();
-
 	TEST(TESTCreateObjects);
 	TEST(TESTVerifyObjects);
 	TEST(TESTVerifyStackMutation);
 	TEST(TESTDoublyLinkedList);
 	TEST(TESTDump);
-
 	return 0;
 }

@@ -3870,3 +3870,14 @@ C symbol nomenclature:
  rreg    - Root node object pointers to dynamic scheme objects
  oobject - Object pointers to static scheme objects
  ssymbol - scheme symbols used in C land includingm syntatic and function names
+
+
+
+Fri Nov  4 16:41:48 EDT 2011
+
+Refactored the intrinsic static objects of which there would never be more than
+one instance of.  Null, true false and eof.  They are zero length objects of
+the tyPE INTRINSIC.  The primitive serializers need to be cleaned up now.  I
+will replace objDump with objDisplay/Write which will allow callbacks to be
+registered for specific types.  The sys module has similar functions and will
+just call the obj module's implementation.

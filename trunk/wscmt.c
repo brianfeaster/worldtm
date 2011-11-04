@@ -9,8 +9,12 @@
 #include "asm.h"
 #include "vm.h"
 #include "mem.h"
+#include "test.h"
 
 
+/*******************************************************************************
+ TESTS
+*******************************************************************************/
 /* Verify goto to an address pointer works.
 */
 void testGoto() {
@@ -20,6 +24,7 @@ void testGoto() {
 	skip:
 	return;
 }
+
 
 /* Verify a semaphore can be created, decremented and incremented
    with expected return values in r0 signalling that the semaphore
@@ -63,7 +68,7 @@ void sysEquals (void) {
 void sysAdd (void) {
 	r1=vmPop();
 	r0=vmPop();
-	objNewInt(*(Int*)r1 + *(Int*)r2);
+	objNewInt(*(Int*)r0 + *(Int*)r1);
 }
 
 void wscmtDisplay (void) {
@@ -82,12 +87,7 @@ void wscmtDisplay (void) {
 }
 
 
-int main (void) {
-	setbuf(stdout, NULL);
-	testGoto();
-
-	compInitialize(); /* asm vm mem os sys obj */
-
+void stuff (void) {
 	sysDefineSyscall (wscmtDisplay, "display");
 	sysDefineSyscall (sysEquals, "=");
 	sysDefineSyscall (sysAdd, "+");
@@ -98,22 +98,25 @@ int main (void) {
 	asmAssemble();
 	rretcode = r0;
 	rretip = (Obj)(-1 * 8);
+	rretenv = renv;
 
-	//yy_scan_string((Str)"(display (eval '(+ 1 2)))");
-	yy_scan_string((Str)"(let ~ ((i 0)(e 9000)) (display i) (display \"\\r\")(if (= i e) (display \"\n\") (~ (+ i 1) e)))");
-	
-	yyparse();
-	compCompile();
-//vmDebugDumpCode(r0, stderr);
+	yy_scan_string((Str)"(let ((v (eval '(+ 42 69)))) v)");
+	yyparse(); compCompile(); rcode=r0; rip=0; vmRun();
+	assert(*(Num*)r0 == 111);
 
-	// Fire up VM.
-	sleep(1); vmInterrupt=0; /* Give the interrupt handler time to trigger so forcing it to 0 actually stays 0. */
-	rcode=r0;
-	rip=0;
-	vmRun();
+	yy_scan_string((Str)"(let ~ ((i 0)(e 9000)) (display \"\\e7\") (display i) (display \"\\e8\") (if (= i e) e (~ (+ i 1) e)))");
+	yyparse(); compCompile(); rcode=r0; rip=0; vmRun();
+	assert(*(Num*)r0 == 9000);
+
 	memGarbageCollect();
+}
 
-	objVerifySemaphore();
 
+int main (void) {
+	compInitialize(); /* asm vm mem os sys obj */
+	testInitialize();
+	TEST(testGoto);
+	TEST(objVerifySemaphore);
+	TEST(stuff);
 	return 0;
 }

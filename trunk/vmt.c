@@ -6,45 +6,12 @@
 #include <assert.h>
 #include "vm.h"
 #include "mem.h"
-
-#define TEST(fn) (printf("Calling test: "#fn"()  "), fn(),printf("PASS\n"))
-
+#include "test.h"
 
 
-/* A character file buffer and the functions that print to it
-*/
-FILE *FB;
-char *FBBuff=NULL;
-
-/* Initialize character file buffer */
-void FBInit (void) {
- static Num size;
-	FB = open_memstream(&FBBuff, &size);
-	assert(NULL != FB);
-}
-
-/* Dump character file buffer's contents.  Finalize related objects. */
-void FBDump () {
-	fflush(FB);
-	fclose(FB);
-	fprintf(stderr, FBBuff);
-	free(FBBuff);
-}
-
-/* Compare character file buffer's contents with string argument. Finalize related objects. */
-void FBFinalize (char *goldenString) {
- Num res;
-	fflush(FB);
-	res = (Num)strcmp(FBBuff, goldenString);
-	if (res) fprintf(stderr, "\nReceived [%s]\nExpected [%s] ", FBBuff, goldenString);
-	assert(0 == res);
-	fclose(FB);
-	free(FBBuff);
-}
-
-
-
-
+/*******************************************************************************
+ TESTS
+*******************************************************************************/
 void displayIntegerR1 (void) {
 	fprintf(FB, "%d", r1);
 }
@@ -54,10 +21,9 @@ void displayStringR1 (void) {
 }
 
 
-
 /* A machine language program that outputs to a buffer some strings and numbers.
 */
-void fancyHelloWorld (void) {
+void TESTfancyHelloWorld (void) {
  Length codeSize;
  /* Registers holding runable code objects */
  #define printNumbersSub r7
@@ -154,7 +120,7 @@ void vmtSigAlarmReset (void) { ualarm(10*1000,0); }
 void vmtSchedulerHandler (void) { ++r5; vmtSigAlarmReset(); } 
 void vmtSigAlarmHandler (int sig) { vmInterrupt=1;}
 
-void testScheduler (void) {
+void TESTScheduler (void) {
 	vmInitialize(vmtSchedulerHandler, NULL);
 	signal(SIGALRM, vmtSigAlarmHandler); /* Start the interrupt schedule timer. */
 	vmtSigAlarmReset();
@@ -191,13 +157,9 @@ void testScheduler (void) {
 
 
 int main (int argc, char *argv[]) {
-	setbuf(stdout,0);
-	printf ("--Welcome to unit test %s----------------\n", __FILE__);
-
 	vmInitialize(0, 0);
-
-	TEST(fancyHelloWorld);
-	TEST(testScheduler);
-
+	testInitialize();
+	TEST(TESTfancyHelloWorld);
+	TEST(TESTScheduler);
 	return 0;
 }

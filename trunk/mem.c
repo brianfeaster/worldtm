@@ -199,13 +199,12 @@ void memTypeStringDumpAll (FILE *stream) {
 #define DescTypeBitCount   8
 #define DescLengthBitCount (DescBitCount - DescTypeBitCount)
 
-#define DescTypeBitMask   (~(Length)0 << (DescBitCount - DescTypeBitCount))
-#define DescLengthBitMask (~(Length)0 >> (DescBitCount - DescLengthBitCount))
-//assert(DescTypeBitMask   == 0xff00000000000000l);
-//assert(DescLengthBitMask == 0x00ffffffffffffffl);
+#define DescTypeBitMask   (~(Length)0 << (DescBitCount - DescTypeBitCount))   /* 0xff000000... */
+#define DescLengthBitMask (~(Length)0 >> (DescBitCount - DescLengthBitCount)) /* 0x00ffffff... */
 
-/* A 'Type' is 8 bits composed of a 1 bit 'class' and 7 bit 'id'.  If the class bit
-   is 0 it is considered raw data and copied as is during a garbage collection.
+/* A 'Type' is 8 bits composed of a 1 bit 'class' and 7 bit 'id'.  If the class
+   bit is 0 then the object and contents are considered raw data and copied
+   as-is during a garbage collection.
 
  Type: [.|.......]
       class  id
@@ -217,10 +216,8 @@ void memTypeStringDumpAll (FILE *stream) {
                    type               size
 */
 
-/* Create a descriptor given 'type' and 'length' values.
-   [........|........ ........ ........ ........ ........ ........ ........]
-      desc                               length
- */
+/* Create a descriptor given 'type' and 'length' field values
+*/
 Descriptor memMakeDescriptor (Type type, Length length) {
 	return type << DescLengthBitCount | length;
 }
@@ -257,7 +254,9 @@ Num memIsObjectType (Obj o, Type t){ return memIsObjectValid(o) && memObjectType
 
 
 
-/* Compute object size (total memory footprint in bytes) based on an array's 'length' */
+/* Compute object size (total memory footprint in bytes) based on an array's 'length'.
+   It's complicated since a one byte object, such as a character, will still take up
+   a machine word size number of bytes (8 bytes on a 64bit architecture) */
 Num memArrayLengthToObjectSize (Length length) {
 	return DescSize + ((length + DescSize-1) & -DescSize);
 }
