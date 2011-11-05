@@ -2689,8 +2689,6 @@ void compInitialize (void) {
 		rsubexpr = onull;
 
 		DB("Registering static pointer description strings");
-		memPointerRegister(objCons10);
-		memPointerRegister(objCons23);
 		memPointerRegister(sysNewClosure1Env); 
 		memPointerRegister(compSyscallCompile); 
 		memPointerRegister(compSysReinstateContinuation); 
@@ -2703,7 +2701,6 @@ void compInitialize (void) {
 		memPointerRegister("Compiler error");
 		memPointerRegister("Too many arguments to function");
 		memPointerRegister("Not enough arguments to closure");
-		memPointerRegister(objNewVector1);
 		memPointerRegister(sysListToStack);
 		memPointerRegister(compSyscallVerifyVectorSetB);
 		memPointerRegister(compSyscallVerifyVectorRef);

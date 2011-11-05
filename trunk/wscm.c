@@ -278,6 +278,8 @@ void wscmOpenLocalStream (void) {
 void syscallFun (void) {
 	vmDebugDumpCode(rcode, stderr);
 	memTypeStringDumpAll(stderr);
+	fprintf(stderr, "\n");memDebugDumpObject(rstack, stderr);
+	fprintf(stderr, "\n");objDisplay(rstack, stderr);
 	r0 = otrue;
 }
 
@@ -434,7 +436,7 @@ void syscallSerializeDisplay (void) {
 			objNewString(buff, (Num)ret);
 			break;
 		case TPORT:
-		case TSOCKET:
+		//case TSOCKET:
 			if (memIsObjectType(memVectorObject(r0, 1), TINTEGER))
 				ret = sprintf((char*)buff, "#SOCKET/PORT<DESC:"NUM" ADDR:"NUM" PORT:"NUM,
 				   (Num)memVectorObject(r0, 0),
@@ -946,8 +948,8 @@ ret:
 void syscallClose(void) {
 	DBBEG();
 	r0 = vmPop();
-	if (memObjectType(r0) != TSOCKET
-		 && memObjectType(r0) != TPORT) {
+	if (// memObjectType(r0) != TSOCKET &&
+		 memObjectType(r0) != TPORT) {
 		printf ("WARNING: syscallClose: not a socket: ");
 		sysDisplay(r0, stdout);
 	} if (objPortState(r0) == sclosed) {
@@ -981,8 +983,8 @@ void syscallRecv (void) {
 		r3 = onullstr;
 	}
 
-	if (memObjectType(r1) != TSOCKET
-		 && memObjectType(r1) != TPORT) {
+	if (//memObjectType(r1) != TSOCKET &&
+		 memObjectType(r1) != TPORT) {
 		fprintf (stderr, "WARNING: syscallRecv: not a socket: ");
 		sysDisplay(r1, stdout);
 		r0 = oeof;
@@ -997,8 +999,8 @@ void syscallReadChar (void) {
 	if (wscmAssertArgCount2(__func__)) goto ret;
 	r1=vmPop(); /* Port object */
 	r2=vmPop(); /* Timout */
-	if (memObjectType(r1) != TSOCKET
-	    && memObjectType(r1) != TPORT) {
+	if (//memObjectType(r1) != TSOCKET &&
+		 memObjectType(r1) != TPORT) {
 		printf ("WARNING: syscallReadChar: not a socket: ");
 		sysDisplay(r1, stdout);
 		r0 = oeof;
@@ -1015,7 +1017,8 @@ void syscallUnreadChar (void) {
 	if (wscmAssertArgCount2(__func__)) goto ret;
 	r1=vmPop(); /* Port. */
 	r0=vmPop(); /* Character. */
-	if (memObjectType(r1) != TSOCKET && memObjectType(r1) != TPORT) {
+	if (//memObjectType(r1) != TSOCKET &&
+		 memObjectType(r1) != TPORT) {
 		printf ("WARNING: syscallUnreadChar: arg2 not a socket: ");
 		sysDisplay(r1, stdout);
 		r0 = oeof;
@@ -1054,7 +1057,8 @@ void syscallSend (void) {
 	r2=vmPop();
 	/* Count sent already.  Should be initialized to 0. */
 	r3=0;
-	if (memObjectType(r1) != TSOCKET && memObjectType(r1) != TPORT) {
+	if (//memObjectType(r1) != TSOCKET &&
+		 memObjectType(r1) != TPORT) {
 		printf ("WARNING: syscallSend: not a socket is (type "HEX02"): ", memObjectType(r1));
 		*(int*)0=0;
 		r0 = oeof;
@@ -1192,25 +1196,31 @@ void sysNewHex (void) {
 
 void syscallDebugDumpAll (void) {
 	DBBEG();
+	if (wscmAssertArgCount0(__func__)) goto ret;
 	memDebugDumpAll(NULL);
+ret:
 	DBEND();
 }
 
 void syscallGarbageCollect (void) {
 	DBBEG();
+	if (wscmAssertArgCount0(__func__)) goto ret;
 	memGarbageCollect();
 	objNewInt((Int)garbageCollectionCount);
+ret:
 	DBEND();
 }
 
 void syscallDisassemble (void) {
 	DBBEG();
+	if (wscmAssertArgCount1(__func__)) goto ret;
 	r0 = vmPop();
 	if (memObjectType(r0) == TCLOSURE) {
 		if (cdr(r0) != onull) sysDumpEnv(cdr(r0));
 		r0 = car(r0); /* Consider closure's code block */
 	}
 	vmDebugDumpCode(r0, stderr);
+ret:
 	DBEND();
 }
 

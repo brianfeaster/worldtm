@@ -3,17 +3,30 @@
 #include "debug.h"
 #include <stdio.h>
 #include <stdlib.h> /* labs */
+#include <fcntl.h> /* fcntl */
 #include <string.h> /* memcpy */
 #include <assert.h>
 #include "obj.h"
 #include "vm.h"
 #include "mem.h"
 
+/*
+ Objects
+ Algorithms
+ Serializers
+ Init
+
+  ABOUT
+*/
+
+
 
 const Num HashTableSize=8191; /* Best if prime */
 
 
-/* Objects */
+/*******************************************************************************
+ Objects
+*******************************************************************************/
 Obj onull, ofalse, otrue, oeof, onullvec, onullstr; /* Intrinsic static objects */
 Obj ocharacters, ointegers; /* Intrinsic static aggregates */
 Obj odebug; /* Mutable */
@@ -367,13 +380,21 @@ void objDoublyLinkedListAdd (Obj lst, Obj node) {
 	memVectorSet(lst,  1, node);
 }
 
-/* Creates vector in r0 from list in r1.
+
+
+/*******************************************************************************
+ Algorithms
+*******************************************************************************/
+/* Copies list to a new vector
+  r0 <= List
+  r1  = Clobbered
+  r0  => Vector
 */
 void objListToVector (void) {
  Num i=0, len;
-	r1=r0;
 	len = objListLength(r0);
 	if (len) {
+		r1=r0;
 		r0 = memNewVector(TVECTOR, len); /* Create empty vector */
 		while (i<len) { /* Stuff vector*/
 			memVectorSet(r0, i++, car(r1));
@@ -384,128 +405,242 @@ void objListToVector (void) {
 	}
 }
 
-void objDumpR (Obj o, FILE *stream, Num islist) {
- Num i;
- char *c;
+
+
+/*******************************************************************************
+ Serializers
+
+ Parameter 'stream' should actually be a 'FILE*' object even though passed
+ around as an Obj.
+*******************************************************************************/
+Func2 ObjectDisplayCallbacks[MEMMAXTYPES];
+Func2 ObjectWriteCallbacks[MEMMAXTYPES];
+
+
+void objDisplayTypeDefault (Obj o, Obj stream) {
+ Type t;
  Str s;
+	s = memTypeString(t = memObjectType(o));
+	if (s) fprintf(stream, "#"STR"<"HEX">", s, o);
+	else fprintf(stream, "#"HEX"<"HEX">", memObjectType(o), o);
+}
 
-	if (-0x430000 < (Int)o && (Int)o < 0x430000) {
-		fprintf(stream, "#<");
-		if ((Int)o < 0l)
-			fprintf(stream, "-"HEX, labs((Int)o));
-		else {
-			fprintf(stream, HEX, o);
-			/* Dump the object description. */
-			if ((s = memPointerString(o))) fprintf (stream, ":%s", s);
+
+void objDisplayTypeIntrinsic (Obj o, Obj stream) {
+	if      (onull == o)  fwrite("()", 1, 2, stream);
+	else if (ofalse == o) fwrite("#f", 1, 2, stream);
+	else if (otrue == o)  fwrite("#t", 1, 2, stream);
+	else if (oeof == o)   fwrite("#eof", 1, 4, stream);
+	else assert(!"Unknown object");
+}
+
+
+void objDisplayTypeChar (Obj o, Obj stream) {
+	fwrite(o, 1, 1, stream);
+}
+
+
+void objWriteTypeChar (Obj o, Obj stream) {
+	fprintf(stream, "#\\%c", *(Chr*)o);
+}
+
+
+void objDisplayTypeSymbol (Obj o, Obj stream) {
+	fwrite (o, 1, memObjectLength(o), stream);
+}
+
+
+void objDisplayTypeString (Obj o, Obj stream) {
+	fwrite (o, 1, memObjectLength(o), stream);
+}
+
+void objWriteTypeString (Obj o, Obj stream) {
+ Num i, len;
+ Chr c;
+	fwrite ("\"", 1, 1, stream);
+	len = memObjectLength(o);
+	for (i = 0; i < len; ++i) {
+		c = ((Chr*)r0)[i];
+		switch (c) {
+		case '\0'  : fwrite("\\0", 1, 2, stream); break; /* 0 */
+		case '\a'  : fwrite("\\a", 1, 2, stream); break; /* 7 */
+		case '\b'  : fwrite("\\b", 1, 2, stream); break; /* 8 */
+		case '\t'  : fwrite("\\t", 1, 2, stream); break; /* 9 */
+		case '\n'  : fwrite("\\n", 1, 2, stream); break; /* 10 */
+		case '\v'  : fwrite("\\v", 1, 2, stream); break; /* 11 */
+		case '\f'  : fwrite("\\f", 1, 2, stream); break; /* 12 */
+		case '\r'  : fwrite("\\r", 1, 2, stream); break; /* 13 */
+		case '\033': fwrite("\\e", 1, 2, stream); break; /* 27 */
+		case '\"'  : fwrite("\\\"", 1, 2, stream); break; /* 34 */
+		case '\\'  : fwrite("\\\\", 1, 2, stream); break; /* 92 */
+		case (Chr)'\233': fwrite("\\c", 1, 2, stream); break; /* 155 */
+		default:
+			/* The printable chracter or a slashified hex */
+			if ((32<=c && c<=126) || (160<=c && c<=255)) fputc(c, stream);
+			else printf (stream, "\\x"HEX02, (Num)c);
 		}
-		fprintf(stream, ">");
-		return;
-	}
-
-	switch (memObjectType(o)) {
-		case TINTRINSIC : /* null false true eof = "()" "#f" "#t" "#eof" */
-			if      (onull == o)  fwrite("()", 1, 2, stream);
-			else if (ofalse == o) fwrite("#f", 1, 2, stream);
-			else if (otrue == o)  fwrite("#t", 1, 2, stream);
-			else if (oeof == o)   fwrite("#eof", 1, 4, stream);
-			else assert(!"Unknown intrinsic object to dump");
-			break;
-		case TCHAR :
-			fwrite(o, 1, 1, stream);
-			break;
-		case TSYMBOL :
-			fwrite (o, 1, memObjectLength(o), stream);
-			break;
-		case TSTRING : 
-			fwrite ("\"", 1, 1, stream);
-			c = o;
-			for (i=memObjectLength(o); i; i--) {
-				switch (*c) {
-					case '\\' : fwrite("\\\\",1, 2, stream); break;
-					case '\"' : fwrite("\\\"",1, 2, stream); break;
-					case '\a' : fwrite("\\a", 1, 2, stream); break;
-					case '\e' : fwrite("\\e", 1, 2, stream); break;
-					case '\233':fwrite("\\c", 1, 2, stream); break;
-					case '\n' : fwrite("\\n", 1, 2, stream); break;
-					case '\r' : fwrite("\\r", 1, 2, stream); break;
-					case '\t' : fwrite("\\t", 1, 2, stream); break;
-					default   : fwrite(c, 1, 1, stream);
-				}
-				c++;
-			}
-			fwrite ("\"", 1, 1, stream);
-			break;
-		case TINTEGER:
-			fprintf(stream, INT, *(Int*)o);
-			break;
-		case TREAL:
-			fprintf(stream, REAL, *(Real*)o);
-			break;
-		case TPAIR :
-			if (!islist) fwrite ("(", 1, 1, stream);
-			objDumpR(car(o), stream, 0);
-
-			if (objIsPair(cdr(o))) {
-				fwrite (" ", 1, 1, stream);
-				objDumpR(cdr(o), stream, 1);
-			} else {
-				if (cdr(o) != onull) {
-					fwrite (" . ", 1, 3, stream);
-					objDumpR(cdr(o), stream, 0);
-				}
-			}
-
-			if (!islist) fwrite (")", 1, 1, stream);
-			break;
-		case TVECTOR :
-			fwrite ("#(", 1, 2, stream);
-			for (i=0; i<memObjectLength(o); i++) {
-				if (i) fwrite (" ", 1, 1, stream);
-				//fprintf(stream, OBJ, *((Obj*)o+i));
-				objDumpR(((Obj*)o)[i], stream, 0);
-			}
-			fwrite (")", 1, 1, stream);
-			break;
-		case TCLOSURE :
-			if (cdr(o) == rtge)
-				fprintf(stream, "#CLOSURE<CODE:"OBJ" TGE:"OBJ">", car(o), cdr(o));
-			else
-				fprintf(stream, "#CLOSURE<CODE:"OBJ" ENV:"OBJ">", car(o), cdr(o));
-			break;
-		case TPORT :
-			fprintf(stream, "#<PORT ");
-			objDumpR(memVectorObject(o, 0), stream, 0);
-			fprintf(stream, " ");
-			objDumpR(memVectorObject(o, 1), stream, 0);
-			fprintf(stream, " ");
-			objDumpR(memVectorObject(o, 2), stream, 0);
-			fprintf(stream, " ");
-			objDumpR(memVectorObject(o, 3), stream, 0);
-			fprintf(stream, " ");
-			objDumpR(memVectorObject(o, 4), stream, 0);
-			fprintf(stream, " ");
-			objDumpR(memVectorObject(o, 5), stream, 0);
-			fprintf(stream, ">");
-			break;
-		case TSYSCALL :
-			fprintf(stream, "#<SYSCALL "OBJ">", *(Obj*)o);
-			break;
-		default :
-			if (rtge == o) {
-				fprintf(stream, "#<TGE "OBJ">", o);
-			} else {
-				fprintf(stream, "#???<"HEX">", o);
-			}
-			/* Dump the object description. */
-			if ((s = memPointerString(o))) fprintf (stream, ":%s", s);
 	}
 }
 
-void objDump (Obj o, FILE *stream) {
-	objDumpR(o, stream, 0);
+
+void objDisplayTypeInteger (Obj o, Obj stream) {
+	fprintf(stream, INT, *(Int*)o);
 }
 
 
+void objDisplayTypeReal (Obj o, Obj stream) {
+	fprintf(stream, REAL, *(Real*)o);
+}
+
+
+void objDisplayTypeVector (Obj o, Obj stream) {
+ Num i;
+	fwrite("#(", 1, 2, stream);
+	for (i=0; i<memObjectLength(o); i++) {
+		if (i) fwrite (" ", 1, 1, stream);
+		objDump(((Obj*)o)[i], stream);
+	}
+	fwrite(")", 1, 1, stream);
+}
+
+
+/* Displays a dotted pair or pretty list
+*/
+void objDisplayTypePair (Obj o, Obj stream) {
+	fwrite ("(", 1, 1, stream);
+	objDump(car(o), stream);
+
+	o = cdr(o);
+	while (objIsPair(o)) {
+		fwrite (" ", 1, 1, stream);
+		objDump(car(o), stream);
+		o = cdr(o);
+	}
+
+	if (onull != o) {
+		fwrite (" . ", 1, 3, stream);
+		objDump(o, stream);
+	}
+	fwrite (")", 1, 1, stream);
+}
+
+
+/* Serialize a stack object converting objects/pointers/immediates
+   to basic strings.
+*/
+void objDisplayTypeStack (Obj o, Obj stream) {
+ Num i;
+ Obj p;
+// int fl;
+	fprintf(stream, "#stack["HEX04" |", memStackLength(o)); /* Length */
+	for (i=0; i<memStackLength(o); i++) {
+		p = memStackObject(o, memStackLength(o)-i-1);
+		fwrite(" ", 1, 1, stream);
+		if (memIsObjectValid(p)) /* Live objects get a type description */
+			objDisplayTypeDefault(p, stream);
+		else  /* Immediate/pointers shown as signed hex */
+			if ((Int)p < 0l) fprintf(stream, "-"HEX, labs((Int)p));
+			else fprintf(stream, HEX, p);
+	}
+	fprintf(stream, "]");
+
+/*
+	fl=fcntl(0, F_GETFL, 0);
+	fcntl (0, F_SETFL, fl&~O_NONBLOCK);
+
+	for (i=0; i<memStackLength(o); i++) {
+		p = memStackObject(o, memStackLength(o)-i-1);
+		fwrite("\n", 1, 1, stream);
+		objDisplay(p, stream);
+	}
+
+	fcntl (0, F_SETFL, fl);
+*/
+}
+
+
+void objDisplay (Obj o, FILE *stream) {
+ Str s;
+	if (memIsObjectValid(o)) {
+		/* A live scheme object */
+		ObjectDisplayCallbacks[memObjectType(o)](o, stream);
+	} else {
+		/* An immediate or C pointer */
+		fwrite("#<", 1, 2, stream);
+
+		/* Display pointer/immediate as a signed HEX value */
+		if ((Int)o < 0l) fprintf(stream, "-"HEX, labs((Int)o));
+		else fprintf(stream, HEX, (Int)o);
+
+		/* The C pointer's registered string */
+		if ((s = memPointerString(o))) fprintf (stream, ":%s", s);
+
+		fwrite(">", 1, 1, stream);
+	}
+}
+
+void objWrite (Obj o, FILE *stream) {
+ Str s;
+	if (memIsObjectValid(o)) {
+		ObjectDisplayCallbacks[memObjectType(o)](o, stream);
+	} else {
+		fwrite("#<", 1, 2, stream);
+		/* Display pointer/immediate as a signed HEX value */
+		if ((Int)o < 0l) fprintf(stream, "-"HEX, labs((Int)o));
+		else fprintf(stream, HEX, (Int)o);
+		/* Dump the object description. */
+		if ((s = memPointerString(o))) fprintf (stream, ":%s", s);
+		fwrite(">", 1, 1, stream);
+	}
+}
+
+
+void objDisplayTypeRegister (Type type, Func2 serializer) {
+	assert(type < MEMMAXTYPES);
+	assert(!ObjectDisplayCallbacks[type] || ObjectDisplayCallbacks[type] == objDisplayTypeDefault);
+	ObjectDisplayCallbacks[type] = serializer;
+}
+
+void objWriteTypeRegister (Type type, Func2 serializer) {
+	assert(type < MEMMAXTYPES);
+	assert(!ObjectWriteCallbacks[type] || ObjectWriteCallbacks[type] == objDisplayTypeDefault);
+	ObjectWriteCallbacks[type] = serializer;
+}
+
+
+void objSerializerInitialize (void) {
+ Num i;
+	for (i=0; i < MEMMAXTYPES; ++i) {
+		objDisplayTypeRegister(i, objDisplayTypeDefault);
+		objWriteTypeRegister(i, objDisplayTypeDefault);
+	}
+
+	objDisplayTypeRegister(TINTRINSIC, objDisplayTypeIntrinsic);
+	objDisplayTypeRegister(TCHAR,      objDisplayTypeChar);
+	objDisplayTypeRegister(TSYMBOL,    objDisplayTypeSymbol);
+	objDisplayTypeRegister(TSTRING,    objDisplayTypeString);
+	objDisplayTypeRegister(TINTEGER,   objDisplayTypeInteger);
+	objDisplayTypeRegister(TREAL,      objDisplayTypeReal);
+	objDisplayTypeRegister(TPAIR,      objDisplayTypePair);
+	objDisplayTypeRegister(TVECTOR,    objDisplayTypeVector);
+	objDisplayTypeRegister(TSTACK,     objDisplayTypeStack);
+
+	objWriteTypeRegister(TINTRINSIC, objDisplayTypeIntrinsic);
+	objWriteTypeRegister(TCHAR,      objWriteTypeChar);
+	objWriteTypeRegister(TSYMBOL,    objDisplayTypeSymbol);
+	objWriteTypeRegister(TSTRING,    objWriteTypeString);
+	objWriteTypeRegister(TINTEGER,   objDisplayTypeInteger);
+	objWriteTypeRegister(TREAL,      objDisplayTypeReal);
+	objWriteTypeRegister(TPAIR,      objDisplayTypePair);
+	objWriteTypeRegister(TVECTOR,    objDisplayTypeVector);
+	objWriteTypeRegister(TSTACK,     objDisplayTypeStack);
+}
+
+
+
+/*******************************************************************************
+ Init
+*******************************************************************************/
 void objInitialize (void) {
  static Num shouldInitialize=1;
  Int i;
@@ -519,8 +654,8 @@ void objInitialize (void) {
 		vmInitialize(0, 0);
 		memInitialize(0, 0, 0);
 
-		//DB("Registering rootset objects");
-		//memRootSetRegister(rdebug);
+		DB("Initialize serializers");
+		objSerializerInitialize();
 
 		DB("Register the internal object types");
 		memTypeRegisterString(TINTRINSIC, (Str)"intrinsic");
@@ -532,17 +667,17 @@ void objInitialize (void) {
 		memTypeRegisterString(TPAIR, (Str)"pair");
 		memTypeRegisterString(TVECTOR, (Str)"vector");
 		memTypeRegisterString(TCLOSURE, (Str)"closure");
-		memTypeRegisterString(TCONTINUATION, (Str)"contin");
+		//memTypeRegisterString(TCONTINUATION, (Str)"contin");
 		memTypeRegisterString(TPORT, (Str)"port");
-		memTypeRegisterString(TSOCKET, (Str)"socket");
+		//memTypeRegisterString(TSOCKET, (Str)"socket");
 		memTypeRegisterString(TSYSCALL, (Str)"syscall");
 
 		/* Intrinsic objects are defined by their static object pointer address.
 		   Their display/write strings are also stored, even though their official
 		   length is zero, using format string "%.2s".  */
-		onull  = memNewStatic(TINTRINSIC, 0); memPointerRegisterString(onull, (Str)"()");
 		ofalse = memNewStatic(TINTRINSIC, 0); memPointerRegisterString(ofalse, (Str)"#f");
 		otrue  = memNewStatic(TINTRINSIC, 0); memPointerRegisterString(otrue, (Str)"#t");
+		onull  = memNewStatic(TINTRINSIC, 0); memPointerRegisterString(onull, (Str)"()");
 		oeof   = memNewStatic(TINTRINSIC, 0); memPointerRegisterString(oeof, (Str)"#eof");
 		onullvec = memNewStatic(TVECTOR, 0);  memPointerRegisterString(onullvec, (Str)"#()");
 		onullstr = memNewStatic(TSTRING, 0);  memPointerRegisterString(onullstr, (Str)"\"\"");
@@ -561,10 +696,11 @@ void objInitialize (void) {
 		osymbols = memNewVector(TVECTOR, HashTableSize);
 		for (n=0; n<HashTableSize; n++) memVectorSet (osymbols, n, onull);
 
-		objNewSymbolStatic("()");           snull = r0;
-		objNewSymbolStatic("#t");           strue = r0;
 		objNewSymbolStatic("#f");           sfalse = r0;
+		objNewSymbolStatic("#t");           strue = r0;
+		objNewSymbolStatic("()");           snull = r0;
 		objNewSymbolStatic("#eof");         seof = r0;
+
 		objNewSymbolStatic("define");       sdefine = r0;
 		objNewSymbolStatic("lambda");       slambda = r0;
 		objNewSymbolStatic("macro");        smacro = r0;
@@ -639,12 +775,13 @@ void objInitialize (void) {
 		}
 
 		DB("Registering static pointer description strings");
-		memPointerString(objCopyInteger);
-		memPointerString(objCopyString);
-		memPointerString(objCons12);
-		memPointerString(objCons23);
-		memPointerString(objNewVector1);
-		memPointerString(objListToVector);
+		memPointerRegister(objCopyInteger);
+		memPointerRegister(objCopyString);
+		memPointerRegister(objCons12);
+		memPointerRegister(objCons23);
+		memPointerRegister(objCons10);
+		memPointerRegister(objNewVector1);
+		memPointerRegister(objListToVector);
 
 		odebug = ofalse;
 

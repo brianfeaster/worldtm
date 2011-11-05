@@ -88,12 +88,50 @@ void TESTDump (void) {
 	objDump(ofalse, FB);
 	objDump(otrue, FB);
 	objDump(onull, FB);
-	objDump(onullvec, FB);
 	objDump(oeof, FB);
-	objNewInt(69); objDump(r0, FB);
-	objNewInt(-69); objDump(r0, FB);
+	objDump(onullvec, FB);
+	objNewInt(69); r3=r0; objDump(r0, FB);
+	objNewInt(-42); r4=r0; objDump(r0, FB);
 	objNewSymbol((Str)"donuts", 6); objDump(r0, FB);
-	FBFinalize("#f#t()#()#eof69-69donuts");
+	r0 = objCons(r3, r4); objDump(r0, FB);
+	r0 = objCons(r3, onull); objDump(r0, FB);
+	r0 = objCons(r4, r0); objDump(r0, FB);
+	r0 = objCons(onull, objCons(onullvec, objCons(ofalse, objCons(otrue, onullstr)))); objDump(r0, FB);
+	objNewVector(4);
+	memVectorSet(r0, 0, ofalse);
+	memVectorSet(r0, 1, otrue);
+	memVectorSet(r0, 2, onull);
+	memVectorSet(r0, 3, onullvec); objDump(r0, FB);
+	r0 = (Obj)0xdeadbeefl; objDump(r0, FB);
+	r0 = (Obj)-0xdeadbeefl; objDump(r0, FB);
+
+	FBFinalize("#f#t()#eof#()69-42donuts(69 . -42)(69)(-42 69)(() #() #f #t . )#(#f #t () #())#<deadbeef>#<-deadbeef>");
+}
+
+
+/* Test a serializer can be registered and used to display a new object type
+ */
+#define TDCHAR 0x70
+
+void objtDisplayTypeDchar (Obj o, Obj serializer) {
+	fwrite("{", 1, 1, serializer);
+	fprintf(serializer, CHR, memArrayObject(o, 0));
+	fprintf(serializer, CHR, memArrayObject(o, 1));
+	fwrite("}", 1, 1, serializer);
+}
+
+void TESTDumpSerializeCallback (void) {
+	memTypeRegister(TDCHAR); /* Register new type ID */
+	objDisplayTypeRegister(TDCHAR, objtDisplayTypeDchar); /* Register serializer */
+
+	FBInit();
+
+	r0 = memNewArray(0x70, 2);
+	memArraySet(r0, 0, 'a');
+	memArraySet(r0, 1, 'z');
+	objDump(r0, FB);
+
+	FBFinalize("{az}");
 }
 
 
@@ -109,5 +147,6 @@ int main (int argc, char *argv[]) {
 	TEST(TESTVerifyStackMutation);
 	TEST(TESTDoublyLinkedList);
 	TEST(TESTDump);
+	TEST(TESTDumpSerializeCallback);
 	return 0;
 }
