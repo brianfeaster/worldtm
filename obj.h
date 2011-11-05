@@ -1,6 +1,7 @@
 #ifndef _OBJ_H
 #define _OBJ_H
 #include "globals.h"
+#include "mem.h"
 
 
 /* Useful objects
@@ -12,7 +13,7 @@ extern Obj symbols, debug;
    highest bit signifying the base type which is either a "vector" or "array"
    object.
 */
-#define TINTRINSIC     0x00l /* false true null eof */
+#define TINTRINSIC     0x00l
 #define TCHAR          0x01l
 #define TSYMBOL        0x02l
 #define TSTRING        0x03l
@@ -22,9 +23,9 @@ extern Obj symbols, debug;
 #define TVECTOR        0x80l
 #define TPAIR          0x81l
 #define TCLOSURE       0x82l
-#define TCONTINUATION  0x83l
+//#define TCONTINUATION  0x83l
 #define TPORT          0x84l
-#define TSOCKET        0x85l
+//#define TSOCKET        0x85l
 #define TSYSCALL       0x86l
 
 
@@ -117,7 +118,11 @@ void objListToVector (void);
 
 /* Module
 */
-void objDump (Obj a, FILE *stream);
+void objDisplayTypeRegister (Type type, Func2 serializer);
+void objWriteTypeRegister   (Type type, Func2 serializer);
+void objDisplay (Obj a, FILE *stream);
+void objWrite   (Obj a, FILE *stream);
+#define objDump objDisplay /* Alias for objDisplay */
 
 void objInitialize (void);
 

@@ -18,11 +18,12 @@
    removal of objects are required.  Currently, a generational bi-heap collector
    is implemented.
 */ 
+#define MEMMAXTYPES   0x100l
 #define TSTACK         0xfbl
 
 
 /* Byte count of a Linux virtual memory block and the resolution of mmap.
-   0x001000 = 2^12 = 4Kb */
+   0x1000 = 2^12 = 4Kb = 4096b*/
 #define BLOCK_BYTE_SIZE ((Num)0x1000)
 
 

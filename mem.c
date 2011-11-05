@@ -305,7 +305,7 @@ void memRootSetRegisterString (Obj *objp, Str desc) {
 
 const Num HEAP_STATIC_BLOCK_COUNT =  0x010; /*    64Kb 0x010000 2^16 */
 const Num HEAP_BLOCK_COUNT        =  0x400; /*  4Mb    0x400000 2^22 */
-const Num STACK_LENGTH           = 0x04000; /*    16Kb 0x004000 2^14 */
+const Num STACK_COUNT            = 0x04000; /*    16Kb 0x004000 2^14 */
 
 typedef struct {
 	Obj start;  /* Initial heap location. */
@@ -596,8 +596,8 @@ Obj memNewPointer (void) {
 Obj memNewStack (void) {
  Obj o;
 	DBBEG();
-	o = memNewObject (memMakeDescriptor(TSTACK, STACK_LENGTH+1),
-	              memVectorLengthToObjectSize(STACK_LENGTH+1));
+	o = memNewObject (memMakeDescriptor(TSTACK, STACK_COUNT+1),
+	              memVectorLengthToObjectSize(STACK_COUNT+1));
 	*(Obj*)o = (Obj)o;
 	DBEND();
 	return o;
@@ -675,7 +675,7 @@ void memStackPush (Obj obj, Obj item) {
 	} else if (!memIsObjectStack(obj)) {
 		printf ("ERROR memStackPush(obj "OBJ" item "OBJ") Not stack type.", obj, item);
 		memRaiseException();
-	} else if (STACK_LENGTH <= memStackLength(obj)) {
+	} else if (STACK_COUNT <= memStackLength(obj)) {
 		printf ("ERROR memStackPush(obj "OBJ" item "OBJ") Stack overflow.", obj, item);
 		memDebugDumpObject(obj, stderr);
 		memRaiseException();
@@ -1411,6 +1411,10 @@ void memInitialize (Func preGC, Func postGC, Func exceptionHandlerCallback) {
 	DBBEG();
 	if (shouldInitialize) {
 		DB("Activating module");
+		DB("Sanity assertions");
+		assert(TMAXARRAY < TMAXVECTOR);
+		assert(TMAXVECTOR < TMAXINTERNAL);
+		assert(TMAXINTERNAL < MEMMAXTYPES);
 		shouldInitialize=0;
 		DB("Register the internal object types");
 		memTypeRegisterStringInternal(TSEMAPHORE,(Str)"SEM");
