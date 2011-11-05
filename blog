@@ -3877,7 +3877,17 @@ Fri Nov  4 16:41:48 EDT 2011
 
 Refactored the intrinsic static objects of which there would never be more than
 one instance of.  Null, true false and eof.  They are zero length objects of
-the tyPE INTRINSIC.  The primitive serializers need to be cleaned up now.  I
-will replace objDump with objDisplay/Write which will allow callbacks to be
-registered for specific types.  The sys module has similar functions and will
-just call the obj module's implementation.
+the type INTRINSIC.
+
+The primitive serializers need to be cleaned up now.  I will replace objDump
+with objDisplay/Write which will allow callbacks to be registered for specific
+types.  The sys module has similar functions and will just call the obj module's
+implementation.
+
+The sysWrite allowed for a character output limit cap.  I'd like to keep this
+behavior so fo rnow I have yet to merge sysWrite.
+
+Blocking need to be enabled when calling these syscall serializers.  While
+dumping a stack and all of its objects, it would stop mid stream.  I reenable
+blocking in other serializers such as mem module's object dumper and asm
+module's iblock dumper.
