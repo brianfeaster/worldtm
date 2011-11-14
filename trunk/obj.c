@@ -413,11 +413,11 @@ void objListToVector (void) {
  Parameter 'stream' should actually be a 'FILE*' object even though passed
  around as an Obj.
 *******************************************************************************/
-Func2 ObjectDisplayCallbacks[MEMMAXTYPES];
-Func2 ObjectWriteCallbacks[MEMMAXTYPES];
+Func2ObjFile ObjectDisplayCallbacks[MEMMAXTYPES];
+Func2ObjFile ObjectWriteCallbacks[MEMMAXTYPES];
 
 
-void objDisplayTypeDefault (Obj o, Obj stream) {
+void objDisplayTypeDefault (Obj o, FILE *stream) {
  Type t;
  Str s;
 	s = memTypeString(t = memObjectType(o));
@@ -426,7 +426,7 @@ void objDisplayTypeDefault (Obj o, Obj stream) {
 }
 
 
-void objDisplayTypeIntrinsic (Obj o, Obj stream) {
+void objDisplayTypeIntrinsic (Obj o, FILE *stream) {
 	if      (onull == o)  fwrite("()", 1, 2, stream);
 	else if (ofalse == o) fwrite("#f", 1, 2, stream);
 	else if (otrue == o)  fwrite("#t", 1, 2, stream);
@@ -435,26 +435,26 @@ void objDisplayTypeIntrinsic (Obj o, Obj stream) {
 }
 
 
-void objDisplayTypeChar (Obj o, Obj stream) {
+void objDisplayTypeChar (Obj o, FILE *stream) {
 	fwrite(o, 1, 1, stream);
 }
 
 
-void objWriteTypeChar (Obj o, Obj stream) {
+void objWriteTypeChar (Obj o, FILE *stream) {
 	fprintf(stream, "#\\%c", *(Chr*)o);
 }
 
 
-void objDisplayTypeSymbol (Obj o, Obj stream) {
+void objDisplayTypeSymbol (Obj o, FILE *stream) {
 	fwrite (o, 1, memObjectLength(o), stream);
 }
 
 
-void objDisplayTypeString (Obj o, Obj stream) {
+void objDisplayTypeString (Obj o, FILE *stream) {
 	fwrite (o, 1, memObjectLength(o), stream);
 }
 
-void objWriteTypeString (Obj o, Obj stream) {
+void objWriteTypeString (Obj o, FILE *stream) {
  Num i, len;
  Chr c;
 	fwrite ("\"", 1, 1, stream);
@@ -477,28 +477,28 @@ void objWriteTypeString (Obj o, Obj stream) {
 		default:
 			/* The printable chracter or a slashified hex */
 			if ((32<=c && c<=126) || (160<=c && c<=255)) fputc(c, stream);
-			else printf (stream, "\\x"HEX02, (Num)c);
+			else fprintf (stream, "\\x"HEX02, (Num)c);
 		}
 	}
 }
 
 
-void objDisplayTypeInteger (Obj o, Obj stream) {
+void objDisplayTypeInteger (Obj o, FILE *stream) {
 	fprintf(stream, INT, *(Int*)o);
 }
 
 
-void objDisplayTypeReal (Obj o, Obj stream) {
+void objDisplayTypeReal (Obj o, FILE *stream) {
 	fprintf(stream, REAL, *(Real*)o);
 }
 
 
-void objDisplayTypeVector (Obj o, Obj stream) {
+void objDisplayTypeVector (Obj o, FILE *stream) {
  Num i;
 	fwrite("#(", 1, 2, stream);
 	for (i=0; i<memObjectLength(o); i++) {
 		if (i) fwrite (" ", 1, 1, stream);
-		objDump(((Obj*)o)[i], stream);
+		objDisplay(((Obj*)o)[i], stream);
 	}
 	fwrite(")", 1, 1, stream);
 }
@@ -506,20 +506,20 @@ void objDisplayTypeVector (Obj o, Obj stream) {
 
 /* Displays a dotted pair or pretty list
 */
-void objDisplayTypePair (Obj o, Obj stream) {
+void objDisplayTypePair (Obj o, FILE *stream) {
 	fwrite ("(", 1, 1, stream);
-	objDump(car(o), stream);
+	objDisplay(car(o), stream);
 
 	o = cdr(o);
 	while (objIsPair(o)) {
 		fwrite (" ", 1, 1, stream);
-		objDump(car(o), stream);
+		objDisplay(car(o), stream);
 		o = cdr(o);
 	}
 
 	if (onull != o) {
 		fwrite (" . ", 1, 3, stream);
-		objDump(o, stream);
+		objDisplay(o, stream);
 	}
 	fwrite (")", 1, 1, stream);
 }
@@ -528,10 +528,9 @@ void objDisplayTypePair (Obj o, Obj stream) {
 /* Serialize a stack object converting objects/pointers/immediates
    to basic strings.
 */
-void objDisplayTypeStack (Obj o, Obj stream) {
+void objDisplayTypeStack (Obj o, FILE *stream) {
  Num i;
  Obj p;
-// int fl;
 	fprintf(stream, "#stack["HEX04" |", memStackLength(o)); /* Length */
 	for (i=0; i<memStackLength(o); i++) {
 		p = memStackObject(o, memStackLength(o)-i-1);
@@ -543,24 +542,23 @@ void objDisplayTypeStack (Obj o, Obj stream) {
 			else fprintf(stream, HEX, p);
 	}
 	fprintf(stream, "]");
-
 /*
-	fl=fcntl(0, F_GETFL, 0);
-	fcntl (0, F_SETFL, fl&~O_NONBLOCK);
-
 	for (i=0; i<memStackLength(o); i++) {
 		p = memStackObject(o, memStackLength(o)-i-1);
 		fwrite("\n", 1, 1, stream);
 		objDisplay(p, stream);
 	}
-
-	fcntl (0, F_SETFL, fl);
 */
 }
 
 
 void objDisplay (Obj o, FILE *stream) {
+ int fdState;
  Str s;
+
+	/* Enable I/O state blocking */
+	fcntl(0, F_SETFL, (fdState=fcntl(0, F_GETFL, 0)) & ~O_NONBLOCK);
+
 	if (memIsObjectValid(o)) {
 		/* A live scheme object */
 		ObjectDisplayCallbacks[memObjectType(o)](o, stream);
@@ -577,10 +575,16 @@ void objDisplay (Obj o, FILE *stream) {
 
 		fwrite(">", 1, 1, stream);
 	}
+	/* Restore I/O state */
+	fcntl(0, F_SETFL, fdState);
 }
 
 void objWrite (Obj o, FILE *stream) {
+ int fdState;
  Str s;
+	/* Enable I/O state blocking */
+	fcntl(0, F_SETFL, (fdState=fcntl(0, F_GETFL, 0)) & ~O_NONBLOCK);
+
 	if (memIsObjectValid(o)) {
 		ObjectDisplayCallbacks[memObjectType(o)](o, stream);
 	} else {
@@ -592,19 +596,34 @@ void objWrite (Obj o, FILE *stream) {
 		if ((s = memPointerString(o))) fprintf (stream, ":%s", s);
 		fwrite(">", 1, 1, stream);
 	}
+	/* Restore I/O state */
+	fcntl(0, F_SETFL, fdState);
 }
 
 
-void objDisplayTypeRegister (Type type, Func2 serializer) {
+/* The type serializer callback can be set once or initialized
+   to the default then set.
+*/
+void objDisplayTypeRegister (Type type, Func2ObjFile serializer) {
 	assert(type < MEMMAXTYPES);
-	assert(!ObjectDisplayCallbacks[type] || ObjectDisplayCallbacks[type] == objDisplayTypeDefault);
-	ObjectDisplayCallbacks[type] = serializer;
+	if (objDisplayTypeDefault == serializer) {
+		if (!ObjectDisplayCallbacks[type])
+			ObjectDisplayCallbacks[type] = serializer;
+	} else {
+		assert(!ObjectDisplayCallbacks[type] || ObjectDisplayCallbacks[type] == objDisplayTypeDefault);
+		ObjectDisplayCallbacks[type] = serializer;
+	}
 }
 
-void objWriteTypeRegister (Type type, Func2 serializer) {
+void objWriteTypeRegister (Type type, Func2ObjFile serializer) {
 	assert(type < MEMMAXTYPES);
-	assert(!ObjectWriteCallbacks[type] || ObjectWriteCallbacks[type] == objDisplayTypeDefault);
-	ObjectWriteCallbacks[type] = serializer;
+	if (objDisplayTypeDefault == serializer) {
+		if (!ObjectWriteCallbacks[type])
+			ObjectWriteCallbacks[type] = serializer;
+	} else {
+		assert(!ObjectWriteCallbacks[type] || ObjectWriteCallbacks[type] == objDisplayTypeDefault);
+		ObjectWriteCallbacks[type] = serializer;
+	}
 }
 
 
@@ -652,10 +671,11 @@ void objInitialize (void) {
 
 		DB("Initializing submodules");
 		vmInitialize(0, 0);
-		memInitialize(0, 0, 0);
 
 		DB("Initialize serializers");
 		objSerializerInitialize();
+		objDisplayTypeRegister(TCODE, vmDisplayTypeCode);
+		objWriteTypeRegister(TCODE,   vmDisplayTypeCode);
 
 		DB("Register the internal object types");
 		memTypeRegisterString(TINTRINSIC, (Str)"intrinsic");
@@ -682,7 +702,7 @@ void objInitialize (void) {
 		onullvec = memNewStatic(TVECTOR, 0);  memPointerRegisterString(onullvec, (Str)"#()");
 		onullstr = memNewStatic(TSTRING, 0);  memPointerRegisterString(onullstr, (Str)"\"\"");
 
-		/* Table of character objects.  The 257th character is the EOF object. */
+		/* Table of character objects */
 		DB("Creating vector of character constants");
 		ocharacters = memNewStaticVector(TVECTOR, 256);
 		for (n=0; n<256; n++) {

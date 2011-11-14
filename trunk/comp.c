@@ -113,7 +113,7 @@ void compSyscallError (void) {
 */
 void compSyscallTGELookup (void) {
 	DBBEG(" ");
-	DBE objDump(r1, stderr);
+	DBE objDisplay(r1, stderr);
 	sysTGEFind();
 	if (r0 == onull) {
 		vmPush(r1);
@@ -141,7 +141,7 @@ void compSyscallTGEMutate (void) {
 	sysTGEFind();
 	if (r0 == onull) {
 		printf ("Unbound symbol");
-		objDump(r1, stdout);
+		objDisplay(r1, stdout);
 		printf ("'\n");
 		r0 = r2; /* TODO  runtime error.  call thread's exception handler continuation */
 	} else {
@@ -319,7 +319,7 @@ void compTransformDefineFunction (void) {
 	r1=r3;      r2=r0;   objCons12(); /* (fn (lambda formals body)) */
 	
 	DBEND("  =>  ");
-	DBE objDump(rexpr, stderr);
+	DBE objDisplay(rexpr, stderr);
 }
 
 
@@ -416,7 +416,7 @@ Num compTransformInternalDefinitions (void) {
 	r1=vmPop(); r2=rexpr;   objCons12(); /* Re-attach arg list */
 
 	DBEND("  =>  ");
-	DBE objDump(rexpr, stdout);
+	DBE objDisplay(rexpr, stdout);
 ret:
 	return ret;
 }
@@ -469,7 +469,7 @@ void compTransformLet (void) {
 	rexpr=r0;
 
 	DBEND("  =>  ");
-	DBE objDump(rexpr, stdout);
+	DBE objDisplay(rexpr, stdout);
 }
 
 
@@ -673,7 +673,7 @@ void compTransformNamedLet (void) {
 	rexpr=r0;
 
 	DBEND("  =>  ");
-	DBE objDump(rexpr, stdout);
+	DBE objDisplay(rexpr, stdout);
 }
 
 /* Transform:
@@ -687,7 +687,7 @@ void compTransformLetrec (void) {
 
    if (!objIsPair(car(rexpr))) {
 		fprintf (stderr, "letrec malformed: ");
-		objDump(rexpr, stderr);
+		objDisplay(rexpr, stderr);
 	}
 
 	/* Push and count letrec binding expressions. */
@@ -722,7 +722,7 @@ void compTransformLetrec (void) {
 	r1=slet; r2=r0;  objCons12();
 
 	DBEND("  =>  ");
-	DBE objDump(r0, stdout);
+	DBE objDisplay(r0, stdout);
 }
 
 /* Given <qq template> in rexpr, create cons tree in r0.
@@ -783,7 +783,7 @@ void compTransformQuasiquote (int depth) {
 void compSymbol (Num flags) {
  Num d, ret, depth, offset;
 	DBBEG();
-	DBE objDump(rexpr, stderr);
+	DBE objDisplay(rexpr, stderr);
 
 	/* Scan local environments.  Returned is a 16 bit number, the high 8 bits
 	   is the environment chain depth, the low 8 bits the binding offset. The
@@ -1327,13 +1327,13 @@ end:
 	}
 
 	DB ("Code block => ");
-	DBE vmDebugDumpCode(r0, stderr);
+	DBE objDisplay(r0, stderr);
 	DBEND(STR, compIsError()?" *ERROR*":"");
 }
 
 void compLambda (Num flags) {
 	DBBEG(" <= ");
-	DBE objDump(rexpr, stdout);
+	DBE objDisplay(rexpr, stdout);
 
 	rexpr = cdr(rexpr); /* Skip 'lambda' */
 
@@ -1562,7 +1562,7 @@ void compBegin (Num flags) {
 
 ret:
 	DBEND(" ");
-	DBE objDump(rcomperror, stderr);
+	DBE objDisplay(rcomperror, stderr);
 }
 
 
@@ -1855,7 +1855,7 @@ void compCond (Num flags) {
 			goto ret;
 		} else {
 			DB("Pushing clause");
-			DBE objDump(r1, stderr);
+			DBE objDisplay(r1, stderr);
 			clauses++;
 			vmPush(r1);
 			r2 = cdr(r2); /* Consider next clause for this loop */
@@ -1863,7 +1863,7 @@ void compCond (Num flags) {
 				/* Else clause matched, so stop pushing clauses and give warning if more clauses follow */
 				if (r2 != onull) {
 					fprintf (stderr, "\nWARNING: compCond: cond's else clause followed by more clauses ");
-					objDump(r2, stderr);
+					objDisplay(r2, stderr);
 				}
 				r2 = onull;
 			}
@@ -1889,7 +1889,7 @@ void compCond (Num flags) {
 			r1=r0;  r2=onull; objCons12();           /* (translated) */
 			if (objIsPair(cdr(r3))) { /* Give warning if else clause followed by more clauses */
 				fprintf (stderr, "\nWARNING: compCond: cond's => expr not a single expression ");
-				objDump(r5, stderr);
+				objDisplay(r5, stderr);
 			}
 			r1=car(r3); r2=r0; objCons12();         /* (<expr> translated) */
 			r1=r4;  r2=r0; objCons12();             /* (<test> <expr> translated) */
@@ -1903,7 +1903,7 @@ void compCond (Num flags) {
 		}
 	}
 	DB ("compCond translated ");
-	DBE objDump(r0, stdout);
+	DBE objDisplay(r0, stdout);
 	rexpr = r0;
 	compCompileExpr(flags);
 
@@ -2206,7 +2206,7 @@ void compQuasiquote (Num flags) {
 	compTransformQuasiquote(0);
 	rexpr = r0;
 	DB("quasiquote transformation => ");
-	DBE objDump (rexpr, stderr);
+	DBE objDisplay(rexpr, stderr);
 	compCompileExpr(flags);
 	DBEND(STR, compIsError()?" *ERROR*":"");
 }
@@ -2490,7 +2490,7 @@ void compThread (Num flags) {
 
 		asmAsm(
 			MVI, R0, r0,
-			SYSI, osNewThread /* the osNewThread syscall returns thread ID integer object in r0 at runtime */
+			SYSI, osNewThread /* the osNewThread syscall returns thread ID integer object in r0 at runtime or #f on failure */
 		);
 	}
 
@@ -2580,7 +2580,7 @@ void compIntrinsic (Num flags) {
 void compCompileExpr (Num flags) {
  Obj op;
 	DBBEG(" <= ");
-	DBE sysDisplay(rexpr, stderr);
+	DBE objDisplay(rexpr, stderr);
 
 //fprintf(stderr, "[CompileExpr:"NUM"]", flags & CCTAILCALL);
 	compPushSubExpr(rexpr);

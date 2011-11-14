@@ -3,11 +3,17 @@
 #define VALIDATE 1
 #include "debug.h"
 #include <stdio.h>
-#include <fcntl.h>
 #include <assert.h>
 #include "vm.h"
 #include "mem.h"
-/* While the virtual machine is running, register rip/r1d, which is the opcode
+/*
+ Virtual_Machine
+ Serializer
+ Init
+
+ About vm.c
+
+   While the virtual machine is running, register rip/r1d, which is the opcode
    index, is transformed into a pointer into the rcode/re vector object.  This
    transformation is undone and rip reverted to an immediate index value when
    a SYS opcode is performed or the interrupt handler called.  */
@@ -17,11 +23,6 @@
 #define OPDB(s,...) DBE fprintf(stderr,"\n"OBJ":"HEX" " s, rcode, ((Obj*)rip-(Obj*)rcode), ##__VA_ARGS__)
 
 
-
-/* Registers (rootset objects) used by the virtual machine's opcodes
- */
-Obj r0,  r1,  r2,  r3,  r4,  r5,  r6,  r7,
-    r8,  r9,  ra,  rb,  rc,  rd,  re,  rf;
 
 void vmPush (Obj o) {
 	memStackPush(rf, o);
@@ -75,7 +76,16 @@ void vmProcessInterrupt (void) {
 }
 
 
-/* Virtual Machine
+
+/*******************************************************************************
+ Virtual_Machine
+*******************************************************************************/
+/* Rootset objects.  Virtual machine registers.
+ */
+Obj r0,  r1,  r2,  r3,  r4,  r5,  r6,  r7,
+    r8,  r9,  ra,  rb,  rc,  rd,  re,  rf;
+
+/* Opcodes
 */
 
 void *vmNOP,
@@ -573,7 +583,11 @@ void vmRun (void) {
 
 
 
-/* Default Object serializer
+/*******************************************************************************
+ Serializer
+
+*******************************************************************************/
+/* Default Object serializer and its mutable callback pointer.
  */
 void vmObjectDumperDefault (Obj o, FILE *stream) {
  static Str p;
@@ -582,32 +596,29 @@ void vmObjectDumperDefault (Obj o, FILE *stream) {
 	fprintf (stream, ">");
 }
 
-void (* vmObjectDumper)(Obj o, FILE *stream) = vmObjectDumperDefault;
+void (*vmObjectDumper)(Obj o, FILE *tream) = vmObjectDumperDefault;
 
+
+/* Convert an instruction pointer (Obj) to an instruction address
+   given the code object pointer (Obj) it is pointing into.
+*/
 Int vmOffsetToPosition (Obj codeBlock, Obj *instPtr) {
- Int pos = 3 + instPtr - (Obj*)codeBlock + (Int)*(instPtr+2) / 8;
+ Int pos = 3 + instPtr - (Obj*)codeBlock + (Int)*(instPtr+2) / (Int)ObjSize;
 	return (memObjectLength(codeBlock) < pos) ? (Int)*(instPtr+2) : pos;
 }
+
 Int vmBraOffsetToPosition (Obj codeBlock, Obj *instPtr) {
- Int pos = 2 + instPtr - (Obj*)codeBlock + (Int)*(instPtr+1) / 8;
+ Int pos = 2 + instPtr - (Obj*)codeBlock + (Int)*(instPtr+1) / (Int)ObjSize;
 	return (memObjectLength(codeBlock) < pos) ? (Int)*(instPtr+1) : pos;
 }
 
-void vmDebugDumpCode (Obj c, FILE *stream) {
- int fdState;
+void vmDisplayTypeCode (Obj c, FILE *stream) {
  Obj *i = c;
  Num lineNumber;
 
 	DBBEG ("  "OBJ"  rcode:"OBJ"  rip:"OBJ, c, rcode, rip);
-	/* Reenable i/o blocking */
-	fcntl (0, F_SETFL, (fdState=fcntl(0, F_GETFL, 0))&~O_NONBLOCK);
-
-	if (stream == NULL) stream=stderr;
-
-	if (!memIsObjectType(c, TCODE)) {
-		memDebugDumpObject(c, stream);
-		goto ret;
-	}
+	assert(stream);
+	assert(memIsObjectType(c, TCODE));
 
 	while (i < ((Obj*)c + memObjectLength(c))) { // Forcing pointer arithmetic.
 		lineNumber = (Num)(i-(Obj*)c);
@@ -719,31 +730,35 @@ void vmDebugDumpCode (Obj c, FILE *stream) {
 		i++;
 		fflush(stdout);
 	}
-ret:
 	printf (NL);
-	fcntl (0, F_SETFL, fdState);
 	DBEND ();
 }
 
 
 
-
-void vmInitialize (Func interruptHandler, void(*vmObjDumper)(Obj, FILE*)) {
+/*******************************************************************************
+ Init
+*******************************************************************************/
+void vmInitialize (Func interruptHandler, Func2ObjFile vmObjDumper) {
  static Num shouldInitialize=1;
 	DBBEG();
 	if (shouldInitialize) {
 		DB("Activating module");
-		shouldInitialize=0;
+		shouldInitialize = 0;
 		memInitialize(0, 0, 0);
+
 		DB("Registering rootset objects");
 		memRootSetRegister(r0);  memRootSetRegister(r1);  memRootSetRegister(r2);  memRootSetRegister(r3);
 		memRootSetRegister(r4);  memRootSetRegister(r5);  memRootSetRegister(r6);  memRootSetRegister(r7);
 		memRootSetRegister(r8);  memRootSetRegister(r9);  memRootSetRegister(ra);  memRootSetRegister(rb);
 		memRootSetRegister(rc);  memRootSetRegister(rd);  memRootSetRegister(re);  memRootSetRegister(rf);
+
 		DB("Create the stack");
 		rf = memNewStack();
+
 		DB("Register the internal object types");
 		memTypeRegisterString(TCODE, (Str)"code");
+
 		DB("Initialize opcode values");
 		vmVm(); /* The first call to vmVm() initializes opcode values */
 	} else {
@@ -753,7 +768,7 @@ void vmInitialize (Func interruptHandler, void(*vmObjDumper)(Obj, FILE*)) {
 	if (interruptHandler) {
 		DB("Setting interrupt handler callback function");
 		assert(!vmInterruptHandler);
-		vmInterruptHandler = interruptHandler; /* sys.c:sysSchedule()  */
+		vmInterruptHandler = interruptHandler;
 	}
 	if (vmObjDumper) {
 		DB("Setting vmObjDumper callback function");

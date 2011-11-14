@@ -35,6 +35,13 @@ void osSleepThread (void);
 void osUnblockSemaphoreBlocked (Obj sem, Num all);
 void osSpawnSignalHandler (void);
 void osCatchSignal (int sig);
+
+/* IO
+*/
+void osRecvBlock (void);
+
+/* Initialization
+*/
 void osInitialize(Func exceptionHandler);
 
 #endif

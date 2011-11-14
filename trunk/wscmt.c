@@ -56,6 +56,7 @@ void objVerifySemaphore (void) {
 	assert(1 == (Int)car(r1));
 }
 
+
 /* Numerical equivalence. */
 void sysEquals (void) {
 	r1=vmPop();  r0=vmPop();
@@ -81,7 +82,7 @@ void wscmtDisplay (void) {
 	if (fd==2) stream = stderr;
 	assert(NULL != stream);
 
-	sysDisplay(r0=vmPop(), stream);
+	objDisplay(r0=vmPop(), stream);
 
 	return;
 }

@@ -1181,6 +1181,8 @@
     (quit))))
 
 
+(load "heapinfowebserver.scm")
+
 ; Keyboard command loop
 (let ~ () (let ((b (getKey)))
   (set! ActivityTime (time))

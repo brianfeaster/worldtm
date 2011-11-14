@@ -23,7 +23,7 @@
  Debugging_aids
  Init
 
-  ABOUT THIS MODULE
+  About mem.c
 
    Two sets of objects, old and young,  will be maintained.  Normally, the
    young object heap will be copy collected, when it fills up, to a new
@@ -59,6 +59,9 @@
   Normalized
 */
 
+/* Number of generational collections until a complete collection
+   is forced across all generations */
+#define FORCE_OLD_GC_COUNT 47
 
 
 /* Internal types which are registered during initialization */
@@ -300,19 +303,18 @@ void memRootSetRegisterString (Obj *objp, Str desc) {
 /*******************************************************************************
  Heap_stuff
 *******************************************************************************/
-/* Limit the size of any object to 16Mb (2^24) bytes for sanity. */
-#define MEMOBJECTMAXSIZE ((Num)0x1000000)
-
 const Num HEAP_STATIC_BLOCK_COUNT =  0x010; /*    64Kb 0x010000 2^16 */
 const Num HEAP_BLOCK_COUNT        =  0x400; /*  4Mb    0x400000 2^22 */
 const Num STACK_COUNT            = 0x04000; /*    16Kb 0x004000 2^14 */
 
+#if 0
 typedef struct {
 	Obj start;  /* Initial heap location. */
 	Obj next;   /* Next available heap location. */
 	Obj last;   /* One byte past the last heap location (exclusive). */
 	Num finalizerCount; /* Number of finalizer types contained in this heap. */
 } Heap;
+#endif
 
 /* The four heap structure instances
 */
@@ -320,6 +322,7 @@ Heap heapOld;   /* Where old objects live during runtime. */
 Heap heap;      /* Where new young objects are created during runtime. */
 Heap heapNew;   /* GC work area. */
 Heap heapStatic;/* Objects that are never deleted nor touched by the GC. */
+
 
 
 /* Return number of objects in heap.  Used for unit tests.
@@ -364,6 +367,7 @@ void memInitializeHeap (Heap *h, Num blockCount) {
  Num bytes = BLOCK_BYTE_SIZE * blockCount;
 	DBBEG(" "STR, memHeapPointerToString(h));
 	h->start = h->next = mmap(0x0, bytes, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, 0, 0);
+	//h->start = h->next = calloc(bytes, 1);
 	if (MAP_FAILED == h->start) {
 		fprintf (stderr, "\nERROR: memInitializeHeap(): Can't create heap.  mmap() => "OBJ, h->start);
 		memRaiseException();
@@ -390,7 +394,8 @@ void memResetHeapObject (Heap *h) {
 void memShrinkHeap (Heap *h, Num blockCount) {
  Num oldBlockCount;
  Num newBlockCount;
- int ret;
+ Int mret;
+// void *ret;
 	DBBEG(" "STR, memHeapPointerToString(h));
 
 	if (0 < blockCount) {
@@ -399,13 +404,17 @@ void memShrinkHeap (Heap *h, Num blockCount) {
 		DB ("["HEX"] -> ["HEX"] - ["HEX"]", oldBlockCount, newBlockCount, blockCount);
 		assert(blockCount <= oldBlockCount);
 
-		ret = munmap(h->start + newBlockCount * BLOCK_BYTE_SIZE, blockCount * BLOCK_BYTE_SIZE - 1);
-		/* Update the heap's "last" pointer if munmap succeeds */
-		if (!ret) {
+		mret = munmap(h->start + newBlockCount * BLOCK_BYTE_SIZE, blockCount * BLOCK_BYTE_SIZE - 1);
+		if (!mret) {
 			h->last = h->start + newBlockCount * BLOCK_BYTE_SIZE;
 		} else {
 		 	fprintf (stderr, "WARNING: memShrinkHeap() can't shrink heap region");
 		}
+		//ret = realloc(h->start, newBlockCount * BLOCK_BYTE_SIZE);
+		//fprintf (stderr, OBJ" "OBJ, ret, h->start);
+		//assert(ret==newBlockCount || ret == h->start);
+		h->last = h->start + newBlockCount * BLOCK_BYTE_SIZE;
+		/* Update the heap's "last" pointer if munmap succeeds */
 	} else {
 		DB ("skipping 0 blockCount");
 	}
@@ -462,12 +471,10 @@ Obj memNewObject (Descriptor desc, Num byteSize) {
  static Num recursed=0;
 	DBBEG("  desc:"HEX016"  byteSize:"HEX, desc, byteSize);
 
-	#if DEBUG_ASSERT
 	if (MEMOBJECTMAXSIZE <= byteSize) {
 		printf ("ERROR:: "STR" (desc "HEX016"  byteSize "HEX"): size too big.", __func__, desc, byteSize);
 		memRaiseException();
 	}
-	#endif
 
 	/* Set the new object's descriptor in the heap, set object pointer 'o' to the
 	   new obj location (immediately after the descriptor) and increment the
@@ -744,7 +751,7 @@ u8 memArrayObject (Obj obj, Num offset) {
 	return *((u8*)obj+offset);
 }
 
-extern Obj r1e;
+//extern Obj r1e;
 Obj memVectorObject (Obj obj, Num offset) {
 	#if DEBUG_ASSERT
 	if (!memIsObjectValid(obj) && !memIsObjectInHeap(&heapNew, obj)) {
@@ -804,6 +811,8 @@ Num memStackLength (Obj obj) {
 	#endif
 	return (Num)(((Obj**)obj)[0] - (Obj*)obj);
 }
+
+
 
 
 
@@ -992,8 +1001,6 @@ void memGarbageCollectInternal (Descriptor desc, Num byteSize) {
 		DBBEG("  mode=OLD    old_count:"HEX"  young_count:"HEX, memHeapBlockCount(&heapOld), memHeapBlockCount(&heap));
 	}
 
-	if (memPreGarbageCollect) memPreGarbageCollect();
-
 	++garbageCollectionCount;
 
 	/* Initialize heap 'new' with enough space to contain all of heap 'old'
@@ -1010,6 +1017,8 @@ void memGarbageCollectInternal (Descriptor desc, Num byteSize) {
 	              byteSize/BLOCK_BYTE_SIZE;
 	DB ("[mode "NUM"][newHeap byte size "NUM"][desired "NUM"]", GarbageCollectionMode, memHeapBlockCount(&heap), byteSize/BLOCK_BYTE_SIZE);
 	memInitializeHeap (&heapNew, newHeapSize);
+
+	if (memPreGarbageCollect) memPreGarbageCollect();
 
 	/* Copy objects in registers to new heap. */
 	DB("Collecting root set");
@@ -1089,9 +1098,8 @@ void memGarbageCollectInternal (Descriptor desc, Num byteSize) {
 		}
 	}
 
-	if (garbageCollectionCount%50 == 0) GarbageCollectionMode = GC_MODE_OLD;
-
-	if (memPostGarbageCollect) memPostGarbageCollect();
+	if (garbageCollectionCount % FORCE_OLD_GC_COUNT == 0)
+		GarbageCollectionMode = GC_MODE_OLD;
 
 	assert(memGCFlag==1);
 	memGCFlag=0;
@@ -1099,6 +1107,8 @@ void memGarbageCollectInternal (Descriptor desc, Num byteSize) {
 #if VALIDATE_HEAP
 	memValidateHeapStructures();
 #endif
+
+	if (memPostGarbageCollect) memPostGarbageCollect();
 
 	/* Debug dump heap [used | unused]objCount info
 	 */
@@ -1155,7 +1165,6 @@ void memDebugDumpHeapHeaders (FILE *stream) {
 	}
 	fprintf (stream, "\n");
 }
-
 
 /* Generic object to string dumper.
    #<11112222f000 y  int:02 0004  (61 62 63 64) "abcd">
@@ -1423,8 +1432,8 @@ void memInitialize (Func preGC, Func postGC, Func exceptionHandlerCallback) {
 		memTypeRegisterStringInternal(TSTACK,    (Str)"STK");
 		memTypeRegisterStringInternal(TSHADOW,   (Str)"SHDW");
 		DB("Create heaps");
-		memInitializeHeap  (&heapStatic, HEAP_STATIC_BLOCK_COUNT);
 		memInitializeHeap  (&heap, HEAP_BLOCK_COUNT);
+		memInitializeHeap  (&heapStatic, HEAP_STATIC_BLOCK_COUNT);
 		memResetHeapObject (&heapOld); /* Old heap unused initially */
 		GarbageCollectionMode = GC_MODE_YOUNG;
 	} else {

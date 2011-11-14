@@ -3885,9 +3885,30 @@ types.  The sys module has similar functions and will just call the obj module's
 implementation.
 
 The sysWrite allowed for a character output limit cap.  I'd like to keep this
-behavior so fo rnow I have yet to merge sysWrite.
+behavior so for now I have yet to merge sysWrite.
 
 Blocking need to be enabled when calling these syscall serializers.  While
 dumping a stack and all of its objects, it would stop mid stream.  I reenable
 blocking in other serializers such as mem module's object dumper and asm
 module's iblock dumper.
+
+
+
+Sat Nov  5 18:21:00 EDT 2011
+
+Using serializer template across all modules.  Although the dispatcher lives in
+the obj module, callbacks exist in child and parent modules.  The callbacks
+can be used independently of the objDisplay/Write dispatcher.
+
+
+
+Fri Nov 11 23:12:52 EST 2011
+
+(read 8 ico) crashes
+
+
+
+Sun Nov 13 13:53:27 EST 2011
+
+Add 32 bit support for ICO library.  Should just be a sequence of widthXheight
+RGBA bytes followed by widthXheight AND bitmap (1 bit alpha).

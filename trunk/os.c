@@ -13,6 +13,8 @@
 /*
  Useful
  Scheduling
+ IO
+ Initialization
 */
 
 
@@ -148,11 +150,11 @@ void osRemoveThread (Obj t) {
 }
 
 /* Creates a new thread object which is inserted into the running queue.
-
-	Requires: r0 code block
-	Mutates: r0 r1 r2
-	Returns: r1 thread descriptor
-            r0 thread id
+   r0 <= code block
+    r1 = used
+    r2 = used
+    r1 => thread descriptor object
+    r0 => thread id object
 */
 void osNewThread (void) {
  Num tid;
@@ -380,7 +382,7 @@ void osRun (void) {
 	DBBEG(" tid="INT, *(Num*)osThreadId(rrunning));
 	if (osThreadState(rrunning) != sready) {
 		fprintf (stderr, "WARNING: osRun: Should be 'ready' thread but is ");
-		objDump(osThreadState(rrunning), stderr);
+		objDisplay(osThreadState(rrunning), stderr);
 	} else {
 		/* Get stack from descriptor. */
 		rstack = osThreadStack(rrunning);
@@ -401,7 +403,7 @@ void osRun (void) {
 		memVectorSet(osThreadDescriptor(rrunning), 2, srunning);
 	}
 	DBEND(" => ");
-	DBE objDump(osThreadDescriptor(rrunning), stderr);
+	DBE objDisplay(osThreadDescriptor(rrunning), stderr);
 }
 
 
@@ -543,8 +545,8 @@ void osUnblockSemaphoreBlocked (Obj sem, Num all) {
 			/* Look at thread's r1 register stored on its stack. */
 			semaphore = memStackObject(osThreadStack(r4),1);
 			DB("considering blocked thread with sem:");
-			DBE objDump(sem, stderr);
-			DBE objDump(semaphore, stderr);
+			DBE objDisplay(sem, stderr);
+			DBE objDisplay(semaphore, stderr);
 			if (semaphore == sem) {
 				DB("unblocking thread tid:"NUM, *(Num*)osThreadId(r4));
 				/* Set thread's return value (r0 register which is found at the top of the thread's stack)
@@ -558,7 +560,7 @@ void osUnblockSemaphoreBlocked (Obj sem, Num all) {
 	}
 	if (!all && !found) {
 		fprintf (stderr, "ERROR: Couldn't find thread blocked on semaphore:");
-		objDump(sem, stderr);
+		objDisplay(sem, stderr);
 		exit (-1);
 	}
 	DBEND();
@@ -617,6 +619,55 @@ void osDebugDumpThreadInfo (void) {
 }
 
 
+
+/*******************************************************************************
+ IO
+*******************************************************************************/
+/* Called by syscallRecv or VM syscall instruction.
+     r1 <= port object
+     r2 <= timout (imm:int or #f)
+     r3 <= buffer (""=any length str  ()=one char  "..."=fill string)
+      r4 = read count
+     r0  => string buffer
+*/
+void osRecvBlock (void) {
+ s64 wakeupTime;
+ Num timedOut;
+	DBBEG();
+
+	/* Time can be false meaning wait forever or the time the thread
+	   should be woken up regardless of character availability. */
+	if (r2 != ofalse) {
+		wakeupTime = sysTime() + *(Int*)r2;
+		objNewInt(wakeupTime);
+		r2=r0;
+	}
+
+	r4 = 0; /* Character read count initialized to 0. */
+
+	sysRecv();
+	timedOut = (r2!=ofalse) && (*(Int*)r2 <= sysTime());
+	if (r0 == ofalse)
+		if (!timedOut) {
+			/* Nothing read and haven't timed out yet so block thread */
+			osUnRun();
+			osMoveToQueue(rrunning, rblocked, sreadblocked);
+			osScheduler();
+		} if (timedOut && 0 < (Num)r4) {
+			/* Timeout with a partial read so return partial string */
+			objNewString(NULL, (Num)r4);
+   		memcpy(r0, r3, (Num)r4);
+		}
+
+	DBEND("  =>  r0:");
+	DBE memDebugDumpObject(r0, stderr);
+}
+
+
+
+/*******************************************************************************
+ Initialization
+*******************************************************************************/
 void osInitialize (Func exceptionHandler) {
  static Num shouldInitialize=1;
  Num i;
@@ -635,6 +686,7 @@ void osInitialize (Func exceptionHandler) {
 
 		DB("Registering static pointer description strings");
 		memPointerString(osNewThread);
+		memPointerString(osRecvBlock);
 
 		/* Create empty thread vector.  All active threads are assigned a number
 		   1-1024 and stored here for easy constant time lookup.  The first entry
@@ -677,6 +729,8 @@ void osInitialize (Func exceptionHandler) {
 
 	DBEND();
 }
+
+
 
 #undef DB_DESC
 #undef DEBUG

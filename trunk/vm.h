@@ -56,7 +56,7 @@ extern void *vmNOP,
 extern Int vmInterrupt;
 
 void vmRun (void);
-void vmInitialize (Func intHandler, void(*vmObjDumper)(Obj, FILE*));
-void vmDebugDumpCode (Obj c, FILE *stream);
+void vmInitialize (Func intHandler, Func2ObjFile vmObjDumper);
+void vmDisplayTypeCode (Obj c, FILE *stream);
 
 #endif

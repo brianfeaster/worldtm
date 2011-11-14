@@ -1,6 +1,8 @@
 #ifndef _GLOBALS_H
 #define _GLOBALS_H
 
+#include <stdio.h>
+
 /* C Type declarations representing the number of bits for unsigned, signed and
    real types.  Currently these match the Linode virtual machines I'm hosted on.
  */
@@ -34,6 +36,7 @@ typedef void* Obj;
 typedef void (*Func)  (void);
 typedef void (*Func1) (Obj a);
 typedef void (*Func2) (Obj a, Obj b);
+typedef void (*Func2ObjFile) (Obj o, FILE *f);
 
 
 /* Printf format strings for the above types.

@@ -38,7 +38,7 @@ void cctDumpSpace (void) { fprintf(FB, " "); }
 void cctDumpNewline (void) { fprintf(FB, "\n"); }
 void cctDumpIntegerR0 (void) { fprintf(FB, INT, r0); }
 void cctDumpIntegerR0stderr (void) { fprintf(stderr, INT, r0); }
-void cctDumpObjR0 (void) { objDump(r0, FB); }
+void cctDumpObjR0 (void) { objDisplay(r0, FB); }
 
 /* Create simple icode program of one iblock then compile the
    iblock and run the code block in the VM
@@ -387,7 +387,7 @@ void cctAsmNested() {
 	FBFinalize("108642\n987654321\n");
 
 //asmDumpIBlocks();
-//vmDebugDumpCode(rcode, stderr);
+//objDisplay(rcode, stderr);
 }
 
 
@@ -461,7 +461,7 @@ void cctJumpAndLink (void) {
 	vmRun();
 
 	/* Verify output */
-//vmDebugDumpCode(rcode, stderr);
+//objDisplay(rcode, stderr);
 //fflush(FB);
 //fprintf(stderr, "[%s]", fpBuff);
 	FBFinalize("01");
@@ -601,7 +601,7 @@ void opcodes (void) {
 	asmInit(); asmAsm(NOP); asmAssemble(); assert(vmNOP == memVectorObject(r0, 0));
 
 //asmDumpIBlocks();
-//vmDebugDumpCode(r0, stderr);
+//objDisplay(r0, stderr);
 }
 
 
@@ -613,7 +613,7 @@ static void asmtDisplayNewline (void) { fprintf (FB, "\n"); }
 static void asmtVmDebugDumpCode (void) {
 	if (0) {
 		memDebugDumpAll(stdout);
-		vmDebugDumpCode(rcode, stdout);
+		objDisplay(rcode, stdout);
 	}
 }
 
@@ -665,7 +665,7 @@ int myTest (void) {
 	asmAssemble();
 	rcode = r0;
 	rip = 0;
-//vmDebugDumpCode(rcode, stderr);
+//objDisplay(rcode, stderr);
 	vmRun();
 
 	/* Run the program again after a garbage collection */
@@ -725,7 +725,7 @@ void optimizePopPush (void) {
 //asmDumpIBlocks();
 	asmAssemble();
 	assert(21==memObjectLength(r0)); /* Verify 21 opcodes emitted */
-//vmDebugDumpCode(r0, stderr);
+//objDisplay(r0, stderr);
 	rcode = r0;  rip = 0;  vmRun();
 }
 
@@ -762,7 +762,7 @@ void optimizeEmptyIBlock (void) {
 
 int main (int argc, char *argv[]) {
 	asmInitialize();
-	vmInitialize(NULL, objDump); /* Register display with the VM code dumper */
+	vmInitialize(NULL, objDisplay); /* Register display with the VM code dumper */
 	testInitialize();
 
 	memPointerRegister(syscallAdd);

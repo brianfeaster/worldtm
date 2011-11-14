@@ -506,7 +506,7 @@
 (define (load file)
  ; Convert file to port if a string
  (if (string? file)
-   (let ((fp (open-file file )))
+   (let ((fp (open-file file)))
      (if (port? fp)
          (load fp)
          (error "Can't load file" file)))

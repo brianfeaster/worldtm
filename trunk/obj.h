@@ -24,9 +24,9 @@ extern Obj symbols, debug;
 #define TPAIR          0x81l
 #define TCLOSURE       0x82l
 //#define TCONTINUATION  0x83l
-#define TPORT          0x84l
+#define TPORT          0x83l
 //#define TSOCKET        0x85l
-#define TSYSCALL       0x86l
+#define TSYSCALL       0x84l
 
 
 /* Objects */
@@ -118,11 +118,10 @@ void objListToVector (void);
 
 /* Module
 */
-void objDisplayTypeRegister (Type type, Func2 serializer);
-void objWriteTypeRegister   (Type type, Func2 serializer);
+void objDisplayTypeRegister (Type type, Func2ObjFile serializer);
+void objWriteTypeRegister   (Type type, Func2ObjFile serializer);
 void objDisplay (Obj a, FILE *stream);
 void objWrite   (Obj a, FILE *stream);
-#define objDump objDisplay /* Alias for objDisplay */
 
 void objInitialize (void);
 

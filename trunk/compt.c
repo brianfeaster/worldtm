@@ -234,31 +234,31 @@ void parseDefine (void) {
 	yy_scan_string ((Str)"((f) 9)"); yyparse();  rexpr=r0;
 	assert(!compParseTransformDefine());
 	objNewSymbol((Str)"f", 1); assert(r0 == r1);
-	sysDisplay(r2, FB);  FBFinalize("(lambda () 9)");
+	objDisplay(r2, FB);  FBFinalize("(lambda () 9)");
 
 	FBInit();
 	yy_scan_string ((Str)"((f g) 9 8)"); yyparse();  rexpr=r0;
 	assert(!compParseTransformDefine());
 	objNewSymbol((Str)"f", 1); assert(r0 == r1);
-	sysDisplay(r2, FB);  FBFinalize("(lambda (g) 9 8)");
+	objDisplay(r2, FB);  FBFinalize("(lambda (g) 9 8)");
 
 	FBInit();
 	yy_scan_string ((Str)"((f . a) 9)"); yyparse();  rexpr=r0;
 	assert(!compParseTransformDefine());
 	objNewSymbol((Str)"f", 1); assert(r0 == r1);
-	sysDisplay(r2, FB);  FBFinalize("(lambda a 9)");
+	objDisplay(r2, FB);  FBFinalize("(lambda a 9)");
 
 	FBInit();
 	yy_scan_string ((Str)"((f . a) 9)"); yyparse();  rexpr=r0;
 	assert(!compParseTransformDefine());
 	objNewSymbol((Str)"f", 1); assert(r0 == r1);
-	sysDisplay(r2, FB);  FBFinalize("(lambda a 9)");
+	objDisplay(r2, FB);  FBFinalize("(lambda a 9)");
 
 	FBInit();
 	yy_scan_string ((Str)"((f . a))"); yyparse();  rexpr=r0;
 	assert(!compParseTransformDefine());
 	objNewSymbol((Str)"f", 1); assert(r0 == r1);
-	sysDisplay(r2, FB);  FBFinalize("(lambda a)");
+	objDisplay(r2, FB);  FBFinalize("(lambda a)");
 }
 
 
@@ -315,7 +315,7 @@ void compilerunif (void) {
 	rcode=r0;
 	rip=0;
 	vmRun();
-	//sysDisplay(r0, stderr);
+	//objDisplay(r0, stderr);
 	assert(ofalse == r0);
 }
 
@@ -328,7 +328,7 @@ void compilerunif (void) {
    buffer code above.
 */
 void exceptionHandler (void) {
-	sysDisplay(r0, FB);
+	objDisplay(r0, FB);
 }
 
 
