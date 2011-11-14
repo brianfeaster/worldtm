@@ -3904,7 +3904,7 @@ can be used independently of the objDisplay/Write dispatcher.
 
 Fri Nov 11 23:12:52 EST 2011
 
-(read 8 ico) crashes
+[ ] (read 8 ico) crashes
 
 
 
@@ -3912,3 +3912,19 @@ Sun Nov 13 13:53:27 EST 2011
 
 Add 32 bit support for ICO library.  Should just be a sequence of widthXheight
 RGBA bytes followed by widthXheight AND bitmap (1 bit alpha).
+
+
+
+Sun Nov 13 22:47:24 EST 2011
+
+While implementing an ico file (graphic image) library I hit upon a semantic
+issue with recv.  It will return #eof if no more bytes are available but will
+still return a string containing the bytes actually read.  This makes
+implementing recvWord and recvLong tricky since what should happen if only one
+byte is read.  The resulting string will not be the same size and must be
+checked against the desired string length.
+
+ICO file reading and writing completed.  All I need to do is add some mutators
+so world will be able to create icons for the prototype web server.  Eventually
+icons will be pushed representing the active map.  I plan on using 8bit icons
+using the 256 color xterm palette.

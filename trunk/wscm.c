@@ -834,6 +834,28 @@ void syscallDiv (void) {
 	DBEND();
 }
 
+void syscallShiftLeft (void) {
+ Int a, b;
+	DBBEG();
+	if (wscmAssertArgCount2(__func__)) goto ret;
+	b = *(Int*)vmPop();
+	a = *(Int*)vmPop();
+	objNewInt(a<<b);
+ret:
+	DBEND();
+}
+
+void syscallShiftRight (void) {
+ Int a, b;
+	DBBEG();
+	if (wscmAssertArgCount2(__func__)) goto ret;
+	b = *(Int*)vmPop();
+	a = *(Int*)vmPop();
+	objNewInt(a>>b);
+ret:
+	DBEND();
+}
+
 void syscallLogAnd (void) {
  Int a, b;
 	DBBEG();
@@ -1934,6 +1956,8 @@ void wscmInitialize (void) {
 	sysDefineSyscall (syscallAdd, "+");
 	sysDefineSyscall (syscallMul, "*");
 	sysDefineSyscall (syscallDiv, "/");
+	sysDefineSyscall (syscallShiftLeft, "<<");
+	sysDefineSyscall (syscallShiftRight, ">>");
 	sysDefineSyscall (syscallLogAnd, "logand");
 	sysDefineSyscall (syscallSqrt, "sqrt");
 	sysDefineSyscall (syscallRemainder, "remainder");
