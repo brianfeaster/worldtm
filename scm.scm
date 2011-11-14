@@ -120,6 +120,44 @@
 
 
 
+; Little endian binary number I/O.  Send or receive
+; 1, 2, and 3 byte numbers.  The implementation is
+; a hack which adds string objects as if they were
+; number objects (at the byte level).  #eof is returned
+; if the entire word length can't be read
+(define (recvByte p)
+  (let ((n (recv 1 #f p)))
+    (if (eof-object? n) n (+ n))))
+
+(define (recvWord p)
+  (let ((n (recv 2 #f p)))
+    (if (or (!= 2 (string-length n))
+            (eof-object? n))
+        #eof
+        (+ n))))
+
+(define (recvLong p)
+  (let ((n (recv 4 #f p)))
+    (if (or (!= 4 (string-length n))
+            (eof-object? n))
+        #eof
+        (+ n))))
+
+(define (sendByte n p)
+  (send (string (integer->char (logand n #b11111111))) p))
+
+(define (sendWord n p)
+  (send (string (integer->char (logand n #b11111111))
+                (integer->char (logand (/ n 256) #b11111111))) p))
+
+(define (sendLong n p)
+  (send (string (integer->char (logand n #b11111111))
+                (integer->char (logand (/ n 256) #b11111111))
+                (integer->char (logand (/ n 65536) #b11111111))
+                (integer->char (logand (/ n 16777216) #b11111111))) p))
+
+
+
 ;(define (socket-port s) (if (port? s) (vector-ref s 2) #f))
 
 (define (seek-set port offset) (seek port offset 0))
