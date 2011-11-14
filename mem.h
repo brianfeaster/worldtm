@@ -21,6 +21,9 @@
 #define MEMMAXTYPES   0x100l
 #define TSTACK         0xfbl
 
+/* Limit the size of any object to 16Mb (2^24) bytes for sanity. */
+#define MEMOBJECTMAXSIZE ((Num)0x1000000)
+
 
 /* Byte count of a Linux virtual memory block and the resolution of mmap.
    0x1000 = 2^12 = 4Kb = 4096b*/
@@ -37,6 +40,15 @@
 typedef Num Descriptor;
 typedef Num Type;       /* Highest byte of descriptor */
 typedef Num Length; /* Remaining bytes of descriptor */
+
+typedef struct {
+	Obj start;  /* Initial heap location. */
+	Obj next;   /* Next available heap location. */
+	Obj last;   /* One byte past the last heap location (exclusive). */
+	Num finalizerCount; /* Number of finalizer types contained in this heap. */
+} Heap;
+
+extern Heap heapStatic, heap, heapOld, heapNew;
 
 
 /***************************************

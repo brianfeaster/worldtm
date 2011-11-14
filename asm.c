@@ -907,7 +907,7 @@ void asmEmitIblockOpcodes (void) {
 		default:
 			if (field0 == NA) break; /* The NA fake opcode is OK.  It's an opcode removed during optimization. */
 			fprintf(stderr, "\nCan't assemble opcode ");
-			objDump(r3, stderr);
+			objDisplay(r3, stderr);
 			assert(!"Unsuported opcode");
 		}
 	}
@@ -970,7 +970,7 @@ void asmPlaceAllIBlocks (void) {
  Num i;
 	DBBEG();
 	for (i=0; i < asmIBlockFrameCount(); ++i) { // TODO use this asmIBlockNextValid()?
-		riblock = asmIBlockFrame(i); /* Consider iblock from vector of all iblocks */
+		riblock = asmIBlockFrame(i); /* Consider iblock from vector of all iblocks in the current frame */
 
 		/* This means the iblock is not connected to the igraph as it wasn't
 		   recursively found when counting the igraph fields */
@@ -1432,8 +1432,8 @@ void asmAssemble (void) {
 
 		r0 = rcodenew;
 
-//		if (ofalse != odebug) objDump(rlabels, stdout);
-		if (ofalse != odebug) vmDebugDumpCode(rcodenew, stderr);
+//		if (ofalse != odebug) objDisplay(rlabels, stdout);
+		if (ofalse != odebug) objDisplay(rcodenew, stderr);
 	} else {
 		r0 = ofalse;
 	}
@@ -1453,8 +1453,8 @@ void asmDumpICodeFields (Obj ic) {
 	if ((Obj)NA != (f = asmICodeField(ic, 1))) { assert(f<=RF); fprintf(stderr, " $"HEX, f); }
 	if ((Obj)NA != (f = asmICodeField(ic, 2))) { assert(f<=RF); fprintf(stderr, " $"HEX, f); }
 	if ((Obj)NA != (f = asmICodeField(ic, 3))) { assert(f<=RF); fprintf(stderr, " $"HEX, f); }
-	if ((Obj)NA != (f = asmICodeField(ic, 4))) { fprintf(stderr, " "); objDump(f, stderr); fflush(stderr); }
-	if ((Obj)NA != (f = asmICodeField(ic, 5))) { fprintf(stderr, " "); objDump(f, stderr); fflush(stderr); }
+	if ((Obj)NA != (f = asmICodeField(ic, 4))) { fprintf(stderr, " "); objDisplay(f, stderr); fflush(stderr); }
+	if ((Obj)NA != (f = asmICodeField(ic, 5))) { fprintf(stderr, " "); objDisplay(f, stderr); fflush(stderr); }
 }
 void asmDumpICode (Obj ic) {
  Obj field;
@@ -1486,7 +1486,7 @@ void asmDumpICode (Obj ic) {
 			default:
 				if (field == NA) { fprintf(stderr, "---"); break; }
 				fprintf(stderr, "**UNKNOWN OPCODE**");
-				objDump(ic, stderr);
+				objDisplay(ic, stderr);
 		}
 	}
 }
@@ -1512,7 +1512,7 @@ void asmDumpIBlock (Obj ib) {
 	else {
 		fprintf (stderr, "  [");
 		if (asmIsObjectTypeIBlock(block)) fprintf(stderr, HEX03, asmIBlockID(block));
-		else objDump(block, stderr);
+		else objDisplay(block, stderr);
 		fprintf (stderr, "]");
 	}
 
@@ -1523,7 +1523,7 @@ void asmDumpIBlock (Obj ib) {
 	else {
 		fprintf (stderr, "  [");
 		if (asmIsObjectTypeIBlock(block)) fprintf(stderr, HEX03, asmIBlockID(block));
-		else objDump(block, stderr);
+		else objDisplay(block, stderr);
 		fprintf (stderr, "]");
 	}
 	/* Incoming block IDs */
@@ -1590,7 +1590,7 @@ void asmInitialize (void) {
 		shouldInitialize=0;
 
 		DB("Initializing submodules");
-		objInitialize (); /* objInitialize -> vmInitialize -> memInitialize */
+		objInitialize(); /* objInitialize -> vmInitialize -> memInitialize */
 
 		DB("Registering rootset objects");
 		memRootSetRegister(ropcodes);

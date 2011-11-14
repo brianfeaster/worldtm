@@ -84,7 +84,7 @@ void networkingWriteStuff (void) {
 
 	printf("\nOpening stream: ");
 	sysAcceptLocalStream();  r1=r0;
-	objDump(r0, stdout); printf(NL);
+	objDisplay(r0, stdout); printf(NL);
 
 	/* Write a message */
 	r1=r5;
@@ -100,9 +100,9 @@ void networkingWriteStuff (void) {
 	sysRecv();
 
 	printf("\nRead:[");
-	objDump(r0, stdout);
+	objDisplay(r0, stdout);
 	printf("]");
-	objDump(r5, stdout);
+	objDisplay(r5, stdout);
 }
 
 void networkingReadStuff (void) {
@@ -111,7 +111,7 @@ void networkingReadStuff (void) {
 	//printf("\nOpening a listening socket: ");
 	objNewInt(8080); vmPush(r0);
 	sysOpenLocalSocket();
-	//objDump(r0, stdout);
+	//objDisplay(r0, stdout);
 
 	sleep(5);
 	r1 = r0;
@@ -124,7 +124,7 @@ void networkingReadStuff (void) {
 	sysRecv();
 
 	printf("\nRead:[");
-	objDump(r0, stdout);
+	objDisplay(r0, stdout);
 	printf("]");
 	//memDebugDumpYoungHeap(stdout);
 }

@@ -192,4 +192,4 @@ The debugging facility is a set of macros which provide functionality to display
 
 Testing
 
-Testing involved three coverage types: Unit, integration, and system.  Unit tests cover individual functions with as little to no intermodule interaction.  All unit tests will verify behavior in a few seconds.  Integration tests cover functionality requiring full module interaction as well as interaction with other modules running within unbounded time limits.  System tests expect a full runtime environment and run within unbounded time limits.
+Testing involves three coverage types: Unit, integration, and system.  Unit tests cover individual functions with as little to no inter-module interaction.  All unit tests will run to completion in a few seconds.  Integration tests cover functionality requiring intermodule interaction as well as intra-interaction running within unbounded time limits.  System tests expect a full runtime environment and run within unbounded time limits.

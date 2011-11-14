@@ -22,6 +22,7 @@
 #include "mem.h"
 #include "cc.h"
 /* 
+   Heap_Statistics
    Useful_functions
    Networking_stuff
    System_calls
@@ -43,6 +44,110 @@
 extern Num garbageCollectionCount;
 void osDebugDumpThreadInfo (void);
 
+/*******************************************************************************
+ Heap_Statistics
+*******************************************************************************/
+Obj rheapinfo;
+
+char *memHeapToChar (Heap *h) {
+	return
+		&heapOld    == h ? "\e[45mo\e[0m" :
+		&heap       == h ? "\e[42m*\e[0m" :
+		&heapNew    == h ? "\e[41mn\e[0m" :
+		&heapStatic == h ? "\e[44mS\e[0m" : "?";
+}
+
+void memHeapToColor (Heap *h) {
+		&heapOld    == h ? objNewSymbol((Str)"orange", 6):
+		&heap       == h ? objNewSymbol((Str)"green", 5):
+		&heapNew    == h ? objNewSymbol((Str)"red", 3):
+		&heapStatic == h ? objNewSymbol((Str)"blue", 4) : objNewSymbol((Str)"black", 5);
+}
+
+Obj min = (Obj)LONG_MAX; /* The lowest memory address used */
+Obj max = (Obj)0; /* The highest memory address used */
+
+void wscmCollectHeapInfo (void) {
+ FILE *stream;
+ struct winsize win;
+ long cols, width, i;
+ Heap *a, *b, *c, *d, *x;
+
+	stream = fopen("heap.out","a");
+
+	a = &heapStatic;
+	b = &heap;
+	c = &heapOld;
+	d = &heapNew;
+
+	ioctl(1, TIOCGWINSZ, &win); /* Terminal width/column count */
+	cols = win.ws_col;
+
+	/* Sort heaps */
+	if (a->start > b->start) {x=b; b=a; a=x; }
+	if (b->start > c->start) {x=c; c=b; b=x; }
+	if (c->start > d->start) {x=d; d=c; c=x; }
+	if (a->start > b->start) {x=b; b=a; a=x; }
+	if (b->start > c->start) {x=c; c=b; b=x; }
+	if (a->start > b->start) {x=b; b=a; a=x; }
+
+	//fprintf(stream, OBJ" "OBJ" "OBJ" "OBJ, a->start, b->start, c->start, d->start);
+
+	if (max < d->last)  max = d->last;
+	if (a->start && b->start) {
+		if (a->start < min) min = a->start; /* Keep track of the smallest heap address ever used */
+		width = max - min;
+		i = (cols * (a->start - min))     / width;  while (i--) fprintf(stream, " ");
+		i = (cols * (a->last - a->start)) / width;  while (i--) fprintf(stream, memHeapToChar(a));
+		i = (cols * (b->start- a->last))  / width;  while (i--) fprintf(stream, " ");
+		i = (cols * (b->last - b->start)) / width;  while (i--) fprintf(stream, memHeapToChar(b));
+		i = (cols * (c->start- b->last))  / width;  while (i--) fprintf(stream, " ");
+		i = (cols * (c->last - c->start)) / width;  while (i--) fprintf(stream, memHeapToChar(c));
+		i = (cols * (d->start- c->last))  / width;  while (i--) fprintf(stream, " ");
+		i = (cols * (d->last - d->start)) / width;  i++; while (i--) fprintf(stream, memHeapToChar(d));
+		fwrite("\n", 1, 1, stream);
+	} else if (b->start) {
+		if (b->start < min) min = b->start; /* Keep track of the smallest heap address ever used */
+		width = max - min;
+		i = (cols * (b->start - min))     / width;  while (i--) fprintf(stream, " ");
+		i = (cols * (b->last - b->start)) / width;  while (i--) fprintf(stream, memHeapToChar(b));
+		i = (cols * (c->start- b->last))  / width;  while (i--) fprintf(stream, " ");
+		i = (cols * (c->last - c->start)) / width;  while (i--) fprintf(stream, memHeapToChar(c));
+		i = (cols * (d->start- c->last))  / width;  while (i--) fprintf(stream, " ");
+		i = (cols * (d->last - d->start)) / width;  i++; while (i--) fprintf(stream, memHeapToChar(d));
+		fwrite("\n", 1, 1, stream);
+		/* Create a list of percentages and associated color */
+		vmPush(r0); /* Save registers */
+		vmPush(r1);
+		objNewInt((100*(d->last -d->start)) /width);  r1=objCons(r0, onull);// 4
+      memHeapToColor(d); r1=objCons(r0, r1);
+		objNewInt((100*(d->start-c->last))  /width);  r1=objCons(r0, r1);   // space
+      memHeapToColor(0); r1=objCons(r0, r1);
+		objNewInt((100*(c->last - c->start))/width);  r1=objCons(r0, r1);   // 3
+      memHeapToColor(c); r1=objCons(r0, r1);
+		objNewInt((100*(c->start- b->last)) /width);  r1=objCons(r0, r1);   // space
+      memHeapToColor(0); r1=objCons(r0, r1);
+		objNewInt((100*(b->last - b->start))/width);  r1=objCons(r0, r1);   // 2
+      memHeapToColor(b); r1=objCons(r0, r1);
+		//objNewInt((100*(b->start- a->last)) /width);  r1=objCons(r0, r1);   // space
+		//objNewInt((100*(a->last - a->start))/width);  r1=objCons(r0, r1);   // 1
+		//objNewInt((100*(a->start - min))    /width);  r1=objCons(r0, r1);   // space
+		objNewInt((100*(b->start- min))     /width);  r1=objCons(r0, r1);   // space
+      memHeapToColor(0); r1=objCons(r0, r1);
+		memVectorSet(rheapinfo, 1, objCons(r1, cdr(rheapinfo)));
+		r1 = vmPop(); /* Restore registers */
+		r0 = vmPop();
+	} else {
+		if (c->start < min) min = c->start; /* Keep track of the smallest heap address ever used */
+		width = max - min;
+		i = (cols * (c->start - min))     / width;  while (i--) fprintf(stream, " ");
+		i = (cols * (c->last - c->start)) / width;  while (i--) fprintf(stream, memHeapToChar(c));
+		i = (cols * (d->start- c->last))  / width;  while (i--) fprintf(stream, " ");
+		i = (cols * (d->last - d->start)) / width;  i++; while (i--) fprintf(stream, memHeapToChar(d));
+		fwrite("\n", 1, 1, stream);
+	}
+	fclose(stream);
+}
 
 
 /*******************************************************************************
@@ -156,7 +261,7 @@ Int wscmAssertArgType2 (Type t1, Type t2, Obj o, Num arg, Num argCount, char con
 */
 Int wscmAssertArgType2NoException (Num arg, Type t1, Type t2, Obj o) {
 	if (t1 == memObjectType(o) || t2 == memObjectType(o)) return 0;
-	fprintf(stderr, "\r\nWSCM-ASSERT::Expect '"STR"', '"STR"' or '"STR"' type for argument "NUM,
+	fprintf(stderr, "\r\nWSCM-ASSERT::Expect '"STR"' or '"STR"' type for argument "NUM,
 		memTypeString(t1), memTypeString(t2), arg);
 	return -1;
 }
@@ -183,52 +288,12 @@ void wscmSocketFinalizer (Obj o) {
 		DB("wscmSocketFinalizer:  Socket already closed");
 	} else {
 		DB("wscmSocketFinalizer:  Closing socket");
-		DBE sysDisplay(o, stderr);
+		DBE objDisplay(o, stderr);
 		close(objPortDescriptor(o));
 		memVectorSet(o, 3, sclosed);
 	}
 }
 
-
-/* Called by syscallRecv or VM syscall instruction.
-   in   r1 port object
-        r2 timout
-        r3 string object buffer  "" any length  () one char  " ..." fill string
-   use  r4 read count
-   out  r0 string buffer
-*/
-void wscmRecvBlock (void) {
- s64 wakeupTime;
- Num timedOut;
-	DBBEG();
-
-	/* Time can be false meaning wait forever or the time the thread
-	   should be woken up regardless of character availability. */
-	if (r2 != ofalse) {
-		wakeupTime = sysTime() + *(Int*)r2;
-		objNewInt(wakeupTime);
-		r2=r0;
-	}
-
-	r4 = 0; /* Character read count initialized to 0. */
-
-	sysRecv();
-	timedOut = (r2!=ofalse) && (*(Int*)r2 <= sysTime());
-	if (r0 == ofalse)
-		if (!timedOut) {
-			/* Nothing read and haven't timed out yet so block thread */
-			osUnRun();
-			osMoveToQueue(rrunning, rblocked, sreadblocked);
-			osScheduler();
-		} if (timedOut && 0 < (Num)r4) {
-			/* Timeout with a partial read so return partial string */
-			objNewString(NULL, (Num)r4);
-   		memcpy(r0, r3, (Num)r4);
-		}
-
-	DBEND("  =>  r0:");
-	DBE memDebugDumpObject(r0, stderr);
-}
 
 
 void wscmOpenRemoteStream (void) {
@@ -276,7 +341,7 @@ void wscmOpenLocalStream (void) {
 
 /* This can do anything.  I change it mainly for debugging and prototyping. */
 void syscallFun (void) {
-	vmDebugDumpCode(rcode, stderr);
+	objDisplay(rcode, stderr);
 	memTypeStringDumpAll(stderr);
 	fprintf(stderr, "\n");memDebugDumpObject(rstack, stderr);
 	fprintf(stderr, "\n");objDisplay(rstack, stderr);
@@ -409,7 +474,7 @@ void syscallSerializeDisplay (void) {
 	if (wscmAssertArgCount1(__func__)) goto ret;
 	r0 = vmPop();
 
-	DBE objDump(r0, stderr);
+	DBE objDisplay(r0, stderr);
 
 	if ((Num)r0 < 0x100000l) {
 		ret = sprintf((char*)buff, "#"OBJ, (Num)r0);
@@ -436,7 +501,6 @@ void syscallSerializeDisplay (void) {
 			objNewString(buff, (Num)ret);
 			break;
 		case TPORT:
-		//case TSOCKET:
 			if (memIsObjectType(memVectorObject(r0, 1), TINTEGER))
 				ret = sprintf((char*)buff, "#SOCKET/PORT<DESC:"NUM" ADDR:"NUM" PORT:"NUM,
 				   (Num)memVectorObject(r0, 0),
@@ -581,7 +645,7 @@ void syscallDisplay (void) {
 	if (fd==2) stream = stderr;
 	assert(NULL != stream);
 
-	sysDisplay(r0=vmPop(), stream);
+	objDisplay(r0=vmPop(), stream);
 ret:
 	DBEND();
 }
@@ -903,7 +967,7 @@ void syscallOpenStream (void) {
 void syscallOpenFile (void) {
  Num silent=0;
  Int len;
- char buff[0x1000];
+ char buff[0x200];
 	DBBEG();
 	if (wscmAssertArgCountRange1To2(__func__)) goto ret;
 
@@ -916,7 +980,7 @@ void syscallOpenFile (void) {
 
 	if (ofalse == r0 && !silent) {
 		len = sprintf(buff, "Unable to open file \""STR"\".  ["INT":"STR"]", r2, errno, strerror(errno));
-		assert(len<0x1000);
+		assert(len<0x200);
 		wscmError(0, buff);
 	}
 ret:
@@ -948,13 +1012,12 @@ ret:
 void syscallClose(void) {
 	DBBEG();
 	r0 = vmPop();
-	if (// memObjectType(r0) != TSOCKET &&
-		 memObjectType(r0) != TPORT) {
+	if (memObjectType(r0) != TPORT) {
 		printf ("WARNING: syscallClose: not a socket: ");
-		sysDisplay(r0, stdout);
+		objDisplay(r0, stdout);
 	} if (objPortState(r0) == sclosed) {
 		printf ("WARNING: syscallClose: socket already closed: ");
-		sysDisplay(r0, stdout);
+		objDisplay(r0, stdout);
 	} else {
 		close(*(int*)r0);
 		memVectorSet(r0, 3, sclosed);
@@ -962,35 +1025,43 @@ void syscallClose(void) {
 	DBEND();
 }
 
-/* Given a byte count, timeout and port, read from the port count bytes or if 0 any
-   number of bytes.
+/* Given a byte count, timeout (integer or #f) and port, read
+   from the port count bytes or if 0 any number of bytes
 */
 void syscallRecv (void) {
+ Num len;
 	DBBEG();
+	if (wscmAssertArgCount3(__func__)) goto ret;
 
-	r1=vmPop(); /* Port object in r1 */
-	r2=vmPop(); /* Timeout in r2 */
+	r1=vmPop(); /* Port object */
+	r2=vmPop(); /* Timeout (integer or #f) */
+	r3=vmPop(); /* Byte count integer */
+
+	if (wscmAssertArgType (TINTEGER, r3, 1, 3, __func__)) goto ret;
+
+	if (r2 != ofalse && !memIsObjectType(r2, TINTEGER)) {
+		fprintf(stderr, "\r\nWSCM-ASSERT::Expect '"STR"' type or '#f' for argument 2", memTypeString(TINTEGER));
+		wscmError(3, __func__);
+		goto ret;
+	}
+	if (wscmAssertArgType (TPORT, r1, 3, 3, __func__)) goto ret;
+
 	/* r3 gets the byte count.  It's then assigned an empty string
 	   character buffer with the specified length of characters to
 	   read.  A count of zero (null string) implies read any count
 	   of bytes. */
-	r3=*(Obj*)vmPop();
+	len = *(Num*)r3; /* Consider immediate integer value */
 
-	if (r3) {
-		r0 = memNewArray(TSTRING, (Num)r3);
-		r3=r0;
-	} else {
-		r3 = onullstr;
+	if (MEMOBJECTMAXSIZE <= len) {
+		fprintf(stderr, "\r\nWSCM-ASSERT::Expect byte count to be less than "HEX, MEMOBJECTMAXSIZE);
+		wscmError(3, __func__);
+		goto ret;
 	}
 
-	if (//memObjectType(r1) != TSOCKET &&
-		 memObjectType(r1) != TPORT) {
-		fprintf (stderr, "WARNING: syscallRecv: not a socket: ");
-		sysDisplay(r1, stdout);
-		r0 = oeof;
-	} else {
-		wscmRecvBlock();
-	}
+	r3 = len ? memNewArray(TSTRING, len) : onullstr;
+
+	osRecvBlock();
+ret:
 	DBEND();
 }
 
@@ -999,14 +1070,13 @@ void syscallReadChar (void) {
 	if (wscmAssertArgCount2(__func__)) goto ret;
 	r1=vmPop(); /* Port object */
 	r2=vmPop(); /* Timout */
-	if (//memObjectType(r1) != TSOCKET &&
-		 memObjectType(r1) != TPORT) {
+	if (memObjectType(r1) != TPORT) {
 		printf ("WARNING: syscallReadChar: not a socket: ");
-		sysDisplay(r1, stdout);
+		objDisplay(r1, stdout);
 		r0 = oeof;
 	} else {
 		r3=onull;  /* tells recv that we just want a character. */
-		wscmRecvBlock();
+		osRecvBlock();
 	}
 ret:
 	DBEND();
@@ -1017,14 +1087,13 @@ void syscallUnreadChar (void) {
 	if (wscmAssertArgCount2(__func__)) goto ret;
 	r1=vmPop(); /* Port. */
 	r0=vmPop(); /* Character. */
-	if (//memObjectType(r1) != TSOCKET &&
-		 memObjectType(r1) != TPORT) {
+	if (memObjectType(r1) != TPORT) {
 		printf ("WARNING: syscallUnreadChar: arg2 not a socket: ");
-		sysDisplay(r1, stdout);
+		objDisplay(r1, stdout);
 		r0 = oeof;
 	} else if (memObjectType(r0) != TCHAR) {
 		printf ("WARNING: syscallUnreadChar: arg1 not a char: ");
-		sysDisplay(r0, stdout);
+		objDisplay(r0, stdout);
 		r0 = oeof;
 	} else
 		memVectorSet(r1, 4, r0);
@@ -1057,8 +1126,7 @@ void syscallSend (void) {
 	r2=vmPop();
 	/* Count sent already.  Should be initialized to 0. */
 	r3=0;
-	if (//memObjectType(r1) != TSOCKET &&
-		 memObjectType(r1) != TPORT) {
+	if (memObjectType(r1) != TPORT) {
 		printf ("WARNING: syscallSend: not a socket is (type "HEX02"): ", memObjectType(r1));
 		*(int*)0=0;
 		r0 = oeof;
@@ -1089,6 +1157,37 @@ void syscallSeek (void) {
 	offset = *(int*)vmPop(); /* Offset */
 	fd=*(int*)vmPop(); /* Descriptor. */
 	lseek(fd, offset, whence);
+ret:
+	DBEND();
+}
+
+void syscallFileStat (void) {
+ struct stat buf;
+	DBBEG();
+	if (wscmAssertArgCount1(__func__)) goto ret;
+
+	r1 = vmPop();
+	if (wscmAssertArgType(TPORT, r1, 1, 1, __func__)) goto ret;
+
+	fstat(objPortDescriptor(r1), &buf);
+
+	objNewVector(13);
+	r1 = r0;
+	objNewInt((Int)buf.st_dev); memVectorSet(r1, 0, r0);      /* dev_t     st_dev;      ID of device containing file */
+	objNewInt((Int)buf.st_ino); memVectorSet(r1, 1, r0);      /* ino_t     st_ino;      inode number */
+	objNewInt(buf.st_mode); memVectorSet(r1, 2, r0);     /* mode_t    st_mode;     protection */
+	objNewInt((Int)buf.st_nlink); memVectorSet(r1, 3, r0);    /* nlink_t   st_nlink;    number of hard links */
+	objNewInt(buf.st_uid); memVectorSet(r1, 4, r0);      /* uid_t     st_uid;      user ID of owner */
+	objNewInt(buf.st_gid); memVectorSet(r1, 5, r0);      /* gid_t     st_gid;      group ID of owner */
+	objNewInt((Int)buf.st_rdev); memVectorSet(r1, 6, r0);     /* dev_t     st_rdev;     device ID (if special file) */
+	objNewInt(buf.st_size); memVectorSet(r1, 7, r0);     /* off_t     st_size;     total size, in bytes */
+	objNewInt(buf.st_blksize); memVectorSet(r1, 8, r0);  /* blksize_t st_blksize;  blocksize for file system I/O */
+	objNewInt(buf.st_blocks); memVectorSet(r1, 9, r0);   /* blkcnt_t  st_blocks;   number of 512B blocks allocated */
+	objNewInt(buf.st_atime); memVectorSet(r1,10, r0);    /* time_t    st_atime;    time of last access */
+	objNewInt(buf.st_mtime); memVectorSet(r1,11, r0);    /* time_t    st_mtime;    time of last modification */
+	objNewInt(buf.st_ctime); memVectorSet(r1,12, r0);    /* time_t    st_ctime;    time of last status change */
+	r0 = r1;
+
 ret:
 	DBEND();
 }
@@ -1219,7 +1318,7 @@ void syscallDisassemble (void) {
 		if (cdr(r0) != onull) sysDumpEnv(cdr(r0));
 		r0 = car(r0); /* Consider closure's code block */
 	}
-	vmDebugDumpCode(r0, stderr);
+	objDisplay(r0, stderr);
 ret:
 	DBEND();
 }
@@ -1416,9 +1515,9 @@ void wscmSysTransition (void) {
 	Uses -- r1:port object   r2:timeout=0  r3:wantChar=()  r4:used by recv
 	        r4:state   r5:token buffer   r6:token length   r7:is list bool.
 
-	wscmRecvBlock in: r1 port  r2 timeout  r3 string buffer
-	              use: r4
-	              out: r0 string
+	osRecvBlock in: r1 port  r2 timeout  r3 string buffer
+	           use: r4
+	           out: r0 string
 */
 
 
@@ -1457,7 +1556,7 @@ void wscmCreateRead (void) {
 		MVI, R2, ofalse, /* tell recv to not timeout */
 		MVI, R3, onull, /* tell recv that we want a character */
 		PUSH, R4,
-			SYSI, wscmRecvBlock, /* Syscall to read char. */
+			SYSI, osRecvBlock, /* Syscall to read char. */
 		POP, R4,
 		MV, R3, R0,                     /* move char object to r3 */
 		MVI, R0, 0l, /* Initialize final state to 0.  Will return 0 when still in non-final state. */
@@ -1795,12 +1894,11 @@ void wscmInitialize (void) {
 
 	/* Although already activated, pass in a virtual machine interrupt handler callback
 	   which eventually calls the schduler.  Called when vmInterrupt is set.  */
-	vmInitialize(wscmSchedule, sysDisplay);
+	vmInitialize(wscmSchedule, objDisplay);
 
 	/* Register objects and pointer addresses with their
 	   C source names for object debug dumps. */
 	DB("Registering static pointer description strings");
-	memPointerString(wscmRecvBlock);
 	memPointerString(wscmSysTransition);
 	memPointerString(sysEnvGet);
 	memPointerString(wscmSocketFinalizer);
@@ -1857,6 +1955,7 @@ void wscmInitialize (void) {
 	sysDefineSyscall (syscallReadString, "read-string");
 	sysDefineSyscall (syscallSend, "send");
 	sysDefineSyscall (syscallSeek, "seek");
+	sysDefineSyscall (syscallFileStat, "file-stat");
 	sysDefineSyscall (syscallTerminalSize, "terminal-size");
 	sysDefineSyscall (syscallStringRef, "string-ref");
 	sysDefineSyscall (syscallStringSetB, "string-set!");
@@ -1878,7 +1977,6 @@ void wscmInitialize (void) {
 	//r0=osymbols; sysDefine("symbols");
 	wscmCreateRead();  sysDefine("read");
 	wscmCreateRepl();  sysDefine("repl2");
-	r0=oeof; sysDefine("#eof");
 	objNewInt(42); sysDefine ("y"); /* It's always nice to have x and y defined with useful values */
 	objNewInt(69); sysDefine ("x");
 	objNewSymbol((Str)"a", 1); r1=r0; /* It's also nice to have a pair ready to go */
@@ -1934,12 +2032,12 @@ void wscmCReadEvalPrintLoop (void) {
 		if (ofalse == r0) {
 			fprintf(stderr, "\n*Compile failed*");
 		} else {
-			//vmDebugDumpCode(rcode, stderr);
+			//objDisplay(rcode, stderr);
 			fprintf(stderr, "== Execute and return value =====\n");
 			if (ofalse != r0) {
 				vmRun();
 			}
-			sysDisplay(r0, stderr);
+			objDisplay(r0, stderr);
 		}
 
 		DBE fprintf(stderr, "== Debug =======================");
@@ -1998,10 +2096,11 @@ void wscmStringReadEvalPrintLoop (void) {
   (send \"\r\nbye.\r\n\" stdout)\
   (quit))");
 	yyparse(); /* Use the internal parser */
-	//sysDisplay(r0, stderr);
+	//objDisplay(r0, stderr);
 	compCompile(); /* Use the internal and only compiler */
-	//vmDebugDumpCode(r0, stderr);
+	//objDisplay(r0, stderr);
 	if (ofalse == r0) {
+		/* Compiler failed and returned #f instead of a code block */
 		fprintf(stderr, "Could not compile internal REPL expression.  Calling internal REPL...");
 		wscmCReadEvalPrintLoop();
 	} else {
@@ -2037,6 +2136,15 @@ int main (int argc, char *argv[]) {
 	srandom((unsigned int)time(NULL));
 
 	wscmInitialize();
+
+	/* FUN: keep track of collector info.  Create a rootset object that holds list of
+	   lists each containing info on the 4 current heaps. */
+	/*
+	memRootSetRegister(rheapinfo);
+	rheapinfo = r0 = objCons(onull, onull);
+	sysDefine("heapinfo");
+	memInitialize(0, wscmCollectHeapInfo, 0);
+	*/
 
 	wscmBindArgs((Num)argc, argv);
 
