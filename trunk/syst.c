@@ -25,7 +25,7 @@ void TESTnetworkLocalClientServerConnection (void) {
 	r0=0;
 
 	//printf("\nOpening listening socket:  ");
-	objNewInt(8080); r1=r0;
+	objNewInt(7070); r1=r0;
 	sysOpenLocalSocket();
 	r5=r0;
 	//objDump(r5, stdout);
@@ -33,7 +33,7 @@ void TESTnetworkLocalClientServerConnection (void) {
 
 	//printf("\nOpening connecting socket: ");
 	objNewString((Str)"localhost", 9); r2 = r0;
-	objNewInt(8080); r1 = r0;
+	objNewInt(7070); r1 = r0;
 	sysOpenRemoteSocket();
 	r6=r0;
 	//objDump(r6, stdout);
@@ -62,7 +62,7 @@ void TESTnetworkLocalClientServerConnection (void) {
 void TESTverifyLocalStreamBlocks () {
 
 	//printf("\nOpening listening socket:  ");
-	objNewInt(8080); r1=r0;
+	objNewInt(7070); r1=r0;
 	sysOpenLocalSocket();
 	r5=r0;
 	assert(saccepting == memVectorObject(r5, 3));
@@ -79,7 +79,7 @@ void networkingWriteStuff (void) {
 	r0=0;
 
 	printf("\nOpening listening socket:  ");
-	objNewInt(8080); vmPush(r0);
+	objNewInt(7070); vmPush(r0);
 	sysOpenLocalSocket();
 
 	printf("\nOpening stream: ");
@@ -109,7 +109,7 @@ void networkingReadStuff (void) {
 	r0=0;
 
 	//printf("\nOpening a listening socket: ");
-	objNewInt(8080); vmPush(r0);
+	objNewInt(7070); vmPush(r0);
 	sysOpenLocalSocket();
 	//objDisplay(r0, stdout);
 

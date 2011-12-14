@@ -13,6 +13,8 @@
 (load "world.scm")
 (load "ultima4.cells")
 (load "scrabble.scm") ; TODO temporary
+(load "graphics.scm")
+(load "web.scm")
 
 (define HUB-PORT 7155)
 (define KITTEHBRAIN  #f)
@@ -55,8 +57,8 @@
 
 ; Console window
 (define WinConsole ((Terminal 'WindowNew)
-  (- (Terminal 'Theight) 14) 0
-  13  (Terminal 'Twidth)
+  (- (Terminal 'Theight) 27) 0
+  26  (Terminal 'Twidth)
   #x0002))
 (define WinConsolePuts (WinConsole 'puts))
 
@@ -460,7 +462,8 @@
 (define (winMapLeft) ((avatarViewport 'move)       (avatarViewport 'Y0) (+ -1 (avatarViewport 'X0))))
 (define (winMapRight)((avatarViewport 'move)       (avatarViewport 'Y0) (+  1 (avatarViewport 'X0))))
 
-(define (walk d) ((avatar 'walk) d))
+(define (walk d) 
+ ((avatar 'walk) d))
 
 ; Notify IPC of my name and glyph change
 (define (changeName str)
@@ -618,6 +621,7 @@
    (setButton #\6 '(WinChatDisplay "\r\n" ((avatar 'lookAt)) ((avatarMap 'column) (avatar 'y) (+(avatar 'x)1))))
    (setButton #\7 '(NewKat))
    (setButton #\8 '((avatarMap 'incLightSource) (avatar 'y) (avatar 'x)))
+   (setButton CHAR-CTRL-F '(writeIco))
 ))
 
 ; Perform button's action
@@ -1116,6 +1120,145 @@
  (or kat (set! kat (Kat avatar))))
 
 
+(define IcoSem (open-semaphore 0))
+
+; Create an ico file based on where I am
+(IcoInitialize (lambda x)) ; Disable ICO library debugging
+(define (writeIco)
+ (define ico (IcoRead "xterm256.ico"))
+ (loop2 0 16 0 16 (lambda (y x)
+   (IcoIndexedPixelSet ico 0 y x (glyph0fg (((avatarMap 'myCanvas) 'glyph)
+                                            (+ -8 y (avatar 'y))
+                                            (+ -8 x (avatar 'x)))))))
+ (IcoWrite ico "favicon.ico")
+ ;(semaphore-up IcoSem)
+)
+
+;<m>
+; <r> <c a="," c="240"/>
+;     <c a="," c="241"> ... </r>
+; ...  ;  </m>
+; A web server for the map icon
+(define SendMapSem (open-semaphore 1))
+(define SendMapFlag #t)
+
+(define (walkOccuredForWebClient dir)
+ (WinConsoleDisplay "\r\n" (tid) "::(walkOccuredForWebClient)")
+ (if (not SendMapFlag)
+    (begin (set! SendMapFlag #t)
+           (semaphore-up SendMapSem)))
+ (WinConsoleDisplay "\r\n" (tid) "  --(walkOccuredForWebClient)")
+)
+
+(define (sendMapWait p)
+ (WinConsoleDisplay "\r\n" (tid) "::(sendMapWait)")
+ (semaphore-down SendMapSem)
+ (set! SendMapFlag #f)
+ (sendMap p)
+ (WinConsoleDisplay "\r\n" (tid) "  --(sendMapWait)")
+)
+
+(define (sendMap p)
+ (define strs ()) ; List of strings to send
+ (define (add . objs)
+   (for-each (lambda (o) (for-each (lambda (s) (set! strs (cons s strs)))
+                                   (display->strings o)))
+             objs))
+ (add "<m>")
+ (loop2 0 16 0 16 (lambda (y x)
+   (if (= x 0) (add "<r>"))
+   (add "<c f='")
+   (add (glyph0fg (((avatarMap 'myCanvas) 'glyph) (+ -8 y (avatar 'y)) (+ -8 x (avatar 'x)))))
+   (add "' c='")
+   (add (glyph0ch (((avatarMap 'myCanvas) 'glyph) (+ -8 y (avatar 'y)) (+ -8 x (avatar 'x)))))
+   (add "'/>")
+   (add "<c f=\'")
+   (add (glyph1fg (((avatarMap 'myCanvas) 'glyph) (+ -8 y (avatar 'y)) (+ -8 x (avatar 'x)))))
+   (add "' c='")
+   (add (glyph1ch (((avatarMap 'myCanvas) 'glyph) (+ -8 y (avatar 'y)) (+ -8 x (avatar 'x)))))
+   (add "'/>")
+   (if (= 15 x) (add "</r>"))))
+ (add "</m>")
+ (sendHeaderXML p (apply + (map string-length strs)))
+ (let ~ ((ss strs))
+   (if (null? ss) 'done
+     (begin (~ (cdr ss))
+            (display (car ss) p)))))
+
+(define (sendChatHeader p s)
+ (outl p "HTTP/1.1 200 OK")
+ (outl p "Content-Type: text/plain")
+ (outl p "Server: World[tm]")
+ (outl p "Connection: keep-alive")
+ (outl p "Content-Length: " (string-length s))
+ (outl p "")
+ (outl p s))
+
+(define (sendChat0 p)
+ (sendChatHeader p "Hello World[tm]!"))
+
+; Incoming chat needs to be sent to web client
+(define ChatQueue (QueueCreate))
+
+(define (WWWVoiceCallBack str)
+ (QueueAdd ChatQueue str))
+
+(define (acceptTalk p s)
+ ((avatar 'speak) s)
+ (sendChatHeader p "OK"))
+
+
+(define (sendChat p)
+ (sendChatHeader p (QueueGet ChatQueue)))
+
+; Initialize web module's debug callback
+(WWWDebugSet WinConsoleDisplay)
+; Create the web server object
+(define www (HTTPServer 7180))
+
+(WWWRegisterGetHandler
+  (lambda (request)
+    (define p (request 'Stream))
+    (define s (chopSlash (request 'URI)))
+    (cond
+      ((eqv? s "map") (sendMapWait p) #t)
+      ((eqv? s "map0") (sendMap p) #t)
+      ((eqv? s "talk")  (acceptTalk p (request 'Post)) #t)
+      ((eqv? s "chat")  (sendChat p) #t)
+      ((eqv? s "chat0") (sendChat0 p) #t)
+      ((eqv? s "favicon.ico")
+       ;(semaphore-down IcoSem)
+       (sendFileIcon p s) #t)
+      ((eqv? s "") (sendFileHtml p "world.html") #t)
+      ((eqv? s "f.html") (sendFileHtml p "f.html") #t)
+      ((eqv? s "c256.css") (sendFileCss p "c256.css") #t)
+      ((eqv? s "lambda16.cur") (sendFileIcon p "lambda16.cur") #t)
+      (else #f))))
+
+(WWWRegisterGetHandler
+  (lambda (request)
+    (define p (request 'Stream))
+    (define s (chopSlash (request 'URI)))
+    (let ((ret #f)
+          (toks (strtok s #\+)))
+      (if (eqv? (car toks) "walk")
+        (begin
+          (set! ret #t)
+          (cond ((eqv? (cdr toks) "0") (walk 0))
+                ((eqv? (cdr toks) "2") (walk 2))
+                ((eqv? (cdr toks) "4") (walk 4))
+                ((eqv? (cdr toks) "6") (walk 6))
+                (else (walk 1)))
+          (sendHeaderText p 0)))
+      ret)))
+
+  
+(define (WWWInitialize)
+  (avatar '(set! WalkCallback walkOccuredForWebClient))
+  (avatar '(set! VoiceCallback WWWVoiceCallBack))
+  (thread ((www 'Start))))
+
+
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Genesis
@@ -1181,7 +1324,10 @@
     (quit))))
 
 
-(load "heapinfowebserver.scm")
+;((load "heapinfowebserver.scm")
+
+; Start Web client server
+(if QUIETLOGIN (WWWInitialize))
 
 ; Keyboard command loop
 (let ~ () (let ((b (getKey)))

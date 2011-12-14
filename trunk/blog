@@ -3904,7 +3904,7 @@ can be used independently of the objDisplay/Write dispatcher.
 
 Fri Nov 11 23:12:52 EST 2011
 
-[ ] (read 8 ico) crashes
+[ ] (read 8 ico) crashes.  Read is an assembly program with not error checking.
 
 
 

@@ -57,6 +57,7 @@
      (error "(testRecvSendByteWordLong): invalid match")))
    (set! c (+ step c)))))
 
+(or (load "adtt.scm") (error "\n\nadtt.scm test FAIL\n"))
 
 (display "\n                                                            ")
 (display "PASS\n")

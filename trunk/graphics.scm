@@ -5,11 +5,84 @@
 ;; ICO_files
 ;;
 
+(define (Palette256Xterm->RGB i)
+ (if (or (< i 0) (< 255 i))
+     (begin (displayl "ERROR: (Palette256Xterm->RGB " i ") out of range")) 
+     (vector-ref #(
+; 16 basic  00-0f
+#(#x00 #x00 #x00) #(#x80 #x00 #x00) #(#x00 #x80 #x00) #(#x80 #x80 #x00) #(#x00 #x00 #x80) #(#x80 #x00 #x80) #(#x00 #x80 #x80) #(#xc0 #xc0 #xc0)
+#(#x80 #x80 #x80) #(#xff #x00 #x00) #(#x00 #xff #x00) #(#xff #xff #x00) #(#x00 #x00 #xff) #(#xff #x00 #xff) #(#x00 #xff #xff) #(#xff #xff #xff)
+; 6x6x6 palette 10-e7
+#(#x00 #x00 #x00) #(#x00 #x00 #x5f) #(#x00 #x00 #x87) #(#x00 #x00 #xaf) #(#x00 #x00 #xd7) #(#x00 #x00 #xff)
+#(#x00 #x5f #x00) #(#x00 #x5f #x5f) #(#x00 #x5f #x87) #(#x00 #x5f #xaf) #(#x00 #x5f #xd7) #(#x00 #x5f #xff)
+#(#x00 #x87 #x00) #(#x00 #x87 #x5f) #(#x00 #x87 #x87) #(#x00 #x87 #xaf) #(#x00 #x87 #xd7) #(#x00 #x87 #xff)
+#(#x00 #xaf #x00) #(#x00 #xaf #x5f) #(#x00 #xaf #x87) #(#x00 #xaf #xaf) #(#x00 #xaf #xd7) #(#x00 #xaf #xff)
+#(#x00 #xd7 #x00) #(#x00 #xd7 #x5f) #(#x00 #xd7 #x87) #(#x00 #xd7 #xaf) #(#x00 #xd7 #xd7) #(#x00 #xd7 #xff)
+#(#x00 #xff #x00) #(#x00 #xff #x5f) #(#x00 #xff #x87) #(#x00 #xff #xaf) #(#x00 #xff #xd7) #(#x00 #xff #xff)
+
+#(#x5f #x00 #x00) #(#x5f #x00 #x5f) #(#x5f #x00 #x87) #(#x5f #x00 #xaf) #(#x5f #x00 #xd7) #(#x5f #x00 #xff)
+#(#x5f #x5f #x00) #(#x5f #x5f #x5f) #(#x5f #x5f #x87) #(#x5f #x5f #xaf) #(#x5f #x5f #xd7) #(#x5f #x5f #xff)
+#(#x5f #x87 #x00) #(#x5f #x87 #x5f) #(#x5f #x87 #x87) #(#x5f #x87 #xaf) #(#x5f #x87 #xd7) #(#x5f #x87 #xff)
+#(#x5f #xaf #x00) #(#x5f #xaf #x5f) #(#x5f #xaf #x87) #(#x5f #xaf #xaf) #(#x5f #xaf #xd7) #(#x5f #xaf #xff)
+#(#x5f #xd7 #x00) #(#x5f #xd7 #x5f) #(#x5f #xd7 #x87) #(#x5f #xd7 #xaf) #(#x5f #xd7 #xd7) #(#x5f #xd7 #xff)
+#(#x5f #xff #x00) #(#x5f #xff #x5f) #(#x5f #xff #x87) #(#x5f #xff #xaf) #(#x5f #xff #xd7) #(#x5f #xff #xff)
+
+#(#x87 #x00 #x00) #(#x87 #x00 #x5f) #(#x87 #x00 #x87) #(#x87 #x00 #xaf) #(#x87 #x00 #xd7) #(#x87 #x00 #xff)
+#(#x87 #x5f #x00) #(#x87 #x5f #x5f) #(#x87 #x5f #x87) #(#x87 #x5f #xaf) #(#x87 #x5f #xd7) #(#x87 #x5f #xff)
+#(#x87 #x87 #x00) #(#x87 #x87 #x5f) #(#x87 #x87 #x87) #(#x87 #x87 #xaf) #(#x87 #x87 #xd7) #(#x87 #x87 #xff)
+#(#x87 #xaf #x00) #(#x87 #xaf #x5f) #(#x87 #xaf #x87) #(#x87 #xaf #xaf) #(#x87 #xaf #xd7) #(#x87 #xaf #xff)
+#(#x87 #xd7 #x00) #(#x87 #xd7 #x5f) #(#x87 #xd7 #x87) #(#x87 #xd7 #xaf) #(#x87 #xd7 #xd7) #(#x87 #xd7 #xff)
+#(#x87 #xff #x00) #(#x87 #xff #x5f) #(#x87 #xff #x87) #(#x87 #xff #xaf) #(#x87 #xff #xd7) #(#x87 #xff #xff)
+
+#(#xaf #x00 #x00) #(#xaf #x00 #x5f) #(#xaf #x00 #x87) #(#xaf #x00 #xaf) #(#xaf #x00 #xd7) #(#xaf #x00 #xff)
+#(#xaf #x5f #x00) #(#xaf #x5f #x5f) #(#xaf #x5f #x87) #(#xaf #x5f #xaf) #(#xaf #x5f #xd7) #(#xaf #x5f #xff)
+#(#xaf #x87 #x00) #(#xaf #x87 #x5f) #(#xaf #x87 #x87) #(#xaf #x87 #xaf) #(#xaf #x87 #xd7) #(#xaf #x87 #xff)
+#(#xaf #xaf #x00) #(#xaf #xaf #x5f) #(#xaf #xaf #x87) #(#xaf #xaf #xaf) #(#xaf #xaf #xd7) #(#xaf #xaf #xff)
+#(#xaf #xd7 #x00) #(#xaf #xd7 #x5f) #(#xaf #xd7 #x87) #(#xaf #xd7 #xaf) #(#xaf #xd7 #xd7) #(#xaf #xd7 #xff)
+#(#xaf #xff #x00) #(#xaf #xff #x5f) #(#xaf #xff #x87) #(#xaf #xff #xaf) #(#xaf #xff #xd7) #(#xaf #xff #xff)
+
+#(#xd7 #x00 #x00) #(#xd7 #x00 #x5f) #(#xd7 #x00 #x87) #(#xd7 #x00 #xaf) #(#xd7 #x00 #xd7) #(#xd7 #x00 #xff)
+#(#xd7 #x5f #x00) #(#xd7 #x5f #x5f) #(#xd7 #x5f #x87) #(#xd7 #x5f #xaf) #(#xd7 #x5f #xd7) #(#xd7 #x5f #xff)
+#(#xd7 #x87 #x00) #(#xd7 #x87 #x5f) #(#xd7 #x87 #x87) #(#xd7 #x87 #xaf) #(#xd7 #x87 #xd7) #(#xd7 #x87 #xff)
+#(#xd7 #xaf #x00) #(#xd7 #xaf #x5f) #(#xd7 #xaf #x87) #(#xd7 #xaf #xaf) #(#xd7 #xaf #xd7) #(#xd7 #xaf #xff)
+#(#xd7 #xd7 #x00) #(#xd7 #xd7 #x5f) #(#xd7 #xd7 #x87) #(#xd7 #xd7 #xaf) #(#xd7 #xd7 #xd7) #(#xd7 #xd7 #xff)
+#(#xd7 #xff #x00) #(#xd7 #xff #x5f) #(#xd7 #xff #x87) #(#xd7 #xff #xaf) #(#xd7 #xff #xd7) #(#xd7 #xff #xff)
+
+#(#xff #x00 #x00) #(#xff #x00 #x5f) #(#xff #x00 #x87) #(#xff #x00 #xaf) #(#xff #x00 #xd7) #(#xff #x00 #xff)
+#(#xff #x5f #x00) #(#xff #x5f #x5f) #(#xff #x5f #x87) #(#xff #x5f #xaf) #(#xff #x5f #xd7) #(#xff #x5f #xff)
+#(#xff #x87 #x00) #(#xff #x87 #x5f) #(#xff #x87 #x87) #(#xff #x87 #xaf) #(#xff #x87 #xd7) #(#xff #x87 #xff)
+#(#xff #xaf #x00) #(#xff #xaf #x5f) #(#xff #xaf #x87) #(#xff #xaf #xaf) #(#xff #xaf #xd7) #(#xff #xaf #xff)
+#(#xff #xd7 #x00) #(#xff #xd7 #x5f) #(#xff #xd7 #x87) #(#xff #xd7 #xaf) #(#xff #xd7 #xd7) #(#xff #xd7 #xff)
+#(#xff #xff #x00) #(#xff #xff #x5f) #(#xff #xff #x87) #(#xff #xff #xaf) #(#xff #xff #xd7) #(#xff #xff #xff)
+; 24 greyscale e8-ff
+#(#x08 #x08 #x08) #(#x12 #x12 #x12) #(#x1c #x1c #x1c) #(#x26 #x26 #x26) #(#x30 #x30 #x30) #(#x3a #x3a #x3a)
+#(#x44 #x44 #x44) #(#x4e #x4e #x4e) #(#x58 #x58 #x58) #(#x62 #x62 #x62) #(#x6c #x6c #x6c) #(#x76 #x76 #x76)
+#(#x80 #x80 #x80) #(#x8a #x8a #x8a) #(#x94 #x94 #x94) #(#x9e #x9e #x9e) #(#xa8 #xa8 #xa8) #(#xb2 #xb2 #xb2)
+#(#xbc #xbc #xbc) #(#xc6 #xc6 #xc6) #(#xd0 #xd0 #xd0) #(#xda #xda #xda) #(#xe4 #xe4 #xe4) #(#xee #xee #xee)) i)))
+
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; ICO_files
 ;;
+;; Read an ICO graphic image into an object
+;;  (IcoRead filename) => Icon graphic image object
+;;
+;; Write an ICO graphic object
+;;  (IcoWrite ICO filename)
+;;
+;; Set an ICO object's palette color's RGB value
+;;   (IcoPaletteRGBSet ICO iconIndex paletteIndex rgb)
+;;
+;; Set an ICO object's pixel
+;;   IcoIndexedPixelSet ICO iconIndex y x index)
+;;
+(define ICODEBUG displayl)
+(define (DB . r) (ICODEBUG "\r\n")
+                 (apply ICODEBUG r))
+(define (DBI . r) (apply ICODEBUG r))
+
+
 ; Split a number into a list of numbers at bit intervals
 (define (byteSplit8 b)
  (list
@@ -42,9 +115,9 @@
 
 ; Read (6 bytes) and return an ICO descriptor  #('ICO reserved type iconCount #entries(...) #infos(...))
 (define (HeaderRead fs)
-  (define reserved (recvWord fs)) ; 0
-  (define type (recvWord fs))     ; 1
-  (define iconCount (recvWord fs)); number of icons embedded in the ico file
+  (define reserved (recvWord fs))
+  (define type (recvWord fs))
+  (define iconCount (recvWord fs))
   (define entries (make-vector iconCount) #f)
   (define infos (make-vector iconCount) #f)
   (vector 'ICO reserved type iconCount entries infos))
@@ -70,8 +143,8 @@
   (define width     (recvByte fs))
   (define height    (recvByte fs))
   (define colorCount(recvByte fs))
-  (define reserved  (recvByte fs)) ; 0
-  (define planes    (recvWord fs)); 1
+  (define reserved  (recvByte fs))
+  (define planes    (recvWord fs))
   (define bits      (recvWord fs))
   (define size      (recvLong fs))
   (define offset    (recvLong fs))
@@ -165,11 +238,11 @@
                         (InfoSize info)
                         (* 4 (vector-length (InfoPalette info)))))
 
-  (displayl "XOR and AND bitmap byte size:" bitMapSize NEWLINE)
+  (DB "XOR and AND bitmap byte size:" bitMapSize NEWLINE)
 
   (if (< 8 bitCount)
     (begin ; Non-palletized bitmaps not supported.  Just read bytes into a list.
-      (displayl "skipping " bitCount "bit bitmaps for now" NEWLINE)
+      (DB "skipping " bitCount "bit bitmaps for now" NEWLINE)
       (InfoXorBitmapSet info (let ~ ((i bitMapSize))
                                      (if (= i 0) () (cons (recvByte fp) (~ (- i 1)))))))
     ; Ranges and sizes need to be considered based on the pixel bitSize
@@ -229,7 +302,7 @@
   (define IconCount (HeaderIconCount ICO)) ; Consider icon count
 
   ; Dump header info
-  (displayl filename "  Reserved:" (HeaderReserved ICO) "  Type:" (HeaderType ICO) "  Count:" IconCount NEWLINE)
+  (DB filename "  Reserved:" (HeaderReserved ICO) "  Type:" (HeaderType ICO) "  Count:" IconCount NEWLINE)
 
   ; Read all entries
   (EntryReadAll ICO fp)
@@ -237,7 +310,7 @@
   ; Dump all entries info
   (loop IconCount (lambda (i)
     (define ed (HeaderEntryRef ICO i))
-    (displayl i" Width:"      (EntryWidth ed) "  Height:" (EntryHeight ed) "  ColorCount:" (EntryColorCount ed)
+    (DB i" Width:"      (EntryWidth ed) "  Height:" (EntryHeight ed) "  ColorCount:" (EntryColorCount ed)
               "  Reserved:"   (EntryReserved ed) "  Planes:" (EntryPlanes ed) "  BitCount:" (EntryBits ed)
               "  Size/Bytes:" (EntrySize ed) "  FileOffset:" (EntryOffset ed) NEWLINE)))
 
@@ -247,37 +320,45 @@
     (InfoRead ICO i fp)
     ; Dump info  header
     (let ((info (HeaderInfoRef ICO i)))
-      (displayl i" Size:" (InfoSize info))
-      (displayl "  Width:" (InfoWidth info))
-      (displayl "  Height:" (InfoHeight info))
-      (displayl "  Planes:"  (InfoPlanes info))
-      (displayl "  BitCount:" (InfoBitCount info))
-      (displayl "  Compression:" (InfoCompression info))
-      (displayl "  ImageSize:" (InfoImageSize info))
-      (displayl "  XPixels/M:" (InfoXPixelsMeter info))
-      (displayl "  YPixels/M:" (InfoYPixelsMeter info))
-      (displayl "  ColorsUsed:" (InfoColorsUsed info))
-      (displayl "  ColorsImpor:" (InfoColorsImportant info))
-      (newline))
+      (DBI i" Size:" (InfoSize info))
+      (DBI "  Width:" (InfoWidth info))
+      (DBI "  Height:" (InfoHeight info))
+      (DBI "  Planes:"  (InfoPlanes info))
+      (DBI "  BitCount:" (InfoBitCount info))
+      (DBI "  Compression:" (InfoCompression info))
+      (DBI "  ImageSize:" (InfoImageSize info))
+      (DBI "  XPixels/M:" (InfoXPixelsMeter info))
+      (DBI "  YPixels/M:" (InfoYPixelsMeter info))
+      (DBI "  ColorsUsed:" (InfoColorsUsed info))
+      (DBI "  ColorsImpor:" (InfoColorsImportant info))
+      (DB newline))
     ; Read palette
     (PaletteRead ICO i fp)
     ; Dump palette
     (let ((info (HeaderInfoRef ICO i)))
-       (displayl "RGBR " (InfoPalette info))
-       (newline))
+       (DB "RGBR " (InfoPalette info))
+       (DB newline))
     ; Read XOR bitmap
     (XorBitmapRead ICO i fp)
     ; Dump XOR bitmap or raw bytes
     (if (<= (InfoBitCount (HeaderInfoRef ICO i)) 8)
-      (vector-for-each (lambda (v) (displayl v NEWLINE)) (InfoXorBitmap (HeaderInfoRef ICO i)))
-      (display (InfoXorBitmap (HeaderInfoRef ICO i))))
-    (newline)
+      ;(vector-for-each (lambda (v) (DB v NEWLINE)) (InfoXorBitmap (HeaderInfoRef ICO i)))
+      (vector-for-each (lambda (row) (vector-for-each (lambda (b) (DBI #\ )
+                                                                  (if (< b 10) (DBI #\ ))
+                                                                  (DBI b))
+                                                      row)
+                                     (DB))
+                       (InfoXorBitmap (HeaderInfoRef ICO i)))
+      (DB (InfoXorBitmap (HeaderInfoRef ICO i))))
+    (DB newline)
     ; Read AND bitmap
     (AndBitmapRead ICO i fp)
      ; Dump AND bitmap if one exists
     (if (InfoAndBitmap (HeaderInfoRef ICO i))
-      (vector-for-each (lambda (v) (displayl v NEWLINE)) (InfoAndBitmap (HeaderInfoRef ICO i))))
-    (newline)))
+      (vector-for-each (lambda (v) (vector-for-each (lambda (b) (DBI (if (= b 0) #\. #\*))) v)
+                                   (DB))
+                       (InfoAndBitmap (HeaderInfoRef ICO i))))
+    (DB newline)))
  
   ; Make sure no extra info before quiting
   (or (eof-object? (recv 1 #f fp)) (eror "unexpected extra byes"))
@@ -347,10 +428,26 @@
   ; Verify all icons are 8 bit or less.  Non palletized icons are not supported. 
   (if (let ~ ((i 0))
         (if (= i (HeaderIconCount ICO)) #t
-        (if (< 8 (EntryBits (HeaderEntryRef ICO i))) (begin (displayl "Icon " i " is > 8 bit which are not supported for writing.") #f)
+        (if (< 8 (EntryBits (HeaderEntryRef ICO i))) (begin (DB "Icon " i " is > 8 bit which are not supported for writing.") #f)
         (~  (+ i 1)))))
       (IcoWriteInternal ICO filename)))
 
-(let ((icoFileName (vector-ref argv 2)))
-  (IcoWrite (IcoRead icoFileName)
-            (string icoFileName ".ico")))
+(define (IcoPaletteRGBSet ICO iconIndex paletteIndex rgb)
+ (define INFO (HeaderInfoRef ICO iconIndex))
+ (define PALETTE (InfoPalette INFO))
+ (if (and (<= 0 paletteIndex)
+          (< paletteIndex (vector-length PALETTE)))
+   (begin (vector-set! (vector-ref PALETTE paletteIndex) 0 (vector-ref rgb 2))
+          (vector-set! (vector-ref PALETTE paletteIndex) 1 (vector-ref rgb 1))
+          (vector-set! (vector-ref PALETTE paletteIndex) 2 (vector-ref rgb 0)))
+   (DB "ERROR: (IcoPaletteRGBSet paletteIndex " paletteIndex " out of range " (vector-length PALETTE))))
+
+(define (IcoIndexedPixelSet ICO iconIndex y x index)
+ (define INFO (HeaderInfoRef ICO iconIndex))
+ (define XOR (InfoXorBitmap INFO))
+   (vector-vector-set! XOR y x index))
+
+
+; Set the DEBUG message function.  Set to (lambda x) to disable debugging
+(define (IcoInitialize db)
+ (set! ICODEBUG db))

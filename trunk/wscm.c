@@ -509,7 +509,7 @@ void syscallSerializeDisplay (void) {
 			else
 				ret = sprintf((char*)buff, "#SOCKET/PORT<DESC:"NUM" ADDR:%.*s PORT:"NUM,
 				   (Num)memVectorObject(r0, 0),
-				   memObjectLength(memVectorObject(r0, 1)), (char*)memVectorObject(r0, 1),
+				   memObjectLength(memVectorObject(r0, 1)), (char*)memVectorObject(r0, 1), /* %* format takes two args */
 				   *(Num*)memVectorObject(r0, 2));
 			objNewString(buff, (Num)ret);
 /*
@@ -999,11 +999,21 @@ void syscallOpenFile (void) {
 	}
 	r1 = vmPop();
 	sysOpenFile(O_RDWR, S_IRUSR|S_IWUSR, silent); /* r1 contains filename object */
-
-	if (ofalse == r0 && !silent) {
-		len = sprintf(buff, "Unable to open file \""STR"\".  ["INT":"STR"]", r2, errno, strerror(errno));
-		assert(len<0x200);
-		wscmError(0, buff);
+	
+	if (!memIsObjectType(r0, TPORT)) {
+		if (silent) {
+			r0 = ofalse;
+		} else {
+			if (memIsObjectType(r0, TSTRING)) {
+				/* Error using the string passed */
+				wscmError(0, r0);
+			} else {
+				/* Error using C's error code */
+				len = sprintf(buff, "Unable to open file \""STR"\".  ["INT":"STR"]", r2, errno, strerror(errno));
+				assert(len<0x200);
+				wscmError(0, buff);
+			}
+		}
 	}
 ret:
 	DBEND();
@@ -1012,7 +1022,7 @@ ret:
 void syscallOpenNewFile (void) {
  Num silent=0;
  Int len;
- char buff[4096];
+ char buff[0x200];
 	DBBEG();
 	if (wscmAssertArgCountRange1To2(__func__)) goto ret;
 	if ((Num)r1==2) { /* If an extra arg is passed, make it a silent call */
@@ -1022,10 +1032,20 @@ void syscallOpenNewFile (void) {
 	r1 = vmPop();
 	sysOpenFile(O_CREAT|O_TRUNC|O_RDWR, S_IRUSR|S_IWUSR, silent);
 
-	if (ofalse == r0 && !silent) {
-		len = sprintf(buff, "Unable to open new file \""STR"\".  \"("INT")"STR"\"", r2, errno, strerror(errno));
-		assert(len<4095);
-		wscmError(0, buff);
+	if (!memIsObjectType(r0, TPORT)) {
+		if (silent) {
+			r0 = ofalse;
+		} else {
+			if (memIsObjectType(r0, TSTRING)) {
+				/* Error using the string passed */
+				wscmError(0, r0);
+			} else {
+				/* Error using C's error code */
+				len = sprintf(buff, "Unable to open new file \""STR"\".  ["INT":"STR"]", r2, errno, strerror(errno));
+				assert(len<0x200);
+				wscmError(0, buff);
+			}
+		}
 	}
 ret:
 	DBEND();
@@ -1195,19 +1215,19 @@ void syscallFileStat (void) {
 
 	objNewVector(13);
 	r1 = r0;
-	objNewInt((Int)buf.st_dev); memVectorSet(r1, 0, r0);      /* dev_t     st_dev;      ID of device containing file */
-	objNewInt((Int)buf.st_ino); memVectorSet(r1, 1, r0);      /* ino_t     st_ino;      inode number */
-	objNewInt(buf.st_mode); memVectorSet(r1, 2, r0);     /* mode_t    st_mode;     protection */
-	objNewInt((Int)buf.st_nlink); memVectorSet(r1, 3, r0);    /* nlink_t   st_nlink;    number of hard links */
-	objNewInt(buf.st_uid); memVectorSet(r1, 4, r0);      /* uid_t     st_uid;      user ID of owner */
-	objNewInt(buf.st_gid); memVectorSet(r1, 5, r0);      /* gid_t     st_gid;      group ID of owner */
-	objNewInt((Int)buf.st_rdev); memVectorSet(r1, 6, r0);     /* dev_t     st_rdev;     device ID (if special file) */
-	objNewInt(buf.st_size); memVectorSet(r1, 7, r0);     /* off_t     st_size;     total size, in bytes */
-	objNewInt(buf.st_blksize); memVectorSet(r1, 8, r0);  /* blksize_t st_blksize;  blocksize for file system I/O */
-	objNewInt(buf.st_blocks); memVectorSet(r1, 9, r0);   /* blkcnt_t  st_blocks;   number of 512B blocks allocated */
-	objNewInt(buf.st_atime); memVectorSet(r1,10, r0);    /* time_t    st_atime;    time of last access */
-	objNewInt(buf.st_mtime); memVectorSet(r1,11, r0);    /* time_t    st_mtime;    time of last modification */
-	objNewInt(buf.st_ctime); memVectorSet(r1,12, r0);    /* time_t    st_ctime;    time of last status change */
+	objNewInt((Int)buf.st_dev); memVectorSet(r1, 0, r0); /* dev_t     st_dev;     ID of device containing file */
+	objNewInt((Int)buf.st_ino); memVectorSet(r1, 1, r0); /* ino_t     st_ino;     inode number */
+	objNewInt(buf.st_mode); memVectorSet(r1, 2, r0);     /* mode_t    st_mode;    protection */
+	objNewInt((Int)buf.st_nlink); memVectorSet(r1, 3, r0);/*nlink_t   st_nlink;   number of hard links */
+	objNewInt(buf.st_uid); memVectorSet(r1, 4, r0);      /* uid_t     st_uid;     user ID of owner */
+	objNewInt(buf.st_gid); memVectorSet(r1, 5, r0);      /* gid_t     st_gid;     group ID of owner */
+	objNewInt((Int)buf.st_rdev); memVectorSet(r1, 6, r0);/* dev_t     st_rdev;    device ID (if special file) */
+	objNewInt(buf.st_size); memVectorSet(r1, 7, r0);     /* off_t     st_size;    total size, in bytes */
+	objNewInt(buf.st_blksize); memVectorSet(r1, 8, r0);  /* blksize_t st_blksize; blocksize for file system I/O */
+	objNewInt(buf.st_blocks); memVectorSet(r1, 9, r0);   /* blkcnt_t  st_blocks;  number of 512B blocks allocated */
+	objNewInt(buf.st_atime); memVectorSet(r1,10, r0);    /* time_t    st_atime;   time of last access */
+	objNewInt(buf.st_mtime); memVectorSet(r1,11, r0);    /* time_t    st_mtime;   time of last modification */
+	objNewInt(buf.st_ctime); memVectorSet(r1,12, r0);    /* time_t    st_ctime;   time of last status change */
 	r0 = r1;
 
 ret:
