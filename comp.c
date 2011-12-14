@@ -57,7 +57,7 @@ Num compIsError (void) {
 	return ofalse != rcomperror;
 }
 
-/* Raise a compiler error.  Set's the error message and initializes
+/* Raise a compiler error.  Sets the error message and initializes
    the offending s-expression trace list with rexpr.
 */
 void compErrorRaise (Str msg) {
@@ -94,7 +94,6 @@ void compPopSubExpr (void) {
 }
 
 
-void compErrorInsertTrace(Obj o) { }  /* Until i removed all references to this unused function */
 
 /*******************************************************************************
  Syscalls
@@ -1847,10 +1846,8 @@ void compCond (Num flags) {
 		r1 = car(r2); /* Consider next clause  r1 = <clause>  */
 		/* Error if clause is not a list */
 		if (!objIsPair(r1)) {
-			vmPush(rexpr); /* Save s-expression */
 			rexpr = r1;
 			compErrorRaise((Str)"Syntax error 'cond' clause");
-			compErrorInsertTrace(vmPop()); /* Use saved s-expression */
 			while(clauses--) vmPop(); /* Pop pushed clauses since not continuing */
 			goto ret;
 		} else {

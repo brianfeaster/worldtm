@@ -164,6 +164,16 @@
 (define (seek-current port offset) (seek port offset 1))
 (define (seek-end port offset) (seek port offset 2))
 
+(define (file-r-user? port)  (!= 0 (logand #b100000000 (vector-ref (file-stat port) 2))))
+(define (file-w-user? port)  (!= 0 (logand #b010000000 (vector-ref (file-stat port) 2))))
+(define (file-x-user? port)  (!= 0 (logand #b001000000 (vector-ref (file-stat port) 2))))
+(define (file-r-group? port) (!= 0 (logand #b100000 (vector-ref (file-stat port) 2))))
+(define (file-w-group? port) (!= 0 (logand #b010000 (vector-ref (file-stat port) 2))))
+(define (file-x-group? port) (!= 0 (logand #b001000 (vector-ref (file-stat port) 2))))
+(define (file-r-other? port) (!= 0 (logand #b100 (vector-ref (file-stat port) 2))))
+(define (file-w-other? port) (!= 0 (logand #b010 (vector-ref (file-stat port) 2))))
+(define (file-x-other? port) (!= 0 (logand #b001 (vector-ref (file-stat port) 2))))
+
 (define (char->integer i) (+ 0 i)) ; TODO Hack that works currently
 (define (integer->char i) (vector-ref characters i))
 
@@ -290,7 +300,18 @@
              (substring str (+ i 1) len))
    (~ (+ i 1)))))))
 
-; Split's a string into a list of substring separated by 'deli
+; Reverse strtok
+;   (rstrtok "a-bc-123" #\-) => ("a-bc" . "123")
+(define (rstrtok str delim)
+ (let ((len (string-length str)))
+ (let ~ ((i (- len 1)))
+   (if (= i -1) (cons "" str)
+   (if (eq? (string-ref str i) delim)
+       (cons (substring str 0 i)
+             (substring str (+ i 1) len))
+   (~ (- i 1)))))))
+
+; Split's a string into a list of substring separated by delim
 (define (split str delim)
  (let ((len (string-length str)))
  (let ~ ((i 0))
@@ -431,6 +452,17 @@
           (~~ (+ y 1) 0))))
     vv)))                      ; Return vector-vector done.
 
+(define (vector-vector-for-each fn vv)
+ (let ~~ ((y 0)(x 0))
+  (if (< y (vector-length vv)) ; Done with Y iteration?
+    (let ((v (vector-ref vv y))) ; Consider row.
+      (let ~ ((x 0))
+        (if (< x (vector-length v)) ; Done with X iteration?
+          (begin (fn (vector-ref v x))
+                 (~ (+ x 1)))
+          (~~ (+ y 1) 0))))
+    vv)))                      ; Return vector-vector done.
+
 (define (vector-random v)
  (vector-ref v (random (vector-length v))))
 
@@ -565,7 +597,7 @@
         (for-each (lambda (e) (display "\r\nEXCEPTION::") (write e))
                   o)
         (begin (display "\r\nEXCEPTION::") (write o)))
-    ;(debugger)
+    (debugger)
     (unthread))))
 
 

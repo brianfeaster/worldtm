@@ -877,6 +877,7 @@
       (mapWalkDetails self))
     (define walkSemaphore (open-semaphore 1)) ; This needs to be destroyed
     (define mapWalkDetails (myMap 'walkDetails))
+    (define WalkCallback #f)
     (define (walk dir)
       (semaphore-down walkSemaphore)
         ; Consider cell I'm walking into.  If cell is entity push it.
@@ -898,6 +899,7 @@
                       (mapWalkDetails self)))))
         ; Gravity
         (or EDIT (fall))
+        (WalkCallback dir)
       (semaphore-up walkSemaphore)) ; walk
     ; Fall down one cell if a non-entity and non-solid cell below me
     (define (fall)
@@ -912,10 +914,12 @@
                       (apply string (display->strings talkInput)))))
     (define (lookHere) (apply (avatarMap 'baseCell) ((avatar 'gps))))
     (define (lookAt) (apply (avatarMap 'baseCell) ((avatar 'gpsLook))))
+    (define VoiceCallback #f)
     (define (IPCHandlerVoice dna level text)
      (or NOVIEWPORT
        (if (= dna 0) ; System messages
          (begin
+           (if VoiceCallback (VoiceCallback (string "*WORLD* " text)))
            (WinChatDisplay "\r\n")
            (WinChatSetColor 0 9) (WinChatDisplay "W")
            (WinChatSetColor 0 11) (WinChatDisplay "O")
@@ -934,10 +938,12 @@
                   (if (<= TalkScreamThreshold level) (set! name (string "{" name "}"))))
                  ; Color of the name and text based on the entity's glyph
                  (WinChatSetColor (glyph0bg glyph) (glyph0fg glyph))
+                 (if VoiceCallback (VoiceCallback (string name " " text)))
                  (WinChatDisplay "\r\n" name VOICEDELIMETER)
                  (WinChatSetColor (glyph1bg glyph) (glyph1fg glyph))
                  (WinChatDisplay text)))
              (begin
+               (if VoiceCallback (VoiceCallback (string "??? " text)))
                (WinChatSetColor 0 7)
                (WinChatDisplay "\r\n???" VOICEDELIMETER text)))))
        (if (and (!= dna (self 'dna)) (eqv? text "unatco"))
@@ -1005,7 +1011,7 @@
   (list owner)
   (macro (parent owner . ChildStack) ; Child
    (define (self msg) (eval msg))
-   (define (info) (list 'IrcAgent name z y x 'hasChild (pair? ChildStack)))
+   (define (info) (list 'Kat name z y x 'hasChild (pair? ChildStack)))
 
    (define (say . l)
      (speak (apply string (map display->string l))))
