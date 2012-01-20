@@ -422,8 +422,9 @@
    (define Buffer (let ((parent self)) (lambda ()
      (define (self msg) (eval msg))
      (define Buffer (list "")) ; List of every line sent.  Append a new empty string.
-     ; Need to pare the string for newlines so a list of lines
-     ; can be assembled over time
+     (define BufferCount 0)
+     (define offset 0) ; Scroll back offset location index.  0 means end of buffer, greater than 0 number of lines back to scroll.
+     ; Need to parse the string for newlines so a list of lines can be assembled over time
      (define (parseString str)
        (let ~ ((i 0)
                (len (string-length str))
@@ -434,12 +435,14 @@
               (if (pair? (memq ch (list RETURN NEWLINE)))
                 (begin
                   (if (not (eq? line ""))
-                    (set! Buffer (cons "" (cons line (cdr Buffer))))) ; Add new line to line bufer
+                    (begin (set! Buffer (cons "" (cons line (cdr Buffer))))
+                           (set! BufferCount (+ 1 BufferCount)))) ; Add new line to line bufer
                   (set! line ""))
                 (set! line (string line ch))) ; Add char to parsed line
               (~ (+ i 1) len line)))))
      (define (redrawBuffer)
-       (let ~ ((c Wheight) (b Buffer))
+       (let ~ ((c Wheight) (b (list-skip Buffer offset)))
+         (if (null? b) (set! b (list ""))) ; Don't expect the modified buffer list to be empty.  Bad base case.
          (if (or (= c 1) (null? (cdr b)))
            (home)
            (~ (- c 1) (cdr b)))
@@ -447,6 +450,29 @@
            (begin
              (if (or (!= TY 0) (!= TX 0)) (begin (return) (newline))) ; Don't newline if home
              ((parent 'puts) (car b))))))
+     (define (scrollHome)
+       (if (< offset (- BufferCount Wheight -2))
+         (begin
+           (set! offset (- BufferCount Wheight -2))
+           ((parent 'resize) Wheight Wwidth) ; Force a reset of the window glyphs
+           (redrawBuffer))))
+     (define (scrollEnd)
+       (if (!= offset 0)
+         (begin
+           (set! offset 0)
+           ((parent 'resize) Wheight Wwidth) ; Force a reset of the window glyphs
+           (redrawBuffer))))
+     (define (scrollBack)
+       (if (< offset (- BufferCount Wheight -2))
+         (begin
+           (set! offset (+ 1 offset))
+           ((parent 'resize) Wheight Wwidth) ; Force a reset of the window glyphs
+           (redrawBuffer))))
+     (define (scrollForward)
+       (if (< 0 offset) 
+         (begin (set! offset (- offset 1))
+                ((parent 'resize) Wheight Wwidth) ; Force a reset of the window glyphs
+                (redrawBuffer))))
      (define (puts str)
        (parseString str)
        ((parent 'puts) str))
@@ -488,7 +514,7 @@
  ; Stack of queues, implemented as a list, accepting keyboard characters
  (define keyQueueStack ())
 
- ; Vector of event (action y x) queues.  TODO only 128 windows supported
+ ; Vector of event (action y x) queues one per window.  TODO only 128 windows supported
  (define mouseQueueVector (make-vector MAXWINDOWCOUNT #f))
 
  ;; Keyboard character handling
@@ -499,9 +525,9 @@
    (or (eq? (car keyQueueStack) q) (display "WARNING: keyQueueStackUnRegister: not top queue"))
    (set! keyQueueStack (list-delete keyQueueStack q)))
 
- (define (keyDispatch c)
-   (if (pair? keyQueueStack)
-     (QueueAdd (car keyQueueStack) c)))
+ (define (keyDispatch . charList)
+   (if (pair? keyQueueStack) ; Only if a key queue exists is on the stack.  There might be nothing expecting keyboard characters.
+     (map (lambda (c) (QueueAdd (car keyQueueStack) c)) charList)))
  
  ;; Mouse character string handling
  (define (mouseQueueRegister win q) ; Was mouseDispatcherRegister 
@@ -539,12 +565,79 @@
            ((eq? c #\B) (keyDispatch 'down))
            ((eq? c #\C) (keyDispatch 'right))
            ((eq? c #\D) (keyDispatch 'left))
+           ((eq? c #\1) (keyScannerEscBracket1))
+           ((eq? c #\2) (keyScannerEscBracket2))
+           ((eq? c #\3) (keyScannerEscBracket3))
+           ((eq? c #\4) (keyScannerEscBracket4))
+           ((eq? c #\5) (keyScannerEscBracket5))
+           ((eq? c #\6) (keyScannerEscBracket6))
            ((eq? c #\M) (keyScannerEscBracketM))
            ; Not an arrow key sequence, so send all the character to the key queue
            (else (keyDispatch CHAR-ESC)
                  (keyDispatch #\[)
                  (keyDispatch c)))))
  
+ ; An "\e[1" has been scanned
+ (define (keyScannerEscBracket1)
+  (letrec ((c (read-char #f stdin)))
+    (if (eq? c #\~)
+      (keyDispatch 'home)
+      (begin (keyDispatch CHAR-ESC)
+             (keyDispatch #\[)
+             (keyDispatch #\1)
+             (keyDispatch c)))))
+
+ ; An "\e[2" has been scanned
+ (define (keyScannerEscBracket2)
+  (letrec ((c (read-char #f stdin)))
+    (if (eq? c #\~)
+      (keyDispatch 'insert)
+      (begin (keyDispatch CHAR-ESC)
+             (keyDispatch #\[)
+             (keyDispatch #\2)
+             (keyDispatch c)))))
+
+
+ ; An "\e[3" has been scanned
+ (define (keyScannerEscBracket3)
+  (letrec ((c (read-char #f stdin)))
+    (if (eq? c #\~)
+      (keyDispatch 'delete)
+      (begin (keyDispatch CHAR-ESC)
+             (keyDispatch #\[)
+             (keyDispatch #\3)
+             (keyDispatch c)))))
+
+ ; An "\e[4" has been scanned
+ (define (keyScannerEscBracket4)
+  (letrec ((c (read-char #f stdin)))
+    (if (eq? c #\~)
+      (keyDispatch 'end)
+      (begin (keyDispatch CHAR-ESC)
+             (keyDispatch #\[)
+             (keyDispatch #\4)
+             (keyDispatch c)))))
+
+ ; An "\e[5" has been scanned
+ (define (keyScannerEscBracket5)
+  (letrec ((c (read-char #f stdin)))
+    (if (eq? c #\~)
+      (keyDispatch 'pgup)
+      (begin (keyDispatch CHAR-ESC)
+             (keyDispatch #\[)
+             (keyDispatch #\5)
+             (keyDispatch c)))))
+
+ ; An "\e[6" has been scanned
+ (define (keyScannerEscBracket6)
+  (letrec ((c (read-char #f stdin)))
+    (if (eq? c #\~)
+      (keyDispatch 'pgdown)
+      (begin (keyDispatch CHAR-ESC)
+             (keyDispatch #\[)
+             (keyDispatch #\6)
+             (keyDispatch c)))))
+
  ; An "\e[M" has been scanned
  (define (keyScannerEscBracketM)
   (letrec ((c (read-char #f stdin))

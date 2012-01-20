@@ -56,7 +56,7 @@
 (WinChat '(set! ScrollbackHack #t))
 
 ; Console window
-(define WinConsole ((Terminal 'WindowNew)
+(define WinConsole ((Terminal 'BufferNew)
   (- (Terminal 'Theight) 27) 0
   26  (Terminal 'Twidth)
   #x0002))
@@ -356,6 +356,13 @@
  ret)
 
 
+(define (scrollFocusedWindow d)
+  (let ((win (if (WinConsole 'ENABLED) WinConsole WinChat)))
+    (if (eq? d 'home) ((win 'scrollHome))
+    (if (eq? d 'end)  ((win 'scrollEnd))
+    (if (eq? d 'up)   ((win 'scrollBack))
+    (if (eq? d 'down) ((win 'scrollForward))))))))
+
 
 ;;;;;;;;;;;;;;;;;;;;;;;;
 ; Avatar_color_chooser
@@ -596,6 +603,10 @@
 (setButton CHAR-CTRL-Q '(shutdown))
 (setButton #\Q         '(shutdown))
 (setButton #eof        '(shutdown))
+(setButton 'pgup '(scrollFocusedWindow 'up))
+(setButton 'pgdown '(scrollFocusedWindow 'down))
+(setButton 'home '(scrollFocusedWindow 'home))
+(setButton 'end '(scrollFocusedWindow 'end))
 ;(setButton #\  '(begin (avatar '(stop)) (kat '(stop))))
 (if QUIETLOGIN (begin
    (setButton CHAR-CTRL-C '((WinConsole 'toggle)))
@@ -952,11 +963,11 @@
       (set! g1 #f) (set! g2 #f) (set! g3 #f) (set! g4 #f)
       )
     (begin
-      (let ((y (avatar 'y)) (x (avatar 'x)))
-        (set! g1 (or ghostsOn (Avatar "G1" 0 (- y 1) (- x 1) ipc #t)))
-        (set! g2 (or ghostsOn (Avatar "G2" 0 (- y 1) (+ x 1) ipc #t)))
-        (set! g3 (or ghostsOn (Avatar "G3" 0 (+ y 1) (- x 1) ipc #t)))
-        (set! g4 (or ghostsOn (Avatar "G4" 0 (+ y 1) (+ x 1) ipc #t)))
+      (let ((z (avatar 'z)) (y (avatar 'y)) (x (avatar 'x)))
+        (set! g1 (or ghostsOn (Avatar "G1" z (- y 1) (- x 1) ipc #t)))
+        (set! g2 (or ghostsOn (Avatar "G2" z (- y 1) (+ x 1) ipc #t)))
+        (set! g3 (or ghostsOn (Avatar "G3" z (+ y 1) (- x 1) ipc #t)))
+        (set! g4 (or ghostsOn (Avatar "G4" z (+ y 1) (+ x 1) ipc #t)))
       )
       (g1 '(ghostMacro))
       (g2 '(ghostMacro))
@@ -1195,7 +1206,7 @@
  (outl p s))
 
 (define (sendChat0 p)
- (sendChatHeader p "Hello World[tm]!"))
+ (sendChatHeader p "Conected to World[tm]!"))
 
 ; Incoming chat needs to be sent to web client
 (define ChatQueue (QueueCreate))
@@ -1211,13 +1222,13 @@
 (define (sendChat p)
  (sendChatHeader p (QueueGet ChatQueue)))
 
-; Initialize web module's debug callback
-(WWWDebugSet WinConsoleDisplay)
-; Create the web server object
-(define www (HTTPServer 7180))
+; Global object for debugging at the command line
+(define www ())
 
-(WWWRegisterGetHandler
-  (lambda (request)
+(define (WWWInitialize)
+  (set! www (HTTPServer 7180))
+  (WWWRegisterGetHandler
+   (lambda (request)
     (define p (request 'Stream))
     (define s (chopSlash (request 'URI)))
     (cond
@@ -1233,10 +1244,11 @@
       ((eqv? s "f.html") (sendFileHtml p "f.html") #t)
       ((eqv? s "c256.css") (sendFileCss p "c256.css") #t)
       ((eqv? s "lambda16.cur") (sendFileIcon p "lambda16.cur") #t)
+      ((eqv? s "mover.js") (sendFileJavascript p "mover.js") #t)
       (else #f))))
 
-(WWWRegisterGetHandler
-  (lambda (request)
+  (WWWRegisterGetHandler
+   (lambda (request)
     (define p (request 'Stream))
     (define s (chopSlash (request 'URI)))
     (let ((ret #f)
@@ -1251,9 +1263,9 @@
                 (else (walk 1)))
           (sendHeaderText p 0)))
       ret)))
-
-  
-(define (WWWInitialize)
+  ; Initialize web module's debug callback
+  (WWWDebugSet WinConsoleDisplay)
+  ; Create the web server object
   (avatar '(set! WalkCallback walkOccuredForWebClient))
   (avatar '(set! VoiceCallback WWWVoiceCallBack))
   (thread ((www 'Start))))
@@ -1263,6 +1275,8 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Genesis
 ;;
+
+(WinConsoleDisplay "[IM IN UR CONSOLE READING UR THAWTS]")
 
 ; Create ipc object.  Pass in a serializer which prints to the console window.
 (define ipc (Ipc WinConsoleDisplay HUB-PORT))
@@ -1324,10 +1338,8 @@
     (quit))))
 
 
-;((load "heapinfowebserver.scm")
-
 ; Start Web client server
-(if QUIETLOGIN (WWWInitialize))
+;(if QUIETLOGIN (WWWInitialize))
 
 ; Keyboard command loop
 (let ~ () (let ((b (getKey)))
