@@ -7,7 +7,7 @@
 ;;   Incomming_IPC_messages
 ;;   Start_everything
 ;;
-(define HUB-PORT 7155)
+(define HUB-PORT 8155)
 (define DNA 17749)
 (define MYNAME "MAP AGENT")
 (define ActivityTime (time)) ; Used for the idle time with the 'who' expression
@@ -253,7 +253,7 @@
             (if ultVec
               (lambda (y x) (vector-vector-set! block y x (ultMapColumn (U4MapCell by bx) ultVec y x)))
               (lambda (y x) (vector-vector-set! block y x (U4MapColumn by bx)))))
-          (MapNodeDirtySet node #t)))
+          (MapNodeDirtySet node #f)))
       (if (port? fp) (close fp))
       (BListAddFront MapNodeDB node))) ; Save to DB
   (MapNodeAccessSet node (time)) ; Reset access time

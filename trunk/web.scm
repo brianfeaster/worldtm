@@ -59,6 +59,15 @@
  (if len (outl wp "Content-Length: " len))
  (outl wp ""))
 
+(define (sendHeaderJavascript wp len)
+ (WEB-DB  "(sendHeaderJavascript)")
+ (outl wp "HTTP/1.1 200 OK")
+ (outl wp "Content-Type: text/javascript")
+ (outl wp "Server: World[tm]")
+ (outl wp "Connection: keep-alive")
+ (if len (outl wp "Content-Length: " len))
+ (outl wp ""))
+
 (define (sendHeaderHtml wp len)
  (WEB-DB  "(sendHeaderHtml)")
  (outl wp "HTTP/1.1 200 OK")
@@ -120,6 +129,20 @@
  (WEB-DB  "(sendFileCss)")
  (if fp (begin ; Did the file open successfully?
    (sendHeaderCss wp len)
+   (let ~ ()
+     (set! buff (recv 1 0 fp))
+     (or (not buff) (eof-object? buff)
+         (begin
+           (send buff wp)
+           (~)))))))
+
+(define (sendFileJavascript wp filename)
+ (define fp (open-file filename))
+ (define buff "")
+ (define len (vector-ref (file-stat fp) 7))
+ (WEB-DB  "(sendFileJavascript)")
+ (if fp (begin ; Did the file open successfully?
+   (sendHeaderJavascript wp len)
    (let ~ ()
      (set! buff (recv 1 0 fp))
      (or (not buff) (eof-object? buff)
@@ -231,6 +254,7 @@
               ((string=? (cdr toks) "xml") (sendFileXml wp path))
               ((string=? (cdr toks) "html") (sendFileHtml wp path))
               ((string=? (cdr toks) "css") (sendFileCss wp path))
+              ((string=? (cdr toks) "js") (sendFileJavascript wp path))
               (else (sendFileText wp path))))))
 
 

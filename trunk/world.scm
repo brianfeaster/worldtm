@@ -899,7 +899,7 @@
                       (mapWalkDetails self)))))
         ; Gravity
         (or EDIT (fall))
-        (WalkCallback dir)
+        (if WalkCallback (WalkCallback dir))
       (semaphore-up walkSemaphore)) ; walk
     ; Fall down one cell if a non-entity and non-solid cell below me
     (define (fall)
@@ -1135,9 +1135,11 @@
    (define (msgQueueAdd s) (QueueAdd msgs s)) ; Generally adds a parsed IRC message.  Could be a string or #eof.
    (define (msgQueueGet) (QueueGet msgs))
    (define (debugDumpMsg msg)
-     (Debug (if (msgPrefix msg) (string "\r\n[" (msgPrefix msg) "]") "\r\n")
-            "[" (msgCommand msg) "]"
-            "[" (serialize-write (msgParameters msg)) "]"))
+     (let ((prefix (msgPrefix msg)))
+       (or (eqv? prefix "PING")
+           (Debug (if prefix (string "\r\n[" prefix "]") "\r\n")
+                  "[" (msgCommand msg) "]"
+                  "[" (serialize-write (msgParameters msg)) "]"))))
    ; Parse an IRC message, vector of strings, from a message string
    (define (parseMsgString ms)
      (let ((newMsg (msgNew))) ; Create new message container #(prefix command parameters)
