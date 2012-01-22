@@ -59,7 +59,7 @@
 (define WinConsole ((Terminal 'BufferNew)
   (- (Terminal 'Theight) 27) 0
   26  (Terminal 'Twidth)
-  #x0002))
+  #x0802))
 (define WinConsolePuts (WinConsole 'puts))
 
 (define (WinConsoleDisplay . l)
@@ -463,11 +463,29 @@
  ((WinHelp 'toggle))
  ((WinHelpBorder 'toggle)))
 
+; Able to move the following window objects: avatarViewport WinChat WinConsole
+; With the H J K L keys toggled with CTRL-W
+(define moveableWin #f)
 
-(define (winMapUp)   ((avatarViewport 'move) (+ -1 (avatarViewport 'Y0))      (avatarViewport 'X0)))
-(define (winMapDown) ((avatarViewport 'move) (+  1 (avatarViewport 'Y0))      (avatarViewport 'X0)))
-(define (winMapLeft) ((avatarViewport 'move)       (avatarViewport 'Y0) (+ -1 (avatarViewport 'X0))))
-(define (winMapRight)((avatarViewport 'move)       (avatarViewport 'Y0) (+  1 (avatarViewport 'X0))))
+(define (winMapMoveSelect)
+ (cond ((eq? moveableWin avatarViewport)
+        (WinChatDisplay "\r\nWinChat")
+        (set! moveableWin WinChat))
+       ((eq? moveableWin WinChat)
+        (WinChatDisplay "\r\nWinConsole")
+        (set! moveableWin WinConsole))
+       (else
+        (WinChatDisplay "\r\navatarViewport")
+        (set! moveableWin avatarViewport))))
+
+(define (winMapUp)   ((moveableWin 'move) (+ -1 (moveableWin 'Y0))      (moveableWin 'X0)))
+(define (winMapDown) ((moveableWin 'move) (+  1 (moveableWin 'Y0))      (moveableWin 'X0)))
+(define (winMapLeft) ((moveableWin 'move)       (moveableWin 'Y0) (+ -1 (moveableWin 'X0))))
+(define (winMapRight)((moveableWin 'move)       (moveableWin 'Y0) (+  1 (moveableWin 'X0))))
+(define (winMapShorten)((moveableWin 'resize) (+ (moveableWin 'Wheight) -1) (moveableWin 'Wwidth)))
+(define (winMapTallen) ((moveableWin 'resize) (+ (moveableWin 'Wheight)  1) (moveableWin 'Wwidth))) ; I invted the word 'tallen' the antonym of 'shorten'
+(define (winMapThin)   ((moveableWin 'resize) (moveableWin 'Wheight) (+ (moveableWin 'Wwidth) -1)))
+(define (winMapWiden)  ((moveableWin 'resize) (moveableWin 'Wheight) (+ (moveableWin 'Wwidth)  1)))
 
 (define (walk d) 
  ((avatar 'walk) d))
@@ -572,10 +590,16 @@
   (WinChatDisplay "\r\nMap animation " VIEWPORTANIMATION)))
 (setButton #\C '(avatarColor))
 ;(setButton #\W '(rollcall))
+(setButton CHAR-CTRL-W '(winMapMoveSelect))
 (setButton #\H '(winMapLeft))
 (setButton #\J '(winMapDown))
 (setButton #\K '(winMapUp))
 (setButton #\L '(winMapRight))
+(setButton #\{ '(winMapShorten))
+(setButton #\} '(winMapTallen))
+(setButton #\[ '(winMapThin))
+(setButton #\] '(winMapWiden))
+
 (setButton #\S '(begin
   (set! MAPSCROLL
     (if (eq? MAPSCROLL 'always) 'edge
@@ -726,17 +750,19 @@
 (define (focusTalk type)
  (define getc ((Terminal 'getKeyCreate)))
  ((avatar 'setSpeakLevel) (cond ((eq? type 'whisper) 2) ((eq? type 'scream) 500) (else 20)))
-  (let ~ ()
-    (WinInputPuts 
-      (if (eq? type 'scream) (string "}}" (replTalk 'getBuffer))
-      (if (eq? type 'whisper)(string "(" (replTalk 'getBuffer) ")")
-                             (string ">" (replTalk 'getBuffer)))))
-    (if (eq? type 'whisper) ((WinInput 'back)))
-    (let ~~ ()
-      (let ((ret (replTalk type (getc))))
-        (if (eq? ret 'more) (~~)
-        (if (eq? ret 'sent) (~))))))
-  (getc 'destroy))
+ (let ~ ()
+   ; Draw current string in input buffer
+   (WinInputPuts 
+     (if (eq? type 'scream) (string "}}" (replTalk 'getBuffer))
+     (if (eq? type 'whisper)(string "(" (replTalk 'getBuffer) ")")
+                            (string ">" (replTalk 'getBuffer)))))
+   ; If in whisper mode, move cursor back one past the trailing ')'
+   (if (eq? type 'whisper) ((WinInput 'back)))
+   (let ~~ ()
+     (let ((ret (replTalk type (getc))))
+       (if (eq? ret 'more) (~~)
+       (if (eq? ret 'sent) (~))))))
+ (getc 'destroy))
 
 
 
@@ -1300,6 +1326,8 @@
 
 ; TODO still used in handleTerminalResize winmapUp/Down/Left/Right mouseWalkActionHandlerLoop
 (define avatarViewport (avatarMap 'myViewport))
+
+(define moveableWin avatarViewport)
 
 ; Start map mouse action handler
 (mouseWalkActionHandlerLoop)
