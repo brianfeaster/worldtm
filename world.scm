@@ -1125,6 +1125,9 @@
       (Debug "\r\n<" (serialize-write (apply string l)) ">")
       (map (lambda (s) (display s portIRC)) l)
       (display "\r\n" portIRC))
+   (define (sendNoDebug . l)
+      (map (lambda (s) (display s portIRC)) l)
+      (display "\r\n" portIRC))
    (define (recvChar)
      (read-char #f portIRC))
    ; IRC message interface
@@ -1135,11 +1138,10 @@
    (define (msgQueueAdd s) (QueueAdd msgs s)) ; Generally adds a parsed IRC message.  Could be a string or #eof.
    (define (msgQueueGet) (QueueGet msgs))
    (define (debugDumpMsg msg)
-     (let ((prefix (msgPrefix msg)))
-       (or (eqv? prefix "PING")
-           (Debug (if prefix (string "\r\n[" prefix "]") "\r\n")
-                  "[" (msgCommand msg) "]"
-                  "[" (serialize-write (msgParameters msg)) "]"))))
+     (or (pair? (memv (msgCommand msg) '("PING" "PONG"))) ; Ignore ping/pong messages
+         (Debug (if (msgPrefix msg) (string "\r\n[" (msgPrefix msg) "]") "\r\n")
+                "[" (msgCommand msg) "]"
+                "[" (serialize-write (msgParameters msg)) "]")))
    ; Parse an IRC message, vector of strings, from a message string
    (define (parseMsgString ms)
      (let ((newMsg (msgNew))) ; Create new message container #(prefix command parameters)
@@ -1178,7 +1180,7 @@
    (define (cmdPING parameters)
      ; For fun set my color to a random value whenver an IRC ping request comes in
      ; TODO Change color when pushed as well
-     (send "PONG " parameters))
+     (sendNoDebug "PONG " parameters))
    (define (cmdTOPIC prefix parameters)
        (speak
         (string (car (strtok prefix #\!)) " changed the topic on "

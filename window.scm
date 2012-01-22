@@ -376,8 +376,8 @@
      (let ((oY1 Y1)
            (oX1 X1))
        (semaphore-down WindowSemaphore)
-       (set! Wheight h)
-       (set! Wwidth w)
+       (set! Wheight (if (< h 1) 1 h)) ; Silently reset invalid height
+       (set! Wwidth  (if (< w 1) 1 w)) ; Silently reset invalid width
        (set! Y1 (+ Y0 Wheight))
        (set! X1 (+ X0 Wwidth))
        (set! TY (min TY (- Wheight 1))) ; Make sure cursor is not out of bounds.
@@ -396,8 +396,8 @@
        (semaphore-down WindowSemaphore)
        (set! Y0 y)
        (set! X0 x)
-       (set! Wheight h)
-       (set! Wwidth w)
+       (set! Wheight (if (< h 1) 1 h)) ; Silently reset invalid height
+       (set! Wwidth  (if (< w 1) 1 w)) ; Silently reset invalid width
        (set! Y1 (+ Y0 Wheight))
        (set! X1 (+ X0 Wwidth))
        (set! TY (min TY (- Wheight 1))) ; Make sure cursor is not out of bounds.
