@@ -249,10 +249,10 @@
       (vector-vector-set! field y x (columnMaker)))))
   (define (setField newField) ; TODO debugging
     (set! field newField)
-    (WinChatDisplay "\r\nOK vector-length " (vector-length newField)))
+    (WinChatDisplay "\nOK vector-length " (vector-length newField)))
   ; MAIN
   ; Initialize the field with a default column
-  ;(WinChatDisplay "\r\nInitializing field...")
+  ;(WinChatDisplay "\nInitializing field...")
   (reset (lambda () (columnMake 0 (vector-random (vector 4 20)) cellAIR))) ; Initialize the canvas with a bogus cell and height to speed up initializing
   ;(reset (lambda () (columnMake 0 (vector-random (vector cellXX cellxx)) cellAIR))) ; Initialize the canvas with a bogus cell and height to speed up initializing
   self) ; Field
@@ -338,7 +338,7 @@
                  (+ SUN (lum y x))))
      (heightSet y x z)))
   ; MAIN
-  ;(WinChatDisplay "\r\nInitializing canvas...")
+  ;(WinChatDisplay "\nInitializing canvas...")
   (resetArray 10 (cellGlyph (cellRef cellxx))) ; Initialize the canvas.  Must be called to finalize field array
   (resetArray 10)
   self) ; Canvas
@@ -420,7 +420,7 @@
     ; MAIN
     ; Disable cursor in map window
     (cursor-visible #f)
-    ;(WinChatDisplay "\r\nInitializing viewport...")
+    ;(WinChatDisplay "\nInitializing viewport...")
     (if (pair? ChildStack)
       ; ChildStack = ((child parameters) child-macro . reset of child stack)
       (apply (cadr ChildStack) self (append (car ChildStack) (cddr ChildStack)))
@@ -671,7 +671,7 @@
     ; Special case to handle cells that change the Avatar's sprite
     (letrec ((cellNum (apply baseCell ((entity 'gps))))
              (baseSym (cellSymbol (cellRef cellNum))))
-      (cond ((and (<= 512 cellNum) (<= cellNum 612)) (WinChatDisplay "\r\n" (twoLetterDefinition baseSym)))
+      (cond ((and (<= 512 cellNum) (<= cellNum 612)) (WinChatDisplay "\n" (twoLetterDefinition baseSym)))
             ((eq? baseSym 'sprite0) (createSprite 0))
             ((eq? baseSym 'sprite1) (createSprite 1))
             ((eq? baseSym 'sprite2) (createSprite 2))))
@@ -822,7 +822,7 @@
      (set! SUN b)
      (canvasResetArray ceiling))))
   ; MAIN
-  ;(WinChatDisplay "\r\nInitializing map...")
+  ;(WinChatDisplay "\nInitializing map...")
   (if (= SUN 0) (set! SUN (* 10 (abs (- (modulo (/ (time) 3600)  10) 5)))))
   ((myEntityDB 'add) avatar)
   (or NOVIEWPORT
@@ -920,7 +920,7 @@
        (if (= dna 0) ; System messages
          (begin
            (if VoiceCallback (VoiceCallback (string "*WORLD* " text)))
-           (WinChatDisplay "\r\n")
+           (WinChatDisplay "\n")
            (WinChatSetColor 0 9) (WinChatDisplay "W")
            (WinChatSetColor 0 11) (WinChatDisplay "O")
            (WinChatSetColor 0 10) (WinChatDisplay "R")
@@ -939,13 +939,13 @@
                  ; Color of the name and text based on the entity's glyph
                  (WinChatSetColor (glyph0bg glyph) (glyph0fg glyph))
                  (if VoiceCallback (VoiceCallback (string name " " text)))
-                 (WinChatDisplay "\r\n" name VOICEDELIMETER)
+                 (WinChatDisplay "\n" name VOICEDELIMETER)
                  (WinChatSetColor (glyph1bg glyph) (glyph1fg glyph))
                  (WinChatDisplay text)))
              (begin
                (if VoiceCallback (VoiceCallback (string "??? " text)))
                (WinChatSetColor 0 7)
-               (WinChatDisplay "\r\n???" VOICEDELIMETER text)))))
+               (WinChatDisplay "\n???" VOICEDELIMETER text)))))
        (if (and (!= dna (self 'dna)) (eqv? text "unatco"))
            (speak "no Savage"))))
     (define (IPCHandlerForce fz fy fx dir mag)

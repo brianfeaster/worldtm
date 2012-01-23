@@ -417,43 +417,74 @@
     (WindowMaskReset Y0 X0 Y1 X1))
 
    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-   ;; Buffer_subclass
+   ;; Buffer_subclass -- Implements a
+   ;; cooked text window with scrollback
+   ;; buffer
    ;;
+   ;; A line will be a list of strings, characters and color indices
    (define Buffer (let ((parent self)) (lambda ()
      (define (self msg) (eval msg))
-     (define Buffer (list "")) ; List of every line sent.  Append a new empty string.
-     (define BufferCount 0)
+     (define Buffer (list ())) ; List of every line structures.  Initially contains an empty first line.
+     (define LineCount 0)
      (define offset 0) ; Scroll back offset location index.  0 means end of buffer, greater than 0 number of lines back to scroll.
-     ; Need to parse the string for newlines so a list of lines can be assembled over time
-     (define (parseString str)
-       (let ~ ((i 0)
-               (len (string-length str))
-               (line (car Buffer))) ; Current new empty string text line
+     ; Parse a string for newlines and add to the buffer's list of
+     ; line structures which is a reverse list of consecutive color and string values (color str ...)
+     ; (set-color green0) (puts "01") (set-color red) (puts "ab\ncd") => ((red "cd")(red "ab" green "01"))
+     (define (puts str)
+       (letrec ((line (car Buffer)) ; Consider the current line structure
+                (color COLOR)
+                (strbuf ""))
+         (if (pair? line) ; Is there already something on the current line?
+           (if (= (car line) COLOR)
+             (begin
+               (set! color #f)
+               (set! strbuf (cadr line)))))
+         (let ~ ((i 0)
+                 (len  (string-length str))
+                 (strb ""))
           (if (= i len)
-            (set-car! Buffer line) ; Save currently parsed line back to buffer
-            (let ((ch (string-ref str i))) ; Otherwise process the next character
-              (if (pair? (memq ch (list RETURN NEWLINE)))
+            ; Save currently parsed line to buffer if a differnet color than
+            ; than or just update the strb with the newly parsed text.
+            (begin
+              (if color
+                (set-car! Buffer (cons COLOR (cons strb line))) ;; DUP ;;
+                (set-car! (cdr line) (string strbuf strb)))
+              ((parent 'puts) strb)) ; Send parsed string to window
+            ; Process the next char
+            (let ((ch (string-ref str i)))
+              (if (eq? ch NEWLINE)
                 (begin
-                  (if (not (eq? line ""))
-                    (begin (set! Buffer (cons "" (cons line (cdr Buffer))))
-                           (set! BufferCount (+ 1 BufferCount)))) ; Add new line to line bufer
-                  (set! line ""))
-                (set! line (string line ch))) ; Add char to parsed line
-              (~ (+ i 1) len line)))))
+                  ((parent 'puts) strb) ; Send parsed string to window
+                  (return)(newline) ; as well as the cooked return/newline
+                  (if (not (eq? strb ""))
+                    (if color
+                      (set-car! Buffer (cons COLOR (cons strb line))) ;; DUP ;;
+                      (set-car! (cdr line) (string strbuf strb))))
+                  (set! LineCount (+ 1 LineCount)) ; Add new strb to strb bufer
+                  (set! Buffer (cons () Buffer)) ; Start a new line
+                  (set! line ())
+                  (set! color COLOR)
+                  (~ (+ i 1) len ""))
+                (~ (+ i 1) len (string strb ch)))))))) ; Add char to parsed strb
      (define (redrawBuffer)
-       (let ~ ((c Wheight) (b (list-skip Buffer offset)))
+       (let ~ ((c Wheight)
+               (b (list-skip Buffer offset)))  ; Line buffer skipping over the 'offset' number of bottom rows
          (if (null? b) (set! b (list ""))) ; Don't expect the modified buffer list to be empty.  Bad base case.
          (if (or (= c 1) (null? (cdr b)))
            (home)
            (~ (- c 1) (cdr b)))
-         (if (not (eq? "" (car b)))
+         (if (pair? (car b))
            (begin
              (if (or (!= TY 0) (!= TX 0)) (begin (return) (newline))) ; Don't newline if home
-             ((parent 'puts) (car b))))))
+             (let ~ ((line (car b)))
+               (or (null? line) (begin
+                 (~ (cddr line))
+                 (set! COLOR (car line))
+                 ((parent 'puts) (cadr line)))))))))
      (define (scrollHome)
-       (if (< offset (- BufferCount Wheight -2))
+       (if (< offset (- LineCount Wheight -2))
          (begin
-           (set! offset (- BufferCount Wheight -2))
+           (set! offset (- LineCount Wheight -2))
            ((parent 'resize) Wheight Wwidth) ; Force a reset of the window glyphs
            (redrawBuffer))))
      (define (scrollEnd)
@@ -463,7 +494,7 @@
            ((parent 'resize) Wheight Wwidth) ; Force a reset of the window glyphs
            (redrawBuffer))))
      (define (scrollBack)
-       (if (< offset (- BufferCount Wheight -2))
+       (if (< offset (- LineCount Wheight -2))
          (begin
            (set! offset (+ 1 offset))
            ((parent 'resize) Wheight Wwidth) ; Force a reset of the window glyphs
@@ -473,9 +504,6 @@
          (begin (set! offset (- offset 1))
                 ((parent 'resize) Wheight Wwidth) ; Force a reset of the window glyphs
                 (redrawBuffer))))
-     (define (puts str)
-       (parseString str)
-       ((parent 'puts) str))
      (define (resize h w)
        ((parent 'resize) h w)
        (redrawBuffer))

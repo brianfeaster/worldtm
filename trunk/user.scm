@@ -162,7 +162,7 @@
 (define handlerCount 0)
 (define (handleTerminalResize . forcedSize)
   ; TODO Temporary assertion
-  (if (!= handlerCount 0) (WinChatDisplay "\r\nWARNING: handleTerminalResize is not reentrant"))
+  (if (!= handlerCount 0) (WinChatDisplay "\nWARNING: handleTerminalResize is not reentrant"))
   (set! handlerCount 1)
   (letrec ((newTermSize (if (null? forcedSize) (terminal-size) (car forcedSize)))
            (tw #f)
@@ -469,13 +469,13 @@
 
 (define (winMapMoveSelect)
  (cond ((eq? moveableWin avatarViewport)
-        (WinChatDisplay "\r\nWinChat")
+        (WinChatDisplay "\nWinChat")
         (set! moveableWin WinChat))
        ((eq? moveableWin WinChat)
-        (WinChatDisplay "\r\nWinConsole")
+        (WinChatDisplay "\nWinConsole")
         (set! moveableWin WinConsole))
        (else
-        (WinChatDisplay "\r\navatarViewport")
+        (WinChatDisplay "\navatarViewport")
         (set! moveableWin avatarViewport))))
 
 (define (winMapUp)   ((moveableWin 'move) (+ -1 (moveableWin 'Y0))      (moveableWin 'X0)))
@@ -587,7 +587,7 @@
 (setButton #\+ '(walk 9))
 (setButton #\A '(begin
   (set! VIEWPORTANIMATION (not VIEWPORTANIMATION))
-  (WinChatDisplay "\r\nMap animation " VIEWPORTANIMATION)))
+  (WinChatDisplay "\nMap animation " VIEWPORTANIMATION)))
 (setButton #\C '(avatarColor))
 ;(setButton #\W '(rollcall))
 (setButton CHAR-CTRL-W '(winMapMoveSelect))
@@ -605,7 +605,7 @@
     (if (eq? MAPSCROLL 'always) 'edge
     (if (eq? MAPSCROLL 'edge) 'never
     'always)))
-  (WinChatDisplay "\r\nScroll mode set to:" MAPSCROLL)))
+  (WinChatDisplay "\nScroll mode set to:" MAPSCROLL)))
 (setButton #\M '((avatarMap 'toggleWindow)))
 (setButton #\s '(focusTalk 'scream))
 (setButton #\t '(focusTalk 'talk))
@@ -617,7 +617,7 @@
 (setButton #\d '(buttonSetCell (avatar 'cell)))
 (setButton #\g
    '(let ((o (apply (avatarMap 'baseCell) ((avatar 'gps)))))
-     (WinChatDisplay "\r\nGrabbed " o)
+     (WinChatDisplay "\nGrabbed " o)
      (buttonSetCell cellAIR)
      (avatar `(set! cell ,o))))
 (setButton #\? '(help))
@@ -642,18 +642,18 @@
       ((avatarMap 'debugDumpMapInfoToggle))
       ((avatarMap 'circularizeToggle))
       ((avatarMap 'bigger))
-      (WinChatDisplay "\r\nEDIT " EDIT)))
-   (setButton #\1 '(WinChatDisplay "\r\n" (cellSymbol (cellRef ((avatar 'lookHere))))
+      (WinChatDisplay "\nEDIT " EDIT)))
+   (setButton #\1 '(WinChatDisplay "\n" (cellSymbol (cellRef ((avatar 'lookHere))))
                                       " " (cellSymbol (cellRef ((avatar 'lookAt))))))
    (setButton #\2 '(loop2 (avatar 'y) (+ (avatar 'y) 10)
                           (avatar 'x) (+ (avatar 'x) 10)
                           (lambda (y x)
-                            (if (= x (avatar 'x)) (WinChatDisplay "\r\n"))
+                            (if (= x (avatar 'x)) (WinChatDisplay "\n"))
                             (WinChatDisplay " " (((avatarMap 'myCanvas) 'height) y x) ))))
    ;(setButton #\2 '(handleTerminalResize (cons 600 400)))
    (setButton #\4 '(ghosts))
    (setButton #\5 '(pong))
-   (setButton #\6 '(WinChatDisplay "\r\n" ((avatar 'lookAt)) ((avatarMap 'column) (avatar 'y) (+(avatar 'x)1))))
+   (setButton #\6 '(WinChatDisplay "\n" ((avatar 'lookAt)) ((avatarMap 'column) (avatar 'y) (+(avatar 'x)1))))
    (setButton #\7 '(NewKat))
    (setButton #\8 '((avatarMap 'incLightSource) (avatar 'y) (avatar 'x)))
    (setButton CHAR-CTRL-F '(writeIco))
@@ -715,7 +715,7 @@
          (if (and (not (eq? "" talkInput))
                   (eq? #\: (string-ref talkInput 0)))
              ; Evaluate an expression Parse
-             (begin (WinChatDisplay "\r\n")
+             (begin (WinChatDisplay "\n")
                     (WinChatDisplay talkInput)
                     (WinChatDisplay "=>")
                     (WinChatDisplay
@@ -819,7 +819,7 @@
       (sleep 500)
       (~))))
    (begin
-     (WinChatSetColor 0 10) (WinChatDisplay "\r\n*Thus ends the journey*")
+     (WinChatSetColor 0 10) (WinChatDisplay "\n*Thus ends the journey*")
      (set! Stop #t)))))
 
 ; Originally a "walking kitty soldier"
@@ -859,7 +859,7 @@
        (set! cycles (- cycles 1))
        (if (and (not Stop) (< 0 cycles)) (~)))))
    (begin
-     (WinChatSetColor 0 10) (WinChatDisplay "\r\n*Thus ends the aimlessness*")
+     (WinChatSetColor 0 10) (WinChatDisplay "\n*Thus ends the aimlessness*")
      (set! Stop #t))))) ; walkAround
 
 
@@ -871,7 +871,7 @@
         (m 0) ; Map location ball is walking to
         (n 0))
    (set! pongPower #t)
-   (WinChatDisplay "\rnPong starts " dna " " name)
+   (WinChatDisplay "\nPong starts " dna " " name)
    (let ~ ((wall 0)) (if pongPower (begin
      (if (= wall 0) (begin (set! m (random MapBlockSize)) (set! n (- MapBlockSize 1)))
       (if (= wall 1) (begin (set! m 0)                     (set! n (random MapBlockSize)))
@@ -888,7 +888,7 @@
              (if pongPower (~ (cdr l))))
            (set! wall (+ 1 wall))))))
      (~ (modulo (+ wall 1) 4)))))
-   (WinChatDisplay "\r\nPong ends " dna " " name)
+   (WinChatDisplay "\nPong ends " dna " " name)
    (die)))) ; pong
 
 (define (pong)
@@ -903,7 +903,7 @@
 (define (tankTalk . l)
   (thread
     (sleep 500)
-    (WinChatSetColor 0 15) (WinChatDisplay "\r\nTank ")
+    (WinChatSetColor 0 15) (WinChatDisplay "\nTank ")
     (WinChatSetColor 0 7) (apply WinChatDisplay l)))
 
 (define tankHangupTime #f)
@@ -1059,14 +1059,14 @@
   (if ghostsOn
     (begin
       (WinChatSetColor 0 1)
-      (WinChatDisplay "\r\nYour pacman game is over."))
+      (WinChatDisplay "\nYour pacman game is over."))
     (begin
       (WinChatSetColor 0 15)
-      (WinChatDisplay "\r\nWelcome to pacman mode")
+      (WinChatDisplay "\nWelcome to pacman mode")
       (WinChatSetColor 0 7)
-      (WinChatDisplay "\r\n q.......quit")
-      (WinChatDisplay "\r\n g.......act like a ghost")
-      (WinChatDisplay "\r\n arrows..move pacman")))
+      (WinChatDisplay "\n q.......quit")
+      (WinChatDisplay "\n g.......act like a ghost")
+      (WinChatDisplay "\n arrows..move pacman")))
   (set! ghostsOn (not ghostsOn)) ; Call again to disable
   (thread (let ~ () (if ghostsOn (begin
     (semaphore-down walkSemaphore)
@@ -1344,8 +1344,8 @@
 ; Display welcome information an announce my presence
 (or QUIETLOGIN (begin
  (fancyDisplay 13 (string "Welcome to World, " (avatar 'name)))
- (WinChatSetColor 0 10) (WinChatDisplay "\r\nHit ? to toggle the help window")
- (WinChatSetColor 0 6) (WinChatDisplay "\r\nSee http://code.google.com/p/worldtm")
+ (WinChatSetColor 0 10) (WinChatDisplay "\nHit ? to toggle the help window")
+ (WinChatSetColor 0 6) (WinChatDisplay "\nSee http://code.google.com/p/worldtm")
  (saySystem (avatar 'name)
   (vector-random #(" *emerges from the Interwebs*"
                    " *CONNECT 2400*"
@@ -1367,7 +1367,7 @@
 
 
 ; Start Web client server
-;(if QUIETLOGIN (WWWInitialize))
+(if QUIETLOGIN (WWWInitialize))
 
 ; Keyboard command loop
 (let ~ () (let ((b (getKey)))
