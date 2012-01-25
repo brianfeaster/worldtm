@@ -154,7 +154,7 @@
 (loop 256 (lambda (i)
   (let ((d (vector-ref WinPaletteDesc i)))
     (WinPaletteGoto (caar d) (cdar d))
-    (WinPaletteColor i 0)
+    (WinPaletteColor i i)
     (WinPaletteDisplay #\ ))))
 
 
@@ -1367,7 +1367,7 @@
 
 
 ; Start Web client server
-(if QUIETLOGIN (WWWInitialize))
+;(if QUIETLOGIN (WWWInitialize))
 
 ; Keyboard command loop
 (let ~ () (let ((b (getKey)))

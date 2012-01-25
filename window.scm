@@ -27,21 +27,36 @@
 #\ð  #\ñ  #\ò  #\ó  #\ô  #\õ  #\ö  #\÷  #\ø  #\ù  #\ú  #\û  #\ü  #\ý  #\þ  #\ÿ) c))
 
 ; 256 color terminal escape sequence interface.
-(define colorTable
+(define colorTable #f)
+
+(define (ColorTable256)
+ (set! colorTable
   (let ((tbl (make-vector 65536)))
     (loop 65536 (lambda (i)
         (vector-set! tbl i (string "\e[48;5;" (number->string (/ i 256))
                                    ";38;5;" (number->string (modulo i 256)) "m"))))
     tbl))
+ 256)
 
 ; 16 color version of the 256 color table
-(rem define colorTable
-  (let ((tbl (make-vector 65536)))
+(define (ColorTable8)
+ (set! colorTable
+  (let ((tbl (make-vector 65536))
+        (cnv #(0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 0 4 4 4 12 12 2 6 6 6 6 12 2 6 6 6 6 12 2 2 6 6 6 6 2 6 6 6 14 14 10 10 14 14 14 14 1 5 5 5 5 12 3 8 6 12 12 12 3 2 6 12 12 12 3 2 6 6 6 6 3 10 10 14 14 14 10 10 10 14 14 14 1 5 5 5 5 13 3 3 5 12 12 12 3 2 8 12 12 12 3 2 2 6 6 6 3 10 10 14 14 14 10 10 10 14 14 14 1 5 5 5 13 13 3 9 5 5 13 13 3 3 9 5 13 13 3 3 3 7 12 12 11 10 10 14 14 14 10 10 10 14 14 14 9 5 5 13 13 13 3 9 9 13 13 13 3 3 9 13 13 13 3 3 3 13 13 12 11 11 11 10 7 15 11 11 10 15 15 15 9 9 13 13 13 13 9 9 9 13 13 13 3 9 9 13 13 13 3 3 3 9 13 13 11 11 11 11 15 15 11 11 11 15 15 15 0 0 8 8 8 8 8 8 8 8 8 8 7 7 7 7 7 7 7 7 7 7 15 15)))
     (loop 65536 (lambda (i)
-        (vector-set! tbl i (string "\e[" (if (> (modulo i 16) 7) "1;3" "0;3")
-                                         (number->string (modulo i 8))
-                                   ";4" (number->string (modulo (/ i 16) 8)) "m"))))
+      (let ((b (vector-ref cnv (/ i 256)))
+            (f (vector-ref cnv (modulo i 256))))
+        (vector-set! tbl i (string "\e[" (if (< 7 f) "0;1;3" "0;3") (number->string (modulo f 8))
+                                      (if (< 7 b) ";5;4" ";4") (number->string (modulo b 8)) "m")))))
     tbl))
+ 8)
+
+(define (ColorTable i)
+ (if (= i 256) (ColorTable256))
+ (if (= i 8) (ColorTable8)))
+
+(ColorTable 256)
+
 
 (define (integer->colorstring i) (vector-ref colorTable i))
 
@@ -565,7 +580,7 @@
    (mouseQueueRegister win #f))
 
  (define (mouseDispatch event y x) ; Send the handler "'mouse0 2 3" for example.
-   (letrec ((win ((Terminal 'topWin) y x))
+   (letrec ((win (topWin y x))
             (id (if win (win 'id) #f))
             (q (if id (vector-ref mouseQueueVector id) #f)))
      ;(or win (WinChatDisplay "\r\n" (list event y x)))
