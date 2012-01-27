@@ -566,10 +566,10 @@
 ; assume a closure.  Consider the closure -> closure's code -> the code's pre-compiled
 ; expression and return it (hack).
 (define (getButton ch)
-  (if (symbol? ch)
+  (if (char? ch)
+    (vector-ref Buttons ch)
     (let ((a (assq ch ButtonsSymbols)))
-      (if (pair? a) (cdr a) ()))
-    (vector-ref Buttons ch)))
+      (if (pair? a) (cdr a) ()))))
 
 (setButton 'down '(walk 6))
 (setButton #\j (lambda () (walk 6)))
@@ -626,7 +626,7 @@
 (setButton CHAR-CTRL-@ '(shutdown))
 (setButton CHAR-CTRL-Q '(shutdown))
 (setButton #\Q         '(shutdown))
-(setButton #eof        '(shutdown))
+(setButton #eof        '(shutdown' now))
 (setButton 'pgup '(scrollFocusedWindow 'up))
 (setButton 'pgdown '(scrollFocusedWindow 'down))
 (setButton 'home '(scrollFocusedWindow 'home))

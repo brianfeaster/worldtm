@@ -359,13 +359,13 @@
         (thread (HandleRequest Stream))
         (AcceptConnectionLoop))
       (begin
-        (WEB-DB "Unable to acquire a stream:" Stream " on socket:" Socket))))
+        (WEB-DB "ERROR: Unable to acquire a stream:" Stream " on socket:" Socket ".\n"))))
   ; Start a new listener thread
   (define (Start)
     (set! Socket (open-socket Port))
     (if (port? Socket)
         (thread (AcceptConnectionLoop))
-        (WEB-DB "Unable to start HTTP server on invalid socket:" Socket)))
+        (WEB-DB "ERROR: Unable to start HTTP server on invalid socket:" Socket ".\n")))
   ; TODO Doesn't work as expected.  Keep-alive connection keep going.
   (define (Stop) 
     (set! Socket #f))
