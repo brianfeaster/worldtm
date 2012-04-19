@@ -377,6 +377,7 @@
 (define (voice dna level text)
  (let ((e ((myEntityDB 'get) dna)))
    (displayl "\e[1;34m " (serialize-write (e 'name)) " " (serialize-write text) "\e[0m")
+   ; Log the chat
    (display (string (e 'name) "\t" text "\n") log)))
 
 (define (setCellAgent z y x cell)

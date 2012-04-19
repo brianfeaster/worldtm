@@ -705,13 +705,10 @@
    (keyQueueStackRegister keyQueue)
    ; Return a blocking key reader.  If passed an integer, timeout.  Anything else, shutdown.
    (lambda restargs
-     (if (null? restargs)
-       (QueueGet keyQueue)
-       (if (integer? (car restargs))
-         (QueueGet keyQueue timeout) ; TODO add timeout capabilities to this or rethink semaphore implementations.
-         (begin
-           (keyQueueStackUnRegister keyQueue)
-           (QueueDestroy keyQueue))))))
+     (cond ((null? restargs) (QueueGet keyQueue))
+           ((integer? (car restargs)) (QueueGet keyQueue timeout)) ; TODO add this timeout capability or rethink semaphore implementations.
+           (else (keyQueueStackUnRegister keyQueue)
+                 (QueueDestroy keyQueue)))))
 
  ; The default keyboard read queue.  Continuously read stdin and append to
  ; a queue accessed via (getKey).  It is possible that another queue has

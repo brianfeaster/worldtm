@@ -1,4 +1,5 @@
 (display "\n--Welcome to unit test scmt.scm----------------")
+(define SCMTPASS #t)
 
 
 ;
@@ -57,7 +58,41 @@
      (error "(testRecvSendByteWordLong): invalid match")))
    (set! c (+ step c)))))
 
-(or (load "adtt.scm") (error "\n\nadtt.scm test FAIL\n"))
+(or (load "adtt.scm") 
+ (begin
+   (error "\n\nadtt.scm test FAIL\n"))
+   (set! SCMTPASS #f))
+
+
+;
+; Update a store object
+;
+(load "store.scm")
+
+; Open or create a new store
+(define store (Store "storetest"))
+
+; Create a new key/value if a new store
+(or ((store 'exist?) 'val)
+    ((store 'add) 'val 0))
+
+; Get and increment value
+(define val ((store 'get) 'val))
+(set! val (+ 1 val))
+
+; Save value back to store and shtudown
+((store 'set) 'val val)
+((store 'shutdown))
+
+; Reopen store and verify store saved new value
+(set! store (Store "storetest" displayl))
+
+(or (eqv? val ((store 'get) 'val))
+    (begin (displayl "\nERROR:  store's val = " ((store 'get) 'val))
+           (set! SCMTPASS #f)))
+
+
+
 
 (display "\n                                                            ")
-(display "PASS\n")
+(displayl (if SCMTPASS "PASS" "FAIL") "\n")

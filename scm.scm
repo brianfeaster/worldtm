@@ -210,6 +210,15 @@
 (define (return)  (display RETURN))
 (define (beep)    (send "\a" stdout))
 
+(define (list . x) x)
+
+; TODO FIX THIS HACK
+(define char=? eq?)
+
+(define char-whitespace-list (list SPACE TAB NEWLINE RETURN))
+(define (char-numeric? c) (and (<= #\0 c) (<= c #\9)))
+(define (char-whitespace? c) (pair? (memq c char-whitespace-list)))
+
 (define (abs x) (if (< x 0) (- x) x))
 
 (define ( caar x)      (car (car x)))
@@ -224,6 +233,13 @@
 (define (cdadr x) (cdr (car (cdr x))))
 (define (cddar x) (cdr (cdr (car x))))
 (define (cdddr x) (cdr (cdr (cdr x))))
+
+
+; This creates symbols bound to closures implementing syntatic expressions
+(define (cdr p) (cdr p))
+(define (car p) (car p))
+
+
 (define (length l) (if (null? l) 0 (+ 1 (length (cdr l)))))
 (define (last l) (if (pair? l) (if (pair? (cdr l)) (last (cdr l)) (if (null? (cdr l)) (car l) (cdr l))) l))
 (define (list-skip l i) (cond ((null? l) l) ((= 0 i) l) (else (list-skip (cdr l) (- i 1)))))
@@ -466,8 +482,6 @@
 
 (define (vector-random v)
  (vector-ref v (random (vector-length v))))
-
-(define (list . x) x)
 
 (define (make-list num . default)
  (set! default (if (pair? default) (car default) ()))

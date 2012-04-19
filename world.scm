@@ -869,7 +869,6 @@
     ; Kill this avatar and IPC thread after announcing death
     (define (die)
       (stop) ; Halt any currently running macro
-      (or QUIETLOGIN (saySystem name " exits"))
       (ipcWrite `(die ,dna)) ; Announce that I'm leaving to other avatars
       (set! alive #f)) ; This will stop the thread from reading the IPC
     (define (jump z y x)
@@ -1109,18 +1108,22 @@
    (define (info) (list 'IrcAgent name z y x 'hasChild (pair? ChildStack)))
    ; Locals
    (define portIRC #f)
-   (define Server "irc.choopa.net")
-;   (define Server "irc.he.net")
+   (define Servers (list "irc.choopa.net" "static.radardog.com" "irc.he.net"))
    (define Port 6667)
    (define Nick "world")
    (define Nicks (BListCreate "w0rld" "worldtm" "world[tm]" "w0rld[tm]" "w0rldtm" "w[tm]rld" "w[]rld"))
-   ;(define channel "#worldtm")
    (define channel "#not-world")
    (define msgs (QueueCreate))
    ; Members
    (define (connectToIRCserver)
-     (set! portIRC (open-stream (open-socket Server Port)))
-     portIRC)
+     (let ~ ((srvs Servers))
+       (if (null? srvs) #f
+         (begin
+           (Debug "\r\n::IrcAgent Attempting to open IRC stream with " (car srvs) " port " Port)
+           (let ((newStream (open-stream (open-socket (car srvs) Port))))
+             (if newStream 
+               (set! portIRC newStream)
+               (~ (cdr srvs))))))))
    (define (send . l)
       (Debug "\r\n<" (serialize-write (apply string l)) ">")
       (map (lambda (s) (display s portIRC)) l)
@@ -1285,14 +1288,16 @@
    (define (say . l)
      (apply send "PRIVMSG " channel " :" (map (lambda (e) (apply string (display->strings e))) l)))
    (define (main)
-     (if (connectToIRCserver) (begin ; Make the connection
-       (Debug "\r\n::IrcAgent connected!  Starting scanStream loops")
-       (thread (scanStream))
-       (thread (msgsDispatcher))
-       (send "USER world 0 * :The World[tm] agent")
-       (send "NICK " Nick)
-       (sleep 500)
-       (send "JOIN " channel))))
+     (if (connectToIRCserver)
+       (begin ; Make the connection
+         (Debug "\r\n::IrcAgent connected on " portIRC ".  Starting scanStream loops")
+         (thread (scanStream))
+         (thread (msgsDispatcher))
+         (send "USER world 0 * :The World[tm] agent")
+         (send "NICK " Nick)
+         (sleep 500)
+         (send "JOIN " channel))
+       (Debug "\r\n::IrcAgent Unable to open a connection to " Servers)))
    ; WOOEE
    (if (pair? ChildStack)
      ; childstack = ((child parameters) child-macro . reset of child stack)
