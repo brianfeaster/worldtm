@@ -1413,14 +1413,20 @@ void asmAssemble (void) {
 
 	assert((0 < IBlockCount) && "There are no iblocks to assemble");
 
-	/* Create the code block object which all iblocks are compile to */
+	/* Create the code block object which all iblocks are compiled to */
 	asmPrepareIGraph(asmIBlock(iblockOffset));
 
-	if (ofalse != odebug) asmDumpIBlocks();
+	if (ofalse != odebug) {
+		fprintf(stderr, "\nasmAssemble() Un-optimized IGraph:");
+		asmDumpIBlocks();
+	}
 
 	asmOptimizeIGraph();
 
-	if (ofalse != odebug) asmDumpIBlocks();
+	if (ofalse != odebug) {
+		fprintf(stderr, "\nasmAssemble() Optimized IGraph:");
+		asmDumpIBlocks();
+	}
 
 	len = asmCountIGraphFields();
 	if (len) {

@@ -216,6 +216,7 @@ void compSyscallCompile (void) {
 		asmAsm(RET);
 		asmAssemble();
 	}
+	//objDisplay(r0, stderr);
 	DBEND(STR, compIsError()?" *ERROR*":"");
 }
 
@@ -1884,7 +1885,7 @@ void compCond (Num flags) {
 		} else if (saif == car(r3)) {
 			r3 = cdr(r3); /* Consider (r4 => . r3 */
 			r1=r0;  r2=onull; objCons12();           /* (translated) */
-			if (objIsPair(cdr(r3))) { /* Give warning if else clause followed by more clauses */
+			if (objIsPair(cdr(r3))) { /* Give warning if => clause followed by more clauses */
 				fprintf (stderr, "\nWARNING: compCond: cond's => expr not a single expression ");
 				objDisplay(r5, stderr);
 			}
@@ -1907,6 +1908,109 @@ void compCond (Num flags) {
 ret:
 	DBEND(STR, compIsError()?" *ERROR*":"");
 }
+
+
+/* Translate (case exp
+					(lst expresions...)
+					...)
+	into      (let ((case exp))
+					 (cond ((assv case 'lst) expresions...)
+							 ...))
+*/
+void compCase (Num flags) {
+ Num clauses=0;
+	DBBEG();
+
+	/* Push clauses, checking for non-lists and verifying the else clause is last */
+	r2 = cdr(rexpr); /* Skip symbol 'case and expression */
+	if (!objIsPair(r2)) {
+		compErrorRaise((Str)"Syntax error in case statement.  Missing key expression.");
+		goto ret;
+	}
+
+	vmPush(car(r2)); /* Push key expression */
+	r2 = cdr(r2); /* Consider all clauses */
+
+	while (objIsPair(r2)) { /* Over all clauses  expr = (<clause> ....) */
+		r1 = car(r2); /* Consider next clause  r1 = <clause>  */
+		/* Error if clause is not a list */
+		if (!objIsPair(r1)) {
+			rexpr = r1;
+			DB("Syntax error 'case' clause");
+			compErrorRaise((Str)"Syntax error 'case' clause");
+			while(clauses--) vmPop(); /* Pop pushed clauses since not continuing */
+			goto ret;
+		} else if (!objIsPair(car(r1)) && selse != car(r1)) {
+			rexpr = r1;
+			DB("Syntax error 'case' clause's datum field not a list");
+			compErrorRaise((Str)"Syntax error 'case' clause's datum field not a list");
+			while(clauses--) vmPop(); /* Pop pushed clauses since not continuing */
+			goto ret;
+		} else {
+			DB("Pushing clause");
+			DBE objDisplay(r1, stderr);
+			clauses++;
+			vmPush(r1);
+			r2 = cdr(r2); /* Consider next clause for this loop */
+			if (selse == car(r1)) {
+				/* Else clause matched, so stop pushing clauses and give warning if more clauses follow */
+				if (r2 != onull) {
+					fprintf (stderr, "\nWARNING: compCase: case's else clause followed by more clauses ");
+					objDisplay(r2, stderr);
+				}
+				r2 = onull;
+			}
+		}
+	}
+
+	/* Pop clauses building the if/or/begin tree bottom-up into r0 */
+	DB (" Creating nested if/or/begin expression");
+	r0 = onull;
+	while (clauses--) {
+		r5 = vmPop(); /* Consider clause r5 = <clause> = <datum expr ...> = (r4 . r3) */
+		r4 = car(r5); /* Datum list or 'else symbol */
+		r3 = cdr(r5) ; /* Rest expr */
+		if (selse == r4) {
+			assert(onull == r0); /* This better be the first clause popped or not at all */
+			r1=r5; r2=onull; objCons12();
+		} else {
+			//if (r0 != onull) { r1=r0;  r2=onull; objCons12(); vmPush(r0); }
+			vmPush(r0);                                /* Push (translated) or () if first clause */
+			vmPush(r3);                                /* Push expressions */
+			r1=r4; r2=onull; objCons12();             /* (datum) */
+			r1=squote; r2=r0; objCons12();             /* '(datum) */
+			r1=r0; r2=onull; objCons12();             /* ('(datum)) */
+			r1=scase;  r2=r0; objCons12();             /* (case '(datum)) */
+			r1=smemv;  r2=r0; objCons12();             /* (memv case '(datum)) */
+			r1=r0;  r2=onull; objCons12();             /* ((memv case '(datum))) */
+			r1=spairp;  r2=r0; objCons12();             /* (pair? (memv case '(datum))) */
+			r1=r0;  r2=vmPop(); objCons12();           /* ((memv case '(datum)) expressions) */
+			r1=r0; r2=vmPop(); objCons12();            /* (((memv case '(datum)) expressions) translated) */
+		}
+	}
+
+	r1=scond; r2=r0; objCons12();    /* (cond ...) */
+
+	r1=r0; r2=onull; objCons12();    /* ((cond ...)) */
+
+	r1=vmPop();                   /* Consider key */
+	vmPush(r0);                   /* Save ((cond ..)) */
+
+	r2=onull; objCons12();       /* (key) */
+	r1=scase; r2=r0; objCons12();  /* (case key) */
+	r1=r0; r2=onull; objCons12();     /* ((case key)) */
+	r1=r0; r2=vmPop(); objCons12();     /* (((case key)) (cond ...)) */
+	r1=slet; r2=r0; objCons12();     /* (let ((case key)) (cond ...)) */
+
+	DB ("compCase translated ");
+	DBE objDisplay(r0, stdout);
+	rexpr = r0;
+	compCompileExpr(flags);
+
+ret:
+	DBEND(STR, compIsError()?" *ERROR*":"");
+}
+
 
 void compProcedureP (Num flags) {
  Obj Lend, Ltrue;
@@ -2602,6 +2706,7 @@ void compCompileExpr (Num flags) {
 			           else if (sand       == op) compOrAnd(flags);
 			           else if (saif       == op) compAIf(flags);
 			           else if (scond      == op) compCond(flags);
+						  else if (scase      == op) compCase(flags);
 			           else if (sprocedurep== op) compProcedureP(flags);
 			           else if (snullp     == op) compNullP(flags);
 			           else if (spairp     == op) compPairP(flags);
@@ -2613,6 +2718,7 @@ void compCompileExpr (Num flags) {
 			           else if (sportp     == op) compPortP(flags);
 			           else if (seofobjectp== op) compEOFObjectP(flags);
 			           else if (slet       == op) compLet(flags);
+						  else if (sletstar   == op) compLetrec(flags); /* TODO HACK */
 			           else if (sletrec    == op) compLetrec(flags);
 			           else if (squasiquote== op) compQuasiquote(flags);
 			           else if (squote     == op) compQuote(flags);

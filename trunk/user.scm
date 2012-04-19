@@ -59,7 +59,7 @@
 (define WinConsole ((Terminal 'BufferNew)
   (- (Terminal 'Theight) 27) 0
   26  (Terminal 'Twidth)
-  #x0802))
+  #xea02))
 (define WinConsolePuts (WinConsole 'puts))
 
 (define (WinConsoleDisplay . l)
@@ -572,7 +572,7 @@
       (if (pair? a) (cdr a) ()))))
 
 (setButton 'down '(walk 6))
-(setButton #\j (lambda () (walk 6)))
+(setButton #\j '(walk 6))
 (setButton 'up '(walk 2))
 (setButton #\k '(walk 2))
 (setButton 'left '(walk 4))
@@ -626,7 +626,7 @@
 (setButton CHAR-CTRL-@ '(shutdown))
 (setButton CHAR-CTRL-Q '(shutdown))
 (setButton #\Q         '(shutdown))
-(setButton #eof        '(shutdown' now))
+(setButton #eof        '(begin (sleep 2000) (shutdown "EOF"))) ; Give any interrupt time to exit rather than an #eof from the keyboard
 (setButton 'pgup '(scrollFocusedWindow 'up))
 (setButton 'pgdown '(scrollFocusedWindow 'down))
 (setButton 'home '(scrollFocusedWindow 'home))
@@ -814,7 +814,7 @@
     (set! Stop #f)
     (thread (let ~ ()
       (for-each
-        (lambda (x) (and Stop (unthread)) (walk x) (sleep 400))
+        (lambda (x) (and Stop (unthread)) (walk x) (sleep 2000))
         '(0 0 0 0 2 2 2 2 4 4 4 4 6 6 6 6))
       (sleep 500)
       (~))))
@@ -1145,9 +1145,10 @@
         (sleep 200)
         (fillgrid)))))
 
+; The IRC agent.  Assigned an instantiated IrcAgent object.
 (define irc #f)
 (define (NewIrc)
-  (or irc (set! irc (IrcAgent WinConsoleDisplay "IRC" (avatar 'z) (avatar 'y) (avatar 'x) ipc))))
+  (or irc (thread (set! irc (IrcAgent WinConsoleDisplay "IRC" (avatar 'z) (avatar 'y) (avatar 'x) ipc)))))
 
 (define LightPoints '(((8 -2) . 5) ((8 -1) . 5) ((8 0) . 5) ((8 1) . 5) ((8 2) . 5) ((7 -4) . 5) ((7 -3) . 5) ((7 -2) . 10) ((7 -1) . 10) ((7 0) . 10) ((7 1) . 10) ((7 2) . 10) ((7 3) . 5) ((7 4) . 5) ((6 -5) . 5) ((6 -4) . 10) ((6 -3) . 10) ((6 -2) . 15) ((6 -1) . 15) ((6 0) . 15) ((6 1) . 15) ((6 2) . 15) ((6 3) . 10) ((6 4) . 10) ((6 5) . 5) ((5 -6) . 5) ((5 -5) . 10) ((5 -4) . 10) ((5 -3) . 15) ((5 -2) . 20) ((5 -1) . 20) ((5 0) . 20) ((5 1) . 20) ((5 2) . 20) ((5 3) . 15) ((5 4) . 10) ((5 5) . 10) ((5 6) . 5) ((4 -7) . 5) ((4 -6) . 10) ((4 -5) . 10) ((4 -4) . 15) ((4 -3) . 20) ((4 -2) . 20) ((4 -1) . 25) ((4 0) . 25) ((4 1) . 25) ((4 2) . 20) ((4 3) . 20) ((4 4) . 15) ((4 5) . 10) ((4 6) . 10) ((4 7) . 5) ((3 -7) . 5) ((3 -6) . 10) ((3 -5) . 15) ((3 -4) . 20) ((3 -3) . 20) ((3 -2) . 25) ((3 -1) . 30) ((3 0) . 30) ((3 1) . 30) ((3 2) . 25) ((3 3) . 20) ((3 4) . 20) ((3 5) . 15) ((3 6) . 10) ((3 7) . 5) ((2 -8) . 5) ((2 -7) . 10) ((2 -6) . 15) ((2 -5) . 20) ((2 -4) . 20) ((2 -3) . 25) ((2 -2) . 30) ((2 -1) . 35) ((2 0) . 35) ((2 1) . 35) ((2 2) . 30) ((2 3) . 25) ((2 4) . 20) ((2 5) . 20) ((2 6) . 15) ((2 7) . 10) ((2 8) . 5) ((1 -8) . 5) ((1 -7) . 10) ((1 -6) . 15) ((1 -5) . 20) ((1 -4) . 25) ((1 -3) . 30) ((1 -2) . 35) ((1 -1) . 35) ((1 0) . 40) ((1 1) . 35) ((1 2) . 35) ((1 3) . 30) ((1 4) . 25) ((1 5) . 20) ((1 6) . 15) ((1 7) . 10) ((1 8) . 5) ((0 -8) . 5) ((0 -7) . 10) ((0 -6) . 15) ((0 -5) . 20) ((0 -4) . 25) ((0 -3) . 30) ((0 -2) . 35) ((0 -1) . 40) ((0 0) . 40) ((0 1) . 40) ((0 2) . 35) ((0 3) . 30) ((0 4) . 25) ((0 5) . 20) ((0 6) . 15) ((0 7) . 10) ((0 8) . 5) ((-1 -8) . 5) ((-1 -7) . 10) ((-1 -6) . 15) ((-1 -5) . 20) ((-1 -4) . 25) ((-1 -3) . 30) ((-1 -2) . 35) ((-1 -1) . 35) ((-1 0) . 40) ((-1 1) . 35) ((-1 2) . 35) ((-1 3) . 30) ((-1 4) . 25) ((-1 5) . 20) ((-1 6) . 15) ((-1 7) . 10) ((-1 8) . 5) ((-2 -8) . 5) ((-2 -7) . 10) ((-2 -6) . 15) ((-2 -5) . 20) ((-2 -4) . 20) ((-2 -3) . 25) ((-2 -2) . 30) ((-2 -1) . 35) ((-2 0) . 35) ((-2 1) . 35) ((-2 2) . 30) ((-2 3) . 25) ((-2 4) . 20) ((-2 5) . 20) ((-2 6) . 15) ((-2 7) . 10) ((-2 8) . 5) ((-3 -7) . 5) ((-3 -6) . 10) ((-3 -5) . 15) ((-3 -4) . 20) ((-3 -3) . 20) ((-3 -2) . 25) ((-3 -1) . 30) ((-3 0) . 30) ((-3 1) . 30) ((-3 2) . 25) ((-3 3) . 20) ((-3 4) . 20) ((-3 5) . 15) ((-3 6) . 10) ((-3 7) . 5) ((-4 -7) . 5) ((-4 -6) . 10) ((-4 -5) . 10) ((-4 -4) . 15) ((-4 -3) . 20) ((-4 -2) . 20) ((-4 -1) . 25) ((-4 0) . 25) ((-4 1) . 25) ((-4 2) . 20) ((-4 3) . 20) ((-4 4) . 15) ((-4 5) . 10) ((-4 6) . 10) ((-4 7) . 5) ((-5 -6) . 5) ((-5 -5) . 10) ((-5 -4) . 10) ((-5 -3) . 15) ((-5 -2) . 20) ((-5 -1) . 20) ((-5 0) . 20) ((-5 1) . 20) ((-5 2) . 20) ((-5 3) . 15) ((-5 4) . 10) ((-5 5) . 10) ((-5 6) . 5) ((-6 -5) . 5) ((-6 -4) . 10) ((-6 -3) . 10) ((-6 -2) . 15) ((-6 -1) . 15) ((-6 0) . 15) ((-6 1) . 15) ((-6 2) . 15) ((-6 3) . 10) ((-6 4) . 10) ((-6 5) . 5) ((-7 -4) . 5) ((-7 -3) . 5) ((-7 -2) . 10) ((-7 -1) . 10) ((-7 0) . 10) ((-7 1) . 10) ((-7 2) . 10) ((-7 3) . 5) ((-7 4) . 5) ((-8 -2) . 5) ((-8 -1) . 5) ((-8 0) . 5) ((-8 1) . 5) ((-8 2) . 5)))
 
@@ -1251,7 +1252,9 @@
 ; Global object for debugging at the command line
 (define www ())
 
-(define (WWWInitialize)
+(define (NewWWW)
+  ; Initialize web module's debug callback
+  (WWWDebugSet WinConsoleDisplay)
   (set! www (HTTPServer 7180))
   (WWWRegisterGetHandler
    (lambda (request)
@@ -1268,6 +1271,7 @@
        (sendFileIcon p s) #t)
       ((eqv? s "") (sendFileHtml p "world.html") #t)
       ((eqv? s "f.html") (sendFileHtml p "f.html") #t)
+      ((eqv? s "3d.html") (sendFileHtml p "3d.html") #t)
       ((eqv? s "c256.css") (sendFileCss p "c256.css") #t)
       ((eqv? s "lambda16.cur") (sendFileIcon p "lambda16.cur") #t)
       ((eqv? s "mover.js") (sendFileJavascript p "mover.js") #t)
@@ -1289,8 +1293,6 @@
                 (else (walk 1)))
           (sendHeaderText p 0)))
       ret)))
-  ; Initialize web module's debug callback
-  (WWWDebugSet WinConsoleDisplay)
   ; Create the web server object
   (avatar '(set! WalkCallback walkOccuredForWebClient))
   (avatar '(set! VoiceCallback WWWVoiceCallBack))
@@ -1332,14 +1334,14 @@
 ; Start map mouse action handler
 (mouseWalkActionHandlerLoop)
 
-; Catch some signal so that normal shutdown can occur
+; Catch some signals to control a proper shut-down
 ; TODO buggy repeated calls to the same handler occurs with I/O signals
-(signal-set 1 (lambda () (saySystem (avatar 'name) " signal 1 HUP")  (shutdown 'now)))
-(signal-set 2 (lambda () (say "signal 2 INT")  (shutdown 'now)))
-(signal-set 3 (lambda () (say "signal 3 QUIT")  (shutdown 'now)))
-(signal-set 6 (lambda () (say "signal 6 ABRT")  (shutdown 'now)))
-;(signal-set 13 (lambda () (say "signal 13 PIPE")  (shutdown 'now)))
-(signal-set 15 (lambda () (say "signal 15 TERM")  (shutdown 'now)))
+(signal-set 1  (lambda () (shutdown "Signal 1 HUP")))
+(signal-set 2  (lambda () (shutdown "Signal 2 INT")))
+(signal-set 3  (lambda () (shutdown "Signal 3 QUIT")))
+(signal-set 6  (lambda () (shutdown "Signal 6 ABRT")))
+(signal-set 13 (lambda () (shutdown "Signal 13 PIPE")))
+(signal-set 15 (lambda () (shutdown "Signal 15 TERM")))
 
 ; Display welcome information an announce my presence
 (or QUIETLOGIN (begin
@@ -1357,9 +1359,10 @@
                    " *turns on a VT100*")))))
 
 ; Call this to quit world
-(define (shutdown . now)
-  (if (or (pair? now) QUIETLOGIN (boxBool "Quit?")) (begin
+(define (shutdown . msg)
+  (if (or (pair? msg) QUIETLOGIN (boxBool "Quit?")) (begin
     (set! SHUTDOWN #t)
+    (or QUIETLOGIN (saySystem (avatar 'name) " exits  " (if (pair? msg) (car msg) "")))
     ((avatar 'die)) ; Force an IPC message so avatar's IPC reader thread calls die method
     (sleep 1000)
     (displayl "\e[" (Terminal 'Theight) "H\r\n\e[0m\e[?25h\e[?1000l\r\n")
@@ -1367,7 +1370,7 @@
 
 
 ; Start Web client server
-;(if QUIETLOGIN (WWWInitialize))
+;(if QUIETLOGIN (NewWWW))
 
 ; Keyboard command loop
 (let ~ () (let ((b (getKey)))

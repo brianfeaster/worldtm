@@ -38,12 +38,12 @@ Obj snull, sfalse, strue, seof,
     sopenblocked, sreadblocked, swriteblocked,
     saccepting, sconnecting, sopen, sclosed,
     sdefine, slambda, smacro, squote, sunquote, squasiquote, sbegin, sunquotesplicing,
-    sif, saif, scond, selse, sor, sand, ssetb,
+    sif, saif, scond, scase, selse, sor, sand, ssetb,
     svectorref, svectorvectorref, svectorvectorsetb, svectorsetb, svectorlength,
     scons, scar, scdr, ssetcarb, ssetcdrb,
-    sprocedurep, snullp,
+    smemv, sprocedurep, snullp,
     spairp, svectorp, scharp, sstringp, sintegerp, ssymbolp, sportp, sappend, seofobjectp,
-    sthread, slet, sletrec,
+    sthread, slet, sletstar, sletrec,
     seval, sapply, scallcc, ssyntaxrules,
     snot, sadd, ssub, smul, sdiv, slogand, ssignalhandlers;
 
@@ -732,6 +732,7 @@ void objInitialize (void) {
 		objNewSymbolStatic("if");           sif = r0;
 		objNewSymbolStatic("=>");           saif = r0;
 		objNewSymbolStatic("cond");         scond = r0;
+		objNewSymbolStatic("case");         scase = r0;
 		objNewSymbolStatic("else");         selse = r0;
 		objNewSymbolStatic("or");           sor = r0;
 		objNewSymbolStatic("and");          sand = r0;
@@ -746,6 +747,7 @@ void objInitialize (void) {
 		objNewSymbolStatic("cdr");          scdr = r0;
 		objNewSymbolStatic("set-car!");     ssetcarb = r0;
 		objNewSymbolStatic("set-cdr!");     ssetcdrb = r0;
+		objNewSymbolStatic("memv");         smemv = r0;
 		objNewSymbolStatic("procedure?");   sprocedurep = r0;
 		objNewSymbolStatic("null?");        snullp = r0;
 		objNewSymbolStatic("pair?");        spairp = r0;
@@ -759,6 +761,7 @@ void objInitialize (void) {
 		objNewSymbolStatic("eof-object?");  seofobjectp = r0;
 		objNewSymbolStatic("thread");       sthread = r0;
 		objNewSymbolStatic("let");          slet = r0;
+		objNewSymbolStatic("let*");         sletstar = r0;
 		objNewSymbolStatic("letrec");       sletrec = r0;
 		objNewSymbolStatic("eval");         seval = r0;
 		objNewSymbolStatic("apply");        sapply = r0;

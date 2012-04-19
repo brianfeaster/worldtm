@@ -13,7 +13,7 @@
 
 ; Global debug message object
 (define WEB-DEBUG displayl)
-(define (WEB-DB . r) (WEB-DEBUG "\r\n" (tid) " ") (apply WEB-DEBUG r))
+(define (WEB-DB . r) (WEB-DEBUG "\n" (tid) " ") (apply WEB-DEBUG r))
 
 ; Return str with initial '/' removed
 (define (chopSlash str)
@@ -250,6 +250,7 @@
       (file-r-other? fp) ; File must be o+r
       (let ((toks (rstrtok path #\.))) ; Must be a valid extension
         (cond ((string=? (cdr toks) "ico") (sendFileIcon wp path))
+              ((string=? (cdr toks) "jpg") (sendFileIcon wp path))
               ((string=? (cdr toks) "cur") (sendFileIcon wp path))
               ((string=? (cdr toks) "xml") (sendFileXml wp path))
               ((string=? (cdr toks) "html") (sendFileHtml wp path))

@@ -61,13 +61,20 @@ void osException (Obj str) {
 	   TODO this should be a static object and global symbol */
 	objNewSymbol ((Str)"ERRORS", 6);  r1=r0;  sysTGEFind();
 
+	if (onull != r0) {
+		r0 = car(r0); /* The ERROR vector */
+		/* The closure in the vector */
+		r0 = memVectorObject(r0, *(Num*)osThreadId(rrunning));
+		if (!memIsObjectType(r0, TCLOSURE)) r0 = onull;
+	}
+
 	if (onull == r0) {
 		if (ExceptionHandlerDefault) {
 			r0 = r3;
 			ExceptionHandlerDefault();
 			return;
 		} else {
-			/* No exception handler vector 'ERRORS' so halt process */
+			/* No exception handler closure found in global 'ERRORS' vector so halt process */
 			fprintf (stderr, "A runtime error/exception has occured:");
 			sysWrite(r3, stderr);
 			fprintf (stderr, "\nEntering debugger");
@@ -76,9 +83,9 @@ void osException (Obj str) {
 		}
 	}
 
-	/* Consider the ERROR vector from TGE binding then consider the closure */
-	r0 = car(r0);
-	r0 = memVectorObject(r0, *(Num*)osThreadId(rrunning));
+
+	// TODO this clobbers the current stack frame makeing it hard to debug
+	// and locate the code block the excepetion occured in.
 
 	/* r0 needs to remain the closure when a code block is first run since the
 	   called code expects to find a lexical enviroment in the closure in r0.
