@@ -1,0 +1,172 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
+<head>
+
+<title>World[tm]</title>
+<link rel="stylesheet" href="c256.css" type="text/css" media="screen" title="256 Color Style Sheet"/>
+<style type="text/css">
+ #map { color: #888; background-color: #000; font-family:fixedsys,monospace; }
+ #chat  {border:0; padding:0; margin:0; font-family:fixedsys,monospace; }
+ #chat p { margin:0;}
+ .clearboth { clear:both }
+</style>
+
+<script type="text/javascript" src="mover.js"></script>
+<script type="text/javascript">//<![CDATA[
+
+ /* Render a map given an XML map block
+    <m><r><c f="foreground color" c="character"/>...</r>...</m>
+  */
+ var walkCount=0;
+ function UpdateMapHandler() {
+   if (this.readyState == 4  &&  this.status == 200  &&  this.responseXML != null) {
+     /* Clear the map section on the page */
+     document.getElementById('map').innerHTML = "";
+     /* Consider the map element's children */
+     var mapElement = this.responseXML.firstChild.childNodes; // <m>...</m>
+     for (var i=0; i < mapElement.length; ++i) {
+       /* Consider the row element's children */
+       var rowElement = mapElement[i].childNodes; // <r>...</r>
+       for (var j=0; j < rowElement.length; ++j) {
+         /* Consider a character element and it's color and character attributes */
+         var charElement = rowElement[j]; // <c f="" c=""/>
+         var colorStr = parseInt(charElement.getAttribute('f'));
+         var character = charElement.getAttribute('c');
+         if (character == " ") { character = String.fromCharCode(160); }
+         if (!character) character = "?";
+         /* Create a new span element representing  the new colored character */
+         var newSpanElement = document.createElement('span');
+         newSpanElement.setAttribute('class', 'c' + colorStr);
+         newSpanElement.insertAdjacentText('beforeEnd', character);
+         /* Insert the new span element into the map section on the page */
+         document.getElementById('map').appendChild(newSpanElement);
+       }
+       /* Each row requires a <br/> */
+       document.getElementById('map').appendChild(document.createElement('br'));
+     }
+     /* Start the map update request cycle again */
+     document.getElementById('count').innerHTML = walkCount++;
+     //setTimeout(MapLoaderLoop, 0);
+     MapLoaderLoop();
+   }
+ }
+
+ function MapLoaderLoop () {
+   var client = new XMLHttpRequest();
+   client.onreadystatechange = UpdateMapHandler;
+   if (walkCount) // Wait for map to update
+     client.open('GET', 'map', true);
+   else // First time request for map always returns a map
+     client.open('GET', 'map0', true);
+   client.send();
+ }
+
+ function walk (event)
+ {
+    var charcode;
+    if (event && event.which) { // Chrome/Mozilla
+        charcode = event.which;
+    }
+    else if (event && !event.which) { // IE
+        charcode = event.keyCode;
+    }
+
+    /* Write to the ID block 'walk' the char code */
+    document.getElementById('walk').innerHTML = charcode.toString();
+
+    /* Send the walk command to the world entity */
+    var client = new XMLHttpRequest();
+    var doit = 1;
+    if      (charcode == 72 || charcode == 37) client.open('HEAD', 'walk+4', true);
+    else if (charcode == 74 || charcode == 40) client.open('HEAD', 'walk+6', true);
+    else if (charcode == 75 || charcode == 38) client.open('HEAD', 'walk+2', true);
+    else if (charcode == 76 || charcode == 39) client.open('HEAD', 'walk+0', true);
+    else { doit = 0 }
+    if (doit) {
+      client.onreadystatechange = function empty(){};
+      client.send();
+    }
+ }
+
+ function UpdateChatHandler() {
+   if (this.readyState == 4  &&  this.status == 200  &&  this.responseText != null) {
+     /* Clear the map section on the page */
+     var ne = document.createElement("p")
+     ne.innerText = this.responseText;
+    var chatBox = document.getElementById('chat')
+     chatBox.appendChild(ne);
+     chatBox.scrollTop = chatBox.scrollHeight;
+     ChatLoaderLoop();
+   }
+ }
+
+ function ChatLoaderLoop () {
+   var client = new XMLHttpRequest();
+   client.onreadystatechange = UpdateChatHandler;
+   if (walkCount) // Wait for map to update
+     client.open('GET', 'chat', true);
+   else // First time request for map always returns a map
+     client.open('GET', 'chat0', true);
+   client.send();
+ }
+
+ function talkHandler (e, f) {
+   if (e.keyCode == 13) {
+     var client = new XMLHttpRequest()
+     client.open('POST', 'talk', true)
+     client.setRequestHeader("Content-type", "text/html")
+     client.send(f.value)
+     f.value = ""
+   }
+ }
+
+ function welcomeMessage () {
+   document.getElementById('chat').innerHTML +=
+   "Use VI-style or cursor keys to walk in map" +
+   "<br/>"
+ }
+
+ window.onload = function () {
+  MapLoaderLoop();
+  ChatLoaderLoop();
+  welcomeMessage();
+  window.Mover.addId('box')
+ }
+
+//]]></script>
+
+</head><body sstyle="cursor:url('http://72.14.188.107:7180/lambda16.cur'), pointer">
+
+<div id='box' style="float:right">
+<div id='map' style="display:inline-block" tabindex="1" onkeydown="walk(event)">
+,,..,,..,,..,,..,,..,,..,,..,,..<br/>
+..,,..,,..,,..,,..,,..,,..,,..,,<br/>
+,,..,,..,,..,,..,,..,,..,,..,,..<br/>
+..,,..,,..,,..,,..,,..,,..,,..,,<br/>
+,,..,,..,,..,,..,,..,,..,,..,,..<br/>
+..,,..,,..,,..,,..,,..,,..,,..,,<br/>
+,,..,,..,,..,,..,,..,,..,,..,,..<br/>
+..,,..,,..,,..,,..,,..,,..,,..,,<br/>
+,,..,,..,,..,,..,,..,,..,,..,,..<br/>
+..,,..,,..,,..,,..,,..,,..,,..,,<br/>
+,,..,,..,,..,,..,,..,,..,,..,,..<br/>
+..,,..,,..,,..,,..,,..,,..,,..,,<br/>
+,,..,,..,,..,,..,,..,,..,,..,,..<br/>
+..,,..,,..,,..,,..,,..,,..,,..,,<br/>
+,,..,,..,,..,,..,,..,,..,,..,,..<br/>
+....,,..,,..,,..,,..,,..,,..,,..<br/>
+</div><br/><i id="walk">Walk with cursor/VI keys</i><b id="count"></b>
+</div>
+
+<div id='chat' style="border:solid thin gray; overflow:auto; width:100%; height:12em"></div>
+<input id='type' type="text" value='' size="60" onkeypress="talkHandler(event,this)"/>
+
+<div class="clearboth" style='text-align:center'>
+ <div style='clear:both; font-size:smaller;'>
+  <a href='http://validator.w3.org/check/referer'>[XHTML 1.0]</a> &nbsp;
+  <a href='http://jigsaw.w3.org/css-validator/check/referer/'>[CSS 2.1]</a>
+ </div>
+</div>
+
+</body></html>
