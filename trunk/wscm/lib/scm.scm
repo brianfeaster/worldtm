@@ -620,11 +620,13 @@
 
 ; The read eval print loop along with an error/exception handler.
 (define repl-input ())
+
 (define (replloop)
   (display "\nwscm>")
   (set! repl-input (read stdin))
   (display (eval repl-input))
   (or (eof-object? repl-input) (replloop)))
+
 (define (repl . WELCOME)
   (set! WELCOME (if (null? WELCOME) "World Scheme" (car WELCOME)))
   (let ((msg (call/cc (lambda (c) (vector-set! ERRORS (tid) c) WELCOME))))

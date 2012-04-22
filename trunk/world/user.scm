@@ -10,11 +10,11 @@
 ;;    Prototypes_and_fun_things
 ;;   Genesis
 ;;
-(load "world.scm")
+(load "world/world.scm")
 (load "ultima4.cells")
 (load "scrabble.scm") ; TODO temporary
-(load "graphics.scm")
-(load "web.scm")
+(load "world/graphics.scm")
+(load "wwww/web.scm")
 
 (define HUB-PORT 7155)
 (define KITTEHBRAIN  #f)

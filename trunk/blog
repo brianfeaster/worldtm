@@ -3952,3 +3952,79 @@ Wed Apr 18 03:32:31 EDT 2012
 Sync source with svn then migrate to new layout.  move all C source to
 worldscheme with each C file in its own directory.  Test files will exist
 in the same directory.
+
+
+
+Thu Apr 19 03:36:26 EDT 2012
+
+The new layout:
+/root
+ blog
+ /wscm
+  README
+  Makefile
+  /docs
+  /lib
+  /src
+   /asm
+    asm.c
+    asmt.c
+   /comp
+    comp.c
+    compt.c
+   /h
+    {all h files}
+   /mem
+    mem.c
+    memt.c
+   /obj
+   /os
+   /sys
+   /vm
+   /wscm
+ /world
+  {scm files}
+ /wwww
+  world.html
+
+
+
+Fri Apr 20 01:42:12 EDT 2012
+
+In an attempt to make the binary location more flexible, I'm fighting the
+security restriction of no file access below the current location.  The
+workaround is to compile the scm.scm file into the binary.  I'll have to do a
+few things first:
+
+ * Compile the scm.scm file as a C string so replace '"' and '\' with '\"' and
+   '\\' then #include it in the source with a call to objNewString().
+ * Make the internal parser reentrant or guarantee it's not called again during
+   the evaluation of the scm.scm string (which includes an REPL within it).
+
+
+
+Sat Apr 21 00:22:58 EDT 2012
+
+Implementing 'open-string which creates an I/O port on an arbitrary string as if
+it were a stream.
+
+
+
+Sat Apr 21 22:36:56 EDT 2012
+
+The wscm binary is compiled with the scm.scm file now as a string in a boot-
+strapping REPL.  Although the binary is self contained now, programs still
+struggle when loading scripts that are not in the same directory as the parent
+process.
+
+The World Scheme source has been reorganized but testing is broken due to the
+above issue.  The individual C tests work but when calling scmt.scm it is unable
+to find other scm files in its directory (not that there's any support for it to
+begin with).
+
+
+
+Sun Apr 22 12:42:32 EDT 2012
+
+Do I want to import the processes environment table?  I think it would be a
+security risk.

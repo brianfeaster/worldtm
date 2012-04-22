@@ -5,6 +5,9 @@
 #include <sys/stat.h> /* mode_t */
 
 
+extern char LibPathBuff[];
+extern char WorkingPathBuff[];
+
 void sysNewClosure1Env (void);
 
 /* Scanner state fields */
@@ -75,6 +78,7 @@ void sysAcceptLocalStream (void);
 void sysRecv (void);
 void sysSend (void);
 void sysOpenFile (int oflag, mode_t mode, Num silent);
+void sysOpenString ();
 void sysSemaphoreDown (void);
 void sysSemaphoreUp (void);
 
