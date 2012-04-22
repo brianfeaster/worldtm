@@ -21,7 +21,7 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; IPC
 ;;
-(load "ipc.scm") ; Includes adt.scm
+(load "world/ipc.scm") ; Includes adt.scm
 (define ipc (Ipc #f HUB-PORT)) ; Instead of #f can pass in a serializer for debug messages
 (define ipcReader ((ipc 'newReader)))
 (define IpcWrite (ipc 'qwrite))
@@ -31,7 +31,7 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Avatar_and_entities
 ;;
-(load "entity.scm")
+(load "world/entity.scm")
 
 ; Extend the Entity class with a new one just for this Map module
 (define EntityBase Entity) ; First rename it

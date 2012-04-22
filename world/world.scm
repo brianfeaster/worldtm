@@ -12,9 +12,9 @@
 ;;    IRC_agent
 ;;
 
-(load "ipc.scm")
-(load "window.scm")
-(load "entity.scm") ; Glyph Sprite Entity EntityDb objects
+(load "world/ipc.scm")
+(load "world/window.scm")
+(load "world/entity.scm") ; Glyph Sprite Entity EntityDb objects
 
 (define SHUTDOWN #f) ; Signals to avatars that the process is going to shutdown
 (define QUIETLOGIN (and (< 2 (vector-length argv)) (eqv? "ADMINISTRATOR" (vector-ref argv 2))))

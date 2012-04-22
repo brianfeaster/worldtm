@@ -653,7 +653,7 @@ void osRecvBlock (void) {
 	r4 = 0; /* Character read count initialized to 0. */
 
 	sysRecv();
-	timedOut = (r2!=ofalse) && (*(Int*)r2 <= sysTime());
+	timedOut = (r2!=ofalse) && (*(Int*)r2 <= sysTime()); // BF: TODO move this inside the following if
 	if (r0 == ofalse)
 		if (!timedOut) {
 			/* Nothing read and haven't timed out yet so block thread */

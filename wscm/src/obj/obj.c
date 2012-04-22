@@ -284,11 +284,19 @@ void objNewVector1 (void) {
 	DBEND();
 }
 
+/*
+       FILE         SOCKET                            STRING
+       descriptor   descriptor                        ""
+       path         url                               string buffer
+       flags        port                              imm:string index
+       open/closed  accepting/connecting/open/closed  open/closed
+       
+*/
 void objNewPort (void) {
 	r0 = memNewVector(TPORT, 6);
-	memVectorSet(r0, 0, r1); /* Descriptor. */
-	memVectorSet(r0, 1, r2); /* Path or internet address string. */
-	memVectorSet(r0, 2, r3); /* Flags or port number. */
+	memVectorSet(r0, 0, r1); /* Descriptor or empty string. */
+	memVectorSet(r0, 1, r2); /* Path or internet address string or string buffer. */
+	memVectorSet(r0, 2, r3); /* Flags or port number or string index. */
 	memVectorSet(r0, 3, r4); /* State: accepting, connecting, open, closed. */
 	memVectorSet(r0, 4, ofalse); /* Push back or next available character. */
 	memVectorSet(r0, 5, ofalse); /* Can hold a finalizer if you want. */

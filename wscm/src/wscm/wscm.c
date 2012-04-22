@@ -20,7 +20,6 @@
 #include "obj.h"
 #include "vm.h"
 #include "mem.h"
-#include "cc.h"
 /* 
    Heap_Statistics
    Useful_functions
@@ -341,10 +340,11 @@ void wscmOpenLocalStream (void) {
 
 /* This can do anything.  I change it mainly for debugging and prototyping. */
 void syscallFun (void) {
-	objDisplay(rcode, stderr);
-	memTypeStringDumpAll(stderr);
-	fprintf(stderr, "\n");memDebugDumpObject(rstack, stderr);
-	fprintf(stderr, "\n");objDisplay(rstack, stderr);
+	//objDisplay(rcode, stderr);
+	//memTypeStringDumpAll(stderr);
+	//fprintf(stderr, "\n");memDebugDumpObject(rstack, stderr);
+	//fprintf(stderr, "\n");objDisplay(rstack, stderr);
+	//fprintf(stderr, "pwd=%s\n", get_current_dir_name());
 	r0 = otrue;
 }
 
@@ -467,6 +467,7 @@ ret:
    addresses.
 */
 void syscallSerializeDisplay (void) {
+ Obj o;
  static u8 buff[8192];
  Int ret;
 	DBBEG(" <= ");
@@ -502,15 +503,19 @@ void syscallSerializeDisplay (void) {
 			break;
 		case TPORT:
 			if (memIsObjectType(memVectorObject(r0, 1), TINTEGER))
-				ret = sprintf((char*)buff, "#SOCKET/PORT<DESC:"NUM" ADDR:"NUM" PORT:"NUM,
+				ret = sprintf((char*)buff, "#PORT<DESC:"NUM" ADDR:"NUM" PORT:"NUM" STATE:"STR">",
 				   (Num)memVectorObject(r0, 0),
 				   *(Num*)memVectorObject(r0, 1),
-				   *(Num*)memVectorObject(r0, 2));
-			else
-				ret = sprintf((char*)buff, "#SOCKET/PORT<DESC:"NUM" ADDR:%.*s PORT:"NUM,
+				   *(Num*)memVectorObject(r0, 2),
+				   objPortState(r0));
+			else {
+				o = memVectorObject(r0, 2); /* Consider the flags/port/index field */
+				ret = sprintf((char*)buff, "#PORT<DESC:"NUM" ADDR:%.*s PORT:"NUM" STATE:"STR">",
 				   (Num)memVectorObject(r0, 0),
 				   memObjectLength(memVectorObject(r0, 1)), (char*)memVectorObject(r0, 1), /* %* format takes two args */
-				   *(Num*)memVectorObject(r0, 2));
+					memIsObjectValid(o)?*(Num*)o:(Num)o,
+					objPortState(r0));
+			}
 			objNewString(buff, (Num)ret);
 /*
 			count += fprintf(stream, " STATE:");
@@ -1019,6 +1024,22 @@ ret:
 	DBEND();
 }
 
+void syscallOpenString (void) {
+	DBBEG();
+	if (wscmAssertArgCount1(__func__)) goto ret;
+
+	r1 = vmPop();
+	sysOpenString(); /* r1 contains string buffer to read */
+	
+	if (!memIsObjectType(r0, TPORT)) {
+		if (memIsObjectType(r0, TSTRING)) {
+			wscmError(0, "ERROR:: syscallOpenString");
+		}
+	}
+ret:
+	DBEND();
+}
+
 void syscallOpenNewFile (void) {
  Num silent=0;
  Int len;
@@ -1059,9 +1080,12 @@ void syscallClose(void) {
 		objDisplay(r0, stdout);
 	} if (objPortState(r0) == sclosed) {
 		printf ("WARNING: syscallClose: socket already closed: ");
-		objDisplay(r0, stdout);
+		//objDisplay(r0, stdout);
 	} else {
-		close(*(int*)r0);
+		/* Don't try and close a port-string */
+		if (onullstr != memVectorObject(r0, 0)) {
+			close(*(int*)r0);
+		}
 		memVectorSet(r0, 3, sclosed);
 	}
 	DBEND();
@@ -1107,15 +1131,39 @@ ret:
 	DBEND();
 }
 
+/* (read-char timeout port)
+   timeout : #f     blocking read
+              0     non-blocking read
+              1000  block for at most 1000ms
+*/
 void syscallReadChar (void) {
+ Num idx;
+ Str str;
 	DBBEG();
 	if (wscmAssertArgCount2(__func__)) goto ret;
 	r1=vmPop(); /* Port object */
 	r2=vmPop(); /* Timout */
 	if (memObjectType(r1) != TPORT) {
-		printf ("WARNING: syscallReadChar: not a socket: ");
+		printf ("WARNING: syscallReadChar: not a port object: ");
 		objDisplay(r1, stdout);
 		r0 = oeof;
+	} else if (onullstr == memVectorObject(r1, 0)) {
+	/* Port object is a port-string.  Return the next char and increment
+	   internal pointer.  EOF returned if entire string read. */
+		r0 = memVectorObject(r1, 4);
+		if (ofalse != r0)
+			/* Return push-back char */
+			memVectorSet(r1, 4, ofalse);
+		else {
+			str = memVectorObject(r1,1);
+			idx = (Num)memVectorObject(r1, 2);
+			if (idx == memObjectLength(str)) {
+				r0 = oeof; /* Return EOF */
+			} else {
+				r0 = objIntegerToChar(str[idx]);
+				memVectorSet(r1, 2, (Obj)(idx+1)); /* Increment index */
+			}
+		}
 	} else {
 		r3=onull;  /* tells recv that we just want a character. */
 		osRecvBlock();
@@ -1130,7 +1178,7 @@ void syscallUnreadChar (void) {
 	r1=vmPop(); /* Port. */
 	r0=vmPop(); /* Character. */
 	if (memObjectType(r1) != TPORT) {
-		printf ("WARNING: syscallUnreadChar: arg2 not a socket: ");
+		printf ("WARNING: syscallUnreadChar: arg2 not a port object: ");
 		objDisplay(r1, stdout);
 		r0 = oeof;
 	} else if (memObjectType(r0) != TCHAR) {
@@ -1594,11 +1642,14 @@ void wscmCreateRead (void) {
 		MVI, R4, 0l,             /* r4 <- Initial state. */
 		MVI, R6, 0l,             /* r6 <- initial yylength. */
 	 LABEL, Lscan,
-		/* Call recv block to read one char */
-		MVI, R2, ofalse, /* tell recv to not timeout */
-		MVI, R3, onull, /* tell recv that we want a character */
-		PUSH, R4,
-			SYSI, osRecvBlock, /* Syscall to read char. */
+		/* Call syscallReadChar to read one char.  It contains logic
+		   to handle string-ports so osRecvBlock not called any longer. */
+		PUSH, R4, // r4 clobbered so push
+			MVI, R3, ofalse, /* tell recv to not timeout */
+			PUSH, R2, /* arg 1: timeout */ 
+			PUSH, R1, /* arg 2: port object */
+			MVI, R1, 2l, /* arg count */
+			SYSI, syscallReadChar,
 		POP, R4,
 		MV, R3, R0,                     /* move char object to r3 */
 		MVI, R0, 0l, /* Initialize final state to 0.  Will return 0 when still in non-final state. */
@@ -1947,73 +1998,74 @@ void wscmInitialize (void) {
 
 	/* Bind usefull values r2=value r1=symbol. */
 	DB("Registering syscalls");
-	sysDefineSyscall (syscallFun, "fun");
-	sysDefineSyscall (syscallError, "error");
-	sysDefineSyscall (wscmDumpEnv, "env");
-	sysDefineSyscall (syscallQuit, "quit");
-	sysDefineSyscall (syscallDumpThreads, "dump-threads");
-	sysDefineSyscall (syscallString, "string");
-	sysDefineSyscall (syscallMakeString, "make-string");
-	sysDefineSyscall (syscallDebugger, "debugger");
-	sysDefineSyscall (syscallSubString, "substring");
-	sysDefineSyscall (syscallStringLength, "string-length");
-	sysDefineSyscall (syscallSerializeDisplay, "serialize-display");
-	sysDefineSyscall (syscallSerializeWrite, "serialize-write");
-	sysDefineSyscall (syscallNumber2String, "number->string");
-	sysDefineSyscall (syscallWrite, "write");
-	sysDefineSyscall (syscallDisplay, "display");
-	sysDefineSyscall (syscallVector, "vector");
-	sysDefineSyscall (syscallMakeVector, "make-vector");
-	sysDefineSyscall (syscallRandom, "random");
-	sysDefineSyscall (syscallEqP, "eq?");
-	sysDefineSyscall (syscallEquals, "=");
-	sysDefineSyscall (syscallNotEquals, "!=");
-	sysDefineSyscall (syscallStringEqualsP, "string=?");
-	sysDefineSyscall (syscallLessThan, "<");
-	sysDefineSyscall (syscallLessEqualThan, "<=");
-	sysDefineSyscall (syscallGreaterThan, ">");
-	sysDefineSyscall (syscallGreaterEqualThan, ">=");
-	sysDefineSyscall (syscallAdd, "+");
-	sysDefineSyscall (syscallMul, "*");
-	sysDefineSyscall (syscallDiv, "/");
-	sysDefineSyscall (syscallShiftLeft, "<<");
-	sysDefineSyscall (syscallShiftRight, ">>");
-	sysDefineSyscall (syscallLogAnd, "logand");
-	sysDefineSyscall (syscallSqrt, "sqrt");
-	sysDefineSyscall (syscallRemainder, "remainder");
-	sysDefineSyscall (syscallModulo, "modulo");
-	sysDefineSyscall (syscallSub, "-");
-	sysDefineSyscall (syscallTime, "time");
-	sysDefineSyscall (syscallUTime, "utime");
-	sysDefineSyscall (syscallSleep, "sleep");
-	sysDefineSyscall (syscallTID, "tid");
-	sysDefineSyscall (osUnthread, "unthread");
-	sysDefineSyscall (syscallOpenSocket, "open-socket");
-	sysDefineSyscall (syscallOpenStream, "open-stream");
-	sysDefineSyscall (syscallOpenFile, "open-file");
-	sysDefineSyscall (syscallOpenNewFile, "open-new-file");
-	sysDefineSyscall (syscallClose, "close");
-	sysDefineSyscall (syscallRecv, "recv");
-	sysDefineSyscall (syscallReadChar, "read-char");
-	sysDefineSyscall (syscallUnreadChar, "unread-char");
-	sysDefineSyscall (syscallReadString, "read-string");
-	sysDefineSyscall (syscallSend, "send");
-	sysDefineSyscall (syscallSeek, "seek");
-	sysDefineSyscall (syscallFileStat, "file-stat");
-	sysDefineSyscall (syscallTerminalSize, "terminal-size");
-	sysDefineSyscall (syscallStringRef, "string-ref");
-	sysDefineSyscall (syscallStringSetB, "string-set!");
-	sysDefineSyscall (syscallVectorLength, "vector-length");
-	sysDefineSyscall (syscallDebugDumpAll, "dump-heap");
-	sysDefineSyscall (syscallGarbageCollect, "garbage-collect");
-	sysDefineSyscall (syscallDisassemble, "disassemble");
-	sysDefineSyscall (syscallOpenSemaphore, "open-semaphore");
-	sysDefineSyscall (syscallCloseSemaphore, "close-semaphore");
-	sysDefineSyscall (syscallSemaphoreDown, "semaphore-down");
-	sysDefineSyscall (syscallSemaphoreUp, "semaphore-up");
-	sysDefineSyscall (syscallSignal, "signal");
-	sysDefineSyscall (syscallToggleDebug, "toggle-debug");
-	sysDefineSyscall (sysDumpTGE, "tge");
+	sysDefineSyscall(syscallFun, "fun");
+	sysDefineSyscall(syscallError, "error");
+	sysDefineSyscall(wscmDumpEnv, "env");
+	sysDefineSyscall(syscallQuit, "quit");
+	sysDefineSyscall(syscallDumpThreads, "dump-threads");
+	sysDefineSyscall(syscallString, "string");
+	sysDefineSyscall(syscallMakeString, "make-string");
+	sysDefineSyscall(syscallDebugger, "debugger");
+	sysDefineSyscall(syscallSubString, "substring");
+	sysDefineSyscall(syscallStringLength, "string-length");
+	sysDefineSyscall(syscallSerializeDisplay, "serialize-display");
+	sysDefineSyscall(syscallSerializeWrite, "serialize-write");
+	sysDefineSyscall(syscallNumber2String, "number->string");
+	sysDefineSyscall(syscallWrite, "write");
+	sysDefineSyscall(syscallDisplay, "display");
+	sysDefineSyscall(syscallVector, "vector");
+	sysDefineSyscall(syscallMakeVector, "make-vector");
+	sysDefineSyscall(syscallRandom, "random");
+	sysDefineSyscall(syscallEqP, "eq?");
+	sysDefineSyscall(syscallEquals, "=");
+	sysDefineSyscall(syscallNotEquals, "!=");
+	sysDefineSyscall(syscallStringEqualsP, "string=?");
+	sysDefineSyscall(syscallLessThan, "<");
+	sysDefineSyscall(syscallLessEqualThan, "<=");
+	sysDefineSyscall(syscallGreaterThan, ">");
+	sysDefineSyscall(syscallGreaterEqualThan, ">=");
+	sysDefineSyscall(syscallAdd, "+");
+	sysDefineSyscall(syscallMul, "*");
+	sysDefineSyscall(syscallDiv, "/");
+	sysDefineSyscall(syscallShiftLeft, "<<");
+	sysDefineSyscall(syscallShiftRight, ">>");
+	sysDefineSyscall(syscallLogAnd, "logand");
+	sysDefineSyscall(syscallSqrt, "sqrt");
+	sysDefineSyscall(syscallRemainder, "remainder");
+	sysDefineSyscall(syscallModulo, "modulo");
+	sysDefineSyscall(syscallSub, "-");
+	sysDefineSyscall(syscallTime, "time");
+	sysDefineSyscall(syscallUTime, "utime");
+	sysDefineSyscall(syscallSleep, "sleep");
+	sysDefineSyscall(syscallTID, "tid");
+	sysDefineSyscall(osUnthread, "unthread");
+	sysDefineSyscall(syscallOpenSocket, "open-socket");
+	sysDefineSyscall(syscallOpenStream, "open-stream");
+	sysDefineSyscall(syscallOpenFile, "open-file");
+	sysDefineSyscall(syscallOpenString, "open-string");
+	sysDefineSyscall(syscallOpenNewFile, "open-new-file");
+	sysDefineSyscall(syscallClose, "close");
+	sysDefineSyscall(syscallRecv, "recv");
+	sysDefineSyscall(syscallReadChar, "read-char");
+	sysDefineSyscall(syscallUnreadChar, "unread-char");
+	sysDefineSyscall(syscallReadString, "read-string");
+	sysDefineSyscall(syscallSend, "send");
+	sysDefineSyscall(syscallSeek, "seek");
+	sysDefineSyscall(syscallFileStat, "file-stat");
+	sysDefineSyscall(syscallTerminalSize, "terminal-size");
+	sysDefineSyscall(syscallStringRef, "string-ref");
+	sysDefineSyscall(syscallStringSetB, "string-set!");
+	sysDefineSyscall(syscallVectorLength, "vector-length");
+	sysDefineSyscall(syscallDebugDumpAll, "dump-heap");
+	sysDefineSyscall(syscallGarbageCollect, "garbage-collect");
+	sysDefineSyscall(syscallDisassemble, "disassemble");
+	sysDefineSyscall(syscallOpenSemaphore, "open-semaphore");
+	sysDefineSyscall(syscallCloseSemaphore, "close-semaphore");
+	sysDefineSyscall(syscallSemaphoreDown, "semaphore-down");
+	sysDefineSyscall(syscallSemaphoreUp, "semaphore-up");
+	sysDefineSyscall(syscallSignal, "signal");
+	sysDefineSyscall(syscallToggleDebug, "toggle-debug");
+	sysDefineSyscall(sysDumpTGE, "tge");
 
 	/* For fun assign TGE symbol to a few internal C obj symbols */
 	r0=ocharacters; sysDefine("characters");
@@ -2021,11 +2073,11 @@ void wscmInitialize (void) {
 	//r0=osymbols; sysDefine("symbols");
 	wscmCreateRead();  sysDefine("read");
 	wscmCreateRepl();  sysDefine("repl2");
-	objNewInt(42); sysDefine ("y"); /* It's always nice to have x and y defined with useful values */
-	objNewInt(69); sysDefine ("x");
-	objNewSymbol((Str)"a", 1); r1=r0; /* It's also nice to have a pair ready to go */
-	objNewSymbol((Str)"b", 1); r2=r0;
-	objCons12(); sysDefine("c");
+	objNewInt(42);  sysDefine ("y"); /* It's always nice to have x and y defined with useful values */
+	objNewInt(69);  sysDefine ("x");
+	objNewSymbol((Str)"a", 1);  r1=r0; /* It's also nice to have a pair ready to go */
+	objNewSymbol((Str)"b", 1);  r2=r0;
+	objCons12();  sysDefine("c");
 
 	DBEND();
 }
@@ -2125,18 +2177,19 @@ void wscmASMReadEvalPrintLoop (int argc, char *argv[]) {
 
 /* Uses legacy C-based parsing code to parse a string.  It's then compiled
    into a thread and the virtual machine started up.
-      ;(sdisplay wscmLoadExpr)\
-      ;(sdisplay \"\\n\")\
 */
 void wscmStringReadEvalPrintLoop (void) {
 	DBBEG();
+
 	yy_scan_string ((Str)
-"(let ((FILE:SCM.SCM (open-file \"scm.scm\")))\
-  (let wscmLoad~ ((wscmLoadExpr (read FILE:SCM.SCM)))\
+"(let ((PORT-SCMLIB (open-string \""
+#include "scmlib.h"
+                  "\")))\
+  (let wscmLoad~ ((wscmLoadExpr (read PORT-SCMLIB)))\
     (or (eof-object? wscmLoadExpr) (begin\
       (eval wscmLoadExpr)\
-      (wscmLoad~ (read FILE:SCM.SCM)))))\
-  (close FILE:SCM.SCM)\
+      (wscmLoad~ (read PORT-SCMLIB)))))\
+  (close PORT-SCMLIB)\
   (send \"\r\nbye.\r\n\" stdout)\
   (quit))");
 	yyparse(); /* Use the internal parser */
@@ -2160,9 +2213,11 @@ void wscmStringReadEvalPrintLoop (void) {
 
 
 /* Bind wscheme's command line arguments to the vector 'argv
+   Also set *SCMILB* to the path of the running binary.
 */
 void wscmBindArgs (Num argc, char *argv[]) {
- Num i=0;
+ Num i=0, len;
+ s8 *last_slash;
 	DBBEG();
 	objNewVector(argc); r1=r0;
 	for (i=0; i<argc; i++) {
@@ -2170,6 +2225,26 @@ void wscmBindArgs (Num argc, char *argv[]) {
 		memVectorSet(r1, i, r0);
 	}
 	r0=r1; sysDefine ("argv"); 
+
+	/* Current working directory */
+	getcwd(WorkingPathBuff, PATH_MAX);
+	len = strlen(WorkingPathBuff);
+	/* Add trailing slash */
+	if ('/' != (WorkingPathBuff[len-1])) {
+		strcpy(WorkingPathBuff+len++, "/");
+	}
+	objNewString((Str)WorkingPathBuff, len);
+	sysDefine("*WORKINGPATH*");
+
+	/* Canonicalized path of this binary */
+	realpath(argv[0], LibPathBuff);
+	last_slash = strrchr(LibPathBuff, '/'); /* Match last '/' */
+	assert(NULL != last_slash);
+	strcpy(last_slash + 1, "lib/");
+	len = (Num)(last_slash - LibPathBuff + 5);
+	objNewString((Str)LibPathBuff, len);
+	sysDefine("*LIBPATH*");
+
 	DBEND();
 }
 
