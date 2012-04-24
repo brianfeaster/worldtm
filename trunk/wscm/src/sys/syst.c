@@ -19,6 +19,19 @@ void TESTscantTest (void) {
 	//objDump(r0, stdout);
 }
 
+/* Verify sandbox file access
+*/
+void sysCanonicalizePath (void);
+
+void TESTsandbox (void) {
+	objNewString((Str)"valid", 5); r1=r0; sysCanonicalizePath(); assert(r1==r0);
+	objNewString((Str)"../valid", 8); r1=r0; sysCanonicalizePath(); assert(r1==r0);
+	sysInitialize((Str)"syst");
+	objNewString((Str)"../wscm/valid", 13); r1=r0; sysCanonicalizePath(); assert(r1==r0);
+	objNewString((Str)"../invalid", 10); r1=r0; sysCanonicalizePath(); assert(ofalse==r0);
+	//objNewSymbol((Str)"*LIBPATH*", 9); r1=r0; sysTGEFind(); objDisplay(r0, stdout);
+	//objNewSymbol((Str)"*WORKINGPATH*", 13); r1=r0; sysTGEFind(); objDisplay(r0, stdout);
+}
 
 /* Open a local socket port and connect to it with another socket port */
 void TESTnetworkLocalClientServerConnection (void) {
@@ -59,7 +72,7 @@ void TESTnetworkLocalClientServerConnection (void) {
 
 /* Verify opening a stream on an unconnected local listener socket
    will signal a fail by returning the original listener socket */
-void TESTverifyLocalStreamBlocks () {
+void TESTverifyLocalStreamBlocks (void) {
 
 	//printf("\nOpening listening socket:  ");
 	objNewInt(7070); r1=r0;
@@ -129,9 +142,8 @@ void networkingReadStuff (void) {
 	//memDebugDumpYoungHeap(stdout);
 }
 
-
 int main (int argc, char *argv[]) {
-	sysInitialize();
+	sysInitialize(0);
 	testInitialize();
 
 	/* Perform a full garbage collection to move module related objects to old
@@ -140,6 +152,7 @@ int main (int argc, char *argv[]) {
 	memGarbageCollect();
 
 	TEST(TESTscantTest);
+	TEST(TESTsandbox);
 	TEST(TESTnetworkLocalClientServerConnection);
 	TEST(TESTverifyLocalStreamBlocks);
 	//TEST(networkingReadStuff);
@@ -147,4 +160,3 @@ int main (int argc, char *argv[]) {
 
 	return 0;
 }
-

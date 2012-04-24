@@ -3,6 +3,7 @@
 #include "debug.h"
 #include <stdio.h>
 #include <stdlib.h> /* labs */
+#include <unistd.h> /* getcwd */
 #include <fcntl.h> /* fcntl */
 #include <string.h> /* memcpy */
 #include <assert.h>
@@ -18,7 +19,6 @@
 
   ABOUT
 */
-
 
 
 const Num HashTableSize=8191; /* Best if prime */
