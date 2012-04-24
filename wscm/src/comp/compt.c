@@ -422,7 +422,7 @@ void parsepushoperands (void) {
 }
 
 
-int main (int argc, char *argv[]) {
+int main (void) {
 	compInitialize();
 	osInitialize(exceptionHandler);
 	testInitialize();

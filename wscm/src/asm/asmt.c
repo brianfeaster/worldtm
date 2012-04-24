@@ -760,7 +760,7 @@ void optimizeEmptyIBlock (void) {
 }
 
 
-int main (int argc, char *argv[]) {
+int main (void) {
 	asmInitialize();
 	vmInitialize(NULL, objDisplay); /* Register display with the VM code dumper */
 	testInitialize();

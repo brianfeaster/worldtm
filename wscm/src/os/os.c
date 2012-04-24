@@ -682,7 +682,7 @@ void osInitialize (Func exceptionHandler) {
 	if (shouldInitialize) {
 		DB("Activating module");
 		shouldInitialize = 0;
-		sysInitialize(); /* obj vm mem */
+		sysInitialize(0); /* obj vm mem */
 
 		DB("Registering rootset objects");
 		memRootSetRegister(rblocked);

@@ -1003,7 +1003,7 @@ void syscallOpenFile (void) {
 		silent=1;
 	}
 	r1 = vmPop();
-	sysOpenFile(O_RDWR, S_IRUSR|S_IWUSR, silent); /* r1 contains filename object */
+	sysOpenFile(O_RDWR, S_IRUSR|S_IWUSR, silent); /* r1 contains filename object, returns port in r0, original filename in r2 */
 	
 	if (!memIsObjectType(r0, TPORT)) {
 		if (silent) {
@@ -2216,8 +2216,7 @@ void wscmStringReadEvalPrintLoop (void) {
    Also set *SCMILB* to the path of the running binary.
 */
 void wscmBindArgs (Num argc, char *argv[]) {
- Num i=0, len;
- s8 *last_slash;
+ Num i=0;
 	DBBEG();
 	objNewVector(argc); r1=r0;
 	for (i=0; i<argc; i++) {
@@ -2225,25 +2224,6 @@ void wscmBindArgs (Num argc, char *argv[]) {
 		memVectorSet(r1, i, r0);
 	}
 	r0=r1; sysDefine ("argv"); 
-
-	/* Current working directory */
-	getcwd(WorkingPathBuff, PATH_MAX);
-	len = strlen(WorkingPathBuff);
-	/* Add trailing slash */
-	if ('/' != (WorkingPathBuff[len-1])) {
-		strcpy(WorkingPathBuff+len++, "/");
-	}
-	objNewString((Str)WorkingPathBuff, len);
-	sysDefine("*WORKINGPATH*");
-
-	/* Canonicalized path of this binary */
-	realpath(argv[0], LibPathBuff);
-	last_slash = strrchr(LibPathBuff, '/'); /* Match last '/' */
-	assert(NULL != last_slash);
-	strcpy(last_slash + 1, "lib/");
-	len = (Num)(last_slash - LibPathBuff + 5);
-	objNewString((Str)LibPathBuff, len);
-	sysDefine("*LIBPATH*");
 
 	DBEND();
 }
@@ -2255,6 +2235,7 @@ int main (int argc, char *argv[]) {
 	srandom((unsigned int)time(NULL));
 
 	wscmInitialize();
+	sysInitialize((Str)argv[0]); /* Engage filesystem sandboxing */
 
 	/* FUN: keep track of collector info.  Create a rootset object that holds list of
 	   lists each containing info on the 4 current heaps. */

@@ -4,10 +4,6 @@
 #include "globals.h"
 #include <sys/stat.h> /* mode_t */
 
-
-extern char LibPathBuff[];
-extern char WorkingPathBuff[];
-
 void sysNewClosure1Env (void);
 
 /* Scanner state fields */
@@ -39,17 +35,18 @@ void sysNewClosure1Env (void);
 s64 sysTime (void);
 void sysStackToList (void);
 void sysListToStack (void);
+void sysDumpCallStackCode (void);
 void syscallDebugger (void);
 
 /* Scanning_parsing */
 extern Chr yytext[];
 extern Num yyleng;
 
-Num parseString (Str str);
+Num transition (Num ch, Num state);
 void yyrestart(int fd);
 void yy_scan_string(Str buff);
 void yy_scan_bytes(u8 *buff, Num len);
-Num transition (Num ch, Num state);
+Num parseString (Str str);
 Num yylex (void);
 void yyparse (void);
 
@@ -83,6 +80,6 @@ void sysSemaphoreDown (void);
 void sysSemaphoreUp (void);
 
 /* Initialization */
-void sysInitialize (void);
+void sysInitialize (Str sandbox);
 
 #endif

@@ -4028,3 +4028,11 @@ Sun Apr 22 12:42:32 EDT 2012
 
 Do I want to import the processes environment table?  I think it would be a
 security risk.
+
+
+
+Tue Apr 24 17:12:37 EDT 2012
+
+Sandboxing streamlined.  By default no file access sandboxing occurs.  A working
+path can be passed to sysInitialize which allows access to the current working
+directory and below as well as the wscm/lib directory (and below).
