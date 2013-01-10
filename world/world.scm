@@ -1053,7 +1053,7 @@
               (ox (owner 'x)))
          (if (pair? steps) (walk (car steps))) ; Can't move if we're at the parent location
          (sleep (+ 500 (modulo dna 1000)))
-         (if FollowFlag
+         (if (and FollowFlag alive)
           ; Continue walking along current path or start a new one if parent moves
           (if (and (eqv? dy oy) (eqv? dx ox))
              (~ dy dx (if (pair? steps) (cdr steps) ()) (owner 'y) (owner 'x))
@@ -1108,7 +1108,7 @@
    (define (info) (list 'IrcAgent name z y x 'hasChild (pair? ChildStack)))
    ; Locals
    (define portIRC #f)
-   (define Servers (list "irc.choopa.net" "static.radardog.com" "irc.he.net"))
+   (define Servers (list  "irc.choopa.net" "static.radardog.com" "irc.he.net"))
    (define Port 6667)
    (define Nick "world")
    (define Nicks (BListCreate "w0rld" "worldtm" "world[tm]" "w0rld[tm]" "w0rldtm" "w[tm]rld" "w[]rld"))

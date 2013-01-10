@@ -110,7 +110,7 @@
 
 
 (define (sendFileXml wp filename)
- (define fp (open-file filename 1))
+ (define fp (if (port? filename) filename (open-file filename 1)))
  (define buff "")
  (WEB-DB  "::(sendFileXml)")
  (if fp (begin ; Did the file open successfully?
@@ -123,7 +123,7 @@
            (~)))))))
 
 (define (sendFileCss wp filename)
- (define fp (open-file filename))
+ (define fp (if (port? filename) filename (open-file filename 1)))
  (define buff "")
  (define len (vector-ref (file-stat fp) 7))
  (WEB-DB  "(sendFileCss)")
@@ -137,7 +137,7 @@
            (~)))))))
 
 (define (sendFileJavascript wp filename)
- (define fp (open-file filename))
+ (define fp (if (port? filename) filename (open-file filename 1)))
  (define buff "")
  (define len (vector-ref (file-stat fp) 7))
  (WEB-DB  "(sendFileJavascript)")
@@ -151,7 +151,7 @@
            (~)))))))
 
 (define (sendFileHtml wp filename)
- (define fp (open-file filename))
+ (define fp (if (port? filename) filename (open-file filename 1)))
  (define buff "")
  (define len (vector-ref (file-stat fp) 7))
  (WEB-DB  "(sendFileHtml)")
@@ -164,7 +164,7 @@
          (~)))))
 
 (define (sendFileText wp filename)
- (define fp (open-file filename))
+ (define fp (if (port? filename) filename (open-file filename 1)))
  (define len (vector-ref (file-stat fp) 7))
  (define buff "")
  (WEB-DB  "(sendFileText)")
@@ -178,7 +178,7 @@
 
 
 (define (sendFileIcon wp filename)
- (define fp (open-file filename))
+ (define fp (if (port? filename) filename (open-file filename 1)))
  (define buff "")
  (WEB-DB  "(sendFileIcon)")
  (sendHeaderIcon wp fp)
@@ -190,7 +190,7 @@
          (~)))))
 
 (define (sendFileBinary wp filename)
- (define fp (open-file filename))
+ (define fp (if (port? filename) filename (open-file filename 1)))
  (define buff "")
  (WEB-DB  "(sendFileBinary)")
  (sendHeaderBinary wp fp)
@@ -241,7 +241,7 @@
        (else #f)))
 
 ; Handle text file.  Return #f if no match.
-(define (WWWGetHandlerFile request) ;wp path)
+(define(WWWGetHandlerFile request) ;wp path)
  (define wp (request 'Stream))
  (define path (chopSlash (request 'URI)))
  (define fp (open-file path 1)) ; Open file, #f if failure
@@ -249,14 +249,14 @@
  (and fp ; Port to file must be open
       (file-r-other? fp) ; File must be o+r
       (let ((toks (rstrtok path #\.))) ; Must be a valid extension
-        (cond ((string=? (cdr toks) "ico") (sendFileIcon wp path))
-              ((string=? (cdr toks) "jpg") (sendFileIcon wp path))
-              ((string=? (cdr toks) "cur") (sendFileIcon wp path))
-              ((string=? (cdr toks) "xml") (sendFileXml wp path))
-              ((string=? (cdr toks) "html") (sendFileHtml wp path))
-              ((string=? (cdr toks) "css") (sendFileCss wp path))
-              ((string=? (cdr toks) "js") (sendFileJavascript wp path))
-              (else (sendFileText wp path))))))
+        (cond ((string=? (cdr toks) "ico") (sendFileIcon wp fp))
+              ((string=? (cdr toks) "jpg") (sendFileIcon wp fp))
+              ((string=? (cdr toks) "cur") (sendFileIcon wp fp))
+              ((string=? (cdr toks) "xml") (sendFileXml wp fp))
+              ((string=? (cdr toks) "html") (sendFileHtml wp fp))
+              ((string=? (cdr toks) "css") (sendFileCss wp fp))
+              ((string=? (cdr toks) "js") (sendFileJavascript wp fp))
+              (else (sendFileText wp fp))))))
 
 
 
@@ -365,7 +365,9 @@
   (define (Start)
     (set! Socket (open-socket Port))
     (if (port? Socket)
-        (thread (AcceptConnectionLoop))
+        (begin
+          (thread (AcceptConnectionLoop))
+          (WEB-DB "INFO: Accepting incoming connections on port " Port ".\n"))
         (WEB-DB "ERROR: Unable to start HTTP server on invalid socket:" Socket ".\n")))
   ; TODO Doesn't work as expected.  Keep-alive connection keep going.
   (define (Stop) 

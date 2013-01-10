@@ -1,3 +1,4 @@
+(display "\n--Welcome to unit test adtt.scm----------------")
 (load "lib/adt.scm")
 (define pass #t)
 

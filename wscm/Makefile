@@ -1,9 +1,16 @@
-# Makefile for Wscheme.  It's simple.
+# Makefile for Wscheme.  It's getting complicated.
 
-# Tell make where to find files
-VPATH = src/h src/mem src/vm src/obj src/sys src/os src/asm src/comp src/wscm
+# Path of the source files and include files
+SRC_PATH   = src
+H_DIR      = h
+TEST_DIR   = test
+H_PATH     = src/$(H_DIR)
+SRC_DIRS   = $(wildcard $(SRC_PATH)/*)
 
-CFLAGS = -I. -Isrc/h -Wall -ggdb -march=native -Wconversion -Wno-trigraphs -Wno-format -O3 -Werror
+# The individual modules proper that make up World Scheme (ignoring h and test dir): mem vm obj sys os asm comp wscm
+MODULES = $(filter-out $(H_DIR) $(TEST_DIR), $(patsubst src/%,%,$(SRC_DIRS)))
+
+CFLAGS = -I. -I$(H_PATH) -Wall -march=native -Wconversion -Wno-trigraphs -Wno-format -O3 -Werror
 # -I                Include this directory for h file searches
 # -Wall             Many warnings.
 # -ggdb             Debugging
@@ -19,92 +26,84 @@ LDFLAGS = -lm
 # -lm       Math library (probably trig functions).
 # -lcrypto  Crypto library for md5sum hash function.
 
-MEMTOBJS  =  memt.o                                         mem.o
-VMTOBJS   =   vmt.o                                    vm.o mem.o
-OBJTOBJS  =  objt.o                        obj.o       vm.o mem.o
-SYSTOBJS  =  syst.o                  sys.o obj.o       vm.o mem.o
-OSTOBJS   =   ost.o             os.o sys.o obj.o       vm.o mem.o
-ASMTOBJS  =  asmt.o                        obj.o asm.o vm.o mem.o
-COMPTOBJS = compt.o      comp.o os.o sys.o obj.o asm.o vm.o mem.o
-WSCMTOBJS = wscmt.o      comp.o os.o sys.o obj.o asm.o vm.o mem.o
+# Paths of all required files including h files.  Tests are located in their module directory.  (makefile variable)
+VPATH = $(SRC_DIRS)
 
-WSCMOBJS  =  wscm.o comp.o sys.o os.o obj.o asm.o vm.o mem.o
+# Modules as .o files
+OBJS := $(addsuffix .o, $(MODULES))
 
-wscm: $(WSCMOBJS)
+# Default target.  Start here!  Creates the World Scheme binary 'wscm'
+wscm: $(OBJS)
 
-mem.o:                                               mem.h globals.h debug.h
-
-vm.o:                                           vm.h mem.h globals.h debug.h
-
-obj.o:                              obj.h       vm.h mem.h globals.h debug.h
-
-sys.o:                   os.h sys.h obj.h       vm.h mem.h globals.h debug.h
-
-os.o:                    os.h       obj.h       vm.h mem.h globals.h debug.h
-
-asm.o:                              obj.h asm.h vm.h mem.h globals.h debug.h
-
-comp.o:           comp.h os.h sys.h obj.h asm.h vm.h mem.h globals.h debug.h
-
-wscm.o:           comp.h os.h sys.h obj.h asm.h vm.h mem.h globals.h debug.h scmlib.h
-
-build: globals.h debug.h mem.h vm.h obj.h asm.h os.h sys.h comp.h mem.c vm.c obj.c asm.c os.c sys.c comp.c wscm.c | scmlib.h
-	cat $^ > build.c
+# Creates and compile full binary from a monolithic source file via files src/h/*.h and src/module/*.c
+build: $(H_PATH)/*.h $(addsuffix .c,$(MODULES))
+	echo '/*' $^ > build.c '*/'
+	cat $^ >> build.c
 	gcc $(CFLAGS) $(LDFLAGS) build.c -o wscm
-	rm build.c scmlib.h
+	rm build.c
 
-scmlib.h: lib/scm.scm
-	(echo -n \" ; sed 's/\\/\\\\/g;s/"/\\"/g;s/\\/\\\\/g;s/"/\\"/g;s/$$/\\n\\/g' < $< ; echo \") > scmlib.h
+# Module dependencies 
+mem.o:                                     mem.h globals.h debug.h
+vm.o:                                 vm.h mem.h globals.h debug.h
+obj.o:                          obj.h vm.h mem.h globals.h debug.h
+sys.o:                    sys.h obj.h vm.h mem.h globals.h debug.h
+os.o:                os.h sys.h obj.h vm.h mem.h globals.h debug.h
+asm.o:         asm.h            obj.h vm.h mem.h globals.h debug.h
+comp.o: comp.h asm.h os.h sys.h obj.h vm.h mem.h globals.h debug.h
+wscm.o: comp.h asm.h os.h sys.h obj.h vm.h mem.h globals.h debug.h
 
-memt: $(MEMTOBJS)
+# C test names one-to-one with MODULES
+TESTS_C := $(addsuffix test, $(MODULES))
 
-vmt: $(VMTOBJS)
+# Scheme test names
+TESTS_SCM := $(addsuffix test, scm adt)
 
-objt: $(OBJTOBJS)
+# Unit test object file dependencies
+MEMTOBJS  :=                                    mem.o
+VMTOBJS   :=                               vm.o mem.o
+OBJTOBJS  :=                         obj.o vm.o mem.o
+SYSTOBJS  :=                   sys.o obj.o vm.o mem.o
+OSTOBJS   :=              os.o sys.o obj.o vm.o mem.o
+ASMTOBJS  :=        asm.o            obj.o vm.o mem.o
+COMPTOBJS := comp.o asm.o os.o sys.o obj.o vm.o mem.o
+WSCMTOBJS := comp.o asm.o os.o sys.o obj.o vm.o mem.o
 
-syst: $(SYSTOBJS)
-
-ost: $(OSTOBJS)
-
-asmt: $(ASMTOBJS)
-
+# Create the unit test binaries
+memt:  $(MEMTOBJS)
+vmt:   $(VMTOBJS)
+objt:  $(OBJTOBJS)
+syst:  $(SYSTOBJS)
+ost:   $(OSTOBJS)
+asmt:  $(ASMTOBJS)
 compt: $(COMPTOBJS)
-
 wscmt: $(WSCMTOBJS)
 
+# The TESTS_C rules.  These run the individual module unit tests.
 memtest: memt
 	./memt
-
 vmtest: vmt
 	./vmt
-
 objtest: objt
 	./objt
-
 systest: syst
 	./syst
-
 ostest: ost
 	./ost
-
 asmtest: asmt
 	./asmt
-
 comptest: compt
 	./compt
-
 wscmtest: wscmt
 	./wscmt
 
-worldscheme: wscm
-	./wscm lib/scmt.scm
+# Run the scheme unit tests.  The target 'MODtest' becomes prerequisite 'MODt.scm'
+$(TESTS_SCM): wscm
+	./wscm lib/$(@:%test=%t).scm
 
-tests: memt vmt objt syst ost asmt compt wscmt
-
-test: memtest vmtest objtest systest ostest asmtest comptest wscmtest worldscheme
+test: $(TESTS_C) $(TESTS_SCM)
 
 linecount:
-	wc Makefile globals.h debug.h mem.h vm.h obj.h sys.h os.h asm.h comp.h mem.c vm.c obj.c sys.c os.c asm.c comp.c wscm.c memt.c vmt.c objt.c asmt.c syst.c ost.c compt.c wscmt.c
+	wc Makefile $(H_PATH)/*.h $(foreach m, $(MODULES), $(SRC_PATH)/$(m)/$(m).c) $(foreach m, $(MODULES), $(SRC_PATH)/$(m)/$(m)t.c) lib/*.scm
 
 links:
 	ln -s src/h/globals.h  globals.h
@@ -127,9 +126,10 @@ links:
 	ln -s src/wscm/wscm.c wscm.c
 	ln -s lib/scm.scm      scm.scm
 
+.PHONY : linksclean clean
+
 linksclean:
 	rm -f globals.h debug.h mem.h vm.h obj.h sys.h os.h asm.h comp.h test.h mem.c vm.c obj.c sys.c os.c asm.c comp.c wscm.c scm.scm
 
-
 clean: linksclean
-	rm $(MEMTOBJS) $(VMTOBJS) $(ASMTOBJS) $(OBJTOBJS) $(OSTOBJS) $(SYSTOBJS) $(COMPTOBJS) $(WSCMTOBJS) $(WSCMOBJS) scmlib.h memt vmt objt syst ost asmt compt wscmt wscm build.c build.o
+	rm -f $(MEMTOBJS) $(VMTOBJS) $(ASMTOBJS) $(OBJTOBJS) $(OSTOBJS) $(SYSTOBJS) $(COMPTOBJS) $(WSCMTOBJS) $(WSCMOBJS) memt vmt objt syst ost asmt compt wscmt wscm build.c build.o

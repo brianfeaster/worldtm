@@ -119,6 +119,14 @@ void objNewString (Str str, Num len) {
    if (str) memcpy(r0, str, len);
 }
 
+/* Create new string copying len bytes from str to object in r0.
+*/
+void objNewStringString (Str str1, Num len1, Str str2, Num len2) {
+   r0 = memNewArray(TSTRING, (len1 + len2));
+   if (str1) memcpy(r0, str1, len1);
+   if (str2) memcpy((r0 + len1), str2, len2);
+}
+
 /* Create new string based on the string object in r1.
 */
 void objCopyString (void) {

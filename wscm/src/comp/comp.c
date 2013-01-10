@@ -1694,7 +1694,7 @@ ret:
 
 void compAsmCombination (Num flags) {
  Num IsTailCall = flags & CCTAILCALL;
- Obj Lsyscall, Lclosure, Lpopargs, Lpopargsdone, Lend;
+ Obj Lsyscall, Lclosure, Lpopargs, Lpopargsdone, Lend=0;
 	DBBEG("  IsTailCall="NUM, IsTailCall);
 	Lsyscall = asmNewLabel();
 	Lclosure = asmNewLabel();

@@ -68,6 +68,7 @@ void objNewReal     (Real x);
 void objCopyReal    (void);
 
 void objNewString  (Str str, Num len);
+void objNewStringString  (Str str1, Num len1, Str str2, Num len2);
 void objCopyString  (void);
 void objNewSymbol  (Str str, Num len);
 void objNewSymbolR5R6 (void); /* Like objNewSymbol only 'str'/'len' are in r5/r6 */

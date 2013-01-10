@@ -2,6 +2,8 @@
 #include "debug.h"
 #include <stdio.h>
 #include <stdlib.h>    /* random() */
+#include <dirent.h>    /* opendir */
+#include <sys/types.h> /* opendir */
 #include <unistd.h>
 #include <math.h>      /* sqrt() */
 #include <string.h>    /* strlen() */
@@ -400,8 +402,8 @@ void syscallMakeString (void) {
 		r2 = vmPop(); /* Fill char */
 		r1 = vmPop(); /* New length */
 
-		if (wscmAssertArgType (TINTEGER, r1, 1, 2, __func__) ||
-			 wscmAssertArgType (TCHAR,    r2, 2, 2, __func__)) goto ret;
+		if (wscmAssertArgType(TINTEGER, r1, 1, 2, __func__) ||
+			 wscmAssertArgType(TCHAR,    r2, 2, 2, __func__)) goto ret;
 
 		len = *(Num*)r1;
 		objNewString(NULL, len);
@@ -410,7 +412,7 @@ void syscallMakeString (void) {
 		/* Expression has no fill character */
 		len = *(Num*)(r1 = vmPop());
 
-		if (wscmAssertArgType (TINTEGER, r1, 1, 1, __func__)) goto ret;
+		if (wscmAssertArgType(TINTEGER, r1, 1, 1, __func__)) goto ret;
 
 		objNewString(NULL, len=*(Num*)r1);
 	}
@@ -428,9 +430,9 @@ void syscallSubString (void) {
 	r2 = vmPop();
 	r1 = vmPop();
 
-	if (wscmAssertArgType (TSTRING,  r1, 1, 3, __func__) ||
-	    wscmAssertArgType (TINTEGER, r2, 2, 3, __func__) ||
-	    wscmAssertArgType (TINTEGER, r3, 3, 3, __func__)) goto ret;
+	if (wscmAssertArgType(TSTRING,  r1, 1, 3, __func__) ||
+	    wscmAssertArgType(TINTEGER, r2, 2, 3, __func__) ||
+	    wscmAssertArgType(TINTEGER, r3, 3, 3, __func__)) goto ret;
 
 	end   = *(Num*)r3;
 	start = *(Num*)r2;
@@ -672,7 +674,7 @@ void syscallMakeVector (void) {
 	if (wscmAssertArgCountRange1To2(__func__)) goto ret;
 	if (1 == (Num)r1) {
 		r1 = vmPop(); /* length */
-		if (wscmAssertArgType (TINTEGER, r1, 1, 1, __func__)) goto ret;
+		if (wscmAssertArgType(TINTEGER, r1, 1, 1, __func__)) goto ret;
 		len = *(Num*)r1;
 		if (0 < len && len <= 0x100000) { /* TODO magic vector size limit */
 			objNewVector(len);
@@ -685,7 +687,7 @@ void syscallMakeVector (void) {
 	} else {
 		r2 = vmPop(); /* Fill object */
 		r1 = vmPop(); /* length */
-		if (wscmAssertArgType (TINTEGER, r1, 1, 2, __func__)) goto ret;
+		if (wscmAssertArgType(TINTEGER, r1, 1, 2, __func__)) goto ret;
 		len = *(Num*)r1;
 		if (0 < len) {
 			objNewVector(len);
@@ -1072,6 +1074,55 @@ ret:
 	DBEND();
 }
 
+void syscallReadDirectory (void) {
+ DIR *dir;
+ Int len;
+ char buff[0x200];
+ struct dirent *de;
+	DBBEG();
+	if (wscmAssertArgCount1(__func__)) goto ret;
+	r1 = vmPop();
+	if (wscmAssertArgType(TSTRING, r1, 1, 1, __func__)) goto ret;
+
+	sysCanonicalizePath(); /* Sandbox verifies r1 and copies to r0 */
+	if (ofalse == r0) {
+		wscmError(1, "Invalid directory path");
+		goto ret;
+	}
+
+	dir = opendir(r0);
+
+	if (NULL == dir) {
+		r0 = onull;
+		len = sprintf(buff, "Unable to open directory \""STR"\".  ["INT":"STR"]", r1, errno, strerror(errno));
+		assert(len<0x200);
+		wscmError(0, buff);
+		goto ret;
+	} else {
+		// Build a list of directory names as strings
+		len= 0;
+		de = readdir(dir);
+		while (de) {
+			if (DT_DIR == de->d_type)
+				objNewStringString((Str)de->d_name, strlen(de->d_name), (Str)"/", 1);
+			else
+				objNewString((Str)de->d_name, strlen(de->d_name));
+			vmPush(r0);
+			++len;
+			de = readdir(dir);
+		}
+		closedir(dir);
+		r0 = onull;
+		while (len--) {
+			r1=vmPop();
+			r2=r0;
+			objCons12();
+		}
+	}
+ret:
+	DBEND();
+}
+
 void syscallClose(void) {
 	DBBEG();
 	r0 = vmPop();
@@ -1103,14 +1154,14 @@ void syscallRecv (void) {
 	r2=vmPop(); /* Timeout (integer or #f) */
 	r3=vmPop(); /* Byte count integer */
 
-	if (wscmAssertArgType (TINTEGER, r3, 1, 3, __func__)) goto ret;
+	if (wscmAssertArgType(TINTEGER, r3, 1, 3, __func__)) goto ret;
 
 	if (r2 != ofalse && !memIsObjectType(r2, TINTEGER)) {
 		fprintf(stderr, "\r\nWSCM-ASSERT::Expect '"STR"' type or '#f' for argument 2", memTypeString(TINTEGER));
 		wscmError(3, __func__);
 		goto ret;
 	}
-	if (wscmAssertArgType (TPORT, r1, 3, 3, __func__)) goto ret;
+	if (wscmAssertArgType(TPORT, r1, 3, 3, __func__)) goto ret;
 
 	/* r3 gets the byte count.  It's then assigned an empty string
 	   character buffer with the specified length of characters to
@@ -2044,6 +2095,7 @@ void wscmInitialize (void) {
 	sysDefineSyscall(syscallOpenFile, "open-file");
 	sysDefineSyscall(syscallOpenString, "open-string");
 	sysDefineSyscall(syscallOpenNewFile, "open-new-file");
+	sysDefineSyscall(syscallReadDirectory , "read-directory");
 	sysDefineSyscall(syscallClose, "close");
 	sysDefineSyscall(syscallRecv, "recv");
 	sysDefineSyscall(syscallReadChar, "read-char");
@@ -2182,9 +2234,7 @@ void wscmStringReadEvalPrintLoop (void) {
 	DBBEG();
 
 	yy_scan_string ((Str)
-"(let ((PORT-SCMLIB (open-string \""
-#include "scmlib.h"
-                  "\")))\
+"(let ((PORT-SCMLIB (open-file (string *LIBPATH* \"/scm.scm\"))))\
   (let wscmLoad~ ((wscmLoadExpr (read PORT-SCMLIB)))\
     (or (eof-object? wscmLoadExpr) (begin\
       (eval wscmLoadExpr)\
