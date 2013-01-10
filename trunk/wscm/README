@@ -15,7 +15,7 @@ Quick_Start
 Build wscm:
    make
 
-Build by compiling an auto-generated monolithic source file:
+Build a more optimized binary by compiling an auto-generated monolithic source file:
    make build
 
 

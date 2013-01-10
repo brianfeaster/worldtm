@@ -718,7 +718,7 @@
              (begin (WinChatDisplay "\n")
                     (WinChatDisplay talkInput)
                     (WinChatDisplay "=>")
-                    (WinChatDisplay
+                    (WinChatWrite
                       (call/cc (lambda (c) ; Return here if an error occurs
                          (vector-set! ERRORS (tid) c)
                          (avatar (read-string (cdr-string talkInput))))))) ; Eval expression in Avatar's environment

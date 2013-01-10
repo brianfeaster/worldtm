@@ -24,11 +24,13 @@ void TESTscantTest (void) {
 void sysCanonicalizePath (void);
 
 void TESTsandbox (void) {
-	objNewString((Str)"valid", 5); r1=r0; sysCanonicalizePath(); assert(r1==r0);
-	objNewString((Str)"../valid", 8); r1=r0; sysCanonicalizePath(); assert(r1==r0);
+	//r1=onullstr; sysCanonicalizePath(); assert(r1==r0);
+	objNewString((Str)"README", 6); r1=r0; sysCanonicalizePath(); assert(r1==r0);
+	objNewString((Str)"../blog", 8); r1=r0; sysCanonicalizePath(); assert(r1==r0);
 	sysInitialize((Str)"syst");
-	objNewString((Str)"../wscm/valid", 13); r1=r0; sysCanonicalizePath(); assert(r1==r0);
-	objNewString((Str)"../invalid", 10); r1=r0; sysCanonicalizePath(); assert(ofalse==r0);
+	objNewString((Str)"README", 6); r1=r0; sysCanonicalizePath(); assert(r1==r0);
+	objNewString((Str)"../wscm/README", 14); r1=r0; sysCanonicalizePath(); assert(r1==r0);
+	objNewString((Str)"../blog", 8); r1=r0; sysCanonicalizePath(); assert(ofalse==r0);
 	//objNewSymbol((Str)"*LIBPATH*", 9); r1=r0; sysTGEFind(); objDisplay(r0, stdout);
 	//objNewSymbol((Str)"*WORKINGPATH*", 13); r1=r0; sysTGEFind(); objDisplay(r0, stdout);
 }

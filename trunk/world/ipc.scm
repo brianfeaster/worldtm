@@ -5,7 +5,7 @@
 ;; will connect to an existing hub if they can not acquire the hub port.  Each
 ;; peer and hub will also have a "single connection, single read" listener.
 ;;
-(load (string *LIBPATH* "adt.scm"))
+(load (string *LIBPATH* "/adt.scm"))
 
 (define (Ipc DisplayFunction . portNum)
  (define Debug (and DisplayFunction)) ; Can pass in #f to disable any debug messages

@@ -4036,3 +4036,25 @@ Tue Apr 24 17:12:37 EDT 2012
 Sandboxing streamlined.  By default no file access sandboxing occurs.  A working
 path can be passed to sysInitialize which allows access to the current working
 directory and below as well as the wscm/lib directory (and below).
+
+The call realpath() actuall requires the destination file to exist.  My code was
+ignoring the error and using the output buffer which just happened to always
+contain the nonexistant yet valid file name.
+
+I'm going to step back and allow symbolic link file access since that is an
+underlying filesystem implementation that world scheme shouldn't care about.  As
+long as the symbolic path matches, wscheme will accept and attmept to open or
+create the file.
+
+
+Thu Jun  7 01:59:30 EDT 2012
+Useful tips for Tank to share
+http://www.reddit.com/r/AskReddit/comments/uou6z/update_i_was_requested_to_compile_all_of_the/
+
+
+
+Tue Jan  8 00:29:38 EST 2013
+
+Implemented read-directory but sysCanonicalizePath() allows "..".  I implemented
+it with the assumption that it would only be verifying regular file names and
+never just plain paths.

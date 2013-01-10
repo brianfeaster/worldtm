@@ -2,6 +2,7 @@
 #define _TEST_H
 #include <stdlib.h>
 #include <string.h>
+#include <assert.h>
 
 #define TEST(fn) do {int c=printf("Calling test: "#fn"() ");fn();printf("%*.sPASS\n", 60<c?0:60-c, "");}while(0)
 
