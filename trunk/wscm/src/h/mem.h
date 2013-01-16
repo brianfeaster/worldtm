@@ -56,9 +56,13 @@ extern Heap heapStatic, heap, heapOld, heapNew;
 
  Mechanism to associate a C pointer address with a string.  A macro is
  provided to associate a pointer addresses and its string representation.
+ The anonymous obj pointer functions are used to temporarily protect
+ local C obj variables.
 ***************************************/
 void memPointerRegisterString (Obj obj, Str str);
 #define memPointerRegister(o) memPointerRegisterString(o, (Str)#o)
+void memRootSetRegisterAnonymous (Obj *objp);
+void memRootSetUnRegisterAnonymous (Obj *objp);
 
 Str memPointerString (Obj obj);
 

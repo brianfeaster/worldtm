@@ -128,6 +128,8 @@
   (set! Theight (cdr termSize)) (if (< Theight 2) (set! Theight 2))
   (set! Twidth  (car termSize)) (if (< Twidth 2) (set! Twidth 2))
   (set! WindowMask (make-vector-vector Theight Twidth #f))
+  ; Clear each window's visible count to coincide with the fresh WindowMask array
+  (map (lambda (w) ((w 'visibleCountClear))) WindowList)
   (WindowMaskReset 0 0 (- Theight 1) (- Twidth 1)))
 
  (define (InsideTerminal? y x)
@@ -176,9 +178,11 @@
      (if (((car w) 'InsideWindow?) gy gx) (car w) ; A window is visible at this location
      (~ (cdr w))))))
 
+
  ; Reset the terminal window mask and adjust the window's visible count
  (define (WindowMaskReset y0 x0 y1 x1)
-  (loop2 y0 (+ y1 1) x0 (+ x1 1) (lambda (gy gx)
+   (loop2 y0 (+ y1 1) x0 (+ x1 1) (lambda (gy gx)
+   ; Recompute each window's visible count
      (if (InsideTerminal? gy gx)
       (let ((prevwin (topWin gy gx)) ; Could be #f
             (topwin (TopmostWindowDiscover gy gx))) ; Get top win at global pos
@@ -238,6 +242,7 @@
 	; Methods
    (define (getColor y x) (vector-ref (vector-vector-ref DESC y x) 0))
    (define (getChar  y x) (vector-ref (vector-vector-ref DESC y x) 1))
+   (define (visibleCountClear) (set! VisibleCount 0))
    (define (visibleCountAdd c) (set! VisibleCount (+ VisibleCount c)))
    (define (goto y x)
      (set! needToScroll #f)
