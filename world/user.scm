@@ -657,6 +657,7 @@
    (setButton #\7 '(NewKat))
    (setButton #\8 '((avatarMap 'incLightSource) (avatar 'y) (avatar 'x)))
    (setButton CHAR-CTRL-F '(writeIco))
+   (setButton #\z '(WinChatDisplay "\n" (WinChat 'VisibleCount)))
 ))
 
 ; Perform button's action

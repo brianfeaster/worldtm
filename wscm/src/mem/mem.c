@@ -1,6 +1,6 @@
 #define DEBUG 0
 #define DB_DESC "MEM"
-#define DEBUG_ASSERT 0
+#define DEBUG_ASSERT 1
 #define DEBUG_ASSERT_STACK 0
 #define VALIDATE_HEAP 0
 #include "debug.h"
@@ -103,6 +103,9 @@ Num ObjStrCount = 0;
 
 /* Assign a fixed pointer location a string name.  Useful for assigning
    a descriptive string to a C function, C pointer or static scheme object.
+
+   The macro memPointerRegister(o) is provided which will pass the C variable
+   and string representation to this function.
 */
 void memPointerRegisterString (Obj obj, Str str) {
 	DBBEG("  Registering "OBJ"  string="STR" on existing str="STR, obj, str, memPointerString(obj));
@@ -287,6 +290,9 @@ Num memObjectSize (Obj o) {
  Register the address of an object pointer for the garbage collector to be
  included in the root set during a garbage collection.  A descriptive string is
  also registered with the pointer address.
+
+ The macro memRootSetRegister(op) is provided which will pass the C variable
+ and string representation to this function.
 *******************************************************************************/
 #define MemRootSetCountMax 64
 Obj *MemRootSet[MemRootSetCountMax];
@@ -296,6 +302,16 @@ void memRootSetRegisterString (Obj *objp, Str desc) {
 	assert(MemRootSetCount < MemRootSetCountMax);
 	MemRootSet[MemRootSetCount++] = objp;
 	memPointerRegisterString(objp, desc);
+}
+
+void memRootSetRegisterAnonymous (Obj *objp) {
+	assert(MemRootSetCount < MemRootSetCountMax);
+	MemRootSet[MemRootSetCount++] = objp;
+}
+
+void memRootSetUnRegisterAnonymous (Obj *objp) {
+	assert(0 < MemRootSetCount);
+	assert(objp == MemRootSet[--MemRootSetCount]);
 }
 
 

@@ -315,6 +315,7 @@ int main (int argc, char *argv[]) {
 	TEST(TESTNewLargeVectorObject);
 	TEST(TESTAutomaticGarbageCollect);
 
+   memDebugDumpHeapHeaders(stdout);
 	//memDebugDumpAll(stdout);
 	return 0;
 }

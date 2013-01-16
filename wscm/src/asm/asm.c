@@ -1306,12 +1306,20 @@ void asmOptimizeEmptyIBlock(void) {
 		/* Set incoming blocks' default and/or conditional block to my default */
 		lst = asmIBlockIncomingList(riblock);
 		assert(objIsPair(lst)); /* It's guaranteed to have an incoming list otherwise it wouldn't be tagged #t */
+		/* Register local C variables with GC */
+		memRootSetRegisterAnonymous(&mydef);
+		memRootSetRegisterAnonymous(&lst);
+		memRootSetRegisterAnonymous(&inib);
 		while (onull != lst) {
 			inib = car(lst); /* Consider an incoming block */
 			if (riblock == asmIBlockDefaultTag(inib)) asmIBlockLinkDefault(asmIBlockID(inib), asmIBlockID(mydef));
 			if (riblock == asmIBlockConditionalTag(inib)) asmIBlockLinkConditional(asmIBlockID(inib), asmIBlockID(mydef));
 			lst = cdr(lst);
 		}
+		/* Unregister local C variables */
+		memRootSetUnRegisterAnonymous(&inib);
+		memRootSetUnRegisterAnonymous(&lst);
+		memRootSetUnRegisterAnonymous(&mydef);
 		asmIBlockTagSet(riblock, ofalse); /* Now invalidate this now unused iblock */
 
 		DB("The result:");
