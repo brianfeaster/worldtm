@@ -62,7 +62,12 @@
  (apply string (display-list-serialize x ())))
 
 (define (display x . p)
- (set! p (if (null? p) stdout (car p))) ; Default port is STDIN.
+ (set! p (if (null? p) stdout
+         (if (and (pair? p)
+                  (port? (car p)))
+             (car p)  ; Make sure 2nd arg is a port object
+             (begin (send (display->string (list "WARNING: display: " p " is not a port")) stdout)
+                    stdout)))) ; Default port is STDIN.
  (for-each (lambda (s) (send s p))
            (display->strings x)))
 
@@ -109,7 +114,12 @@
   (apply string (write-list-serialize x ())))
 
 (define (write x . p)
- (set! p (if (null? p) stdout (car p))) ; Default port is STDIN.
+ (set! p (if (null? p) stdout
+         (if (and (pair? p)
+                  (port? (car p)))
+             (car p)  ; Make sure 2nd arg is a port object
+             (begin (send (display->string (list "WARNING: write " p " is not a port")) stdout)
+                    stdout)))) ; Default port is STDIN.
  (for-each (lambda (s) (send s p))
            (write->strings x)))
 

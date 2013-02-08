@@ -9,7 +9,7 @@
 ; irc.prison.net 6667
 ; irc.he.net 6667
 ; \x02 bold  \x16 inverse  \x1f underline
-(load "world.scm")
+(load "world/world.scm")
 
 
 (rem define (expandTabs line)
