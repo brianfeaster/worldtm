@@ -178,10 +178,17 @@
      (if (((car w) 'InsideWindow?) gy gx) (car w) ; A window is visible at this location
      (~ (cdr w))))))
 
+ ; Given a global terminal coordinate, plot a character
+ (define drawBackgroundCell (let ((i 0)) (lambda (gy gx)
+   (gputc (vector-ref #(#\[ #\t #\m #\] #\  ) i) ; The char
+          #xeb16                            ; The 8bit background and 8bit foreground color
+          gy gx)                            ; physical terminal y and x location
+   (if (< i 4) (set! i (+ i 1)))
+   (if (and (= i 4) (= 0 (random 20))) (set! i 0)))))
 
  ; Reset the terminal window mask and adjust the window's visible count
  (define (WindowMaskReset y0 x0 y1 x1)
-   (loop2 y0 (+ y1 1) x0 (+ x1 1) (lambda (gy gx)
+   (loop2 y0 y1 x0 x1 (lambda (gy gx)
    ; Recompute each window's visible count
      (if (InsideTerminal? gy gx)
       (let ((prevwin (topWin gy gx)) ; Could be #f
@@ -196,7 +203,7 @@
           (if topwin ((topwin 'visibleCountAdd) 1))) ; No previous window here
         (if topwin
           ((topwin 'globalRefresh) gy gx) ; Redraw glyph of this window at its global position.
-          (gputc #\# #x08 gy gx))))))) ; Default background terminal glyph
+          (drawBackgroundCell gy gx))))))) ; Render the background
 
  (define (lock)
    (semaphore-down PublicSemaphore))

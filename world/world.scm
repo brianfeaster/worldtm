@@ -1283,7 +1283,7 @@
           (if (and entity (not (eq? entity self)) (< dist level))
               (say IRCPRENAME (entity 'name) IRCPOSTNAME " " text)))))
    (define (IPCHandlerForce fz fy fx dir mag) ; Virtual
-     (funChangeColor)
+     (and (= fz z) (= fy y) (= fx x) (funChangeColor))
      ((parent 'IPCHandlerForce) fz fy fx dir mag))
    (define (say . l)
      (apply send "PRIVMSG " channel " :" (map (lambda (e) (apply string (display->strings e))) l)))
