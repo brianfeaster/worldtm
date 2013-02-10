@@ -1280,7 +1280,10 @@
         () ; Ignore system messages
         (letrec ((entity ((myMap 'entityDBGet) adna))
                  (dist (if entity (distance ((entity 'gps)) (gps)))))
-          (if (and entity (not (eq? entity self)) (< dist level))
+          (if (and entity
+                   (not (eq? entity self))
+                   (< dist level)
+                   (not (string=? "IRC" (substring (entity 'name) 0 3))))
               (say IRCPRENAME (entity 'name) IRCPOSTNAME " " text)))))
    (define (IPCHandlerForce fz fy fx dir mag) ; Virtual
      (and (= fz z) (= fy y) (= fx x) (funChangeColor))

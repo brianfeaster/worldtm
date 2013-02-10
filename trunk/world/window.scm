@@ -460,7 +460,8 @@
      (define (puts str)
        (letrec ((line (car Buffer)) ; Consider the current line structure
                 (color COLOR)
-                (strbuf ""))
+                (strbuf "")
+                (lastch #f)) ; Keep track of last character parsed
          (if (pair? line) ; Is there already something on the current line?
            (if (= (car line) COLOR)
              (begin
@@ -470,29 +471,32 @@
                  (len  (string-length str))
                  (strb ""))
           (if (= i len)
-            ; Save currently parsed line to buffer if a differnet color than
-            ; than or just update the strb with the newly parsed text.
+            ; Save currently parsed line to buffer if a differnet color
+            ; then or just update the strb with the newly parsed text.
             (begin
               (if color
                 (set-car! Buffer (cons COLOR (cons strb line))) ;; DUP ;;
                 (set-car! (cdr line) (string strbuf strb)))
               ((parent 'puts) strb)) ; Send parsed string to window
             ; Process the next char
-            (let ((ch (string-ref str i)))
-              (if (eq? ch NEWLINE)
+            (let ((ch (string-ref str i))
+                  (strbufNew #f))
+              (if (pair? (memq ch '(NEWLINE RETURN)))
                 (begin
                   ((parent 'puts) strb) ; Send parsed string to window
                   (return)(newline) ; as well as the cooked return/newline
                   (if (not (eq? strb ""))
-                    (if color
+                    (if coloR
                       (set-car! Buffer (cons COLOR (cons strb line))) ;; DUP ;;
                       (set-car! (cdr line) (string strbuf strb))))
                   (set! LineCount (+ 1 LineCount)) ; Add new strb to strb bufer
                   (set! Buffer (cons () Buffer)) ; Start a new line
                   (set! line ())
                   (set! color COLOR)
-                  (~ (+ i 1) len ""))
-                (~ (+ i 1) len (string strb ch)))))))) ; Add char to parsed strb
+                  (set! strbufNew ""))
+                (set! strbufNew (string strb ch))) ; Add char to parsed strb
+              (set! lastch ch)
+              (~ (+ i 1) len strbufNew)))))) ; loop
      (define (redrawBuffer)
        (let ~ ((c Wheight)
                (b (list-skip Buffer offset)))  ; Line buffer skipping over the 'offset' number of bottom rows
