@@ -4058,3 +4058,11 @@ Tue Jan  8 00:29:38 EST 2013
 Implemented read-directory but sysCanonicalizePath() allows "..".  I implemented
 it with the assumption that it would only be verifying regular file names and
 never just plain paths.
+
+
+
+Fri Feb  8 20:09:42 EST 2013
+
+Scrollback in a window doesn't do very well when a line ends in just a return. I
+can either cook the text OR honor the overwriting behavior that a lack of
+newline would produce.
