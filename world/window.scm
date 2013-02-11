@@ -9,7 +9,7 @@
 ; Return the char if printable and a #\. otherwise
 (define (char->visible c)
  (vector-ref #(
-#\.  #\.  #\.  #\.  #\.  #\.  #\.  #\.  #\.  #\.  #\.  #\.  #\.  #\.  #\.  #\.  
+#\.  #\.  #\.  #\.  #\.  #\.  #\.  #\.  #\.  #\.  #\.  #\.  #\.  #\.  #\.  #\.
 #\.  #\.  #\.  #\.  #\.  #\.  #\.  #\.  #\.  #\.  #\.  #\.  #\.  #\.  #\.  #\.
 #\   #\!  #\"  #\#  #\$  #\%  #\&  #\'  #\(  #\)  #\*  #\+  #\,  #\-  #\.  #\/
 #\0  #\1  #\2  #\3  #\4  #\5  #\6  #\7  #\8  #\9  #\:  #\;  #\<  #\=  #\>  #\?
@@ -284,7 +284,7 @@
               (semaphore-down WindowSemaphore)
               (putchar c)
               (semaphore-up WindowSemaphore)
-              (display CHAR-CTRL-H) 
+              (display CHAR-CTRL-H)
               (set! needToScroll #f)
               (set! TX (- TX 1)))))
    (define (hardwareScrollable?)
@@ -368,7 +368,7 @@
          (if (>= TX Wwidth)
            (if (= TY (- Wheight 1))
                (set! needToScroll #t) ; TODO remove this line then develop a framework to debug the ensuing issue
-               (begin 
+               (begin
                  (return)
                  (newline))))))))))
    (define (putc c)
@@ -445,58 +445,58 @@
 
    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
    ;; Buffer_subclass -- Implements a
-   ;; cooked text window with scrollback
-   ;; buffer
+   ;; cooked text window with scrollback buffer
    ;;
-   ;; A line will be a list of strings, characters and color indices
+   ;; Printing RED "abc" GREEN "def\n" BLUE "123" PURPLE "456\n" results in:
+   ;;
+   ;; The Buffer structure: ((PURPLE "456" BLUE "123")   second line
+   ;;                        (GREEN  "def" RED  "abc"))  first line
+   ;;
+   ;; Note purple 456 is the current line color and string and could have more characters appended
+   ;;
+   ;; A newline or return characters creates a new line entry in the buffer of the form (COLOR "")
+   ;; who's color could be changed.
+   ;;
    (define Buffer (let ((parent self)) (lambda ()
      (define (self msg) (eval msg))
-     (define Buffer (list ())) ; List of every line structures.  Initially contains an empty first line.
+     (define Buffer (list (list COLOR ""))) ; List of every line structures.  Initially contains an empty first line.
      (define LineCount 0)
      (define offset 0) ; Scroll back offset location index.  0 means end of buffer, greater than 0 number of lines back to scroll.
+     (define LastCh #f) ; Keep track of last character parsed/displayed
      ; Parse a string for newlines and add to the buffer's list of
      ; line structures which is a reverse list of consecutive color and string values (color str ...)
-     ; (set-color green0) (puts "01") (set-color red) (puts "ab\ncd") => ((red "cd")(red "ab" green "01"))
      (define (puts str)
-       (letrec ((line (car Buffer)) ; Consider the current line structure
-                (color COLOR)
-                (strbuf "")
-                (lastch #f)) ; Keep track of last character parsed
-         (if (pair? line) ; Is there already something on the current line?
-           (if (= (car line) COLOR)
-             (begin
-               (set! color #f)
-               (set! strbuf (cadr line)))))
-         (let ~ ((i 0)
-                 (len  (string-length str))
-                 (strb ""))
-          (if (= i len)
-            ; Save currently parsed line to buffer if a differnet color
-            ; then or just update the strb with the newly parsed text.
-            (begin
-              (if color
-                (set-car! Buffer (cons COLOR (cons strb line))) ;; DUP ;;
-                (set-car! (cdr line) (string strbuf strb)))
-              ((parent 'puts) strb)) ; Send parsed string to window
-            ; Process the next char
-            (let ((ch (string-ref str i))
-                  (strbufNew #f))
-              (if (pair? (memq ch '(NEWLINE RETURN)))
-                (begin
-                  ((parent 'puts) strb) ; Send parsed string to window
-                  (return)(newline) ; as well as the cooked return/newline
-                  (if (not (eq? strb ""))
-                    (if coloR
-                      (set-car! Buffer (cons COLOR (cons strb line))) ;; DUP ;;
-                      (set-car! (cdr line) (string strbuf strb))))
-                  (set! LineCount (+ 1 LineCount)) ; Add new strb to strb bufer
-                  (set! Buffer (cons () Buffer)) ; Start a new line
-                  (set! line ())
-                  (set! color COLOR)
-                  (set! strbufNew ""))
-                (set! strbufNew (string strb ch))) ; Add char to parsed strb
-              (set! lastch ch)
-              (~ (+ i 1) len strbufNew)))))) ; loop
+       (define line (car Buffer)) ; Current buffer line (might be empty if just created or newline sent)
+       (let ~ ((str str) ; The current string, length and parse index
+               (len (string-length str))
+               (i 0)
+               (last LastCh))
+        (cond ((= len 0) ; Empty string.  Done.
+               (set! LastCh last)
+               'done)
+              ((= i len) ; Parsed entire string.  Update Buffer structure.  Done.
+               (cond ((= (car line) COLOR) ; Current line color is same as window's color
+                      (set-car! (cdr line) (string (cadr line) str))) ; Just append parsed string to current string
+                     ((eq? (cadr line) "") ; current line string segment is empty
+                      (set-car! line COLOR) ; Replace current line color with current window color
+                      (set-car! (cdr line) str)) ; Replace curent empty line string with the new parsed string
+                     (else
+                      (set-car! Buffer (cons COLOR (cons str line))))) ; Add new color/str to current line
+               ((parent 'puts) str)
+               (set! LastCh last)) ; Send parsed string to window
+              (else
+                 (let ((ch (string-ref str i)))
+                   (if (pair? (memv ch (list NEWLINE RETURN)))
+                     (if (and (eq? ch NEWLINE) (eq? last RETURN))
+                         (~ (substring str 1 len) (- len 1) 0 ch) ; Recurse.  Ignore newline that follows a return
+                         (begin
+                           (~ (substring str 0 i) i i ch) ; Recurse.  Use this recursive call to display and save color/string to line
+                           (return)(newline) ; as well as a cooked newline
+                           (set! LineCount (+ 1 LineCount)) ; Add new strb to strb bufer
+                           (set! line (list COLOR ""))
+                           (set! Buffer (cons line Buffer)) ; Start a new line
+                           (if (< 1 len) (~ (substring str (+ i 1) len) (- len i 1) 0 ch)))) ; Recurse
+                     (~ str len (+ i 1) ch))))))) ; Recurse
      (define (redrawBuffer)
        (let ~ ((c Wheight)
                (b (list-skip Buffer offset)))  ; Line buffer skipping over the 'offset' number of bottom rows
@@ -531,7 +531,7 @@
            ((parent 'resize) Wheight Wwidth) ; Force a reset of the window glyphs
            (redrawBuffer))))
      (define (scrollForward)
-       (if (< 0 offset) 
+       (if (< 0 offset)
          (begin (set! offset (- offset 1))
                 ((parent 'resize) Wheight Wwidth) ; Force a reset of the window glyphs
                 (redrawBuffer))))
@@ -587,9 +587,9 @@
  (define (keyDispatch . charList)
    (if (pair? keyQueueStack) ; Only if a key queue exists is on the stack.  There might be nothing expecting keyboard characters.
      (map (lambda (c) (QueueAdd (car keyQueueStack) c)) charList)))
- 
+
  ;; Mouse character string handling
- (define (mouseQueueRegister win q) ; Was mouseDispatcherRegister 
+ (define (mouseQueueRegister win q) ; Was mouseDispatcherRegister
    (vector-set! mouseQueueVector (win 'id) q))
 
  (define (mouseQueueUnRegister win) ; Was mouseDispatcherUnRegister
@@ -602,9 +602,9 @@
      ;(or win (WinChatDisplay "\r\n" (list event y x)))
      (if q  (begin
               (QueueAdd q (list event (- y (win 'Y0)) (- x (win 'X0))))))))
- 
+
  ; State machine to read and parse stdin.
- 
+
  ; An "\e" scanned
  (define (keyScannerEsc)
   (let ((c (read-char 500 stdin))) ; Return character stdin or #f after 500ms
@@ -616,7 +616,7 @@
           ; Not a recognized escape sequence, so send escape and the [ character
           (else (keyDispatch CHAR-ESC)
                 (keyDispatch c)))))
- 
+
  ; An "\e[" scanned
  (define (keyScannerEscBracket)
    (let ((c (read-char #f stdin)))
@@ -635,7 +635,7 @@
            (else (keyDispatch CHAR-ESC)
                  (keyDispatch #\[)
                  (keyDispatch c)))))
- 
+
  ; An "\e[1" has been scanned
  (define (keyScannerEscBracket1)
   (letrec ((c (read-char #f stdin)))
@@ -708,7 +708,7 @@
            (x (- (read-char #f stdin) #\  1))
            (y (- (read-char #f stdin) #\  1)))
    (mouseDispatch action y x)))
- 
+
  (define (keyScannerAgentLoop)
   (let ((c (read-char #f stdin)))
     (if (eq? c CHAR-ESC)

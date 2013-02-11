@@ -260,10 +260,10 @@ Int wscmAssertArgType2 (Type t1, Type t2, Obj o, Num arg, Num argCount, char con
 
 /* Special case assert returns false, skipping error/exception call
 */
-Int wscmAssertArgType2NoException (Num arg, Type t1, Type t2, Obj o) {
-	if (t1 == memObjectType(o) || t2 == memObjectType(o)) return 0;
-	fprintf(stderr, "\r\nWSCM-ASSERT::Expect '"STR"' or '"STR"' type for argument "NUM,
-		memTypeString(t1), memTypeString(t2), arg);
+Int wscmAssertArgType3NoException (Num arg, Type t1, Type t2, Type t3 ,Obj o) {
+	if (t1 == memObjectType(o) || t2 == memObjectType(o) || t3 == memObjectType(o)) return 0;
+	fprintf(stderr, "\r\nWSCM-ASSERT::Expect '"STR"' or '"STR"' or '"STR"' type for argument "NUM,
+		memTypeString(t1), memTypeString(t2), memTypeString(t3), arg);
 	return -1;
 }
 
@@ -374,7 +374,7 @@ void syscallString (void) {
 	/* Verify each arg is a string and sum the lengths */
 	while (s < (Int)r1) {
 		r0 = memStackObject(rstack, s++);
-		if (wscmAssertArgType2NoException((Num)r1 - s + 1, TSTRING, TCHAR, r0)) {
+		if (wscmAssertArgType3NoException((Num)r1 - s + 1, TSTRING, TCHAR, TSYMBOL, r0)) {
 			osException((Obj)__func__);
 			goto ret;
 		}
