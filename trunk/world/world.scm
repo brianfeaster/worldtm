@@ -1108,7 +1108,7 @@
    (define (info) (list 'IrcAgent name z y x 'hasChild (pair? ChildStack)))
    ; Locals
    (define portIRC #f)
-   (define Servers (list  "irc.choopa.net" "static.radardog.com" "irc.he.net"))
+   (define Servers (list "irc.he.net" "irc.choopa.net" "static.radardog.com"))
    (define Port 6667)
    (define Nick "world")
    (define Nicks (BListCreate "w0rld" "worldtm" "world[tm]" "w0rld[tm]" "w0rldtm" "w[tm]rld" "w[]rld"))
