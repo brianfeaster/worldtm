@@ -461,7 +461,7 @@
      (define (self msg) (eval msg))
      (define Buffer (list (list COLOR ""))) ; List of every line structures.  Initially contains an empty first line.
      (define LineCount 0)
-     (define offset 0) ; Scroll back offset location index.  0 means end of buffer, greater than 0 number of lines back to scroll.
+     (define offset 0) ; Scrollback offset index.  0 = end of buffer. > 0 is number of lines back to view.
      (define LastCh #f) ; Keep track of last character parsed/displayed
      ; Parse a string for newlines and add to the buffer's list of
      ; line structures which is a reverse list of consecutive color and string values (color str ...)
@@ -500,7 +500,7 @@
      (define (redrawBuffer)
        (let ~ ((c Wheight)
                (b (list-skip Buffer offset)))  ; Line buffer skipping over the 'offset' number of bottom rows
-         (if (null? b) (set! b (list ""))) ; Don't expect the modified buffer list to be empty.  Bad base case.
+         (if (null? b) (set! b (list COLOR ""))) ; Don't expect the modified buffer list to be empty.  Bad base case.
          (if (or (= c 1) (null? (cdr b)))
            (home)
            (~ (- c 1) (cdr b)))
