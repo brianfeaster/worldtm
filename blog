@@ -4066,3 +4066,30 @@ Fri Feb  8 20:09:42 EST 2013
 Scrollback in a window doesn't do very well when a line ends in just a return. I
 can either cook the text OR honor the overwriting behavior that a lack of
 newline would produce.
+
+
+
+Tue Feb 12 01:59:29 EST 2013
+
+I rewrote the scrollback renderer to treat returns as a newline and a subsequent
+newline as redundant/ignored.
+
+Revisiting scrolling:  Scrolling around should be performed on a rendered line
+basis and not the actual physical lines.  This means the scrollback renderer
+will need to compensate for the window width as well as the resizing of the
+buffered window rerender correctly.  A buffered line that exceeds the window
+width will in effect become multiple physical lines relative to the window size.
+This will affect the scrollback position index.
+
+
+
+Fri Feb 15 01:13:13 EST 2013
+
+While attempting to make hacking world easier and adding the wscm binary to the
+shell's PATH variable, I discovered the shortcomings of the realpath() function.
+The *WORKINGPATH* ended up being the current directory and the *LIBPATH*
+"working/lib" which is incorrect.  It would seem realpath doesn't take into
+account the process might have been disovered via the PATH environment list.  I
+need to add an exception to the current file handlers which assume a relative
+or fixed path if a '/' appears in the argv[0] string and a PATH searched
+location if no '/' exists.
