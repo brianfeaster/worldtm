@@ -1027,8 +1027,8 @@
 
    ; Walks in a straight line to my owner/spawner.
    (define (walkToParent)
-     (let ((py (owner 'y))
-           (px (owner 'x)))
+     (let ((py (+ -5 (random 10) (owner 'y)))
+           (px (+ -5 (random 10) (owner 'x))))
        (let ~ ((steps (lineWalks y x py px)))
          (if (pair? steps) (begin
            (walk (car steps))
@@ -1108,11 +1108,12 @@
    (define (info) (list 'IrcAgent name z y x 'hasChild (pair? ChildStack)))
    ; Locals
    (define portIRC #f)
-   (define Servers (list "irc.he.net" "irc.choopa.net" "static.radardog.com"))
+   (define Servers (list "irc.choopa.net" "irc.he.net" "static.radardog.com"))
    (define Port 6667)
-   (define Nick "world")
-   (define Nicks (BListCreate "w0rld" "worldtm" "world[tm]" "w0rld[tm]" "w0rldtm" "w[tm]rld" "w[]rld"))
+   (define Nickname "world")
+   (define Nicknames (BListCreate "w0rld" "worldtm" "world[tm]" "w0rld[tm]" "w0rldtm" "w[tm]rld" "w[]rld"))
    (define channel "#not-world")
+   (define NickEntities (ListCreate))
    (define msgs (QueueCreate))
    ; Members
    (define (connectToIRCserver)
@@ -1195,21 +1196,21 @@
                                    (if (string=? channel chan) "" chan))
                                  " " (cdr (strtok parameters #\:)))))
    (define (cmdNICK prefix parameters)
-      (if (string=? Nick (car (strtok prefix #\!))) ; "nick!.....com"
+      (if (string=? Nickname (car (strtok prefix #\!))) ; "nick!.....com"
         (begin
-         (set! Nick (cdr (strtok parameters #\:))) ; ":newnick"
-         (speak (string "my new IRC nickname is " Nick)))))
+         (set! Nickname (cdr (strtok parameters #\:))) ; ":newnick"
+         (speak (string "my new IRC nickname is " Nickname)))))
    ; Received the error message that the nick I am assuming is invalid so try a new one
    (define (cmd433 parameters) ; ERR_NICKNAMEINUSE
      (letrec ((s (strtok parameters #\ )) ; ("toNick" . "desiredNick :Nickname is already in use.")
               (toNick (car s))
               (desiredNick (car (strtok (cdr s) #\ ))))
-        (if (string=? Nick desiredNick)
+        (if (string=? Nickname desiredNick)
           (begin
-            (BListAddBack Nicks Nick)
-            (set! Nick (BListDelFront Nicks))
-            (Debug "\r\nTrying to register with next prefered nick="Nick " " (BListList Nicks))
-            (send "NICK " Nick)))))
+            (BListAddBack Nicknames Nickname)
+            (set! Nickname (BListDelFront Nicknames))
+            (Debug "\r\nTrying to register with next prefered nick="Nickname " " (BListList Nicknames))
+            (send "NICK " Nickname)))))
   
    ; Joining multiple channels.
    ;  <"JOIN #worldtm,#not-world">
@@ -1232,6 +1233,9 @@
    ;  [shrewm!~worlda@li54-107.members.linode.com] [JOIN] [":#worldtm"]
    ;  [shrewm!~worlda@li54-107.members.linode.com][PART]["#worldtm"]
   
+   ; Agent quits IRC
+   ; [tangles_!~android@m630e36d0.tmodns.net][QUIT][":Ping timeout: 268 seconds"]
+
    ; The topic for the channel.
    ;   [irc.choopa.net] [332] ["world #worldtm :The World[tm] >---< IRC[k] gateway"]
    ;   [irc.choopa.net] [333] ["world #worldtm shrewm!~shroom@li54-107.members.linode.com 1302287052"]
@@ -1241,19 +1245,39 @@
    ;   [irc.choopa.net] [366] ["world #worldtm :End of /NAMES list."]
   
    (define (cmdJOIN prefix parameters)
-     (let ((joinee (car (strtok prefix #\!))))
-       (if (string=? Nick joinee)
+     (let ((nick (car (strtok prefix #\!))))
+       (if (string=? Nickname nick)
          ; I have joined an IRC channel for the first time
          (begin
            (sleep 1000)
-           (speak "Joined channel " parameters)
-           )
-         (speak (string joinee " has joined " (cdr (strtok parameters #\#)))))))
+           (speak "Joined channel " parameters))
+         ; Someone has joined a channel, create a new entity for him
+         (let ((newNick (Nick nick self)))
+           (ListAdd NickEntities newNick)
+           (speak (string nick " has joined " (cdr (strtok parameters #\#))))))))
+   ; Find this IRC nick's avatar/entity in the list
+   (define (lookupNickEntity name)
+     (let ((e (memp (lambda (e) (eqv? name (e 'channelName)))
+                    (ListGet NickEntities))))
+       (if (pair? e) (car e) #f)))
    (define (cmdPART prefix parameters)
-     (speak (string (car (strtok prefix #\!)) " has left " (cdr (strtok parameters #\#)))))
-   ; [tangles_!~android@m630e36d0.tmodns.net][QUIT][":Ping timeout: 268 seconds"]
+     (letrec ((nickName (car (strtok prefix #\!)))
+              (ent (lookupNickEntity nickName)))
+        (speak (string nickName " has left " (cdr (strtok parameters #\#))))
+        (if ent (begin
+         ((ent 'say) "I'm leaving the channel and World[tm] (parameters=" parameters ")")
+         ((ent 'die)))
+                (begin
+                  (speak (string "Can't find nick " nickName " in NickEntities list."))))))
    (define (cmdQUIT prefix parameters)
-     (speak (string (car (strtok prefix #\!)) parameters)))
+     (letrec ((nickName (car (strtok prefix #\!)))
+              (ent (lookupNickEntity nickName)))
+       (if ent
+         (begin
+           ((ent 'say) "I'm quitting IRC and World[tm]: " parameters ")")
+           ((ent 'die)))
+         (begin
+           (speak (string "IRC QUIT unknown nick [" prefix "] [" parameters "]"))))))
    ; Dispatch on queued IRC messages
    (define (msgsDispatcher)
      (let ((ircMsg (msgQueueGet)))
@@ -1297,7 +1321,7 @@
          (thread (scanStream))
          (thread (msgsDispatcher))
          (send "USER world 0 * :The World[tm] agent")
-         (send "NICK " Nick)
+         (send "NICK " Nickname)
          (sleep 500)
          (send "JOIN " channel))
        (Debug "\r\n::IrcAgent Unable to open a connection to " Servers)))
@@ -1311,3 +1335,45 @@
          ((obj 'main)))
        self)))
   ChildStack)) ; IRC_agent
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; IRC sub-agent representing a nick
+;;
+(define (Nick channelName ircAgent . ChildStack)
+ (apply Avatar (string  channelName ":" (ircAgent 'name))
+               (ircAgent 'z)  (+ (random 5) (ircAgent 'y))  (+ (random 5) (ircAgent 'x))
+               (ircAgent 'ipc)
+               #t ; No viewport flag
+  (list channelName ircAgent) ; Parameters to this child class
+  (macro (parent channelName ircAgent . ChildStack) ; Child
+   (define (self msg) (eval msg))
+   (define (info) (list 'Nick name Z Y X 'hasChild= (pair? ChildStack)))
+
+   (define (say . l)
+     (speak (apply string (map display->string l))))
+
+   (define (IPCHandlerVoice dna level text)
+    ())
+     ;((parent 'IPCHandlerVoice) dna level text) ; No need to call the parent else it appears the parent heard it.
+
+   ;; Walk randomly 2 times
+   (define (IPCHandlerForce fz fy fx dir mag)
+     (and (= fz z) (= fy y) (= fx x) (begin
+       ((parent 'IPCHandlerForce) fz fy fx dir mag)
+       (loop (random 2) (lambda (i) (walk dir))))))
+
+   (define (IPCHandlerMove dna z y x) ())
+
+   (define (main)
+     (speak name " enters " (ircAgent 'channel)))
+
+   ; WOOEE
+   (if (pair? ChildStack)
+     (apply (cadr ChildStack) self (append (car ChildStack) (cddr ChildStack)))
+     (begin
+       (let ~ ((obj self))
+         (if (obj 'parent) (~ (obj 'parent)))
+         ((obj 'main)))
+       self)))
+ ChildStack)) ; Nick

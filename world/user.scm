@@ -469,14 +469,14 @@
 
 (define (winMapMoveSelect)
  (cond ((eq? moveableWin avatarViewport)
-        (WinChatDisplay "\nWinChat")
-        (set! moveableWin WinChat))
+         (WinChatDisplay "\nWinChat")
+         (set! moveableWin WinChat))
        ((eq? moveableWin WinChat)
-        (WinChatDisplay "\nWinConsole")
-        (set! moveableWin WinConsole))
+         (WinChatDisplay "\nWinConsole")
+         (set! moveableWin WinConsole))
        (else
-        (WinChatDisplay "\navatarViewport")
-        (set! moveableWin avatarViewport))))
+         (WinChatDisplay "\navatarViewport")
+         (set! moveableWin avatarViewport))))
 
 (define (winMapUp)   ((moveableWin 'move) (+ -1 (moveableWin 'Y0))      (moveableWin 'X0)))
 (define (winMapDown) ((moveableWin 'move) (+  1 (moveableWin 'Y0))      (moveableWin 'X0)))
