@@ -379,6 +379,15 @@
      (semaphore-down WindowSemaphore)
      (loop (string-length str) (lambda (i) (putchar (string-ref str i))))
      (semaphore-up WindowSemaphore))
+   ; Clears rest of line.  Output will resume on the next line.
+   (define (clearToEnd)
+     (semaphore-down WindowSemaphore)
+     (let ~ ((i TX))
+       (if (< i Wwidth)
+         (begin
+           (putchar #\ )
+           (~ (+ i 1)))))
+     (semaphore-up WindowSemaphore))
    (define (toggle . state)
      (let ((newstate (if (null? state) (not ENABLED) (car state))))
        (or (= state newstate) (begin ; If same state, do nothing
@@ -502,39 +511,40 @@
                (b (list-skip Buffer offset)))  ; Line buffer skipping over the 'offset' number of bottom rows
          (if (null? b) (set! b (list COLOR ""))) ; Don't expect the modified buffer list to be empty.  Bad base case.
          (if (or (= c 1) (null? (cdr b)))
-           (home)
-           (~ (- c 1) (cdr b)))
+             (home)
+             (~ (- c 1) (cdr b)))
          (if (pair? (car b))
            (begin
-             (if (or (!= TY 0) (!= TX 0)) (begin (return) (newline))) ; Don't newline if home
              (let ~ ((line (car b)))
                (or (null? line) (begin
                  (~ (cddr line))
                  (set! COLOR (car line))
-                 ((parent 'puts) (cadr line)))))))))
+                 ((parent 'puts) (cadr line)))))
+             ((parent 'clearToEnd))))))
      (define (scrollHome)
        (if (< offset (- LineCount Wheight -2))
          (begin
            (set! offset (- LineCount Wheight -2))
-           ((parent 'resize) Wheight Wwidth) ; Force a reset of the window glyphs
+           ;((parent 'resize) Wheight Wwidth) ; Force a reset of the window glyphs
            (redrawBuffer))))
      (define (scrollEnd)
        (if (!= offset 0)
          (begin
            (set! offset 0)
-           ((parent 'resize) Wheight Wwidth) ; Force a reset of the window glyphs
+           ;((parent 'resize) Wheight Wwidth) ; Force a reset of the window glyphs
            (redrawBuffer))))
      (define (scrollBack)
        (if (< offset (- LineCount Wheight -2))
          (begin
            (set! offset (+ 1 offset))
-           ((parent 'resize) Wheight Wwidth) ; Force a reset of the window glyphs
+           ;((parent 'resize) Wheight Wwidth) ; Force a reset of the window glyphs
            (redrawBuffer))))
      (define (scrollForward)
        (if (< 0 offset)
-         (begin (set! offset (- offset 1))
-                ((parent 'resize) Wheight Wwidth) ; Force a reset of the window glyphs
-                (redrawBuffer))))
+         (begin
+           (set! offset (- offset 1))
+           ;((parent 'resize) Wheight Wwidth) ; Force a reset of the window glyphs
+           (redrawBuffer))))
      (define (resize h w)
        ((parent 'resize) h w)
        (redrawBuffer))

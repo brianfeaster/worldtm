@@ -288,6 +288,12 @@
   (if (equal? o (car l)) l
    (member o (cdr l)))))
 
+; Member predicate
+(define (memp p l)
+ (if (null? l) ()
+  (if (p (car l)) l
+   (memp p (cdr l)))))
+
 (define (assq o l)
  (if (null? l) ()
   (if (eq? o (caar l)) (car l)
