@@ -4093,3 +4093,25 @@ account the process might have been disovered via the PATH environment list.  I
 need to add an exception to the current file handlers which assume a relative
 or fixed path if a '/' appears in the argv[0] string and a PATH searched
 location if no '/' exists.
+
+
+
+Sun Mar  3 23:26:22 EST 2013
+
+Working out the details for the IRC agent.  Currently the agent spawns a new
+avatar for each nick in the IRC channel.  At first a feeback loop occured when
+I spawned two IRC agents.  I blocked IRC agents from propagating messages back
+to IRC from other IRC agents by ignoring voices from avatars with IRC as their
+name.  Now that I'm having the nickname avatars talk, I need to come up with
+a different way of multiple IRC agents to recognize when a Worldlian is talking
+versus when an IRClian is talking.  I could add a "type" to each entity or maybe
+rely on a bit or a range of the entity's DNA number.
+
+
+
+Tue Mar  5 21:57:12 EST 2013
+
+The canvas class could not handle unknown entity DNAs in the field object.  I
+enhanced the render method to use the default glyphUNKNOWN in this case.  I
+need to get the IRC agent to handle nick name changes.
+

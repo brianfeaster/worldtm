@@ -326,17 +326,20 @@
                 h))
   (define (render top y x)
    (let ((z (fieldTopHeight top y x))) ; Get z of first cell starting at top
-     (let ((celli (fieldCell z y x))) ; Field might contain an entity's dna
-       (glyphSet y x
+     (heightSet y x z)
+     (glyphSet y x
+               (let ((celli (fieldCell z y x)))
+                 ; Field location is either a glyph index or entity DNA number
                  (if (< CellMax celli)
-                    (letrec ((ent ((anEntityDB 'get) celli))
-                             (sprite (ent 'sprite))
-                             (ey (ent 'y))
-                             (ex (ent 'x)))
-                      ((sprite 'glyphRef) (- y ey) (- x ex)))
-                    (cellGlyph (cellRef celli)))
-                 (+ SUN (lum y x))))
-     (heightSet y x z)))
+                     (let ((ent ((anEntityDB 'get) celli))) ; Enitty at this location
+                       (if ent
+                         (let ((sprite (ent 'sprite))
+                               (ey (ent 'y))
+                               (ex (ent 'x)))
+                           ((sprite 'glyphRef) (- y ey) (- x ex))) ; Known entity's glyph
+                         glyphUNKNOWN)) ; Unknown entity so use a default glyph
+                     (cellGlyph (cellRef celli)))) ; Glyph at this location
+               (+ SUN (lum y x)))))
   ; MAIN
   ;(WinChatDisplay "\nInitializing canvas...")
   (resetArray 10 (cellGlyph (cellRef cellxx))) ; Initialize the canvas.  Must be called to finalize field array
@@ -1110,8 +1113,8 @@
    (define portIRC #f)
    (define Servers (list "irc.choopa.net" "irc.he.net" "static.radardog.com"))
    (define Port 6667)
-   (define Nickname "world")
-   (define Nicknames (BListCreate "w0rld" "worldtm" "world[tm]" "w0rld[tm]" "w0rldtm" "w[tm]rld" "w[]rld"))
+   (define Nickname #f)
+   (define Nicknames (BListCreate "world" "w0rld" "worldtm" "world[tm]" "w0rld[tm]" "w0rldtm" "w[tm]rld" "w[]rld"))
    (define channel "#worldtm")
    (define NickEntities (ListCreate))
    (define msgs (QueueCreate))
@@ -1132,6 +1135,7 @@
                (set! portIRC newStream)
                (~ (cdr srvs))))))))
    (define (send . l)
+      (DebugSetColor #xea #x03)
       (Debug "\r\n<" (serialize-write (apply string l)) ">")
       (map (lambda (s) (display s portIRC)) l)
       (display "\r\n" portIRC))
@@ -1205,26 +1209,42 @@
                 (car (strtok parameters #\:)) " to " (cdr (strtok parameters #\:)))))
    ; [Shrewm!~worlda@li54-107.members.linode.com][PRIVMSG]["#not-world :it's world!"]
    (define (cmdPRIVMSG prefix parameters)
-        (speak (string (car (strtok prefix #\!))
-                                 (let ((chan (car (strtok parameters #\ ))))
-                                   (if (string=? channel chan) "" chan))
-                                 " " (cdr (strtok parameters #\:)))))
+     (letrec ((nick (car (strtok prefix #\!)))
+              (recp (car (strtok parameters #\ )))
+              (text (cdr (strtok parameters #\:)))
+              (ent (lookupNickEntity nick)))
+       (if ent
+         ((ent 'say) (if (string=? channel recp)
+                         text                      ; Normal message to channel
+                         (string "((" text "))"))) ; Private message to me
+         (speak (string nick (if (string=? channel recp) "" recp) " " text)))))
+   (define (setNextNick)
+     (Debug "\r\nTrying to register with next nickname " (BListList Nicknames))
+     (set! Nickname (BListDelFront Nicknames))
+     ;(BListAddBack Nicknames Nickname)
+     (send "NICK " Nickname))
+   ; [tangles1!~dcoker@c-24-18-232-32.hsd1.wa.comcast.net] [NICK] [:kthxbye]
    (define (cmdNICK prefix parameters)
-      (if (string=? Nickname (car (strtok prefix #\!))) ; "nick!.....com"
-        (begin
-         (set! Nickname (cdr (strtok parameters #\:))) ; ":newnick"
-         (speak (string "my new IRC nickname is " Nickname)))))
+     (let ((nick    (car (strtok prefix #\!)))
+           (newNick (cdr (strtok parameters #\:))))
+       (Debug "\r\nIRC:NICK " nick " -> " newNick)
+       (if (string=? Nickname nick)
+         ; I changed my name
+         (begin
+           (set! Nickname newNick)
+           (speak (string "my new IRC nickname is " Nickname)))
+         ; A IRClian has a new name
+         (let ((ent (lookupNickEntity nick)))
+          (if ent
+             (ent `(set! nickName ,newNick)))))))
    ; Received the error message that the nick I am assuming is invalid so try a new one
+   ; [irc.choopa.net] [433] [world tangles :Nickname is already in use.] TODO VERIFY THIS MESSAGE
    (define (cmd433 parameters) ; ERR_NICKNAMEINUSE
      (letrec ((s (strtok parameters #\ )) ; ("toNick" . "desiredNick :Nickname is already in use.")
               (toNick (car s))
               (desiredNick (car (strtok (cdr s) #\ ))))
         (if (string=? Nickname desiredNick)
-          (begin
-            (BListAddBack Nicknames Nickname)
-            (set! Nickname (BListDelFront Nicknames))
-            (Debug "\r\nTrying to register with next prefered nick="Nickname " " (BListList Nicknames))
-            (send "NICK " Nickname)))))
+            (setNextNick))))
   
    ; Joining multiple channels.
    ;  <"JOIN #worldtm,#not-world">
@@ -1257,64 +1277,62 @@
    ; The users in the channel.
    ;   [irc.choopa.net] [353] ["world = #worldtm :world shrewm @strtok"]
    ;   [irc.choopa.net] [366] ["world #worldtm :End of /NAMES list."]
-   (define (addNewNick nick)
-     (or (lookupNickEntity nick) ; nick entity already in DB
-       (let ((newNick (Nick nick self)))
-         (ListAdd NickEntities newNick))))
-   (define (cmdJOIN prefix parameters)
-     (let ((nick (car (strtok prefix #\!))))
-       (if (string=? Nickname nick)
-         ; I have joined an IRC channel for the first time
+
+   ; Find this IRC nick's avatar/entity in the list
+   (define (lookupNickEntity name)
+     (let ((e (memp (lambda (e) (eqv? name (e 'nickName)))
+                    (ListGet NickEntities))))
+       (if (pair? e) (car e) #f)))
+   (define (addNewNick nick msg)
+     (if (lookupNickEntity nick) ; nick entity already in DB
+       (Debug "\r\n::IrcAgent.addNewNick '" nick "' already in DB " (map (lambda (e) (e 'nickName)) (ListGet (irc 'NickEntities))))
+       (let ((newNickEntity (Nick nick self)))
+         (ListAdd NickEntities newNickEntity)
+         (speak msg)
+         (Debug "\r\n::IrcAgent.addNewNick added '" nick "' to " (map (lambda (e) (e 'nickName)) (ListGet (irc 'NickEntities)))))))
+   (define (removeNick nick msg)
+     (let ((ent (lookupNickEntity nick)))
+       (if ent
          (begin
-           (sleep 1000)
-           (speak "Joined channel " parameters))
-         ; Someone has joined a channel, create a new entity for him
-         (begin
-           (speak (string nick " has joined '" (cdr (strtok parameters #\#)) "'"))
-           (addNewNick nick)))))
-   ; This IRC command returns a list of users in a channel
-   ; which is sent immediately after joining a new channel.
+           (ListDel NickEntities ent)
+           (Debug "\r\n::IrcAgent.removeNick '" nick "' from " (map (lambda (e) (e 'nickName)) (ListGet (irc 'NickEntities))))
+           (speak msg) 
+           ((ent 'die)))
+         (Debug "\r\n::IrcAgent.removeNick '" nick "' not in DB " (map (lambda (e) (e 'nickName)) (ListGet (irc 'NickEntities)))))))
+   ; This IRC command returns a list of users in a channel which is sent immediately after joining a new channel
    ; parameters "mynick @|*|= #channel :mynick and all other nicks in channel @op +voice"
    (define (cmd353 parameters)
-     (define params (cdr (split parameters #\ ))) ; Consider ("*" "#chann" ":nick" ...)
+     (define params (cdr (split parameters #\ ))) ; Consider ("*" "#chan" ":nick" "@nick" "nick" "+nick"...)
      (define chmode (car params))
      (define chan (cadr params))
      (define nicklist (cddr params))
-     (Debug "\r\nChannel " chan " is " (assv chmode '(("@" "secret") ("*" "private") ("=" "public"))))
+     (speak (string chan " is " (cdr (assv chmode '(("@"."secret") ("*"."private") ("="."public"))))))
      (each-for
        nicklist
        (lambda (nick)
-         ; Remove first ":" (will probably me my own nick
+         ; Remove first ":" (will probably me my own nick)
          (if (eq? #\: (string-ref nick 0))                 (set! nick (substring nick 1 (string-length nick))))
-         ; Remove @ and + (don't care about a nick's channel mode
+         ; Remove @ and + (don't care about a nick's channel mode)
          (if (pair? (memq (string-ref nick 0) '(#\@ #\+))) (set! nick (substring nick 1 (string-length nick))))
          (or (eqv? nick Nickname) ; Skip my nick
            ; Create a new entity for him
-           (Debug (string "\r\n" nick " is in channel '" chan "'"))
-           (addNewNick nick)))))
-   ; Find this IRC nick's avatar/entity in the list
-   (define (lookupNickEntity name)
-     (let ((e (memp (lambda (e) (eqv? name (e 'channelName)))
-                    (ListGet NickEntities))))
-       (if (pair? e) (car e) #f)))
+           (addNewNick nick (string nick " is in " chan))))))
+   ;  [world!~world@li54-107.members.linode.com] [JOIN] [":#worldtm"]
+   (define (cmdJOIN prefix parameters)
+     (let ((nick (car (strtok prefix #\!)))
+           (chan (cdr (strtok parameters #\:))))
+       (if (string=? Nickname nick)
+         (speak (string "I have joined " chan)) ; I have joined an IRC channel for the first time
+         (addNewNick nick (string nick " has joined " chan))))) ; Someone joined channel, create new 'nick' entity
+   ;  [shrewm!~worlda@li54-107.members.linode.com][PART]["#worldtm"]
    (define (cmdPART prefix parameters)
-     (letrec ((nickName (car (strtok prefix #\!)))
-              (ent (lookupNickEntity nickName)))
-        (speak (string nickName " has left " (cdr (strtok parameters #\#))))
-        (if ent (begin
-         ((ent 'say) "I'm leaving the channel and World[tm] (parameters=" parameters ")")
-         ((ent 'die)))
-                (begin
-                  (speak (string "Can't find nick " nickName " in NickEntities list."))))))
+     (letrec ((nick (car (strtok prefix #\!)))
+              (chan parameters))
+        (removeNick nick (string nick " is parting " chan))))
+   ; [tangles_!~android@m630e36d0.tmodns.net][QUIT][":Ping timeout: 268 seconds"]
    (define (cmdQUIT prefix parameters)
-     (letrec ((nickName (car (strtok prefix #\!)))
-              (ent (lookupNickEntity nickName)))
-       (if ent
-         (begin
-           ((ent 'say) "I'm quitting IRC and World[tm]: " parameters ")")
-           ((ent 'die)))
-         (begin
-           (speak (string "IRC QUIT unknown nick [" prefix "] [" parameters "]"))))))
+     (let ((nick (car (strtok prefix #\!))))
+        (removeNick nick (string nick " is quitting IRC " parameters))))
    ; Dispatch on queued IRC messages
    (define (msgsDispatcher)
      (let ((ircMsg (msgQueueGet)))
@@ -1337,15 +1355,17 @@
                    ((eqv? command "QUIT")   (cmdQUIT    prefix parameters))))
            (Debug "\r\nmsgsDispatcher: not a valid parsed IRC message: " ircMsg))
          (msgsDispatcher)))))
+   ; Messages in world (that the IRC agent can hear) are sent to IRC
+   ; but only if it's a normal Worldlian talking.
    (define (IPCHandlerVoice adna level text) ; Override parent's function
       (if (or (= adna 0) (= adna dna))
-        () ; Ignore system messages
+        () ; Ignore system messages and myself
         (letrec ((entity ((myMap 'entityDBGet) adna))
                  (dist (if entity (distance ((entity 'gps)) (gps)))))
           (if (and entity
                    (not (eq? entity self))
                    (< dist level)
-                   (not (string=? "IRC" (substring (entity 'name) 0 3))))
+                   (not (string-prefix? "IRC" (entity 'name))))
               (say IRCPRENAME (entity 'name) IRCPOSTNAME " " text)))))
    (define (IPCHandlerForce fz fy fx dir mag) ; Virtual
      (and (= fz z) (= fy y) (= fx x) (funChangeColor))
@@ -1359,8 +1379,8 @@
          (thread (scanStream))
          (thread (msgsDispatcher))
          (send "USER world 0 * :The World[tm] agent")
-         (send "NICK " Nickname)
-         (sleep 500)
+         (setNextNick)
+         (sleep 2000)
          (send "JOIN " channel))
        (Debug "\r\n::IrcAgent Unable to open a connection to " Servers)))
    ; WOOEE
@@ -1378,34 +1398,52 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; IRC sub-agent representing a nick
 ;;
-(define (Nick channelName ircAgent . ChildStack)
- (apply Avatar (string  channelName ":" (ircAgent 'name))
+(define (Nick nickName ircAgent . ChildStack)
+ (apply Avatar (string  (ircAgent 'name) ":" nickName)
                (ircAgent 'z)  (+ (random 5) (ircAgent 'y))  (+ (random 5) (ircAgent 'x))
                (ircAgent 'ipc)
                #t ; No viewport flag
-  (list channelName ircAgent) ; Parameters to this child class
-  (macro (parent channelName ircAgent . ChildStack) ; Child
+  (list nickName ircAgent) ; Parameters to this child class
+  (macro (parent nickName ircAgent . ChildStack) ; Child
    (define (self msg) (eval msg))
    (define (info) (list 'Nick name Z Y X 'hasChild= (pair? ChildStack)))
+
+   ; Use my irc agent's methods
+   (define Debug (ircAgent 'Debug))
+   (define send (ircAgent 'send))
 
    (define (say . l)
      (speak (apply string (map display->string l))))
 
-   (define (IPCHandlerVoice dna level text)
-    ())
-     ;((parent 'IPCHandlerVoice) dna level text) ; No need to call the parent else it appears the parent heard it.
-
    ;; Walk randomly 2 times
    (define (IPCHandlerForce fz fy fx dir mag)
      (and (= fz z) (= fy y) (= fx x) (begin
+       (funChangeColor)
        ((parent 'IPCHandlerForce) fz fy fx dir mag)
        (loop (random 2) (lambda (i) (walk dir))))))
 
-   (define (IPCHandlerMove dna z y x) ())
+   (define (funChangeColor)
+     (ipcWrite (list 'entity dna
+                      (Glyph
+                        (glyph0bg glyph) (random 256) (glyph0ch glyph)
+                         (glyph1bg glyph) (random 256) (glyph1ch glyph)))))
+
+   (define (IPCHandlerVoice adna level text) ; Override parent's function
+      (if (or (= adna 0) (= adna dna))
+        () ; Ignore system messages and myself
+        (letrec ((entity ((myMap 'entityDBGet) adna))
+                 (dist (if entity (distance ((entity 'gps)) (gps)))))
+          (if (and entity
+                   (not (eq? entity self))
+                   (< dist level)
+                   (<= level 2) ; A whisper
+                   (not (string-prefix? "IRC" (entity 'name))))
+              (send "PRIVMSG " nickName " :" IRCPRENAME (entity 'name) IRCPOSTNAME text)))))
 
    (define (main)
-     ;(Debug name " enters " (ircAgent 'channel))
-   )
+    (setGlyph (Glyph 0 15 (string-ref nickName 0)
+                     0 15 (string-ref nickName (if (< 1 (string-length nickName)) 1 0))))
+    (IPCwho))
 
    ; WOOEE
    (if (pair? ChildStack)

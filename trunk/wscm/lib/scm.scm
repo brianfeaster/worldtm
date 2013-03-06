@@ -321,6 +321,16 @@
   (if (= i l) '()
       (cons (vector-ref v i) (~ (+ i 1) l)))))
 
+(define (string-prefix? s1 s2)
+  (let ((len (string-length s1)))
+    (and
+      (<= len (string-length s2))
+      (let ~ ((i 0))
+        (or (= len i)
+            (and (eq? (string-ref s1 i)
+                      (string-ref s2 i))
+                 (~ (+ i 1))))))))
+
 ; Returns a pair containing the string split on the first delimeter character.
 ;   (strtok "abc-123" #\-)  =>  ("abc" . "123")
 ;   (strtok "abc=123" #\-)  =>  ("abc=123")
