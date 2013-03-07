@@ -1115,7 +1115,10 @@
    (define Port 6667)
    (define Nickname #f)
    (define Nicknames (BListCreate "world" "w0rld" "worldtm" "world[tm]" "w0rld[tm]" "w0rldtm" "w[tm]rld" "w[]rld"))
-   (define channel "#worldtm")
+   (define channel "#not-world")
+   (define Topic "*unknown topic*")
+   (define TopicNick "*nobody*")
+   (define TopicSeconds 0)
    (define NickEntities (ListCreate))
    (define msgs (QueueCreate))
    ; Members
@@ -1317,6 +1320,22 @@
          (or (eqv? nick Nickname) ; Skip my nick
            ; Create a new entity for him
            (addNewNick nick (string nick " is in " chan))))))
+   ;[irc.choopa.net 332] [world #not-world :World[tm] -- The first ever hellban]
+   (define (cmd332 parameters)
+     (let ((chan  (car (strtok (cdr (strtok parameters #\ )) #\ )))
+           (topic (cdr (strtok parameters #\:))))
+       (if (eqv? chan channel)
+           (set! Topic topic))))
+   ;[irc.choopa.net 333] [world #not-world shrewm!~worlda@li54-107.members.linode.com 1362432204]
+   (define (cmd333 parameters)
+     (letrec ((params  (cdr (split parameters #\ )))
+              (chan    (car params))
+              (nick    (car (strtok  (cadr params) #\!)))
+              (seconds (caddr params)))
+       (if (eqv? chan channel)
+         (begin
+           (set! TopicNick nick)
+           (set! TopicSeconds (read-string seconds))))))
    ;  [world!~world@li54-107.members.linode.com] [JOIN] [":#worldtm"]
    (define (cmdJOIN prefix parameters)
      (let ((nick (car (strtok prefix #\!)))
@@ -1350,7 +1369,9 @@
                    ((eqv? command "NICK")   (cmdNICK    prefix parameters))
                    ((eqv? command "433")    (cmd433            parameters)) ; ERR_NICKNAMEINUSE
                    ((eqv? command "JOIN")   (cmdJOIN    prefix parameters))
-                   ((eqv? command "353")    (cmd353            parameters))
+                   ((eqv? command "353")    (cmd353            parameters)) ; RPL_NAMREPLY
+                   ((eqv? command "332")    (cmd332            parameters)) ; RPL_TOPIC
+                   ((eqv? command "333")    (cmd333            parameters)) ; RPL_TOPICWHOTIME
                    ((eqv? command "PART")   (cmdPART    prefix parameters))
                    ((eqv? command "QUIT")   (cmdQUIT    prefix parameters))))
            (Debug "\r\nmsgsDispatcher: not a valid parsed IRC message: " ircMsg))
@@ -1362,11 +1383,18 @@
         () ; Ignore system messages and myself
         (letrec ((entity ((myMap 'entityDBGet) adna))
                  (dist (if entity (distance ((entity 'gps)) (gps)))))
+          (if (and (= level 2)
+                   (eqv? text "(topic)"))
+              (speak (string "\"" Topic
+                             "\" -- " TopicNick ", "
+                             (number->string (/ (- (time) TopicSeconds) 3600))
+                             " hours ago")
+                     2)
           (if (and entity
                    (not (eq? entity self))
                    (< dist level)
                    (not (string-prefix? "IRC" (entity 'name))))
-              (say IRCPRENAME (entity 'name) IRCPOSTNAME " " text)))))
+              (say IRCPRENAME (entity 'name) IRCPOSTNAME " " text))))))
    (define (IPCHandlerForce fz fy fx dir mag) ; Virtual
      (and (= fz z) (= fy y) (= fx x) (funChangeColor))
      ((parent 'IPCHandlerForce) fz fy fx dir mag))
