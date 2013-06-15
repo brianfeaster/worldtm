@@ -1124,6 +1124,9 @@
    ; Members
    (define DebugPuts (DebugConsole 'puts))
    (define DebugSetColor (DebugConsole 'set-color))
+   (define DebugSetColorWord (DebugConsole 'set-color-word))
+   (define (DebugGetColorWord) (DebugConsole 'COLOR))
+   (define DebugColor (DebugGetColorWord)) ; Keep track of the default Debug output color
    (define (Debug . l)
      (for-each
        (lambda (x) (for-each DebugPuts (display->strings x)))
@@ -1132,14 +1135,18 @@
      (let ~ ((srvs Servers))
        (if (null? srvs) #f
          (begin
+           (DebugSetColorWord DebugColor)
            (Debug "\r\n::IrcAgent Attempting to open IRC stream with " (car srvs) " port " Port)
            (let ((newStream (open-stream (open-socket (car srvs) Port))))
              (if newStream 
                (set! portIRC newStream)
                (~ (cdr srvs))))))))
    (define (send . l)
-      (DebugSetColor #xea #x03)
-      (Debug "\r\n<" (serialize-write (apply string l)) ">")
+      ; Debug dump the string
+      (let ((clr (DebugGetColorWord)))
+         (DebugSetColor #xe9 #x16)
+         (Debug "\r\n" (serialize-write (apply string l)))
+         (DebugSetColorWord clr))
       (map (lambda (s) (display s portIRC)) l)
       (display "\r\n" portIRC))
    (define (sendNoDebug . l)
@@ -1155,18 +1162,18 @@
    (define (msgQueueAdd s) (QueueAdd msgs s)) ; Generally adds a parsed IRC message.  Could be a string or #eof.
    (define (msgQueueGet) (QueueGet msgs))
    (define (debugDumpMsg msg)
-     (or (pair? (memv (msgCommand msg) '("PING" "PONG"))) ; Ignore ping/pong messages
-         (begin
+     (if (null? (memv (msgCommand msg) '("PING" "PONG"))) ; Ignore ping/pong messages
+         (let ((clr (DebugGetColorWord)))
            (if (msgPrefix msg)
              (begin
-               (DebugSetColor #xea #x06)
+               (DebugSetColor #xe9 #x02)
                (Debug "\r\n" (msgPrefix msg)))
              (Debug  "\r\n"))
-           (DebugSetColor #xea #x01)
+           (DebugSetColor #xe9 #x0a)
            (Debug (msgCommand msg))
-           (DebugSetColor #xea #x02)
+           (DebugSetColor #xe9 #x02)
            (Debug (serialize-write (msgParameters msg)))
-           (DebugSetColor #xea #x02))))
+           (DebugSetColorWord clr))))
    ; Parse an IRC message, vector of strings, from a message string
    (define (parseMsgString ms)
      (let ((newMsg (msgNew))) ; Create new message container #(prefix command parameters)
@@ -1217,11 +1224,12 @@
               (text (cdr (strtok parameters #\:)))
               (ent (lookupNickEntity nick)))
        (if ent
-         ((ent 'say) (if (string=? channel recp)
-                         text                      ; Normal message to channel
-                         (string "((" text "))"))) ; Private message to me
+         (if (string=? channel recp)
+           ((ent 'say) text) ; Normal message to channel
+           ((ent 'whisper) text)) ; Private message to me
          (speak (string nick (if (string=? channel recp) "" recp) " " text)))))
    (define (setNextNick)
+     (DebugSetColorWord DebugColor)
      (Debug "\r\nTrying to register with next nickname " (BListList Nicknames))
      (set! Nickname (BListDelFront Nicknames))
      ;(BListAddBack Nicknames Nickname)
@@ -1230,6 +1238,7 @@
    (define (cmdNICK prefix parameters)
      (let ((nick    (car (strtok prefix #\!)))
            (newNick (cdr (strtok parameters #\:))))
+       (DebugSetColorWord DebugColor)
        (Debug "\r\nIRC:NICK " nick " -> " newNick)
        (if (string=? Nickname nick)
          ; I changed my name
@@ -1287,21 +1296,29 @@
                     (ListGet NickEntities))))
        (if (pair? e) (car e) #f)))
    (define (addNewNick nick msg)
-     (if (lookupNickEntity nick) ; nick entity already in DB
-       (Debug "\r\n::IrcAgent.addNewNick '" nick "' already in DB " (map (lambda (e) (e 'nickName)) (ListGet (irc 'NickEntities))))
+     (if (lookupNickEntity nick)
+       (begin
+         (DebugSetColorWord DebugColor)
+         (Debug "\r\n::IrcAgent '" nick "' already in DB " (getNicks)))
        (let ((newNickEntity (Nick nick self)))
          (ListAdd NickEntities newNickEntity)
          (speak msg)
-         (Debug "\r\n::IrcAgent.addNewNick added '" nick "' to " (map (lambda (e) (e 'nickName)) (ListGet (irc 'NickEntities)))))))
+         (DebugSetColorWord DebugColor)
+         (Debug "\r\n::IrcAgent added '" nick "' to " (getNicks)))))
+   (define (getNicks)
+      (map (lambda (e) (e 'nickName)) (ListGet (irc 'NickEntities))))
    (define (removeNick nick msg)
      (let ((ent (lookupNickEntity nick)))
        (if ent
          (begin
            (ListDel NickEntities ent)
-           (Debug "\r\n::IrcAgent.removeNick '" nick "' from " (map (lambda (e) (e 'nickName)) (ListGet (irc 'NickEntities))))
+           (DebugSetColorWord DebugColor)
+           (Debug "\r\n::IrcAgent.removeNick '" nick "' from " (getNicks))
            (speak msg) 
            ((ent 'die)))
-         (Debug "\r\n::IrcAgent.removeNick '" nick "' not in DB " (map (lambda (e) (e 'nickName)) (ListGet (irc 'NickEntities)))))))
+         (begin
+           (DebugSetColorWord DebugColor)
+           (Debug "\r\n::IrcAgent.removeNick '" nick "' not in DB " (getNicks))))))
    ; This IRC command returns a list of users in a channel which is sent immediately after joining a new channel
    ; parameters "mynick @|*|= #channel :mynick and all other nicks in channel @op +voice"
    (define (cmd353 parameters)
@@ -1350,13 +1367,16 @@
         (removeNick nick (string nick " is parting " chan))))
    ; [tangles_!~android@m630e36d0.tmodns.net][QUIT][":Ping timeout: 268 seconds"]
    (define (cmdQUIT prefix parameters)
-     (let ((nick (car (strtok prefix #\!))))
-        (removeNick nick (string nick " is quitting IRC " parameters))))
+     (let ((nick (car (strtok prefix #\!)))
+           (msg (cdr (strtok parameters #\:))))
+        (removeNick nick (string nick " is quitting IRC " msg))))
    ; Dispatch on queued IRC messages
    (define (msgsDispatcher)
      (let ((ircMsg (msgQueueGet)))
        (if (eof-object? ircMsg)
-         (Debug "\r\nmsgsDispatcher: #eof from queue. halting")
+         (begin
+           (DebugSetColorWord DebugColor)
+           (Debug "\r\nmsgsDispatcher: #eof from queue. halting"))
        (begin
          (if (vector? ircMsg)
            (letrec ((prefix (vector-ref ircMsg 0)) ; Consider message components
@@ -1374,7 +1394,9 @@
                    ((eqv? command "333")    (cmd333            parameters)) ; RPL_TOPICWHOTIME
                    ((eqv? command "PART")   (cmdPART    prefix parameters))
                    ((eqv? command "QUIT")   (cmdQUIT    prefix parameters))))
-           (Debug "\r\nmsgsDispatcher: not a valid parsed IRC message: " ircMsg))
+           (begin
+             (DebugSetColorWord DebugColor)
+             (Debug "\r\nmsgsDispatcher: not a valid parsed IRC message: " ircMsg)))
          (msgsDispatcher)))))
    ; Messages in world (that the IRC agent can hear) are sent to IRC
    ; but only if it's a normal Worldlian talking.
@@ -1403,6 +1425,7 @@
    (define (main)
      (if (connectToIRCserver)
        (begin ; Make the connection
+         (DebugSetColorWord DebugColor)
          (Debug "\r\n::IrcAgent connected on " portIRC ".  Starting scanStream loops")
          (thread (scanStream))
          (thread (msgsDispatcher))
@@ -1410,7 +1433,9 @@
          (setNextNick)
          (sleep 2000)
          (send "JOIN " channel))
-       (Debug "\r\n::IrcAgent Unable to open a connection to " Servers)))
+       (begin
+         (DebugSetColorWord DebugColor)
+         (Debug "\r\n::IrcAgent Unable to open a connection to " Servers))))
    ; WOOEE
    (if (pair? ChildStack)
      ; childstack = ((child parameters) child-macro . reset of child stack)
@@ -1442,6 +1467,9 @@
 
    (define (say . l)
      (speak (apply string (map display->string l))))
+
+   (define (whisper . l)
+     (speak (apply string (map display->string l)) 2))
 
    ;; Walk randomly 2 times
    (define (IPCHandlerForce fz fy fx dir mag)

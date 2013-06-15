@@ -256,6 +256,7 @@
      (set! TY (min (max 0 y) (- Wheight 1)))
      (set! TX (min (max 0 x) (- Wwidth 1))))
    (define (set-color b f) (set! COLOR (+ (* 256 b) f))) ; 256 colors each fg and bg packed into 16 bits
+   (define (set-color-word c) (set! COLOR c))
    (define (InsideWindow? gy gx)
      (and ENABLED
           (>= gy Y0)
@@ -379,14 +380,17 @@
      (semaphore-down WindowSemaphore)
      (loop (string-length str) (lambda (i) (putchar (string-ref str i))))
      (semaphore-up WindowSemaphore))
-   ; Clears rest of line.  Output will resume on the next line.
+   ; Clears rest of line.  Output will resume at original column.
    (define (clearToEnd)
      (semaphore-down WindowSemaphore)
-     (let ~ ((i TX))
-       (if (< i Wwidth)
-         (begin
-           (putchar #\ )
-           (~ (+ i 1)))))
+     (let ((ox TX) (oy TY))
+       (let ~ ((i TX))
+         (if (< i Wwidth)
+           (begin
+             (putchar #\ )
+             (~ (+ i 1)))))
+       (set! TX ox)
+       (set! TY oy))
      (semaphore-up WindowSemaphore))
    (define (toggle . state)
      (let ((newstate (if (null? state) (not ENABLED) (car state))))
@@ -509,7 +513,7 @@
      (define (redrawBuffer)
        (let ~ ((c Wheight)
                (b (list-skip Buffer offset)))  ; Line buffer skipping over the 'offset' number of bottom rows
-         (if (null? b) (set! b (list COLOR ""))) ; Don't expect the modified buffer list to be empty.  Bad base case.
+         (if (null? b) (set! b (list COLOR "."))) ; Don't expect the modified buffer list to be empty.  Bad base case.
          (if (or (= c 1) (null? (cdr b)))
              (home)
              (~ (- c 1) (cdr b)))
@@ -520,7 +524,8 @@
                  (~ (cddr line))
                  (set! COLOR (car line))
                  ((parent 'puts) (cadr line)))))
-             ((parent 'clearToEnd))))))
+             ((parent 'clearToEnd))
+             (if (!= c Wheight) (begin (return)(newline))))))) ; Skip newline for last line
      (define (scrollHome)
        (if (< offset (- LineCount Wheight -2))
          (begin
