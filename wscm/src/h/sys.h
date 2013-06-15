@@ -74,7 +74,7 @@ void sysAcceptRemoteStream (void);
 void sysAcceptLocalStream (void);
 void sysRecv (void);
 void sysSend (void);
-void sysCanonicalizePath (void);
+Int  sysCanonicalizePath (char *path);
 void sysOpenFile (int oflag, mode_t mode, Num silent);
 void sysOpenString ();
 void sysSemaphoreDown (void);
