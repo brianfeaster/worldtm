@@ -4115,3 +4115,10 @@ The canvas class could not handle unknown entity DNAs in the field object.  I
 enhanced the render method to use the default glyphUNKNOWN in this case.  I
 need to get the IRC agent to handle nick name changes.
 
+
+
+Sat Mar 23 22:32:28 EDT 2013
+
+OOP2 -- I can define the semantics of a child class two different ways: Either
+the child class instantiates its own parent or an existing parent is passed in
+during creation.

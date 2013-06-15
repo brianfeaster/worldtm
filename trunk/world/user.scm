@@ -59,7 +59,7 @@
 (define WinConsole ((Terminal 'BufferNew)
   (- (Terminal 'Theight) 27) 0
   26  (Terminal 'Twidth)
-  #xea02))
+  #xe907))
 (define WinConsolePuts (WinConsole 'puts))
 
 (define (WinConsoleDisplay . l)
@@ -184,9 +184,11 @@
    ; redraw loop while more potential requests occur
    (semaphore-down sem)
    (if (!= 0 count)
+     ; Count is not 0
      (begin
        (set! count (+ count 1))
        (semaphore-up sem)) ; Done
+     ; Count is 0 (first time)
      (let ~ ()
        (set! count 1)
        (semaphore-up sem)
@@ -200,8 +202,6 @@
          (begin
            (WinConsoleDisplay "  count " count)
            (~))))))))
-
-(signal-set 28 (lambda () (sigwinch) (unthread)))
 
 ; Welcome message marquee displayed when connecting.
 (define (welcome)
@@ -657,7 +657,7 @@
    (setButton #\7 '(NewKat))
    (setButton #\8 '((avatarMap 'incLightSource) (avatar 'y) (avatar 'x)))
    (setButton CHAR-CTRL-F '(writeIco))
-   (setButton #\z '(WinChatDisplay "\n" (WinChat 'VisibleCount)))
+   (setButton #\z '(WinConsoleDisplay (list (WinChat 'TY) (WinChat 'TX) (WinChat 'needToScroll))))
 ))
 
 ; Perform button's action
@@ -1343,6 +1343,7 @@
 (signal-set 6  (lambda () (shutdown "Signal 6 ABRT")))
 (signal-set 13 (lambda () (shutdown "Signal 13 PIPE")))
 (signal-set 15 (lambda () (shutdown "Signal 15 TERM")))
+(signal-set 28 (lambda () (sigwinch) (unthread))) 
 
 ; Display welcome information an announce my presence
 (or QUIETLOGIN (begin
