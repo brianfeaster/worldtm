@@ -366,6 +366,7 @@ void syscallQuit (void) {
 
 void syscallDumpThreads (void) {
 	sysWrite(rthreads, stderr); /* TODO make this pretty */
+	r0 = otrue;
 }
 
 void syscallString (void) {
@@ -1076,7 +1077,8 @@ ret:
 
 void syscallReadDirectory (void) {
  DIR *dir;
- Int len;
+ Int ret;
+ Num len;
  char buff[0x200];
  struct dirent *de;
 	DBBEG();
@@ -1084,18 +1086,22 @@ void syscallReadDirectory (void) {
 	r1 = vmPop();
 	if (wscmAssertArgType(TSTRING, r1, 1, 1, __func__)) goto ret;
 
-	sysCanonicalizePath(); /* Sandbox verifies r1 and copies to r0 */
-	if (ofalse == r0) {
+	/* Scheme string to C string */
+	len = memObjectLength(r1);
+	strncpy(buff, (char*)r1, len);
+	buff[len] = 0;
+
+	if (!sysCanonicalizePath(buff)) { /* Sandbox verifies path in 'buff' is valid */
 		wscmError(1, "Invalid directory path");
 		goto ret;
 	}
 
-	dir = opendir(r0);
+	dir = opendir(r1);
 
 	if (NULL == dir) {
 		r0 = onull;
-		len = sprintf(buff, "Unable to open directory \""STR"\".  ["INT":"STR"]", r1, errno, strerror(errno));
-		assert(len<0x200);
+		ret = sprintf(buff, "Unable to open directory \""STR"\".  ["INT":"STR"]", r1, errno, strerror(errno));
+		assert(ret<0x200);
 		wscmError(0, buff);
 		goto ret;
 	} else {

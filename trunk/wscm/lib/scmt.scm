@@ -58,7 +58,7 @@
      (error "(testRecvSendByteWordLong): invalid match")))
    (set! c (+ step c)))))
 
-(or (load "lib/adtt.scm") 
+(or (load (string *LIBPATH* "/adtt.scm") )
  (begin
    (error "\n\nadtt.scm test FAIL\n"))
    (set! SCMTPASS #f))
@@ -67,7 +67,7 @@
 ;
 ; Update a store object
 ;
-(load "lib/store.scm")
+(load (string *LIBPATH* "/store.scm"))
 
 ; Open or create a new store
 (define store (Store "storetest"))
