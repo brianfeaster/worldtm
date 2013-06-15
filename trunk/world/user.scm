@@ -1270,7 +1270,7 @@
       ((eqv? s "favicon.ico")
        ;(semaphore-down IcoSem)
        (sendFileIcon p s) #t)
-      ((eqv? s "") (sendFileHtml p "world.html") #t)
+      ((eqv? s "") (sendFileHtml p "wwww/world.html") #t)
       ((eqv? s "f.html") (sendFileHtml p "f.html") #t)
       ((eqv? s "3d.html") (sendFileHtml p "3d.html") #t)
       ((eqv? s "c256.css") (sendFileCss p "c256.css") #t)
@@ -1343,7 +1343,7 @@
 (signal-set 6  (lambda () (shutdown "Signal 6 ABRT")))
 (signal-set 13 (lambda () (shutdown "Signal 13 PIPE")))
 (signal-set 15 (lambda () (shutdown "Signal 15 TERM")))
-(signal-set 28 (lambda () (sigwinch) (unthread))) 
+(signal-set 28 (lambda () (sigwinch) (unthread)))
 
 ; Display welcome information an announce my presence
 (or QUIETLOGIN (begin
