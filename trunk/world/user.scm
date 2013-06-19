@@ -242,7 +242,7 @@
                                    #\W #\o #\r #\l #\d #\[ #\t #\m #\] #\ )
                                  (modulo (+ i j) 21)))
      (if (< j 19) (~ (+ j 1)))) ; Marquee area width
-   (if (< i 60) ; Msg scroll count
+   (if (< i 20) ; Msg scroll count
        (~~ (+ i 1))))
  ((WinMarquee 'delete)))
 
@@ -1347,7 +1347,7 @@
 
 ; Display welcome information an announce my presence
 (or QUIETLOGIN (begin
- (fancyDisplay 13 (string "Welcome to World, " (avatar 'name)))
+ ;(fancyDisplay 13 (string "Welcome to World, " (avatar 'name)))
  (WinChatSetColor 0 10) (WinChatDisplay "\nHit ? to toggle the help window")
  (WinChatSetColor 0 6) (WinChatDisplay "\nSee http://code.google.com/p/worldtm")
  (saySystem (avatar 'name)
