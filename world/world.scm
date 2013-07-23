@@ -1131,6 +1131,17 @@
      (for-each
        (lambda (x) (for-each DebugPuts (display->strings x)))
        l))
+
+   ; Cook a string (return new string with non-printable chars replaced with #\.
+   (define (cookString str)
+     (define len (string-length str))
+     (define newStr (make-string len))
+     (let ~ ((i 0))
+       (if (< i len)
+         (let ((c (string-ref text i)))
+           (string-set! newStr i (if (and (>= c #\ )(<= c #\~)) c #\.))
+           (~ (+ i 1)))))
+     newStr)
    (define (connectToIRCserver)
      (let ~ ((srvs Servers))
        (if (null? srvs) #f
@@ -1221,7 +1232,7 @@
    (define (cmdPRIVMSG prefix parameters)
      (letrec ((nick (car (strtok prefix #\!)))
               (recp (car (strtok parameters #\ )))
-              (text (cdr (strtok parameters #\:)))
+              (text (cookString (cdr (strtok parameters #\:))))
               (ent (lookupNickEntity nick)))
        (if ent
          (if (string=? channel recp)
