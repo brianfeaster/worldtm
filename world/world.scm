@@ -1138,8 +1138,8 @@
      (define newStr (make-string len))
      (let ~ ((i 0))
        (if (< i len)
-         (let ((c (string-ref str i)))
-           (string-set! newStr i (if (and (>= c #\ )(<= c #\~)) c #\.))
+         (begin
+           (string-set! newStr i (char->visible (char->integer (string-ref str i))))
            (~ (+ i 1)))))
      newStr)
    (define (connectToIRCserver)
