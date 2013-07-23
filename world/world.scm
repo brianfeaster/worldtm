@@ -1138,7 +1138,7 @@
      (define newStr (make-string len))
      (let ~ ((i 0))
        (if (< i len)
-         (let ((c (string-ref text i)))
+         (let ((c (string-ref str i)))
            (string-set! newStr i (if (and (>= c #\ )(<= c #\~)) c #\.))
            (~ (+ i 1)))))
      newStr)
