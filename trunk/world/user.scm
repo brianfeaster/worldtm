@@ -933,7 +933,7 @@
   (letrec ((words (split talkInput #\ ))
            (w1 (car words)))
    (cond
-    ;((string=? "who" talkInput) (IpcWrite '(say "I'm here!")))
+    ;((string=? "who" talkInput) (map (lambda (e) (e 'name)) ((((avatar 'myMap) 'myEntityDB) 'getAll)))) ; Was (IpcWrite '(say "I'm here!"))
     ((string=? "load the jump program" talkInput) (tankTalk "I can't find the disk"))
     ((eqv? w1 "sex") (apply satc (cdr words)))
     ((string=? "march" talkInput) (avatar '(march)))
@@ -1319,7 +1319,11 @@
 
 ; Get username.  Create avatar object.
 (define avatar (if QUIETLOGIN "Administrator" (boxInput "Enter your name")))
-(if (eq? "" avatar) (set! avatar "Guest"))
+(cond ((eq? "" avatar)
+        (set! avatar "Guest"))
+      ((eqv? "-" avatar)
+        (set! avatar "Administrator")
+        (set! QUIETLOGIN #t)))
 (set! avatar (Avatar avatar 1 3464 2767 ipc #f))
 ;(set! avatar (Avatar avatar 1 3438 2735 ipc #f)) ; Pacman arena
 (avatar '(set! climb #t))

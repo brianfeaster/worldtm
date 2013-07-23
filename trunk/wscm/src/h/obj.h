@@ -19,6 +19,7 @@ extern Obj symbols, debug;
 #define TSTRING        0x03l
 #define TINTEGER       0x04l
 #define TREAL          0x05l
+#define TPRIMITIVE     0x06l
 
 #define TVECTOR        0x80l
 #define TPAIR          0x81l
@@ -73,7 +74,8 @@ void objCopyString  (void);
 void objNewSymbol  (Str str, Num len);
 void objNewSymbolR5R6 (void); /* Like objNewSymbol only 'str'/'len' are in r5/r6 */
 void objNewSymbolStatic (char *s);
-void objNewSyscall (Func f);
+void objNewSyscall   (Func f);
+void objNewPrimitive (Func f);
 Obj  objCons   (Obj a, Obj b);
 void objCons010(void);
 void objCons101(void);

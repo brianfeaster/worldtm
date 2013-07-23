@@ -216,6 +216,7 @@ void compSyscallCompile (void) {
 		asmAsm(RET);
 		asmAssemble();
 	}
+   // Dump the compiled code object as machine language
 	//objDisplay(r0, stderr);
 	DBEND(STR, compIsError()?" *ERROR*":"");
 }
@@ -806,7 +807,7 @@ void compSymbol (Num flags) {
 		}
 	} else {
 		/* Scan tge... */
-		sysTGEFind();
+		sysTGEFind(); /* r0 gets the symbol/value pair */
 		if (onull == r0) {
 			DB("Can't find in TGE...maybe at runtime");
 			asmAsm(
@@ -814,9 +815,8 @@ void compSymbol (Num flags) {
 				SYSI, compSyscallTGELookup);
 		} else {
 			DB("Found in TGE");
-			r3 = r0; /* Keep track of the symbol */
 			asmAsm(
-				MVI, R0, r3,
+				MVI, R0, r0, /* the static symbol/value pair */
 				LDI, R0, R0, 0l);
 		}
 	}
@@ -2672,6 +2672,12 @@ void compIntrinsic (Num flags) {
 	DBEND();
 }
 
+void compPrimitiveAdd (Num flags) {
+   DBBEG();
+	asmAsm(MVI, R0, otrue);
+	DBEND();
+}
+
 
 /* Recursive scheme expression compiler.  Translates an expression in
    rexpr into opcodes which are sent to the assembler.
@@ -2727,7 +2733,13 @@ void compCompileExpr (Num flags) {
 			           else if (smacro     == op) compMacro(flags);
 			           else if (scallcc    == op) compCallCC(flags);
 			           else if (sthread    == op) compThread(flags);
-			           else if (srem       == op);
+			           else if (sthread    == op) compThread(flags);
+			           else if (srem       == op); /* The comment operator */
+                    else if (objIsSymbol(op) && (r1=op, sysTGEFind(), r0 != onull) && memIsObjectType(car(r0), TPRIMITIVE)) {
+                       objWrite(car(r0), stderr);
+                       objWrite(cdr(r0), stderr);
+                       (*(void(**)(Num))car(r0))(flags); 
+                    }
 			           else compCombination(flags);
 			           break;
 		default     : compIntrinsic(flags);
@@ -2790,6 +2802,9 @@ void compInitialize (void) {
 		memRootSetRegister(rsubexpr);
 
 		rsubexpr = onull;
+
+		DB("Registering primitive operators");
+      sysDefinePrimitive((Func)compPrimitiveAdd, ":+:");
 
 		DB("Registering static pointer description strings");
 		memPointerRegister(sysNewClosure1Env); 

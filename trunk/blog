@@ -4122,3 +4122,68 @@ Sat Mar 23 22:32:28 EDT 2013
 OOP2 -- I can define the semantics of a child class two different ways: Either
 the child class instantiates its own parent or an existing parent is passed in
 during creation.
+
+
+
+Mon Jul  1 23:31:28 UTC 2013
+
+Primitive arithmetic should be compiled to equivalent assembly and not rely on
+syscalls with error checking/exception handling in the case of unknown static
+type checking.  New arithmetic opcodes need to be implemented and honored by the
+assembler.  The compiler needs to be augmented and keep track of a expression
+which returns an arithmetic value which will continue to be used during the
+expression chain.  If an expression creates a new integer, a flag will be set
+marking the return value as being an internally generated, thus mutable during
+the computation chain.
+
+ (+ 1 x)
+
+ compSymbol()  Returns with flag set to: "return value in r0" and "not a copy"
+ compPrimitive()
+  Since flag set to "not a copy" dup it and set flag to "a copy"
+  figure out immediate constant value
+  addoi r0, imm  (*r0 += imm)
+  returns with flag set to "a copy"
+  
+
+Wed Jul  3 00:26:57 UTC 2013
+
+I want this to assemble into something more sexy:
+
+(disassemble (lambda () (+ x y 99)))
+=>
+7FEB6F40BA60 0000 mv   $c $8
+7FEB6F40BA68 0001 beqi $1 0 000e
+7FEB6F40BA80 0004 mvi  $0 ((lambda () (+ x y 99)) (disassemble (lambda () (+ x y 99))))
+7FEB6F40BA90 0006 sysi #<41b88c:sysListToStack>
+7FEB6F40BAA0 0008 addi $1 2
+7FEB6F40BAB0 000a mvi  $0 #<4284c6:"Too many arguments to closure">
+7FEB6F40BAC0 000c sysi #<414ad0:compSyscallError>
+7FEB6F40BAD0 000e mvi  $0 (69 . x)
+7FEB6F40BAE0 0010 ldi  $0 $0 #<0>
+7FEB6F40BAF0 0012 push $0
+7FEB6F40BAF8 0013 mvi  $0 (42 . y)
+7FEB6F40BB08 0015 ldi  $0 $0 #<0>
+7FEB6F40BB18 0017 push $0
+7FEB6F40BB20 0018 mvi  $0 99
+7FEB6F40BB30 001a push $0
+7FEB6F40BB38 001b mvi  $0 (#syscall<00401a60:syscallAdd> . +)
+7FEB6F40BB48 001d ldi  $0 $0 #<0>
+7FEB6F40BB58 001f mvi  $1 #<3>
+7FEB6F40BB68 0021 brti $0 84 003a
+7FEB6F40BB80 0024 brti $0 82 003e
+7FEB6F40BB98*0027 beqi $1 0 002f
+7FEB6F40BBB0 002a pop  $2
+7FEB6F40BBB8 002b addi $1 -1
+7FEB6F40BBC8 002d bra 0027
+7FEB6F40BBD8 002f push $0
+7FEB6F40BBE0 0030 mvi  $0 ((+ x y 99) (lambda () (+ x y 99)) (disassemble (lambda () (+ x y 99))))
+7FEB6F40BBF0 0032 sysi #<41b88c:sysListToStack>
+7FEB6F40BC00 0034 mvi  $1 #<4>
+7FEB6F40BC10 0036 mvi  $0 #<428615:"Illegal operator type">
+7FEB6F40BC20 0038 sysi #<414ad0:compSyscallError>
+7FEB6F40BC30 003a ldi  $0 $0 #<0>
+7FEB6F40BC40 003c sys  $0
+7FEB6F40BC48 003d ret
+7FEB6F40BC50 003e ldi  $2 $0 #<0>
+7FEB6F40BC60 0040 jmp  $2

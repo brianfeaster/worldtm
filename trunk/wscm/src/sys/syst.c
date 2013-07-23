@@ -21,16 +21,13 @@ void TESTscantTest (void) {
 
 /* Verify sandbox file access
 */
-void sysCanonicalizePath (void);
-
 void TESTsandbox (void) {
-	//r1=onullstr; sysCanonicalizePath(); assert(r1==r0);
-	objNewString((Str)"README", 6); r1=r0; sysCanonicalizePath(); assert(r1==r0);
-	objNewString((Str)"../blog", 8); r1=r0; sysCanonicalizePath(); assert(r1==r0);
+	assert(sysCanonicalizePath("README"));
+	assert(sysCanonicalizePath("../blog"));
 	sysInitialize((Str)"syst");
-	objNewString((Str)"README", 6); r1=r0; sysCanonicalizePath(); assert(r1==r0);
-	objNewString((Str)"../wscm/README", 14); r1=r0; sysCanonicalizePath(); assert(r1==r0);
-	objNewString((Str)"../blog", 8); r1=r0; sysCanonicalizePath(); assert(ofalse==r0);
+	assert(sysCanonicalizePath("README"));
+	assert(sysCanonicalizePath("../wscm/README"));
+	assert(0==sysCanonicalizePath("../blog"));
 	//objNewSymbol((Str)"*LIBPATH*", 9); r1=r0; sysTGEFind(); objDisplay(r0, stdout);
 	//objNewSymbol((Str)"*WORKINGPATH*", 13); r1=r0; sysTGEFind(); objDisplay(r0, stdout);
 }

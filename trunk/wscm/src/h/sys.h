@@ -58,6 +58,8 @@ void sysEnvGet (void);
 void sysDefine (char* sym);
 void sysDefineSyscallString (Func function, Str functionStr, char* symbol);
 #define sysDefineSyscall(f,s) sysDefineSyscallString(f, (Str)#f, s)
+void sysDefinePrimitiveString (Func function, Str functionStr, char* symbol);
+#define sysDefinePrimitive(f,s) sysDefinePrimitiveString(f, (Str)#f, s)
 
 /* Serializers_internal */
 void sysSerializeInteger (Int theint, Num base);

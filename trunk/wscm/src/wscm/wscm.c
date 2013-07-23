@@ -2049,9 +2049,9 @@ void wscmInitialize (void) {
 	/* Register objects and pointer addresses with their
 	   C source names for object debug dumps. */
 	DB("Registering static pointer description strings");
-	memPointerString(wscmSysTransition);
-	memPointerString(sysEnvGet);
-	memPointerString(wscmSocketFinalizer);
+	memPointerRegister(wscmSysTransition);
+	memPointerRegister(sysEnvGet);
+	memPointerRegister(wscmSocketFinalizer);
 
 	/* Bind usefull values r2=value r1=symbol. */
 	DB("Registering syscalls");
