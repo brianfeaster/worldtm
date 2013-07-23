@@ -282,12 +282,11 @@ void test5 (void) {
    in the global igraph.
 */
 void cctAsm() {
- Obj L0, L1, L2, L3, L4, L5, L6;
+ Obj L1, L2, L3, L4, L5, L6;
 
 	asmInit();
 	FBInit();
 
-	L0 = asmNewLabel();
 	L1 = asmNewLabel();
 	L2 = asmNewLabel();
 	L3 = asmNewLabel();

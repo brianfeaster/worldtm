@@ -201,6 +201,11 @@ void objNewSyscall (Func f) {
 	memVectorSet(r0, 0, f);
 }
 
+void objNewPrimitive (Func f) {
+   r0 = memNewArray(TPRIMITIVE, 4);
+   *(Func*)r0 = f;
+}
+
 /* Safely creates and returns a new pair from C args
 */
 Obj objCons (Obj a, Obj b) {
@@ -508,6 +513,10 @@ void objDisplayTypeReal (Obj o, FILE *stream) {
 	fprintf(stream, REAL, *(Real*)o);
 }
 
+void objDisplayTypePrimitive (Obj o, FILE *stream) {
+	fprintf(stream, "#PRIM<" HEX ">", *(Func*)o);
+}
+
 
 void objDisplayTypeVector (Obj o, FILE *stream) {
  Num i;
@@ -656,19 +665,22 @@ void objSerializerInitialize (void) {
 	objDisplayTypeRegister(TSTRING,    objDisplayTypeString);
 	objDisplayTypeRegister(TINTEGER,   objDisplayTypeInteger);
 	objDisplayTypeRegister(TREAL,      objDisplayTypeReal);
+	objDisplayTypeRegister(TPRIMITIVE, objDisplayTypePrimitive);
 	objDisplayTypeRegister(TPAIR,      objDisplayTypePair);
 	objDisplayTypeRegister(TVECTOR,    objDisplayTypeVector);
 	objDisplayTypeRegister(TSTACK,     objDisplayTypeStack);
+	objDisplayTypeRegister(TCODE,      vmDisplayTypeCode);
 
 	objWriteTypeRegister(TINTRINSIC, objDisplayTypeIntrinsic);
 	objWriteTypeRegister(TCHAR,      objWriteTypeChar);
 	objWriteTypeRegister(TSYMBOL,    objDisplayTypeSymbol);
 	objWriteTypeRegister(TSTRING,    objWriteTypeString);
 	objWriteTypeRegister(TINTEGER,   objDisplayTypeInteger);
-	objWriteTypeRegister(TREAL,      objDisplayTypeReal);
+	objWriteTypeRegister(TPRIMITIVE, objDisplayTypePrimitive);
 	objWriteTypeRegister(TPAIR,      objDisplayTypePair);
 	objWriteTypeRegister(TVECTOR,    objDisplayTypeVector);
 	objWriteTypeRegister(TSTACK,     objDisplayTypeStack);
+	objWriteTypeRegister(TCODE,      vmDisplayTypeCode);
 }
 
 
@@ -690,8 +702,6 @@ void objInitialize (void) {
 
 		DB("Initialize serializers");
 		objSerializerInitialize();
-		objDisplayTypeRegister(TCODE, vmDisplayTypeCode);
-		objWriteTypeRegister(TCODE,   vmDisplayTypeCode);
 
 		DB("Register the internal object types");
 		memTypeRegisterString(TINTRINSIC, (Str)"intrinsic");
@@ -700,6 +710,7 @@ void objInitialize (void) {
 		memTypeRegisterString(TSYMBOL, (Str)"symb");
 		memTypeRegisterString(TINTEGER, (Str)"int");
 		memTypeRegisterString(TREAL, (Str)"real");
+		memTypeRegisterString(TPRIMITIVE, (Str)"primitive");
 		memTypeRegisterString(TPAIR, (Str)"pair");
 		memTypeRegisterString(TVECTOR, (Str)"vector");
 		memTypeRegisterString(TCLOSURE, (Str)"closure");

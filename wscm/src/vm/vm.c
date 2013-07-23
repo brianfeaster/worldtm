@@ -1,6 +1,6 @@
 #define DEBUG 0
 #define DB_DESC "VM "
-#define VALIDATE 1
+#define VALIDATE 0
 #include "debug.h"
 #include <stdio.h>
 #include <assert.h>

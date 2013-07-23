@@ -10,7 +10,7 @@ SRC_DIRS   = $(wildcard $(SRC_PATH)/*)
 # The individual modules proper that make up World Scheme (ignoring h and test dir): mem vm obj sys os asm comp wscm
 MODULES = $(filter-out $(H_DIR) $(TEST_DIR), $(patsubst src/%,%,$(SRC_DIRS)))
 
-CFLAGS = -I. -I$(H_PATH) -Wall -march=native -Wconversion -Wno-trigraphs -Wno-format -O3 -Werror
+CFLAGS = -I. -I$(H_PATH) -Wall -march=native -Wconversion -Wno-trigraphs -Wno-format -Werror -O3
 # -I                Include this directory for h file searches
 # -Wall             Many warnings.
 # -ggdb             Debugging
