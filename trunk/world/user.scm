@@ -737,7 +737,8 @@
        (begin (WinInputPuts "\r\n")
               'done)
      ; Append new character to talk string buffer
-     (if (and (>= c #\ )(<= c #\~))
+     (if (or (and (<= #\   c) (<= c #\~))
+             (and (<= #\  c) (<= c #\ÿ)))
        (begin (WinInputPutc c)
               (if (eq? cmd 'whisper) (begin (WinInputPutc #\))
                                             ((WinInput 'back))))
