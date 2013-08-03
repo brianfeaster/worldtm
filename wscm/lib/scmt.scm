@@ -1,5 +1,13 @@
 (display "\n--Welcome to unit test scmt.scm----------------")
-(define SCMTPASS #t)
+(define STATUS #t)
+
+(define (AssertEqual a b)
+ (or (equal? a b) (begin
+   (set! STATUS #f)
+   (display  "\nFAILED (AssertEqual\n        ")
+   (display a)
+   (display "\n        ")
+   (display b))))
 
 
 ;
@@ -61,7 +69,7 @@
 (or (load (string *LIBPATH* "/adtt.scm") )
  (begin
    (error "\n\nadtt.scm test FAIL\n"))
-   (set! SCMTPASS #f))
+   (set! STATUS #f))
 
 
 ;
@@ -89,11 +97,27 @@
 
 (or (eqv? val ((store 'get) 'val))
     (begin (displayl "\nERROR:  store's val = " ((store 'get) 'val))
-           (set! SCMTPASS #f)))
+           (set! STATUS #f)))
 
+; vector-vector-set-vector-vector! test.  Can a vector-vector be copied into?
+(define vv
+ #( #(1 2 3)
+    #(4 5 6)
+    #(7 8 9)))
+
+(define uu 
+ #( #(11 22 33 44)
+    #(55 66 77 88)
+    #(99 10 11 12)
+    #(13 14 15 16)))
+
+(vector-vector-set-vector-vector! uu 0 0 vv 0 0)
+(AssertEqual uu #( #(1 2 3 44) #(4 5 6 88) #(7 8 9 12) #(13 14 15 16)))
+
+(vector-vector-set-vector-vector! uu 1 1 vv 0 0)
+(AssertEqual uu #( #(1  2 3 44) #(4  1 2 3) #(7  4 5 6) #(13 7 8 999)))
 
 
 
 (display "\n                                                            ")
-(displayl (if SCMTPASS "PASS" "FAIL") "\n")
-(displayl "argv=" argv)
+(displayl (if STATUS "PASS" "FAIL") "\n")

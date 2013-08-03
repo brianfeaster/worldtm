@@ -167,6 +167,7 @@
   (letrec ((newTermSize (if (null? forcedSize) (terminal-size) (car forcedSize)))
            (tw #f)
            (th #f))
+    ((Terminal 'TerminalDisable))
     ((Terminal 'ResetTerminal) newTermSize)
     (set! tw (Terminal 'Twidth))
     (set! th (Terminal 'Theight))
@@ -174,7 +175,8 @@
     ((WinChat 'resize)          (- th 1) tw)
     ((avatarViewport 'move)                0 (- tw (avatarViewport 'Wwidth) 2))
     ((WinInput 'resize)                1 tw)
-    ((WinInput 'move)           (- th 1) 0))
+    ((WinInput 'move)           (- th 1) 0)
+    ((Terminal 'TerminalEnable)))
   (set! handlerCount 0))
 
 (define sigwinch
@@ -515,16 +517,17 @@
 ;                (string (number->string (/ t 86400)) "d"))))))))))))
 
 (define (buttonSetCell cell)
- (if PortMapAgent
-   ; Send to map agent. If map agent doesn't respond then
-   ; ignore it just send to everyone.  Map agent eventually
-   ; send a mapSetCell message to all other avatars.
-   (or ((ipc 'private) PortMapAgent `(setCellAgent ,(avatar 'z) ,(avatar 'y) ,(avatar 'x) ,cell))
-     (begin
-       (set! PortMapAgent #f) ; No response so unset the port and recurse
-       (buttonSetCell)))
-   ; Send to everyone
-   (IpcWrite `(mapSetCell ,(avatar 'z) ,(avatar 'y) ,(avatar 'x) ,cell))))
+ (if cell
+   (if PortMapAgent
+     ; Send to map agent. If map agent doesn't respond then
+     ; ignore it just send to everyone.  Map agent eventually
+     ; send a mapSetCell message to all other avatars.
+     (or ((ipc 'private) PortMapAgent `(setCellAgent ,(avatar 'z) ,(avatar 'y) ,(avatar 'x) ,cell))
+       (begin
+         (set! PortMapAgent #f) ; No response so unset the port and recurse
+         (buttonSetCell)))
+     ; Send to everyone
+     (IpcWrite `(mapSetCell ,(avatar 'z) ,(avatar 'y) ,(avatar 'x) ,cell)))))
 
 
 (define (mouseWalkActionHandlerLoop)
@@ -618,7 +621,7 @@
 (setButton #\g
    '(let ((o (apply (avatarMap 'baseCell) ((avatar 'gps)))))
      (WinChatDisplay "\nGrabbed " o)
-     (buttonSetCell cellAIR)
+     (buttonSetCell cellAIR) ; Replace map cell with AIR
      (avatar `(set! cell ,o))))
 (setButton #\? '(help))
 (setButton #\< '((avatarMap 'smaller)))
@@ -657,7 +660,10 @@
    (setButton #\7 '(NewKat))
    (setButton #\8 '((avatarMap 'incLightSource) (avatar 'y) (avatar 'x)))
    (setButton CHAR-CTRL-F '(writeIco))
-   (setButton #\z '(WinConsoleDisplay (list (WinChat 'TY) (WinChat 'TX) (WinChat 'needToScroll))))
+   (setButton #\z
+    '(if (Terminal 'ENABLE)
+         ((Terminal 'TerminalDisable))
+         ((Terminal 'TerminalEnable))))
 ))
 
 ; Perform button's action
