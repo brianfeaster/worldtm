@@ -262,12 +262,23 @@
      (= a b)          ; Numeric 1
      (string=? a b))) ; String
 
+
 (define (equal? l1 l2)
  (or (eqv? l1 l2)
      (and (pair? l1)
           (pair? l2)
           (equal? (car l1) (car l2))
-          (equal? (cdr l1) (cdr l2)))))
+          (equal? (cdr l1) (cdr l2)))
+     (and (vector? l1)
+          (vector? l2)
+          (let ((len1 (vector-length l1))
+                (len2 (vector-length l2)))
+            (and (= len1 len2)
+                 (let ~ ((i (- len1 1))) ; Comparing from end of vector to beginning
+                   (if (< i 0) #t
+                       (and (equal? (vector-ref l1 i)
+                                    (vector-ref l2 i))
+                            (~ (- i 1))))))))))
 
 (define (neq? a b)    (not (eq? a b)))
 (define (neqv? a b)   (not (eqv? a b)))
@@ -401,6 +412,17 @@
             (< b (vector-length v2)))
       (begin
         (vector-set! v1 a (vector-ref v2 b))
+        (~ (+ a 1)
+           (+ b 1))))))
+
+(define (vector-vector-set-vector-vector! v1 t s v2 v u)
+  (let ~ ((a t)
+          (b v))
+    (if (and (< a (vector-length v1))
+             (< b (vector-length v2)))
+      (begin
+        (vector-set-vector! (vector-ref v1 a) s
+                            (vector-ref v2 b) u)
         (~ (+ a 1)
            (+ b 1))))))
 

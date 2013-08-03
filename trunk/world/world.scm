@@ -865,7 +865,7 @@
     (define Stop #t) ; Used by action macros
     (define speakLevel 20) ; Whisper=2  Talk=20 Scream=500 
     (define climb #f)
-    (define cell 19) ; TODO replace with a generalize item container
+    (define cell #f) ; TODO replace with a generalize item container
     (define ipcRead (if ipc ((ipc 'newReader)) #f)) ; This needs to be destroyed.
     (define ipcWrite (if ipc (ipc 'qwrite) #f))
     (define (stop) (set! Stop #t))

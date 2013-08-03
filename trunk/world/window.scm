@@ -112,6 +112,7 @@
  (define MAXWINDOWCOUNT 128)
  (define TCOLOR #f)
  (define TCURSOR-VISIBLE #t)
+ (define ENABLE #t)
  (define Theight 0)
  (define Twidth  0)
  (define GY -1) ; Global cursor positions.
@@ -123,14 +124,13 @@
  ; 2D table of visible window objects.  #f represents no window which is never drawn on.  Considering
  ; having a default base window always in existence which could act as a static/dynamic background image.
  (define WindowMask ())
- ; Methods
- (define (ResetTerminal termSize)
-  (set! Theight (cdr termSize)) (if (< Theight 2) (set! Theight 2))
-  (set! Twidth  (car termSize)) (if (< Twidth 2) (set! Twidth 2))
-  (set! WindowMask (make-vector-vector Theight Twidth #f))
-  ; Clear each window's visible count to coincide with the fresh WindowMask array
-  (map (lambda (w) ((w 'visibleCountClear))) WindowList)
-  (WindowMaskReset 0 0 (- Theight 1) (- Twidth 1)))
+
+ (define (TerminalEnable)
+   (set! ENABLE #t)
+   (RefreshTerminal))
+
+ (define (TerminalDisable)
+   (set! ENABLE #f))
 
  (define (InsideTerminal? y x)
    (and (>= y 0) (>= x 0) (< y Theight) (< x Twidth)))
@@ -139,12 +139,56 @@
    (and (InsideTerminal? y x)
         (vector-vector-ref WindowMask y x)))
 
+ ; Return first window object in window list that is visible at this location.
+ (define (TopmostWindowDiscover gy gx)
+   (let ~ ((w WindowList))
+     (if (null? w) #f ; No windows are visible at this location
+     (if (((car w) 'InsideWindow?) gy gx) (car w) ; A window is visible at this location
+     (~ (cdr w))))))
+
+ ; Reset the terminal window mask and adjust the window's visible count
+ ; The window mask is the terminal size.
+ (define (WindowMaskReset y0 x0 y1 x1)
+   (loop2 y0 y1 x0 x1 (lambda (gy gx) ; Over every terminal char position in the specified box
+   (if (InsideTerminal? gy gx)
+     (let ((prevwin (topWin gy gx)) ; Consider the cached and actual top win at this loc
+           (topwin (TopmostWindowDiscover gy gx)))
+       ; Update the visible count for the window(s) at this global location.
+       ; A different window implies we need to decreement the last window's count (if any)
+       ; and inc the new window's count (if any).
+       (or (eq? prevwin topwin)
+         (begin
+           (vector-vector-set! WindowMask gy gx topwin) ; Update the window reference at this position
+           (if prevwin ((prevwin 'visibleCountAdd) -1))
+           (if topwin  ((topwin 'visibleCountAdd) 1))))
+       ; Redraw the glyph (or background)
+       (if topwin
+         ((topwin 'globalRefresh) gy gx)
+         (drawBackgroundCell gy gx)))))))
+
+ (define (ResetTerminal termSize)
+  (set! Theight (cdr termSize)) (if (< Theight 2) (set! Theight 2))
+  (set! Twidth  (car termSize)) (if (< Twidth 2) (set! Twidth 2))
+  (set! WindowMask (make-vector-vector Theight Twidth #f))
+  ; Clear each window's visible count to coincide with the fresh WindowMask array
+  (map (lambda (w) ((w 'visibleCountClear))) WindowList)
+  (WindowMaskReset 0 0 (- Theight 1) (- Twidth 1)))
+
+ (define (RefreshTerminal)
+   ;(loop2 0 Theight 0 Twidth (lambda (gy gx) (gputc #\. #x0001 gy gx))) ; Clear every terminal char position
+   (loop2 0 Theight 0 Twidth (lambda (gy gx) ; Over every terminal char position
+     (let ((win (topWin gy gx)))
+       (if win
+         ((win 'globalRefresh) gy gx)
+         (drawBackgroundCell gy gx))))))
+
  (define (gputc char color y x)
+  (if ENABLE (begin
    (semaphore-down TerminalSemaphore)
    ; Set color.
    (if (!= TCOLOR color) (begin
      (set! TCOLOR color)
-     (display (integer->colorstring color))))
+     (send (integer->colorstring color) stdout)))
    ; Set cursor location.
    (if (or (!= y GY) (!= x GX)) (begin
      (send "\e[" stdout)
@@ -163,22 +207,9 @@
          (set! GY (+ 1 GY))
          ;(if (<= Theight GY) (set! GY (- Theight 1))) ; Allow the cursor to be off screen to force a cursor move.
        ))
-   (semaphore-up TerminalSemaphore))
+   (semaphore-up TerminalSemaphore))))
 
- (define (tcursor-visible)
-   (semaphore-down TerminalSemaphore)
-   (display (if TCURSOR-VISIBLE "\e[?25l" "\e[?25h"))
-   (set! TCURSOR-VISIBLE (not TCURSOR-VISIBLE))
-   (semaphore-up TerminalSemaphore))
-
- (define (TopmostWindowDiscover gy gx)
- ; Return first window object in window list that is visible at this location.
-   (let ~ ((w WindowList))
-     (if (null? w) #f ; No windows are visible at this location
-     (if (((car w) 'InsideWindow?) gy gx) (car w) ; A window is visible at this location
-     (~ (cdr w))))))
-
- ; Given a global terminal coordinate, plot a character
+ ; Given a global terminal coordinate, plot a background character.
  (define drawBackgroundCell (let ((i 0)) (lambda (gy gx)
    (gputc (vector-ref #(#\[ #\t #\m #\] #\  ) i) ; The char
           #xeb16                            ; The 8bit background and 8bit foreground color
@@ -186,30 +217,14 @@
    (if (< i 4) (set! i (+ i 1)))
    (if (and (= i 4) (= 0 (random 20))) (set! i 0)))))
 
- ; Reset the terminal window mask and adjust the window's visible count
- (define (WindowMaskReset y0 x0 y1 x1)
-   (loop2 y0 y1 x0 x1 (lambda (gy gx)
-   ; Recompute each window's visible count
-     (if (InsideTerminal? gy gx)
-      (let ((prevwin (topWin gy gx)) ; Could be #f
-            (topwin (TopmostWindowDiscover gy gx))) ; Get top win at global pos
-        (vector-vector-set! WindowMask gy gx topwin) ; Cache it
-        ; Update the visible count for the window(s) at this global location.
-        (if prevwin
-          (if (not (eq? prevwin topwin))             ; Previous window here
-             (begin
-               ((prevwin 'visibleCountAdd) -1)
-               (if topwin ((topwin 'visibleCountAdd) 1))))
-          (if topwin ((topwin 'visibleCountAdd) 1))) ; No previous window here
-        (if topwin
-          ((topwin 'globalRefresh) gy gx) ; Redraw glyph of this window at its global position.
-          (drawBackgroundCell gy gx))))))) ; Render the background
+ (define (tcursor-visible)
+   (semaphore-down TerminalSemaphore)
+   (display (if TCURSOR-VISIBLE "\e[?25l" "\e[?25h"))
+   (set! TCURSOR-VISIBLE (not TCURSOR-VISIBLE))
+   (semaphore-up TerminalSemaphore))
 
- (define (lock)
-   (semaphore-down PublicSemaphore))
-
- (define (unlock)
-   (semaphore-up PublicSemaphore))
+ (define (lock) (semaphore-down PublicSemaphore))
+ (define (unlock) (semaphore-up PublicSemaphore))
 
  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
  ;; Window_subclass
@@ -227,7 +242,7 @@
                    i))))
    (define Y1 (+ Y0 Wheight))
    (define X1 (+ X0 Wwidth))
-   (define TY 0)
+   (define TY 0) ; Cursor position relative to window
    (define TX 0)
    ; 2d vector of cell descriptors #(color char) AKA glyph.
    (define DESC (vector-vector-map!
@@ -240,7 +255,7 @@
    (define ALPHA (make-vector-vector Wheight Wwidth #t))
    (define CURSOR-VISIBLE #t)
    (define ENABLED #t)
-   (define topRow 0) ; For vertical scrolling.
+   (define topRow 0) ; For vertical scrolling.  The logical "top row" of the DESC array
    (define needToScroll #f) ; For bottom right character printing.
    (define (cursor-visible s) (set! CURSOR-VISIBLE s))
    (define WindowSemaphore (open-semaphore 1))
@@ -414,7 +429,8 @@
        (semaphore-up WindowSemaphore)))
    (define (resize h w)
      (let ((oY1 Y1)
-           (oX1 X1))
+           (oX1 X1)
+           (oldDesc DESC))
        (semaphore-down WindowSemaphore)
        (set! Wheight (if (< h 1) 1 h)) ; Silently reset invalid height
        (set! Wwidth  (if (< w 1) 1 w)) ; Silently reset invalid width
@@ -422,10 +438,16 @@
        (set! X1 (+ X0 Wwidth))
        (set! TY (min TY (- Wheight 1))) ; Make sure cursor is not out of bounds.
        (set! TX (min TX (- Wwidth 1)))
+       ; Reset alpha mask (no cell is transparent)
        (set! ALPHA (make-vector-vector Wheight Wwidth #t))
-       (set! DESC (vector-vector-map! (lambda (x) (vector COLOR #\ ))
-                                      (make-vector-vector Wheight Wwidth ())))
-       (if ENABLED (WindowMaskReset Y0 X0 (max oY1 Y1) (max oX1 X1))) ; Redraw window
+       ; Reset descriptor table (each cell is a space with current color set)
+       (set! DESC
+         (vector-vector-map! (lambda (x) (vector COLOR #\ ))
+                               (make-vector-vector Wheight Wwidth ())))
+       ;(vector-vector-set-vector-vector! DESC 0 0 oldDesc 0 0)  ; For this to be useful, the call to WindowMaskReset should be smarter and not redraw the entire window (plus the new area)
+       ; Recompute the window mask for the terminal.  Redraw the window it it's enabled.
+       (if ENABLED
+         (WindowMaskReset Y0 X0 (max oY1 Y1) (max oX1 X1)))
        (set! topRow 0)
        (semaphore-up WindowSemaphore)))
    (define (moveresize y x h w)
@@ -434,15 +456,17 @@
            (oY1 Y1)
            (oX1 X1))
        (semaphore-down WindowSemaphore)
+       ; Mutate the window's upper left (Y0 X0) and lower right (Y1 X1) coordinates
        (set! Y0 y)
        (set! X0 x)
-       (set! Wheight (if (< h 1) 1 h)) ; Silently reset invalid height
-       (set! Wwidth  (if (< w 1) 1 w)) ; Silently reset invalid width
+       (set! Wheight (if (< h 1) 1 h)) ; Silently reset invalid height and width (A window must have area of at least cell)
+       (set! Wwidth  (if (< w 1) 1 w))
        (set! Y1 (+ Y0 Wheight))
        (set! X1 (+ X0 Wwidth))
-       (set! TY (min TY (- Wheight 1))) ; Make sure cursor is not out of bounds.
+       ; Make sure cursor is not out of bounds
+       (set! TY (min TY (- Wheight 1)))
        (set! TX (min TX (- Wwidth 1)))
-       (set! ALPHA (make-vector-vector Wheight Wwidth #t))
+       (set! ALPHA (make-vector-vector Wheight Wwidth #t)) ; Reset the alpha mask (TODO?)
        (set! DESC (vector-vector-map! (lambda (x) (vector COLOR #\ ))
                                       (make-vector-vector Wheight Wwidth ())))
        (if ENABLED (WindowMaskReset
