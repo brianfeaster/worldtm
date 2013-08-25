@@ -172,10 +172,11 @@
     (set! tw (Terminal 'Twidth))
     (set! th (Terminal 'Theight))
     (WinConsoleDisplay "\r\nSIGWINCH: newTermSize " (cons tw th))
-    ((WinChat 'resize)          (- th 1) tw)
-    ((avatarViewport 'move)                0 (- tw (avatarViewport 'Wwidth) 2))
-    ((WinInput 'resize)                1 tw)
-    ((WinInput 'move)           (- th 1) 0)
+    ((WinChat 'resize)     (- th 1) tw)
+    ((avatarViewport 'move)       0 (- tw (avatarViewport 'Wwidth) 2))
+    ((WinInput 'resize)           1 tw)
+    ((WinInput 'move)      (- th 1) 0)
+    (redrawTalk) ; Redraw the talk input line
     ((Terminal 'TerminalEnable)))
   (set! handlerCount 0))
 
@@ -646,13 +647,13 @@
       ((avatarMap 'circularizeToggle))
       ((avatarMap 'bigger))
       (WinChatDisplay "\nEDIT " EDIT)))
-   (setButton #\1 '(WinChatDisplay "\n" (cellSymbol (cellRef ((avatar 'lookHere))))
-                                      " " (cellSymbol (cellRef ((avatar 'lookAt))))))
+   (setButton #\1 '(WinConsoleDisplay "\n" (cellSymbol (cellRef ((avatar 'lookHere))))
+                                       " " (cellSymbol (cellRef ((avatar 'lookAt))))))
    (setButton #\2 '(loop2 (avatar 'y) (+ (avatar 'y) 10)
                           (avatar 'x) (+ (avatar 'x) 10)
                           (lambda (y x)
-                            (if (= x (avatar 'x)) (WinChatDisplay "\n"))
-                            (WinChatDisplay " " (((avatarMap 'myCanvas) 'height) y x) ))))
+                            (if (= x (avatar 'x)) (WinConsoleDisplay "\n"))
+                            (WinConsoleDisplay " " (((avatarMap 'myCanvas) 'height) y x) ))))
    ;(setButton #\2 '(handleTerminalResize (cons 600 400)))
    (setButton #\4 '(ghosts))
    (setButton #\5 '(pong))
@@ -682,7 +683,8 @@
 ;; Typing_and_talking
 ;;
 (define (say phrase . level)
-  (apply (avatar 'speak) phrase level))
+  (apply (avatar 'speak) phrase level)
+  #t)
 
 (define (saySystem . strs)
  (IpcWrite (list 'voice 0 0 (apply string strs))))
@@ -755,21 +757,31 @@
 
 ; Activate event driven talk mechanism
 ;   type is one of 'whisper 'talk 'scream
+(define TalkType #f)
+
+(define (redrawTalk)
+  (if TalkType
+    (begin
+      (WinInputPuts 
+        (if (eq? TalkType 'scream) (string "\r\n}}" (replTalk 'getBuffer))
+        (if (eq? TalkType 'whisper)(string "\r\n(" (replTalk 'getBuffer) ")")
+        (if (eq? TalkType 'talk)   (string "\r\n>" (replTalk 'getBuffer))
+        "\n???"))))
+      ; If in whisper mode, move cursor back one past the trailing ')'
+      (if (eq? TalkType 'whisper) ((WinInput 'back))))))
+
 (define (focusTalk type)
  (define getc ((Terminal 'getKeyCreate)))
+ (set! TalkType type)
  ((avatar 'setSpeakLevel) (cond ((eq? type 'whisper) 2) ((eq? type 'scream) 500) (else 20)))
  (let ~ ()
    ; Draw current string in input buffer
-   (WinInputPuts 
-     (if (eq? type 'scream) (string "}}" (replTalk 'getBuffer))
-     (if (eq? type 'whisper)(string "(" (replTalk 'getBuffer) ")")
-                            (string ">" (replTalk 'getBuffer)))))
-   ; If in whisper mode, move cursor back one past the trailing ')'
-   (if (eq? type 'whisper) ((WinInput 'back)))
+   (redrawTalk)
    (let ~~ ()
      (let ((ret (replTalk type (getc))))
        (if (eq? ret 'more) (~~)
        (if (eq? ret 'sent) (~))))))
+ (set! TalkType #f)
  (getc 'destroy))
 
 

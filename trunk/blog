@@ -4187,3 +4187,17 @@ I want this to assemble into something more sexy:
 7FEB6F40BC48 003d ret
 7FEB6F40BC50 003e ldi  $2 $0 #<0>
 7FEB6F40BC60 0040 jmp  $2
+
+
+
+Sun Aug  4 16:26:37 UTC 2013
+
+I optimized terminal resizing by disabling any screen updates then reenabling
+after the windows have been resized, moved, and refreshed.  I'm not attacking
+scrollback.  It currently just draws the previous N lines not taking into
+account the possibility of lines wrapping thus taking up more rows.  Often
+a scrollback the window will fill then scroll. The final result is somewhat
+correct but the execution should be optimized to only display what's needed
+without scrolling.
+
+

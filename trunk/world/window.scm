@@ -125,6 +125,7 @@
  ; having a default base window always in existence which could act as a static/dynamic background image.
  (define WindowMask ())
 
+ ; Disable Terminal updates to the remote console.  Allows for hidden screen refresh/redraws.
  (define (TerminalEnable)
    (set! ENABLE #t)
    (RefreshTerminal))
@@ -297,9 +298,7 @@
      (if (and (< 0 TX) (< TX Wwidth))
        (begin (set! TX (- TX 1))
               (set! needToScroll #f)
-              (semaphore-down WindowSemaphore)
-              (putchar c)
-              (semaphore-up WindowSemaphore)
+              (putc c)
               (display CHAR-CTRL-H)
               (set! needToScroll #f)
               (set! TX (- TX 1)))))
@@ -387,13 +386,15 @@
                (begin
                  (return)
                  (newline))))))))))
-   (define (putc c)
-     (semaphore-down WindowSemaphore)
-     (putchar c)
-     (semaphore-up WindowSemaphore))
+   ; puts is autonomous to guarantee the string output is not altered.  putc must be autonomous as well
+   ; for its homgeneity.
    (define (puts str)
      (semaphore-down WindowSemaphore)
      (loop (string-length str) (lambda (i) (putchar (string-ref str i))))
+     (semaphore-up WindowSemaphore))
+   (define (putc c)
+     (semaphore-down WindowSemaphore)
+     (putchar c)
      (semaphore-up WindowSemaphore))
    ; Clears rest of line.  Output will resume at original column.
    (define (clearToEnd)
@@ -484,10 +485,12 @@
    ;; Buffer_subclass -- Implements a
    ;; cooked text window with scrollback buffer
    ;;
+   ;; The Buffer structure is a forever growing stack: (... LINE3 LINE2 LINE0)
+   ;;
    ;; Printing RED "abc" GREEN "def\n" BLUE "123" PURPLE "456\n" results in:
    ;;
-   ;; The Buffer structure: ((PURPLE "456" BLUE "123")   second line
-   ;;                        (GREEN  "def" RED  "abc"))  first line
+   ;; The Buffer structure: ((PURPLE "456" BLUE "123")  ; second line
+   ;;                        (GREEN  "def" RED  "abc")) ; first line
    ;;
    ;; Note purple 456 is the current line color and string and could have more characters appended
    ;;
@@ -498,10 +501,10 @@
      (define (self msg) (eval msg))
      (define Buffer (list (list COLOR ""))) ; List of every line structures.  Initially contains an empty first line.
      (define LineCount 0)
-     (define offset 0) ; Scrollback offset index.  0 = end of buffer. > 0 is number of lines back to view.
+     (define backscroll 0) ; Scrollback offset index.  0 = end of buffer. > 0 is number of lines back to view.
      (define LastCh #f) ; Keep track of last character parsed/displayed
      ; Parse a string for newlines and add to the buffer's list of
-     ; line structures which is a reverse list of consecutive color and string values (color str ...)
+     ; line structures which is a reverse list of consecutive color and string values (COLOR STR ...)
      (define (puts str)
        (define line (car Buffer)) ; Current buffer line (might be empty if just created or newline sent)
        (let ~ ((str str) ; The current string, length and parse index
@@ -522,56 +525,86 @@
                ((parent 'puts) str)
                (set! LastCh last)) ; Send parsed string to window
               (else
-                 (let ((ch (string-ref str i)))
-                   (if (pair? (memv ch (list NEWLINE RETURN)))
-                     (if (and (eq? ch NEWLINE) (eq? last RETURN))
-                         (~ (substring str 1 len) (- len 1) 0 ch) ; Recurse.  Ignore newline that follows a return
-                         (begin
-                           (~ (substring str 0 i) i i ch) ; Recurse.  Use this recursive call to display and save color/string to line
-                           (return)(newline) ; as well as a cooked newline
-                           (set! LineCount (+ 1 LineCount)) ; Add new strb to strb bufer
-                           (set! line (list COLOR ""))
-                           (set! Buffer (cons line Buffer)) ; Start a new line
-                           (if (< 1 len) (~ (substring str (+ i 1) len) (- len i 1) 0 ch)))) ; Recurse
-                     (~ str len (+ i 1) ch))))))) ; Recurse
+                (let ((ch (string-ref str i)))
+                  (if (pair? (memv ch (list NEWLINE RETURN)))
+                    (if (and (eq? ch NEWLINE) (eq? last RETURN))
+                        (~ (substring str 1 len) (- len 1) 0 ch) ; Recurse.  Ignore newline that follows a return
+                        (begin
+                          (~ (substring str 0 i) i i ch) ; Recurse.  Use this recursive call to display and save color/string to line
+                          (return)(newline) ; as well as a cooked newline
+                          (set! LineCount (+ 1 LineCount)) ; Add new strb to strb bufer
+                          (set! line (list COLOR "")) ; Create new empty line
+                          (set! Buffer (cons line Buffer)) ; Start a new line
+                          (if (< 1 len) (~ (substring str (+ i 1) len) (- len i 1) 0 ch)))) ; Recurse
+                    (~ str len (+ i 1) ch))))))) ; Recurse
+     ; Return glyph lengh of the line of the form (COLOR STR COLOR STR ...)
+     (define (line-length line)
+       (if (null? line) 0
+         (+ (string-length (cadr line)) ; Every 2nd element is a string
+            (line-length (cddr line)))))
+     ; The backscroll var is the physical scrollback row count.  This figures the logical line count based
+     ; on the printable line lengths and screen width as well as the number of physical lines to initially
+     ; skip when rendering the first line.
+     (define (logical-scroll-back)
+       (let ~ ((physical (+ backscroll Wheight)) ; Number of physical window rows
+               (logical 0) ; Number of logical lines to display (the first and last line printed might not include the entire line)
+               (lst Buffer))
+         (cond ((null? lst)
+                (cons logical 0)) ; Return logical lines and nothing to skip for 1st line
+               ((< physical 1)
+                (cons logical (- physical))) ; Return logical lines and number of 1st lines to skip
+               (else
+                (~ (- physical (/ (line-length (car lst)) Wwidth) -1)
+                   (+ 1 logical)
+                   (cdr lst))))))
+     ; Draws a line to the window.  The list is backwards, thus the pre-recursive call.
+     (define (redrawLine line)
+         (or (null? line) (begin
+           (redrawLine (cddr line)) ; pre-recurse
+           (set! COLOR (car line))
+           ((parent 'puts) (cadr line)) )))
      (define (redrawBuffer)
-       (let ~ ((c Wheight)
-               (b (list-skip Buffer offset)))  ; Line buffer skipping over the 'offset' number of bottom rows
+       (define lineInfo (logical-scroll-back)) ; Consider (logicalLineCount . 1stLinesToSkip)
+       (let ~ ((c Wheight) ; car lineInfo
+               (b (list-skip Buffer backscroll))) ; skip back logicalLineCount number of lines in buffer
+     ; Line buffer skipping over the 'offset' number of bottom rows
          (if (null? b) (set! b (list COLOR "."))) ; Don't expect the modified buffer list to be empty.  Bad base case.
          (if (or (= c 1) (null? (cdr b)))
              (home)
              (~ (- c 1) (cdr b)))
          (if (pair? (car b))
            (begin
-             (let ~ ((line (car b)))
-               (or (null? line) (begin
-                 (~ (cddr line))
-                 (set! COLOR (car line))
-                 ((parent 'puts) (cadr line)))))
+             (redrawLine (car b))
+             ;((parent 'puts) (display->string (+ (/ (line-length (car b)) Wwidth) 1)))
              ((parent 'clearToEnd))
-             (if (!= c Wheight) (begin (return)(newline))))))) ; Skip newline for last line
+             (if (!= c Wheight)
+                 (begin
+                   (return)
+                   (newline))
+                   ;((parent 'puts) (display->string backscroll))
+                   ))))) ; Skip newline for last line
      (define (scrollHome)
-       (if (< offset (- LineCount Wheight -2))
+       (if (< backscroll (- LineCount Wheight -2))
          (begin
-           (set! offset (- LineCount Wheight -2))
+           (set! backscroll (- LineCount Wheight -2))
            ;((parent 'resize) Wheight Wwidth) ; Force a reset of the window glyphs
            (redrawBuffer))))
      (define (scrollEnd)
-       (if (!= offset 0)
+       (if (!= backscroll 0)
          (begin
-           (set! offset 0)
+           (set! backscroll 0)
            ;((parent 'resize) Wheight Wwidth) ; Force a reset of the window glyphs
            (redrawBuffer))))
      (define (scrollBack)
-       (if (< offset (- LineCount Wheight -2))
+       (if (< backscroll (- LineCount Wheight -2))
          (begin
-           (set! offset (+ 1 offset))
+           (set! backscroll (+ 1 backscroll))
            ;((parent 'resize) Wheight Wwidth) ; Force a reset of the window glyphs
            (redrawBuffer))))
      (define (scrollForward)
-       (if (< 0 offset)
+       (if (< 0 backscroll)
          (begin
-           (set! offset (- offset 1))
+           (set! backscroll (- backscroll 1))
            ;((parent 'resize) Wheight Wwidth) ; Force a reset of the window glyphs
            (redrawBuffer))))
      (define (resize h w)
