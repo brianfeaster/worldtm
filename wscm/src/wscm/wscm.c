@@ -1379,6 +1379,7 @@ void syscallStringSetB (void) {
 	if (offset < 0) offset = (Int)memObjectLength(strObj)+offset;
 	assert(0<=offset);
 	memArraySet(strObj, (Num)offset, ch);
+	r0 = strObj; 
 ret:
 	DBEND();
 }
