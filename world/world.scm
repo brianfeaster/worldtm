@@ -1260,7 +1260,7 @@
          (let ((ent (lookupNickEntity nick)))
           (if ent
              (begin
-               (IpcWrite (list 'entity (ent 'dna) newName))
+               (IpcWrite (list 'entity (ent 'dna) newNick))
                (ent `(set! nickName ,newNick))))))))
    ; Received the error message that the nick I am assuming is invalid so try a new one
    ; [irc.choopa.net] [433] [world tangles :Nickname is already in use.] TODO VERIFY THIS MESSAGE
