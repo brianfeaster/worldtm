@@ -1259,7 +1259,9 @@
          ; A IRClian has a new name
          (let ((ent (lookupNickEntity nick)))
           (if ent
-             (ent `(set! nickName ,newNick)))))))
+             (begin
+               (IpcWrite (list 'entity (ent 'dna) newName))
+               (ent `(set! nickName ,newNick))))))))
    ; Received the error message that the nick I am assuming is invalid so try a new one
    ; [irc.choopa.net] [433] [world tangles :Nickname is already in use.] TODO VERIFY THIS MESSAGE
    (define (cmd433 parameters) ; ERR_NICKNAMEINUSE
