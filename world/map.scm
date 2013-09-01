@@ -397,7 +397,7 @@
 (define force list)
 
 (define (mapSetCell . x) ())
-(define (sun . x) ())
+(define (sun . x) ()) ; So that I ignore, without error, the sun command via the IPC.
 
 
 

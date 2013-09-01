@@ -173,7 +173,7 @@
   (set! WindowMask (make-vector-vector Theight Twidth #f))
   ; Clear each window's visible count to coincide with the fresh WindowMask array
   (map (lambda (w) ((w 'visibleCountClear))) WindowList)
-  (WindowMaskReset 0 0 (- Theight 1) (- Twidth 1)))
+  (WindowMaskReset 0 0 Theight Twidth))
 
  (define (RefreshTerminal)
    ;(loop2 0 Theight 0 Twidth (lambda (gy gx) (gputc #\. #x0001 gy gx))) ; Clear every terminal char position
@@ -499,7 +499,7 @@
    ;;
    (define Buffer (let ((parent self)) (lambda ()
      (define (self msg) (eval msg))
-     (define Buffer (list (list COLOR ""))) ; List of every line structures.  Initially contains an empty first line.
+     (define Buffer (list (list COLOR "Welcome to Zombocom"))) ; List of every line structures.  Initially contains an empty first line.
      (define LineCount 0)
      (define backscroll 0) ; Scrollback offset index.  0 = end of buffer. > 0 is number of lines back to view.
      (define LastCh #f) ; Keep track of last character parsed/displayed
@@ -522,7 +522,7 @@
                       (set-car! (cdr line) str)) ; Replace curent empty line string with the new parsed string
                      (else
                       (set-car! Buffer (cons COLOR (cons str line))))) ; Add new color/str to current line
-               ((parent 'puts) str)
+               (if (= 0 backscroll) ((parent 'puts) str))
                (set! LastCh last)) ; Send parsed string to window
               (else
                 (let ((ch (string-ref str i)))
@@ -537,76 +537,101 @@
                           (set! Buffer (cons line Buffer)) ; Start a new line
                           (if (< 1 len) (~ (substring str (+ i 1) len) (- len i 1) 0 ch)))) ; Recurse
                     (~ str len (+ i 1) ch))))))) ; Recurse
-     ; Return glyph lengh of the line of the form (COLOR STR COLOR STR ...)
+     ; Return glyph length of the line of the form (COLOR STR ...)
      (define (line-length line)
        (if (null? line) 0
          (+ (string-length (cadr line)) ; Every 2nd element is a string
             (line-length (cddr line)))))
-     ; The backscroll var is the physical scrollback row count.  This figures the logical line count based
-     ; on the printable line lengths and screen width as well as the number of physical lines to initially
-     ; skip when rendering the first line.
-     (define (logical-scroll-back)
-       (let ~ ((physical (+ backscroll Wheight)) ; Number of physical window rows
-               (logical 0) ; Number of logical lines to display (the first and last line printed might not include the entire line)
-               (lst Buffer))
-         (cond ((null? lst)
-                (cons logical 0)) ; Return logical lines and nothing to skip for 1st line
-               ((< physical 1)
-                (cons logical (- physical))) ; Return logical lines and number of 1st lines to skip
-               (else
-                (~ (- physical (/ (line-length (car lst)) Wwidth) -1)
-                   (+ 1 logical)
-                   (cdr lst))))))
-     ; Draws a line to the window.  The list is backwards, thus the pre-recursive call.
-     (define (redrawLine line)
-         (or (null? line) (begin
-           (redrawLine (cddr line)) ; pre-recurse
-           (set! COLOR (car line))
-           ((parent 'puts) (cadr line)) )))
+     ; Returns number of physical lines this line prints on the current window
+     (define (line-line-count line)
+       (define len (line-length line))
+       (if (= len 0)
+           1
+           (/ (+ len Wwidth -1) Wwidth))) ; number of full lines
+     ; Draws a line (CLR STR ...) to the window skipping 'skip' lines and
+     ; displaying up to 'left' lines  The list is backwards, thus the
+     ; pre-recursive algorithm.
+     (define (redrawLine LINE skip left)
+       (set! skip (* skip Wwidth)) ; Consider skip and left as characters now
+       (set! left  (* left Wwidth))
+       (let ~ ((line LINE))
+         (if (not (null? line))
+         (begin
+           (~ (cddr line)) ; pre-recurse
+           (if (< 0 left)
+           (let ((str (cadr line))
+                 (len (string-length (cadr line))))
+             (cond ((<= len skip)
+                    (set! skip (- skip len))) ; Need to skip more characters
+                   (else
+                    (set! COLOR (car line))
+                    ; consider the full string or sub string
+                    (letrec ((substr (substring str skip (string-length str)))
+                             (len (string-length substr)))
+                      (set! skip 0) ; nothing more to skip now
+                      (if (<= left len)
+                        (begin
+                          ((parent 'puts) (substring substr 0 left))
+                          (set! left 0))
+                        (begin
+                           ((parent 'puts) substr)
+                           (set! left (- left len))))))))))))
+       ; If the amount of chars left to print to is not even, clear to end of line.
+       (if (!= 0 (modulo left Wwidth))
+         ((parent 'clearToEnd))))
+     ; Redraw the current state of the scrollback buffered window.
+     ; The 'backscroll' var is the physical row count to scroll back,
+     ; with respect to the bottom most printable line.
      (define (redrawBuffer)
-       (define lineInfo (logical-scroll-back)) ; Consider (logicalLineCount . 1stLinesToSkip)
-       (let ~ ((c Wheight) ; car lineInfo
-               (b (list-skip Buffer backscroll))) ; skip back logicalLineCount number of lines in buffer
-     ; Line buffer skipping over the 'offset' number of bottom rows
-         (if (null? b) (set! b (list COLOR "."))) ; Don't expect the modified buffer list to be empty.  Bad base case.
-         (if (or (= c 1) (null? (cdr b)))
-             (home)
-             (~ (- c 1) (cdr b)))
-         (if (pair? (car b))
+       (define skip 0) ; State used when the recursion unwinds
+       (define physicalLeft Wheight)
+       (define oy 0)
+       (define ox 0)
+       (home)
+       (let ~ ((physical (+ backscroll Wheight)) ; The number of physical lines we need to skip until redrawing occurs.
+               (lst Buffer)) ; The stack buffer of lines
+         (cond ((< physical 1);Base case 2: The current line exceeds beyond the top of the screen, we only need to skip (abs physical) number of lines
+                (set! skip (- physical)))
+               ((null? lst) ()) ; Base case 1: We've hit the "top" of the buffer.  So return and start the dumping of the lines we've traversed recursively.
+               (else
+                (letrec ((line (car lst)) ; Consider the current line
+                         (llcount (line-line-count line))) ; and the number of physical lines it requires to display
+                (~ (- physical llcount) (cdr lst)); Pre-recurse
+                ; Print this line, assuming skip lines and physicalLeft lines to go
+                (if (< 0 physicalLeft)
+                  (begin
+                    ;; Render the line to multiple physical lines possibly along with cleartoEnd.
+                    (redrawLine line skip physicalLeft)
+                    (set! physicalLeft (- physicalLeft (- llcount skip))) ; subtract number of lines displayed (total line count - skipped lines)
+                    (if (eq? lst Buffer)
+                      (begin ; Keep track of the cursor position after the last line printed
+                        (set! oy TY)
+                        (set! ox TX))
+                       (if (< 0 physicalLeft) ; If there are more physical lines and this isnt' the last line to print, carriage return.
+                         (begin
+                           (return)
+                           (newline))))
+                    (set! skip 0)))))))
+       (let ~ ((i physicalLeft)) ; Clear rest of window if there aren't enough lines to fill the screen
+         (if (< 0 i)
            (begin
-             (redrawLine (car b))
-             ;((parent 'puts) (display->string (+ (/ (line-length (car b)) Wwidth) 1)))
+             (return)
+             (newline)
              ((parent 'clearToEnd))
-             (if (!= c Wheight)
-                 (begin
-                   (return)
-                   (newline))
-                   ;((parent 'puts) (display->string backscroll))
-                   ))))) ; Skip newline for last line
+             (~ (- i 1)))))
+       (goto oy ox))
      (define (scrollHome)
-       (if (< backscroll (- LineCount Wheight -2))
-         (begin
-           (set! backscroll (- LineCount Wheight -2))
-           ;((parent 'resize) Wheight Wwidth) ; Force a reset of the window glyphs
-           (redrawBuffer))))
+       (set! backscroll (- LineCount Wheight))
+       (redrawBuffer))
      (define (scrollEnd)
-       (if (!= backscroll 0)
-         (begin
-           (set! backscroll 0)
-           ;((parent 'resize) Wheight Wwidth) ; Force a reset of the window glyphs
-           (redrawBuffer))))
+       (set! backscroll 0)
+       (redrawBuffer))
      (define (scrollBack)
-       (if (< backscroll (- LineCount Wheight -2))
-         (begin
-           (set! backscroll (+ 1 backscroll))
-           ;((parent 'resize) Wheight Wwidth) ; Force a reset of the window glyphs
-           (redrawBuffer))))
+       (set! backscroll (+ 1 backscroll))
+       (redrawBuffer))
      (define (scrollForward)
-       (if (< 0 backscroll)
-         (begin
-           (set! backscroll (- backscroll 1))
-           ;((parent 'resize) Wheight Wwidth) ; Force a reset of the window glyphs
-           (redrawBuffer))))
+       (set! backscroll (- backscroll 1))
+       (redrawBuffer))
      (define (resize h w)
        ((parent 'resize) h w)
        (redrawBuffer))
