@@ -1115,7 +1115,7 @@
    (define Port 6667)
    (define Nickname #f)
    (define Nicknames (BListCreate "world" "w0rld" "worldtm" "world[tm]" "w0rld[tm]" "w0rldtm" "w[tm]rld" "w[]rld"))
-   (define channel "#not-world")
+   (define channel "#notworld")
    (define Topic "*unknown topic*")
    (define TopicNick "*nobody*")
    (define TopicSeconds 0)

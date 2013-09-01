@@ -252,7 +252,7 @@
 
 (define (length l) (if (null? l) 0 (+ 1 (length (cdr l)))))
 (define (last l) (if (pair? l) (if (pair? (cdr l)) (last (cdr l)) (if (null? (cdr l)) (car l) (cdr l))) l))
-(define (list-skip l i) (cond ((null? l) l) ((= 0 i) l) (else (list-skip (cdr l) (- i 1)))))
+(define (list-skip l i) (cond ((null? l) l) ((<= i 0) l) (else (list-skip (cdr l) (- i 1)))))
 
 (define (car-string str) (string-ref str 0))
 (define (cdr-string str) (substring str 1 (string-length str)))

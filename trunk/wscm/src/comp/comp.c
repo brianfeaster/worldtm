@@ -117,7 +117,7 @@ void compSyscallTGELookup (void) {
 	if (r0 == onull) {
 		vmPush(r1);
 		r1 = (Obj)1;
-		r0 = (Obj)"Unbound symbol";
+		r0 = (Obj)"Unbound symbol:";
 		compSyscallError();
 	} else {
 		DB("found in tge @ opcode "HEX, (Num)rip-4);
@@ -139,9 +139,9 @@ void compSyscallTGEMutate (void) {
 	r2=r0; /* Since a syscall, save value we're trying to set!. */
 	sysTGEFind();
 	if (r0 == onull) {
-		printf ("Unbound symbol");
+		printf ("Unbound symbol \"");
 		objDisplay(r1, stdout);
-		printf ("'\n");
+		printf ("\"\n");
 		r0 = r2; /* TODO  runtime error.  call thread's exception handler continuation */
 	} else {
 		DB("found in tge at opcode %0x", (Int)rip-4);
@@ -870,7 +870,7 @@ void compSetB (Num flags) {
 		if (r0 == onull) {
 			DB("can't find in TGE...maybe at runtime");
 			asmAsm(
-				MVI, R1, rexpr,
+				MVI, R1, r1,
 				SYSI, compSyscallTGEMutate);
 		} else {
 			DB("found in TGE");
