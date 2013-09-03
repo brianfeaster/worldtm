@@ -85,6 +85,10 @@ void vmProcessInterrupt (void) {
 Obj r0,  r1,  r2,  r3,  r4,  r5,  r6,  r7,
     r8,  r9,  ra,  rb,  rc,  rd,  re,  rf;
 
+Obj d0,  d1,  d2,  d3,  d4,  d5,  d6,  d7,
+    d8,  d9,  da,  db,  dc,  dd,  de,  df;
+
+
 /* Opcodes
 */
 
@@ -96,14 +100,18 @@ void *vmNOP,
      *vmMV61, *vmMV72,
      *vmLDI00, *vmLDI02, *vmLDI0C, *vmLDI11, *vmLDI20, *vmLDI22, *vmLDI50, *vmLDIC0, *vmLDI1C,
      *vmLD012,
+*LD_D1_R1,
      *vmSTI01, *vmSTI05, *vmSTI0C, *vmSTI21, *vmSTI20, *vmSTI30, *vmSTI40, *vmSTI50,
      *vmST012, *vmST201,
+*ST_D1_R1,
      *vmPUSH0, *vmPUSH1, *vmPUSH2, *vmPUSH3, *vmPUSH4, *vmPUSH5, *vmPUSH7, *vmPUSH9,
      *vmPUSHA, *vmPUSHB, *vmPUSHC,
      *vmPOP0, *vmPOP1, *vmPOP2, *vmPOP3, *vmPOP4, *vmPOP5, *vmPOP7, *vmPOP9, *vmPOPA, *vmPOPB, *vmPOPC,
      *vmADDI0, *vmADDI1, *vmADDI2, *vmADD10, *vmMUL10,
+*ADD_D1_I,
      *vmBLTI1,
      *vmBEQI0, *vmBEQI1, *vmBEQI7, *vmBNEI0, *vmBNEI1, *vmBNEI2, *vmBNEI5, *vmBRTI0, *vmBNTI0, *vmBRA,
+*BEQ_D1_I,
      *vmJMP0, *vmJMP2, *vmJAL0, *vmJAL2, *vmRET,
      *vmSYSI, *vmSYS0, *vmQUIT;
 
@@ -111,9 +119,10 @@ void *vmNOP,
 /* Macro which associates the opcode symbol with (1) a goto address (for the virtual machine)
    and (2) a string (for debug dumps):
      vmOPCODE = &&gOPCODE;
-     memPointerRegister(vmOPCODE);
+     memPointerRegister(vmOPCODE); // Associates an address with a string
 */
 #define memRegisterOpcode(OP) vm##OP=&&g##OP; memPointerRegister(vm##OP);
+#define memRegisterOpcodeNew(OP) OP=&&OP; memPointerRegister(OP);
 
 void vmVm (void) {
  static Num NeedToInitialized = 1;
@@ -142,6 +151,7 @@ void vmVm (void) {
 		memRegisterOpcode(LDIC0);
 
 		memRegisterOpcode(LD012);
+memRegisterOpcodeNew(LD_D1_R1);
 
 		memRegisterOpcode(STI01); memRegisterOpcode(STI05); memRegisterOpcode(STI0C);
 		memRegisterOpcode(STI20); memRegisterOpcode(STI21);
@@ -151,6 +161,7 @@ void vmVm (void) {
 
 		memRegisterOpcode(ST012);
 		memRegisterOpcode(ST201);
+memRegisterOpcodeNew(ST_D1_R1);
 
 		memRegisterOpcode(PUSH0); memRegisterOpcode(PUSH1); memRegisterOpcode(PUSH2); memRegisterOpcode(PUSH3);
 		memRegisterOpcode(PUSH4); memRegisterOpcode(PUSH5); memRegisterOpcode(PUSH7);
@@ -163,6 +174,7 @@ void vmVm (void) {
 		memRegisterOpcode(ADDI0); memRegisterOpcode(ADDI1); memRegisterOpcode(ADDI2);
 
 		memRegisterOpcode(ADD10);
+memRegisterOpcodeNew(ADD_D1_I);
 
 		memRegisterOpcode(MUL10);
 
@@ -177,6 +189,8 @@ void vmVm (void) {
 		memRegisterOpcode(BNTI0);
 
 		memRegisterOpcode(BRA);
+
+memRegisterOpcodeNew(BEQ_D1_I);
 
 		memRegisterOpcode(JMP0); memRegisterOpcode(JMP2);
 
@@ -271,6 +285,9 @@ void vmVm (void) {
 	/* Load value in register's address plus register offset into register. */
 	gLD012: OPDB("ld012"); r0=*((Obj*)r1 + (Num)r2);  goto **(void**)(rip+=8);
 
+	// Load r1's object value into data register
+	LD_D1_R1: OPDB("LD_D1_R1"); d1 = *(Obj*)r1;  goto **(void**)(rip+=8);
+
 	/* Store r0 -> *(r1 + immediate). */
 	gSTI01:OPDB("sti01");
 #if VALIDATE
@@ -321,6 +338,9 @@ void vmVm (void) {
 		*((Obj*)r1 + (Num)r2) = r0;  goto **(void**)(rip+=8);
 	gST201: OPDB("st201"); *((Obj*)r0 + (Num)r1) = r2;  goto **(void**)(rip+=8);
 
+   // Store D1's value into R1's object
+	ST_D1_R1: OPDB("ST_D1_R1"); *(Obj*)r1 = d1;  goto **(void**)(rip+=8);
+
 	/* Push register using local stack pointer. */
 	gPUSH0: OPDB("push0");  vmPush(r0);  goto **(void**)(rip+=8);
 	gPUSH1: OPDB("push1");  vmPush(r1);  goto **(void**)(rip+=8);
@@ -356,6 +376,9 @@ void vmVm (void) {
 	/* Mutate object r1 with (object r1 + object r0). */
 	gADD10: OPDB("add10"); *(Int*)r1 += *(Int*)r0; goto **(void**)(rip+=8);
 	gMUL10: OPDB("mul10"); *(Int*)r1 *= *(Int*)r0; goto **(void**)(rip+=8);
+
+	// Add immediate to D1
+	ADD_D1_I: OPDB("ADD_D1_I"); d1 += *(Int*)(rip+=8); goto **(void**)(rip+=8);
 
 	gBLTI1: OPDB("blti1");
 	if (r1<*(void**)(rip+=8)) {
@@ -501,6 +524,20 @@ void vmVm (void) {
 	rip += 8l;
 	if (vmInterrupt) vmProcessInterrupt();
 	goto **(void**)(rip);
+
+	// Branch to immediate if D1 is equal to an immediate
+	BEQ_D1_I: OPDB("BEQ_D1_I");
+	if (d1 == *(Obj*)(rip+=8)) {
+		rip += 8; // Skip immediate
+		rip += *(Int*)rip + 8; // Add offset and skip immediate
+		if (vmInterrupt) vmProcessInterrupt();
+		goto **(void**)(rip);
+	} else {
+		rip += 2*8;
+		if (vmInterrupt) vmProcessInterrupt();
+		goto **(void**)(rip);
+	}
+
 
 	/* Jump to first instruction in block in r0. */
 	gJMP0: OPDB("jmp0");
@@ -664,6 +701,7 @@ void vmDisplayTypeCode (Obj c, FILE *stream) {
 		else if (*i==vmLDI50) {fprintf(stream, "ldi  $5 $0 "); vmObjectDumper(*++i, stream);}
 		else if (*i==vmLDIC0) {fprintf(stream, "ldi  $c $0 "); vmObjectDumper(*++i, stream);}
 		else if (*i==vmLD012) {fprintf(stream, "ld0  $1 $2");}
+else if (*i==LD_D1_R1){fprintf(stream, "ld   $d1 $r1");}
 		else if (*i==vmSTI01) {fprintf(stream, "sti  $0 $1 "); vmObjectDumper(*++i, stream);}
 		else if (*i==vmSTI05) {fprintf(stream, "sti  $0 $5 "); vmObjectDumper(*++i, stream);}
 		else if (*i==vmSTI0C){fprintf(stream, "sti  $0 $c "); vmObjectDumper(*++i, stream);}
@@ -674,6 +712,7 @@ void vmDisplayTypeCode (Obj c, FILE *stream) {
 		else if (*i==vmSTI50) {fprintf(stream, "sti  $5 $0 "); vmObjectDumper(*++i, stream);}
 		else if (*i==vmST012) {fprintf(stream, "st   $0 $1 $2 ");}
 		else if (*i==vmST201) {fprintf(stream, "st   $2 $0 $1 ");}
+else if (*i==ST_D1_R1) {fprintf(stream,"st   $d1 $r1");}
 		else if (*i==vmPUSH0) {fprintf(stream, "push $0 ");}
 		else if (*i==vmPUSH1) {fprintf(stream, "push $1 ");}
 		else if (*i==vmPUSH2) {fprintf(stream, "push $2 ");}
@@ -701,6 +740,7 @@ void vmDisplayTypeCode (Obj c, FILE *stream) {
 		else if (*i==vmADDI2) {fprintf(stream, "addi $2 %ld", *(i+1)); i++; }
 		else if (*i==vmADD10) {fprintf(stream, "add  $1 $0 "); }
 		else if (*i==vmMUL10) {fprintf(stream, "mul  $1 $0 "); }
+else if (*i==ADD_D1_I) {fprintf(stream,"add  $d1  "HEX, *(i+1)); i++;}
 
 		else if (*i==vmBLTI1) {fprintf(stream, "blti $1 "HEX" "HEX04, *(i+1), vmOffsetToPosition(c, i)); i+=2;}
 		else if (*i==vmBEQI0) {fprintf(stream, "beqi $0 "HEX" "HEX04, *(i+1), vmOffsetToPosition(c, i)); i+=2;}
@@ -713,6 +753,8 @@ void vmDisplayTypeCode (Obj c, FILE *stream) {
 		else if (*i==vmBRTI0) {fprintf(stream, "brti $0 "HEX" "HEX04, *(i+1), vmOffsetToPosition(c, i)); i+=2;}
 		else if (*i==vmBNTI0) {fprintf(stream, "bnti $0 "HEX" "HEX04, *(i+1), vmOffsetToPosition(c, i)); i+=2;}
 		else if (*i==vmBRA)   {fprintf(stream, "bra "HEX04, vmBraOffsetToPosition(c, i)); i++;}
+
+else if (*i==BEQ_D1_I) {fprintf(stream, "beq  $d1  "HEX" "HEX04, *(i+1), vmOffsetToPosition(c, i)); i+=2;}
 
 		else if (*i==vmJMP0) {fprintf(stream, "jmp  $0 ");}
 		else if (*i==vmJMP2) {fprintf(stream, "jmp  $2 ");}
@@ -750,6 +792,7 @@ void vmInitialize (Func interruptHandler, Func2ObjFile vmObjDumper) {
 		DB("Registering rootset objects");
 		memRootSetRegister(r0);  memRootSetRegister(r1);  memRootSetRegister(r2);  memRootSetRegister(r3);
 		memRootSetRegister(r4);  memRootSetRegister(r5);  memRootSetRegister(r6);  memRootSetRegister(r7);
+
 		memRootSetRegister(r8);  memRootSetRegister(r9);  memRootSetRegister(ra);  memRootSetRegister(rb);
 		memRootSetRegister(rc);  memRootSetRegister(rd);  memRootSetRegister(re);  memRootSetRegister(rf);
 

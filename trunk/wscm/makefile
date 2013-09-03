@@ -68,6 +68,16 @@ ASMTOBJS  :=        asm.o            obj.o vm.o mem.o
 COMPTOBJS := comp.o asm.o os.o sys.o obj.o vm.o mem.o
 WSCMTOBJS := comp.o asm.o os.o sys.o obj.o vm.o mem.o
 
+
+memt.o:  test.h
+vmt.o:   test.h
+objt.o:  test.h
+syst.o:  test.h
+ost.o:   test.h
+asmt.o:  test.h
+compt.o: test.h
+wscmt.o: test.h
+
 # Create the unit test binaries
 memt:  $(MEMTOBJS)
 vmt:   $(VMTOBJS)

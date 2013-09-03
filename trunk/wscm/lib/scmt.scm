@@ -30,7 +30,7 @@
 (display "\nVerify thread overflow exception caught")
 (let ~ ((i 0))
  (cond ((= i 3000) (error "\nCan't verify thread overflow with " i " thread calls") (quit -1))
-       ((thread (sleep 1000)) (~ (+ i 1)))))
+       ((thread (sleep 3000)) (~ (+ i 1)))))
 
 
 
@@ -115,7 +115,7 @@
 (AssertEqual uu #( #(1 2 3 44) #(4 5 6 88) #(7 8 9 12) #(13 14 15 16)))
 
 (vector-vector-set-vector-vector! uu 1 1 vv 0 0)
-(AssertEqual uu #( #(1  2 3 44) #(4  1 2 3) #(7  4 5 6) #(13 7 8 999)))
+(AssertEqual uu #( #(1  2 3 44) #(4  1 2 3) #(7  4 5 6) #(13 7 8 9)))
 
 
 

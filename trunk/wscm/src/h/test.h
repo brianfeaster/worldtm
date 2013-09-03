@@ -45,4 +45,11 @@ void testInitializeInternal (char *fn) {
 
 #define testInitialize() testInitializeInternal(__FILE__)
 
+static inline u64 rdtsc (void)
+{
+  u32 hi, lo;
+  __asm__ volatile("rdtsc" : "=a" (lo), "=d" (hi));
+  return ((u64)hi << 32) | lo;
+}
+
 #endif
