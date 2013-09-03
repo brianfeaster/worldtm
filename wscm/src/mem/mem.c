@@ -1,6 +1,6 @@
 #define DEBUG 0
 #define DB_DESC "MEM"
-#define DEBUG_ASSERT 1
+#define DEBUG_ASSERT 0
 #define DEBUG_ASSERT_STACK 0
 #define VALIDATE_HEAP 0
 #include "debug.h"

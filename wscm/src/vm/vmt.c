@@ -12,6 +12,14 @@
 /*******************************************************************************
  TESTS
 *******************************************************************************/
+void displayHexD1 (void) {
+	fprintf(FB, "%x", d1);
+}
+
+void displayHexR1 (void) {
+	fprintf(FB, "%x", *(Int*)r1);
+}
+
 void displayIntegerR1 (void) {
 	fprintf(FB, "%d", r1);
 }
@@ -155,11 +163,58 @@ void TESTScheduler (void) {
 }
 
 
+/* Verify opcode LD_D1_R1
+*/
+void TESTMvLdSt (void) {
+	FBInit();
+
+	vmInitialize(NULL, NULL);
+
+	// Register a new array type
+	memTypeRegisterString(0, (Str)"Int");
+
+	// Register external function names
+	memPointerRegister(displayHexD1);
+	memPointerRegister(displayHexR1);
+
+	// Create a number object in r0
+	r2 = memNewArray(0, sizeof(Int));
+	*(Num*)r2 = 0x69;
+
+	// Assembly program
+	Obj prog[] = {
+		vmMVI1, r2,
+		LD_D1_R1,
+		vmSYSI, displayHexD1,
+      ADD_D1_I, (Obj)1,
+		vmSYSI, displayHexD1,
+		BEQ_D1_I, (Obj)0x6a, (Obj)(-7*8),
+		ST_D1_R1,
+		vmSYSI, displayHexR1,
+		vmQUIT };
+
+	// Copy the program into a code object
+	r0 = memNewVector(TCODE, sizeof(prog)/8);
+	memcpy(r0, prog, sizeof(prog));
+	rcode = r0;
+	rip = 0;
+	vmRun();
+
+	// Look at the VM details
+	//memDebugDumpAll(stdout);
+
+	// Disassemble the code block
+	//vmDisplayTypeCode(rcode, stdout);
+
+	//FBDump();
+	FBFinalize("696a6b6b");
+}
 
 int main (int argc, char *argv[]) {
 	vmInitialize(0, 0);
 	testInitialize();
 	TEST(TESTfancyHelloWorld);
 	TEST(TESTScheduler);
+	TEST(TESTMvLdSt);
 	return 0;
 }

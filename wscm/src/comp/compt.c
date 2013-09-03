@@ -410,7 +410,7 @@ void parsepushoperands (void) {
 	rcode = r0;
 	rip = 0;
 	vmRun();
-	FBFinalize("(Unbound symbol z)");
+	FBFinalize("(Unbound symbol: z)");
 
 	yy_scan_string ((Str)"((lambda (x) x)99)");  yyparse();  rexpr = r0;
 	compCompile();
