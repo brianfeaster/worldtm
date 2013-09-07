@@ -1,0 +1,195 @@
+World Scheme
+Design Document
+
+Purpose
+History
+Overview
+Module mem
+Module vm
+Module obj
+Module sys
+Module os
+Module asm
+Module comp
+Module wscm
+Testing
+
+Purpose
+
+This document describes World Scheme, an environment for programming in the computer language Scheme.  It should be read to gain a high level overview of the structure, design, and implementation of World Scheme.  Detailed algorithmic descriptions are not covered in this document.
+
+History
+
+World Scheme was born during the development of World, a terminal based multi-user MUD written in C on the Linux platform.  The World project allowed for multiple clients to connect remotely and chat in a text-only environment that implemented a 2 dimensional graphical environment using characters and color capabilities of the clients terminal emulator.  Represented in this environment were each client's avatar, rooms and objects.  The clients were able to move around the environment preventing or allowing interactivity with other clients.
+
+As features and functionality were added over time, redundancy was distilled and libraries created facilitating controls of the client's session of his environment and avatar's behavior such as colors or the avatar's appearance.  Although programmable at the C level, the client's use of features was limited to the static interface programmed at the C level.  The user had no way of dynamically or algorithmically interacting with the capabilities of the system.  This client could move the avatar, change his chat color and move objects in the 2D environment, but he couldn't combine actions or base his actions on events from other clients.
+
+A simple command line interpreter was added allowing for simple scripting of World commands and mutation of global state variables with the ability to bind these sequences to key commands.  Many of the low level C implemented functionality was migrated to this runtime interpreted mechanism.  This was exciting for the developer because it allowed for real-time changes in the system without having to force clients to reconnected to a recompiled C client.
+
+Over time the coupling between the original C code and scripting code grew.  At the same time the interpreter was enhanced to accept scheme-like syntax for easier predictable parsing.  Soon after, the monolithic program was split logically and physically into three components, (1) low level system components that implemented World features, (2) the scheme-like interpreter that managed calls and to the system, and (3) scripts that implemented the World client.
+
+Overview
+
+World Scheme [wscm] is written in C for the Linux platform.  It abstracts net connectivity via similar existing file/port functions, can evaluate simultaneous expressions via a multi-threaded mechanism, and semaphores for thread synchronization.
+
+The code base is partitioned into eight modules.  Scheme expressions are read and compiled [wscm, comp, asm] for an internal virtual machine [vm], memory manager [mem], and system calls [obj, sys].  The virtual machine [vm] implements a simplified RISC CPU.  Threads, I/O and semaphores are managed by a library [os] which handles calls to the Linux system (I/O, TCP/IP), the current running VM code block, CPU and registers.
+
+   Module Hierarchy
+   [mem]--[vm]--[obj]--[sys]--[os]--[comp]-[wscm]
+                     \-------[asm]-/
+
+Module mem
+
+Keywords: array vector memory object pointer garbage collector generational stack finalizer heap
+
+The memory module restricts how Linux memory is allocated via Linux mmap() and provides pointers to two different object types: Arrays and vectors.  An array is a fixed length sequence of bytes.  Any value can be stored in the allocated size.  A vector is a fixed length sequence of pointers to other arrays or vector objects.  Once requested and allocated, the memory used by either type of object will eventually be returned back to Linux and unallocated with the pointers becoming invalid.  To prevent this, a C pointer variable's address (as opposed to its pointer value) is registered with the module as a root object/pointer.  Multiple root objects can be registered.  All root objects are dereferenced to object pointers which, again, are pointers to arrays or vectors objects (with vectors pointing to further arrays or vectors, etc).  The entire tree of objects referenced by this root set will never be returned to the Linux system.
+
+The act of reclaiming unreferenced/unused objects is performed by a garbage collector.  Currently it implements a stop and copy collector with generational tendandcies.  When conditions are met, the memory module takes control of the system and moves all live objects to a newly allocated Linux heap while updating root set object/pointer values as well as the references within a vector object.
+
+Object's can be read and written to directly via C expressions or module calls which validate the objects access and values.  The latter is the recommended approach especially with vector objects.  There exist object subtypes the garbage collector handles more specifically than vectors:  stack, pointer and finalizer.
+
+Stacks are self explainitory in behavior and are just vector's with the first element directly referencing the object's subelement managed by push and pop vector object functions.  The garbage collector only concerns itself with sub elements in the vector containing live stack objects.  The other pointers in the vector are ignored and possibly treated as "garbage".
+
+Pointer objects are similar to stack objects but contain just two elements:  A reference to another object and a pointer to a subelement of that object.  The garbage collector maintains the pointer value during the stop-and-copy collection.
+
+Finalizer objects are vectors of length two which maintain a pointer to an object as well as a pointer to an internal C function.  Once the memory module deems the finalizer object is garbage, the C function is called with the object value passed as a single argument.
+
+Static array and vector objects can also be created and are kept on a separate heap that is never collected.  Array and vector objects can be created with the restriction that static vectors don't reference regular non-static objects.  The static heap is never scanned during a garbage collection and would not protect a live object from being lost during a garbage collection.  This heap is used to hold symbols and constant objects which remain live over the entire World Scheme lifetime such as character objects and syntatic symbol names (#\a #\b #\c cond eq? quote etc...).
+
+Basic array and vector objects can be typed with user specified values.  During object creation, the type and size (size is either in bytes for arrays or architecture dependant long word/void* for vectors) are specified and stored in a descriptor right before the object's address in Linux memory.  A type with the high bit set will be the vector base type, unset the array base type.
+ [descriptor] <-- [type|  size  ]
+ [ Element 0] <-- address of object
+ [ Element 1]
+ [ Element 2]
+ ...
+
+After an object is created, either directly by the memory module or indirectly via another module, it must always be reachable in the tree formed from the root set.  If an object is returned and not assigned to an existing vector or root node and instead passed to a C function or assigned to a local C variable, it is possible for the garbage collector to move the object, resulting in the C pointer not referencing the live object or valid heap.
+
+Validation functions exist to verify all live objects are valid or that the pointers are considered constant values which the memory module accepts as exceptions to valid object pointers.  Any value not referencing an address in an existing heap is considered a static address or constant value and is ignored during garbage collection.  Constant values are those below a certain address range.  On the current development Linux machine, addresses below 0x430000 have been identified as falling within the range of global C variables, C function addresses, and goto addresses and so those values are ignored when validating valid pointer values.  All new heaps allocated fall above this value.  This allows vector objects which represent code blocks (see the "vm" mdoule section) to contain C pointers to functions and goto labels.  Integer constants (between +/-#x430000) are also allowed as vector values as immediate numbers for certain virtual machine opcodes.
+
+Module vm
+
+Keywords: virtual machine VM CPU stack register root set goto pointer opcode program counter PC
+
+The virtual memory module models a CPU, stack and registers.  It interprets opcodes and values in a code object which is a vector type.  Opcodes are C goto addresses determined at runtime requiring the code objects to be assembled at runtime.
+
+The overall mechanism of the virtual machine is to continuously jump to the C goto label address stored in the vector.  Direct references to the vector's obects are via a program counter.  The program counter is kept in a register and points to an element in the code object.  The opcodes are implemented as C code which performs basic operations on registers, a vector objects, and the program counter.  It can also make calls to C functions which are considered "system/kernel" calls.
+
+Registers are object pointers registered with the memory module as root pointers.  They encapsulate the bulk of the root set.  32 registers are used with the first 16 used by opcodes and the remaining 16 by different modules as working/state objects such as the global stack, code object, scheme environments, thread lists, etc.
+
+Before a system call, the program counter is translated into an index into the code vector and restored upon returning from the system call.  This prevents the collector from confusing the pointer as a valid object since it points within an active heap but not at a legal object location.
+
+ Example VM machine and code block
+
+ {
+    pc = code;
+    goto **pc;
+    addi0Label: reg0 += *(int*)(++pc); goto **(++pc);
+    mv01Label:  reg0 = reg1;           goto **(++pc);
+ }
+
+ code = [  CODE    ] Initial goto jumps to the mv01Label C code
+        [MV $0 $1  1 code which, after assigning register 1 to 0
+        [ADDI $0   ] jumps to the addi0Label C code.
+        [99        ]
+        [SYSI      ]
+        [sysDisplay]
+        [QUIT      ]
+
+The jump and link opcode will copy the current code and program counter registers to a return code and return program counter register before setting the current code and program counter to the specified code block and first instruction.  The return value registers are copied back when the opcode "ret" is evaluated.
+
+Module obj
+
+The object module abstracts common scheme object creation and interaction and creates common symbols assinged to global C symbols.  This module fully demonstrates the strict requirements of the memory module with respect to passing and storing objects as care must be taken to guarantee new objects are always reference by a root set pointer or other live vector object.
+
+The following scheme primitives can be created with functions in this module: integer, floats, strings, symbols, pairs, doubly linked lists, vectors, and ports.  Object values are dereferenced via C expressions or memory module functions for vector objects.  An integer object's value would be accessed with the C expression "*(Int*)obj".
+
+A some pair accessors are defined (car, cadr, etc) as well as doubly linked list mutators and traversers.  Symbols are hashed in this module.  Integers between -1024 and 1024 and all 256 character objects are cached.
+
+Module sys
+
+Keywords: I/O IO state machine scanner parser read display write serialize environment local global blocking socket port network
+
+The system module contains C implementations of I/O functionality, scheme object serialization, and scheme environment managing.  These functions are used mainly outside the virtual machine's runtime as they will block the entire world scheme process.
+
+A scheme token scanner is implemented as a state machine consisting of state tables indexed by the characters read in.  As each character is read, the next state is referenced via the current state's table character index.  There are 16 state symbols/tables and 19 final state symbols.  The parser is single recursive function whos only real function is to build lists and vectors of primitives returned by the scanner.
+
+The parser is not used on I/O streams as it will fail when when the parser fails to scan a complete valid expression and so is used only for initial bootstrapping and string parsing calls.  A virtual machine runtime scanner and parser is implemented in the wscm module allowing blocking streams to be parsed and its process to be preemted.
+
+The runtime global scheme symbol environment is an association list of symbols and values.  Local environments are a tree structure with each node continaing the parent environment, list of symbols and symbol values.  This module contains functions to get and set global and local variables.  Local environments are created at runtime and so functionality to create local environments is compiled directly into runtime virtual machine code objects.
+
+Scheme object serialization is performed on most objects allowing for visual or machine parsing.  Scheme requires "display" and "write" serializers with the latter's output able to feed any scheme "read" mechanism.  The functions accept any scheme object pointer and a C FILE pointer for output.  These I/O functions will block the entire world scheme process so are not used directly at runtime.
+
+To facilitate non-blocking I/O, the file/socket I/O functions in this module will keep track of the bytes processed and port state.  It is up to the caller to deal with unhandled bytes or unopened ports.  The state of the I/O call, be it to open a connection or read a number of bytes, is determined by the object returned in vm register r0.  Virtual machine registers are used as input arguments to these calls and must be stored if these calls are preemted by other threads or calls.  This is handled by thread functions in the os module during runtime.
+
+Module os
+
+Keywords: thread descriptor code scheduler interrupt sleep queue semaphore blocked ready waiting running sleeping round robin registers signal handler
+
+To facilitate thread management during runtime, this module coordinates and manages virtual machine and thread descriptor state.  Threads are created around a code object which is allowed to run in the virtual machine periodically.  Some system calls made out of the virtual machine module are thread aware and will yield its thread to the scheduler I/O.  These calls are related to file and socket I/O, semaphores and thread sleeping.  The scheduler will also spawn new interrupt handler threads triggered on interrupt flags.
+
+The scheduler is a round robin scheduler which is called periodically from the virtual machine.  The virtual machine is triggered via a flag set from a Linux C timer interrupt handler.  If the vm module's interrupt flag is never set then the VM will only exit if the program reaches a QUIT opcode.
+
+If the vm module's interrupt flag is raised, the virtual machine will prepare itself for the garbage collector (just in case) then call the os module's scheduler.  The scheduler performs the following:  Move timed sleeping threads and I/O blocked threads to the ready queue, spawn new signal handler threads, choose the next ready thread to be run by the virtual machine, and/or wait until the next sleeping thread or I/O blocked thread is ready.
+
+The sleeping thread list contains threads in order of their time to wake up.  Any thread past the wakeup time is moved to the ready queue.  The blocked thread list contains all threads waiting on an I/O event.  It is scanned every call to the scheduler.  Semaphore blocked threads are handled directly by the system calls that raise/lower their counter.  After all threads have been moved to their proper queues, the round robin scheduler selects the next thread, sets the virtual machine registers to the current thread's last valus and returns back to the virtual machine.
+
+Most state and data structures are stored in many of the high (0x12 through 0x16) virtual machine registers mapped to the following C symbols:  rblocked, rthreads, rsleeping, rrunning and rready.  Signal handlers are stored in the scheme global environment mapped to symbol "SIGNALHANDLERS" and to C symbol "signalhandlers".
+
+Module asm
+
+Keywords: assemble optimize peephole iblock icode igraph child parent branch jump opcode conditional
+
+The assembler module facilitates the runtime creation and assembly of virtual machine programs.  The assembly programs are embedded in the C code and passed functionally to the assembler.  At runtime the assembler transforms the program into an intermediate graph of intermediate blocks which containing intermediate code objects.  Optimizations are performed on the igraph and iblocks directly in an attempt to increase runtime performance of the resulting virtual machine code objects.
+
+Assembly occurs by functionally passing a combination of opcode, opcode fields, and scheme objects which are all translated into icode objects.  Opcodes and opcode fields are enumerated integers of virtual machine instructions and registers.
+
+Icode objects represent a complete virtual machine opcode.  New icodes are stored internally which are eventually transfered to new iblocks triggered on certain opcodes.  New iblocks have bidirectional connections to other iblocks which define the possible flow of control of the vm program.  Each iblock will have at least one incoming parent iblock, and zero, one, or two child iblocks.  Child iblocks model the default flow or conditional branch flow.
+
+Lables can be generated which allow locations in the assembly program to be tagged for conditional and unconditional branch instructions.  Label's are integers which get associated with iblocks once the lable is parsed by the assembler.  Label targets, required for all branch opcodes, are eventually resolved both in the igraph and related code block opcode fields.
+
+The assembly program is broken up into iblocks on specific flow control changing opcodes.  As the assembly program is parsed and new icodes generated, new iblocks are formed on the following opcodes:  labels, unconditional and conditional branch, ret, call, and jmp opcodes.  Labels are associated with iblocks in a vector.  Once the entire igraph has been created, default and conditional iblock target links are resolved (bidirectionally) for each iblock.
+
+The igraph and iblocks are optimized the following ways (with more to be added over time):  (1) Redundant push/pop instructions are removed  (2) Empty iblocks are removed from the igraph and parent/child links updated.
+
+After optimization all icodes are emitted to a new code block with the branch offset values computed and set.  At this point the program can be sent to the virtual machine directly or wrapped in a thread and passed to the scheduler.
+
+Module comp
+
+Keywords:  compiler translate program parse assembly code runtime environment combination scheme specification opcode closure continuation special form quasiquote tail optimization syntax
+
+The compiler translates a parsed scheme program into an assembly program and is implemented completely in C as a scheme syscall so will block all threads until it completes.  All syntatic scheme forms are translated into assembly which extend and utilize runtime environments, evaluate combinations, and make system calls to C functions implementing all other scheme features.  The code generated by the compiler, when run by the virtual machine, returns the expression's value in virtual machine register r0.
+
+As a scheme program is compiled, as much of it is translated into the same igraph as possible.  Once a new closure is required to be produced at run time, a new assembly context is created and compilation, in essence, started over for the new code block.  Continuations, threads, lambda and macros begin new compilation contexts.
+
+Global variable references are compiled into code that reference the binding's value or make a system call to find the global variable if the global variable is undefined.  If the global variable exists at runtime, the system call code is replaced at runtime with code that references the binding's value.  Otherwise the program will error and halt.
+
+Closures, when applied, include the logic to extend local environments and update virtual machine registers which define the current local environment, code bock and instruction pointer.  The macro special form is a modified lambda which and does not honor the scheme specificication.  Instead it is a dynamically bound closure which extends the caller's environment rather than the macro's defined environment.
+
+A continuation call will copy the stack and registers and form a new closure who's code block reinstates the stack and registers.
+
+Some special forms will re-write the s-expression into a normalized form such as the letrec or quasiquote special forms.  Letrec forms are rewritten as generic lambda forms.  Quasiquote is rewritten as generic list constructions and expression applications.
+
+Tail optimization is managed during compilation and determines if procedure calls should be assembled to save the current environment state with a jump and link to the closure's code or simply allowed to be replaced by the callee's lexical environment with a non-returning jump.
+
+All other syntatic forms are compiled into assembly which perform direct mathematical or equivalency checks on objects or make system calls to C functions which perform the required actions on variables or returned sub-expression values.
+
+Module wscm
+
+Keywords: scheme read eval print runtime environment system call primitive excpetion error
+
+The world scheme module implements a complete scheme runtime environment.  It configures creates a read eval print loop in assembly as well as a parser allowing multiple preemptive threads to parse and run expressions via multiple I/O ports.
+
+C functions are bound to global scheme environment symbols as system calls for support of many scheme required functionality:  file I/O, socket I/O, scheme primitive operations (numbers, strings, characters, lists and their mutators, accessors, etc), conditionals, etc.  Added functionality not required by the scheme specification include:  thread management, thread synchronization, preemptive signal handling, and various internal and runtime debugging aids.
+
+Runtime error handling, when detected, will halt the process with a relevant message displayed to the standard output port.  An error/exception handler can be registered after the thread is created which is called instead of the default handler.  The registered handler can be a closure of one argument including a continuation.
+
+Module debug
+
+Keywords: debug indent trace macro
+
+The debugging facility is a set of macros which provide functionality to display indented messages while entering, inside, and leaving C functions useful for tracing the running World Scheme process.  The calls behave like printf except automatic indentation is incremented for all debug message after a DBBEG() call, decremented after DBEND(), and remains the same with DB().  An macro variable toggles the debug facility at runtime preventing the C code from compiling into the binary.  Another macro variables sets the message prefix string which is always aligned to the left.
+
+Testing
+
+Testing involves three coverage types: Unit, integration, and system.  Unit tests cover individual functions with as little to no inter-module interaction.  All unit tests will run to completion in a few seconds.  Integration tests cover functionality requiring intermodule interaction as well as intra-interaction running within unbounded time limits.  System tests expect a full runtime environment and run within unbounded time limits.
