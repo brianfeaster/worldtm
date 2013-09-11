@@ -10,9 +10,11 @@
 #define rretip     ra /* Caller's ip */
 #define rretcode   rb /* Caller's code block */
 #define renv       rc /* Current running thread's environment */
-#define rip        rd /* Current running program instruction pointer */
+
 #define rcode      re /* Currently running code object */
 #define rstack     rf /* Global stack created and used by VM module */
+
+#define dip        de /* Current running program instruction pointer */
 
 #define TCODE 0xefl
 
@@ -20,11 +22,11 @@
    computation should use only these as variables since a GC could move an 
    objects location in memory at any time.
 */
-extern Obj d0,  d1,  d2,  d3,  d4,  d5,  d6,  d7,
-           d8,  d9,  da,  db,  dc,  dd,  de,  df;
-
 extern Obj r0,  r1,  r2,  r3,  r4,  r5,  r6,  r7,
            r8,  r9,  ra,  rb,  rc,  rd,  re,  rf;
+
+extern Int d0,  d1,  d2,  d3,  d4,  d5,  d6,  d7,
+           d8,  d9,  da,  db,  dc,  dd,  de,  df;
 
 void vmPush (Obj o);
 Obj vmPop (void);

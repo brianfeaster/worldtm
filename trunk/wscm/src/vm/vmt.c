@@ -110,7 +110,7 @@ void TESTfancyHelloWorld (void) {
 	memcpy(rcode, mainCode, codeSize);
 
 	/* Set instruction pointer and start  the machine language program running */
-	rip=0;
+	dip=0;
 	vmRun();
 
 	/* Verify the machine language program's output against a magic string */
@@ -156,7 +156,7 @@ void TESTScheduler (void) {
 	r0 = memNewVector(TCODE, sizeof(prog)/8);
 	memcpy(r0, prog, sizeof(prog));
 	rcode = r0;
-	rip = 0;
+	dip = 0;
 	vmRun();
 
 	assert((Obj)4==r5);
@@ -197,7 +197,7 @@ void TESTMvLdSt (void) {
 	r0 = memNewVector(TCODE, sizeof(prog)/8);
 	memcpy(r0, prog, sizeof(prog));
 	rcode = r0;
-	rip = 0;
+	dip = 0;
 	vmRun();
 
 	// Look at the VM details
