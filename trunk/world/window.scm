@@ -115,8 +115,9 @@
  (define ENABLE #t)
  (define Theight 0)
  (define Twidth  0)
- (define GY -1) ; Global cursor positions.
- (define GX -1)
+ (define TY -1) ; Global cursor positions.
+ (define TX -1)
+ (define PASTLASTCOLUMN #f) ; Last character was on the last column.  Cursor is technically in two places now.
  (define WindowVec (make-vector MAXWINDOWCOUNT #f)) ; Vector of window objects by ID
  (define WindowList ()) ; List of window objects in display order
  (define TerminalSemaphore (open-semaphore 1))
@@ -133,12 +134,12 @@
  (define (TerminalDisable)
    (set! ENABLE #f))
 
- (define (InsideTerminal? y x)
-   (and (>= y 0) (>= x 0) (< y Theight) (< x Twidth)))
+ (define (InsideTerminal? ty tx)
+   (and (>= ty 0) (>= tx 0) (< ty Theight) (< tx Twidth)))
 
- (define (topWin y x)
-   (and (InsideTerminal? y x)
-        (vector-vector-ref WindowMask y x)))
+ (define (topWin ty tx)
+   (and (InsideTerminal? ty tx)
+        (vector-vector-ref WindowMask ty tx)))
 
  ; Return first window object in window list that is visible at this location.
  (define (TopmostWindowDiscover gy gx)
@@ -171,50 +172,78 @@
   (set! Theight (cdr termSize)) (if (< Theight 2) (set! Theight 2))
   (set! Twidth  (car termSize)) (if (< Twidth 2) (set! Twidth 2))
   (set! WindowMask (make-vector-vector Theight Twidth #f))
-  ; Clear each window's visible count to coincide with the fresh WindowMask array
+  ; Clear each window's visible count to coincide with the uninitialized WindowMask array
+  ; then reset each window's visibile count and terminal window mask.
   (map (lambda (w) ((w 'visibleCountClear))) WindowList)
   (WindowMaskReset 0 0 Theight Twidth))
 
  (define (RefreshTerminal)
-   ;(loop2 0 Theight 0 Twidth (lambda (gy gx) (gputc #\. #x0001 gy gx))) ; Clear every terminal char position
-   (loop2 0 Theight 0 Twidth (lambda (gy gx) ; Over every terminal char position
-     (let ((win (topWin gy gx)))
+   ;(loop2 0 Theight 0 Twidth (lambda (ty tx) (gputc #\. #x0001 ty tx))) ; Clear every terminal char position
+   (loop2 0 Theight 0 Twidth (lambda (ty tx) ; Over every terminal char position
+     (let ((win (topWin ty tx)))
        (if win
-         ((win 'globalRefresh) gy gx)
-         (drawBackgroundCell gy gx))))))
+         ((win 'globalRefresh) ty tx)   ; Ask window to draw one of its characters to the terminal
+         (drawBackgroundCell ty tx)))))); No window at this location so draw the background
 
+ (define (tgoto y x)
+   (if (and (or (!= y TY) (!= x TX))
+            (InsideTerminal? y x))
+     (begin
+       (semaphore-down TerminalSemaphore)
+       (set! PASTLASTCOLUMN #f)
+       (send "\e[" stdout)
+       (display (+ y 1))
+       (send ";" stdout)
+       (display (+ x 1))
+       (send "H" stdout)
+       (set! TY y)
+       (set! TX x)
+       (semaphore-up TerminalSemaphore))))
+
+ ; Match the behavior of sane terminals internally.  Sending a printable char
+ ; advances the cursor including non-glyph chars which are represented by a
+ ; generic the generic glyph '.'.  The cursor is expected not to advance past
+ ; the last column until another char is displayed which occurs on the next row
+ ; and first column.
  (define (gputc char color y x)
-  (if ENABLE (begin
-   (semaphore-down TerminalSemaphore)
-   ; Set color.
-   (if (!= TCOLOR color) (begin
-     (set! TCOLOR color)
-     (send (integer->colorstring color) stdout)))
-   ; Set cursor location.
-   (if (or (!= y GY) (!= x GX)) (begin
-     (send "\e[" stdout)
-     (display (+ y 1))
-     (send ";" stdout)
-     (display (+ x 1))
-     (send "H" stdout)
-     (set! GY y) (set! GX x)))
-   ; Draw character.
-   (display (char->visible char))
-   ; Update cursor.
-   (set! GX (+ 1 GX))
-   (if (<= Twidth GX)
-       (begin
-         (set! GX 0)
-         (set! GY (+ 1 GY))
-         ;(if (<= Theight GY) (set! GY (- Theight 1))) ; Allow the cursor to be off screen to force a cursor move.
-       ))
-   (semaphore-up TerminalSemaphore))))
+  (and ENABLE (begin
+    (semaphore-down TerminalSemaphore)
+    ; Set color.
+    (if (!= TCOLOR color) (begin
+      (set! TCOLOR color)
+      (send (integer->colorstring color) stdout)))
+    (if PASTLASTCOLUMN
+      ; Adjust virtual terminal cursor to next line if last char was displayed on the last column.
+      ; If already on the last line, send a return to prevent the screen from scrolling.
+      (begin
+        (set! PASTLASTCOLUMN #f)
+        (set! TX 0)
+        (if (< TY (- Theight 1))
+            (set! TY (+ TY 1))
+            (send "\r" stdout))))
+    ; Set cursor location.
+    (if (or (!= y TY) (!= x TX)) (begin
+      (send "\e[" stdout)
+      (display (+ y 1))
+      (send ";" stdout)
+      (display (+ x 1))
+      (send "H" stdout)
+      (set! TY y) (set! TX x)))
+    ; Draw char as something (even non-glyphed chars).
+    (display (char->visible char))
+    ; Advance cursor.  The cursor's visible range is [0 .. Twidth - 1]
+    ; A character was sent to the last column, keep TX on the
+    ; last column but set end of physical line EOPL flag.
+    (if (< TX (- Twidth 1))
+      (set! TX (+ 1 TX))
+      (set! PASTLASTCOLUMN #t))
+    (semaphore-up TerminalSemaphore))))
 
  ; Given a global terminal coordinate, plot a background character.
- (define drawBackgroundCell (let ((i 0)) (lambda (gy gx)
+ (define drawBackgroundCell (let ((i 0)) (lambda (ty tx)
    (gputc (vector-ref #(#\[ #\t #\m #\] #\  ) i) ; The char
           #xeb16                            ; The 8bit background and 8bit foreground color
-          gy gx)                            ; physical terminal y and x location
+          ty tx)                            ; physical terminal y and x location
    (if (< i 4) (set! i (+ i 1)))
    (if (and (= i 4) (= 0 (random 20))) (set! i 0)))))
 
@@ -230,7 +259,7 @@
  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
  ;; Window_subclass
  ;;
- (define (WindowNew Y0 X0 Wheight Wwidth COLOR . ChildStack)
+ (define WindowNew (let ((parent self)) (lambda (Y0 X0 Wheight Wwidth COLOR . ChildStack)
    (define (self msg) (eval msg))
    (define id
      (let ~ ((i 1))
@@ -243,8 +272,8 @@
                    i))))
    (define Y1 (+ Y0 Wheight))
    (define X1 (+ X0 Wwidth))
-   (define TY 0) ; Cursor position relative to window
-   (define TX 0)
+   (define WY 0) ; Cursor position relative to window
+   (define WX 0)
    ; 2d vector of cell descriptors #(color char) AKA glyph.
    (define DESC (vector-vector-map!
                   (lambda (x) (vector COLOR #\ ))
@@ -257,7 +286,7 @@
    (define CURSOR-VISIBLE #t)
    (define ENABLED #t)
    (define topRow 0) ; For vertical scrolling.  The logical "top row" of the DESC array
-   (define needToScroll #f) ; For bottom right character printing.
+   (define PASTLASTCOLUMN #f) ; For last column cursor positioning
    (define (cursor-visible s) (set! CURSOR-VISIBLE s))
    (define WindowSemaphore (open-semaphore 1))
    (define ScrollbackHack #f)
@@ -268,11 +297,14 @@
    (define (visibleCountClear) (set! VisibleCount 0))
    (define (visibleCountAdd c) (set! VisibleCount (+ VisibleCount c)))
    (define (goto y x)
-     (set! needToScroll #f)
-     (set! TY (min (max 0 y) (- Wheight 1)))
-     (set! TX (min (max 0 x) (- Wwidth 1))))
-   (define (set-color b f) (set! COLOR (+ (* 256 b) f))) ; 256 colors each fg and bg packed into 16 bits
-   (define (set-color-word c) (set! COLOR c))
+     (set! PASTLASTCOLUMN #f)
+     (set! WY (min (max 0 y) (- Wheight 1)))
+     (set! WX (min (max 0 x) (- Wwidth 1)))
+     (tgoto (+ Y0 WY) (+ X0 WX)))
+   (define (set-color b f)
+     (set! COLOR (+ (* 256 b) f))) ; 256 colors each fg and bg packed into 16 bits
+   (define (set-color-word c)
+     (set! COLOR c))
    (define (InsideWindow? gy gx)
      (and ENABLED
           (>= gy Y0)
@@ -280,43 +312,35 @@
           (<  gy Y1)
           (<  gx X1)
           (vector-vector-ref ALPHA (- gy Y0) (- gx X0))))
-   (define (home) (goto 0 0))
-   (define (return)
-     (set! TX 0))
-   (define (newline)
-     (set! TY (+ 1 TY))
-     (if (>= TY Wheight) (begin
-           (set! TY (- Wheight 1))
-           (scrollUp)
-           (set! needToScroll #f))))
-   (define (back)
-     (if (and (< 0 TX) (< TX Wwidth))
-       (begin (set! TX (- TX 1))
-              (set! needToScroll #f)
-              (display CHAR-CTRL-H))))
-   (define (backspace c)
-     (if (and (< 0 TX) (< TX Wwidth))
-       (begin (set! TX (- TX 1))
-              (set! needToScroll #f)
-              (putc c)
-              (display CHAR-CTRL-H)
-              (set! needToScroll #f)
-              (set! TX (- TX 1)))))
    (define (hardwareScrollable?)
      (and (= Wwidth Twidth)
           (< 1 Wheight)
           (= VisibleCount (* Wwidth Wheight))))
+   ; Assumtions: Window cursor X is back to column 0
    (define (scrollUp)
      (if (hardwareScrollable?)
        (begin
+         (semaphore-down TerminalSemaphore)
+         ; Manually update the terminal color
+         (if (!= COLOR TCOLOR)
+           (send (integer->colorstring COLOR) stdout))
+         ; Save cursor location, set scrolling region to entire window, move
+         ; cursor to bottom of region, newline (causing region to scroll).
          (displayl "\e7\e[" (+ Y0 1) ";" (+ Y0 Wheight) "r\e[" (+ Y0 Wheight) "H\n")
-         (displayl "\e[r\e8")
+         ; Reset the new last row in the window descriptor array and
+         ; manually clear the new line.
          (loop Wwidth (lambda (x) ; Clear row which will become the bottom row
            (let ((desc (vector-vector-ref DESC topRow x)))
              (vector-set! desc 0 COLOR)
-             (vector-set! desc 1 #\ ))))
-         (set! topRow (modulo (+ topRow 1) Wheight)) ; Shift buffer
-         (repaintRow (- Wheight 1)))
+             (vector-set! desc 1 #\ )
+             (send #\  stdout))))
+         ; Restore scrolling region, restore cursor.
+         (display "\e[r\e8")
+         (if (!= COLOR TCOLOR) ; Manually sync terminal color
+           (set! TCOLOR COLOR))
+         (set! topRow (modulo (+ topRow 1) Wheight)) ; Shift the buffer's top-row index.
+         (semaphore-up TerminalSemaphore)
+         (return)) ; Send the cursor to the beginning of bottom row.
        (begin
          ; Clear top-row which is to become the bottom row.
          ; Force topmost line off the top of the terminal in hopes
@@ -325,7 +349,7 @@
          (if ScrollbackHack (begin
            (display "\e7\e[1;2r\e[H")
            (let ~ ((x 0))
-             (if (>= x Wwidth) 'done
+             (if (< x Wwidth)
                (let ((desc (vector-vector-ref DESC topRow x)))
                   (displayl (integer->colorstring (vector-ref desc 0)) (vector-ref desc 1))
                   (~ (+ x 1)))))
@@ -337,13 +361,14 @@
              (vector-set! desc 1 #\ ))))
          (set! topRow (modulo (+ topRow 1) Wheight)) ; Shift buffer
          ; Refresh window.
-         (repaint))))
+         (repaint)
+         (return))))
    (define (repaintRow row)
      (loop Wwidth (lambda (x)
        (let ((desc (vector-vector-ref DESC (modulo (+ row topRow) Wheight) x)))
          (and (InsideTerminal? (+ row Y0) (+ x X0))
               (eq? self (topWin (+ row Y0) (+ x X0)))
-              (gputc (vector-ref desc 1)
+              (gputc #\- ;(vector-ref desc 1)
                      (vector-ref desc 0)
                      (+ row Y0) (+ x X0)))))))
    (define (repaint)
@@ -361,31 +386,71 @@
                    (modulo (+ (- gy Y0) topRow) Wheight)
                    (- gx X0))))
        (gputc (vector-ref desc 1) (vector-ref desc 0) gy gx)))
-   (define (putchar c)
-     (if needToScroll (begin (set! needToScroll #f) (return) (newline)))
-     (if (not (eq? TCURSOR-VISIBLE CURSOR-VISIBLE)) (tcursor-visible))
-     (if (eq? c NEWLINE) (newline)
-     (if (eq? c RETURN) (return)
-     (if (eq? c CHAR-CTRL-G) (display c)
-     (let ((gy (+ TY Y0))
-           (gx (+ TX X0)))
+   (define (return)
+     (set! PASTLASTCOLUMN #f)
+     (set! WX 0)
+     (tgoto (+ Y0 WY) (+ X0 WX)))
+   (define (newline)
+     (set! PASTLASTCOLUMN #f)
+     (if (< WY (- Wheight 1))
+         (set! WY (+ WY 1))
+         (scrollUp))
+     (tgoto (+ Y0 WY) (+ X0 WX)))
+   (define (home)
+     (goto 0 0))
+   (define (_back)
+     ; If just displayed last char in row, do nothing.
+     (if (and (< 0 WX) (< WX Wwidth))
        (begin
-         ; Send character to terminal only if window location is visible.
-         (and (InsideTerminal? gy gx)
-              (eq? self (topWin gy gx))
-              (gputc c COLOR gy gx))
-         ; Cache color and char to buffer.
-         (let ((desc (vector-vector-ref DESC (modulo (+ TY topRow) Wheight) TX)))
-           (vector-set! desc 0 COLOR)
-           (vector-set! desc 1 c))
-         ; Advance cursor.
-         (set! TX (+ 1 TX))
-         (if (>= TX Wwidth)
-           (if (= TY (- Wheight 1))
-               (set! needToScroll #t) ; TODO remove this line then develop a framework to debug the ensuing issue
-               (begin
-                 (return)
-                 (newline))))))))))
+         (or PASTLASTCOLUMN
+           (set! WX (- WX 1)))
+         (set! PASTLASTCOLUMN #f))))
+   (define (back)
+     (semaphore-down WindowSemaphore)
+     (_back)
+     (goto WY WX)
+     (semaphore-up WindowSemaphore))
+   (define (backspace c) ; backspacing with a non glyph is dangerous
+     (semaphore-down WindowSemaphore)
+     (if (and (< 0 WX) (< WX Wwidth))
+       (begin
+         (_back)
+         (putchar c)
+         (_back)
+         (goto WY WX)))
+     (semaphore-up WindowSemaphore))
+   (define (putchar c)
+     (if (not (eq? TCURSOR-VISIBLE CURSOR-VISIBLE)) (tcursor-visible)) ; Sync window and terminal's cursor visibility
+     (if (eq? c NEWLINE) (newline) ; This should actually move the cursor
+      (if (eq? c RETURN) (return) ; This should actually move the cursor
+       (if (eq? c CHAR-CTRL-G) (display c) ; Bell doesn't physically print anything so no state to adjust.
+        (begin
+          ; If the last char printed was on the last column, we
+          ; need to set window cursor to the right spot first.
+          (if PASTLASTCOLUMN
+            (begin
+              (set! PASTLASTCOLUMN #f)
+              (set! WX 0) ; back to columm 0
+              (if (< WY (- Wheight 1)) ; Either cursor down a row or scroll window up
+                (set! WY (+ 1 WY))
+                (scrollUp))))
+          (let ((ty (+ WY Y0)) ; Consider terminal coordinate location for next character
+                (tx (+ WX X0)))
+            ; Send character only if the this location is in the window and visible
+            (if (eq? self (topWin ty tx))
+              (gputc c COLOR ty tx))
+            ; Cache color and char to buffer.  The modulo is required to compute
+            ; the actual row since it depends on the topRow value which increments
+            ; whenever the window scrolls up.
+            (let ((desc (vector-vector-ref DESC
+                                           (modulo (+ WY topRow) Wheight)
+                                           WX)))
+              (vector-set! desc 0 COLOR)
+              (vector-set! desc 1 c))
+            ; Advance cursor or leave it on the last column.
+            (if (< WX (- Wwidth 1))
+              (set! WX (+ 1 WX)) ; The cursor hangs out on the last column until the next char
+              (set! PASTLASTCOLUMN #t))))))))
    ; puts is autonomous to guarantee the string output is not altered.  putc must be autonomous as well
    ; for its homgeneity.
    (define (puts str)
@@ -399,14 +464,14 @@
    ; Clears rest of line.  Output will resume at original column.
    (define (clearToEnd)
      (semaphore-down WindowSemaphore)
-     (let ((ox TX) (oy TY))
-       (let ~ ((i TX))
+     (let ((ox WX) (oy WY))
+       (let ~ ((i WX))
          (if (< i Wwidth)
            (begin
              (putchar #\ )
              (~ (+ i 1)))))
-       (set! TX ox)
-       (set! TY oy))
+       (set! WX ox)
+       (set! WY oy))
      (semaphore-up WindowSemaphore))
    (define (toggle . state)
      (let ((newstate (if (null? state) (not ENABLED) (car state))))
@@ -437,8 +502,8 @@
        (set! Wwidth  (if (< w 1) 1 w)) ; Silently reset invalid width
        (set! Y1 (+ Y0 Wheight))
        (set! X1 (+ X0 Wwidth))
-       (set! TY (min TY (- Wheight 1))) ; Make sure cursor is not out of bounds.
-       (set! TX (min TX (- Wwidth 1)))
+       (set! WY (min WY (- Wheight 1))) ; Make sure cursor is not out of bounds.
+       (set! WX (min WX (- Wwidth 1)))
        ; Reset alpha mask (no cell is transparent)
        (set! ALPHA (make-vector-vector Wheight Wwidth #t))
        ; Reset descriptor table (each cell is a space with current color set)
@@ -465,8 +530,8 @@
        (set! Y1 (+ Y0 Wheight))
        (set! X1 (+ X0 Wwidth))
        ; Make sure cursor is not out of bounds
-       (set! TY (min TY (- Wheight 1)))
-       (set! TX (min TX (- Wwidth 1)))
+       (set! WY (min WY (- Wheight 1)))
+       (set! WX (min WX (- Wwidth 1)))
        (set! ALPHA (make-vector-vector Wheight Wwidth #t)) ; Reset the alpha mask (TODO?)
        (set! DESC (vector-vector-map! (lambda (x) (vector COLOR #\ ))
                                       (make-vector-vector Wheight Wwidth ())))
@@ -531,7 +596,8 @@
                         (~ (substring str 1 len) (- len 1) 0 ch) ; Recurse.  Ignore newline that follows a return
                         (begin
                           (~ (substring str 0 i) i i ch) ; Recurse.  Use this recursive call to display and save color/string to line
-                          (return)(newline) ; as well as a cooked newline
+                          (return) ; as well as a cooked newline
+                          (newline)
                           (set! LineCount (+ 1 LineCount)) ; Add new strb to strb bufer
                           (set! line (list COLOR "")) ; Create new empty line
                           (set! Buffer (cons line Buffer)) ; Start a new line
@@ -550,35 +616,33 @@
            (/ (+ len Wwidth -1) Wwidth))) ; number of full lines
      ; Draws a line (CLR STR ...) to the window skipping 'skip' lines and
      ; displaying up to 'left' lines  The list is backwards, thus the
-     ; pre-recursive algorithm.
+     ; pre-recursive algorithm.  Returns number of chars not printed to on
+     ; the last line.
      (define (redrawLine LINE skip left)
-       (set! skip (* skip Wwidth)) ; Consider skip and left as characters now
-       (set! left  (* left Wwidth))
-       (let ~ ((line LINE))
-         (if (not (null? line))
+       (set! skip (* skip Wwidth)) ; Consider number of chars to skip before displaying logical line
+       (set! left  (* left Wwidth)); Total number of chars on screen we can display to.
+       (let ~ ((line LINE)) ; List of (CLR STR ...)
+         (or (null? line)
          (begin
            (~ (cddr line)) ; pre-recurse
-           (if (< 0 left)
-           (let ((str (cadr line))
-                 (len (string-length (cadr line))))
-             (cond ((<= len skip)
-                    (set! skip (- skip len))) ; Need to skip more characters
-                   (else
-                    (set! COLOR (car line))
-                    ; consider the full string or sub string
-                    (letrec ((substr (substring str skip (string-length str)))
-                             (len (string-length substr)))
-                      (set! skip 0) ; nothing more to skip now
-                      (if (<= left len)
-                        (begin
-                          ((parent 'puts) (substring substr 0 left))
-                          (set! left 0))
-                        (begin
-                           ((parent 'puts) substr)
-                           (set! left (- left len))))))))))))
-       ; If the amount of chars left to print to is not even, clear to end of line.
-       (if (!= 0 (modulo left Wwidth))
-         ((parent 'clearToEnd))))
+           (if (< 0 left) (let ((str (cadr line))
+                                (len (string-length (cadr line))))
+             (if (<= len skip)
+                 (set! skip (- skip len)) ; Need to skip more characters
+                 (begin
+                   (set! COLOR (car line))
+                   ; consider the full string or sub string
+                   (letrec ((substr (substring str skip (string-length str)))
+                            (len (string-length substr)))
+                     (set! skip 0) ; nothing more to skip now
+                     (if (<= left len)
+                       (begin
+                         ((parent 'puts) (substring substr 0 left))
+                         (set! left 0))
+                       (begin
+                          ((parent 'puts) substr)
+                          (set! left (- left len))))))))))))
+       (modulo left Wwidth)) ; Return number of chars not printed to on this physical line.
      ; Redraw the current state of the scrollback buffered window.
      ; The 'backscroll' var is the physical row count to scroll back,
      ; with respect to the bottom most printable line.
@@ -591,35 +655,35 @@
        (let ~ ((physical (+ backscroll Wheight)) ; The number of physical lines we need to skip until redrawing occurs.
                (lst Buffer)) ; The stack buffer of lines
          (cond ((< physical 1);Base case 2: The current line exceeds beyond the top of the screen, we only need to skip (abs physical) number of lines
-                (set! skip (- physical)))
-               ((null? lst) ()) ; Base case 1: We've hit the "top" of the buffer.  So return and start the dumping of the lines we've traversed recursively.
+                 (set! skip (- physical)))
+               ((null? lst)
+                 ()) ; Base case 1: We've hit the "top" of the buffer.  So return and start the dumping of the lines we've traversed recursively.
                (else
-                (letrec ((line (car lst)) ; Consider the current line
-                         (llcount (line-line-count line))) ; and the number of physical lines it requires to display
-                (~ (- physical llcount) (cdr lst)); Pre-recurse
-                ; Print this line, assuming skip lines and physicalLeft lines to go
-                (if (< 0 physicalLeft)
-                  (begin
-                    ;; Render the line to multiple physical lines possibly along with cleartoEnd.
-                    (redrawLine line skip physicalLeft)
-                    (set! physicalLeft (- physicalLeft (- llcount skip))) ; subtract number of lines displayed (total line count - skipped lines)
-                    (if (eq? lst Buffer)
-                      (begin ; Keep track of the cursor position after the last line printed
-                        (set! oy TY)
-                        (set! ox TX))
-                       (if (< 0 physicalLeft) ; If there are more physical lines and this isnt' the last line to print, carriage return.
+                 (letrec ((line (car lst)) ; Consider the current line
+                          (llcount (line-line-count line))) ; and the number of physical lines it requires to display
+                 (~ (- physical llcount) (cdr lst)); Pre-recurse
+                 ; Print this line, assuming skip lines and physicalLeft lines to go
+                 (if (< 0 physicalLeft)
+                   (let ((charsLeft (redrawLine line skip physicalLeft))) ; Render the line to multiple physical lines
+                     (if (< 0 charsLeft) ((parent 'clearToEnd)))
+                     (set! physicalLeft (- physicalLeft (- llcount skip))) ; subtract number of lines displayed (total line count - skipped lines)
+                     (set! skip 0)
+                     (if (eq? lst Buffer)
+                       (begin ; Make sure the last line printed is the next cursor position.
+                         (set! oy WY)
+                         (set! ox WX)
+                         (let ~ ((i physicalLeft)) ; Clear rest of window if there aren't enough lines to fill the screen
+                           (if (< 0 i)
+                             (begin
+                               (return)
+                               (newline)
+                               ((parent 'clearToEnd))
+                               (~ (- i 1)))))
+                         (goto oy ox))
+                       (if (and (< 0 charsLeft) (< 0 physicalLeft)) ; If there are more physical lines and not last line to print, clear and carriage return.
                          (begin
                            (return)
-                           (newline))))
-                    (set! skip 0)))))))
-       (let ~ ((i physicalLeft)) ; Clear rest of window if there aren't enough lines to fill the screen
-         (if (< 0 i)
-           (begin
-             (return)
-             (newline)
-             ((parent 'clearToEnd))
-             (~ (- i 1)))))
-       (goto oy ox))
+                           (newline)))))))))))
      (define (scrollHome)
        (set! backscroll (- LineCount Wheight))
        (redrawBuffer))
@@ -654,7 +718,7 @@
         ; childstack = ((child parameters) child-macro . reset of child stack)
         (apply (cadr ChildStack) self (append (car ChildStack) (cddr ChildStack)))
         self))
-    #f))
+    #f))))
  ;;
  ;; Window_subclass
  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;

@@ -4213,3 +4213,37 @@ Tue Aug 27 18:58:41 UTC 2013
 
 Useful facts for Tank to share
 http://imgur.com/a/NSpG2
+
+
+
+Sat Sep  7 03:48:21 UTC 2013
+
+I created a Subversion tag for the current state of development.  I called it
+world64-1.0.
+
+The virtual machine uses one of the existing registers as an instruction
+pointer.  During an interrupt this is converted to an instruction offset
+on the stack which is ignored by the garbage collector due to the value being
+an invalid heap pointer.  I assume the heap is very high in memory so an
+instruction offset won't be anywhere near a heap address.  I plan to create an
+entire set of immediate registers in the virtual machine as well as arithmetic
+operators that use them.  I will be able to use one of them for the instruction
+pointer after this is complete and another as a stack pointer perhaps.
+
+
+
+Mon Sep  9 02:18:51 UTC 2013
+
+The updated scrollback buffer was not rendering correctly for lines one char
+length less than the window width.  While creating new terminal/window tests,
+I discovered a window's inability to hover the cursor past the end of a lien.
+I'm adding support for this and refactoring both the terminal and window class
+to support this ability.
+
+ * Rename WindowMask to WindowTable
+
+
+Wed Sep 11 03:25:34 UTC 2013
+
+Add a mechanism to keep track of the current active window.  If its cursor is
+enabled it should always reflect the window's current cursor position.

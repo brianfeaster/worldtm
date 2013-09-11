@@ -46,6 +46,7 @@
   0 0
   (- (Terminal 'Theight) 1)  (Terminal 'Twidth)
   #x000f))
+((WinChat 'cursor-visible) #f)
 (define WinChatPutc (WinChat 'putc))
 (define WinChatPuts (WinChat 'puts))
 (define WinChatSetColor (WinChat 'set-color))
@@ -55,11 +56,24 @@
   (for-each (WinChat 'puts) (write->strings o)))
 (WinChat '(set! ScrollbackHack #t))
 
+; Input Window
+(define WinInput ((Terminal 'WindowNew)
+  (- (Terminal 'Theight) 1) 0
+  1 (Terminal 'Twidth)
+  #x040a))
+((WinInput 'cursor-visible) #f)
+(define WinInputPutc (WinInput 'putc))
+(define WinInputPuts (WinInput 'puts))
+(define WinInputSetColor (WinInput 'set-color))
+
 ; Console window
 (define WinConsole ((Terminal 'BufferNew)
   (- (Terminal 'Theight) 27) 0
   26  (Terminal 'Twidth)
   #xe907))
+
+((WinConsole 'cursor-visible) #f)
+
 (define WinConsolePuts (WinConsole 'puts))
 
 (define (WinConsoleDisplay . l)
@@ -78,15 +92,6 @@
 
 
 ((WinConsole 'toggle))
-
-; Input Window
-(define WinInput ((Terminal 'WindowNew)
-  (- (Terminal 'Theight) 1) 0
-  1 (Terminal 'Twidth)
-  #x040a))
-(define WinInputPutc (WinInput 'putc))
-(define WinInputPuts (WinInput 'puts))
-(define WinInputSetColor (WinInput 'set-color))
 
 ; Help Window
 (define WinHelpBorder ((Terminal 'WindowNew) 4 20 16 32 #x0200))
@@ -176,8 +181,8 @@
     ((avatarViewport 'move)       0 (- tw (avatarViewport 'Wwidth) 2))
     ((WinInput 'resize)           1 tw)
     ((WinInput 'move)      (- th 1) 0)
-    (redrawTalk) ; Redraw the talk input line
-    ((Terminal 'TerminalEnable)))
+    ((Terminal 'TerminalEnable))
+    (redrawTalk)) ; Redraw the talk input line after the screen is redrawing so cursor is in the right spot. TODO fix redraw so this happens automatically.  I need to refactor the terminal class into two parts (1) direct terminal drawing and (2) virtual terminal drawing.  The window class does and should talk to the terminal class but out-of-band behavior (scrolling, refresh, cursor positioning) need to be separated.
   (set! handlerCount 0))
 
 (define sigwinch
@@ -774,6 +779,7 @@
  (define getc ((Terminal 'getKeyCreate)))
  (set! TalkType type)
  ((avatar 'setSpeakLevel) (cond ((eq? type 'whisper) 2) ((eq? type 'scream) 500) (else 20)))
+ ((WinInput 'cursor-visible) #t)
  (let ~ ()
    ; Draw current string in input buffer
    (redrawTalk)
@@ -781,6 +787,7 @@
      (let ((ret (replTalk type (getc))))
        (if (eq? ret 'more) (~~)
        (if (eq? ret 'sent) (~))))))
+ ((WinInput 'cursor-visible) #f)
  (set! TalkType #f)
  (getc 'destroy))
 
