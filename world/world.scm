@@ -409,10 +409,10 @@
       (let ((y (modulo (- gy my) canvasSize)) ; Normalize avatar position.
             (x (modulo (- gx mx) canvasSize)))
        (and (< y winHeight) (< x winWidth) (begin
-         ((Terminal 'lock)) ; This shouldn't be such an all encompasing lock.
+         (lock) ; This shouldn't be such an all encompasing lock.
          (plot (canvasGlyph gy gx)
                y (* x 2))
-         ((Terminal 'unlock)))))) ; This shouldn't be such an all encompasing lock.
+         (unlock))))) ; This shouldn't be such an all encompasing lock.
     (define (animationLoop)
       (and VIEWPORTANIMATION
            (< NextDrawTime (utime))
