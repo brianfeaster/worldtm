@@ -4247,3 +4247,17 @@ Wed Sep 11 03:25:34 UTC 2013
 
 Add a mechanism to keep track of the current active window.  If its cursor is
 enabled it should always reflect the window's current cursor position.
+
+
+Wed Sep 11 20:10:04 UTC 2013
+
+Resizing the map and the terminal at the same time crashes World.  Added
+mutexes and refactored relevant terminal methods.
+
+Researching control characters, I found these useful articles:
+
+  http://vt100.net/docs/vt220-rm/table2-2.html
+
+  http://www.ecma-international.org/publications/files/ECMA-ST/Ecma-043.pdf
+
+  http://en.wikipedia.org/wiki/C0_and_C1_control_codes

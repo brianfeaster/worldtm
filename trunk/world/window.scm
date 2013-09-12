@@ -110,111 +110,82 @@
 (define (Terminal)
  (define (self msg) (eval msg))
  (define MAXWINDOWCOUNT 128)
- (define TCOLOR #f)
- (define TCURSOR-VISIBLE #t)
  (define ENABLE #t)
  (define Theight 0)
  (define Twidth  0)
- (define TY -1) ; Global cursor positions.
+ (define TY -1) ; Physical terminal's cursor positions
  (define TX -1)
- (define PASTLASTCOLUMN #f) ; Last character was on the last column.  Cursor is technically in two places now.
- (define WindowVec (make-vector MAXWINDOWCOUNT #f)) ; Vector of window objects by ID
- (define WindowList ()) ; List of window objects in display order
- (define TerminalSemaphore (open-semaphore 1))
- (define PublicSemaphore (open-semaphore 1))
- ; 2D table of visible window objects.  #f represents no window which is never drawn on.  Considering
- ; having a default base window always in existence which could act as a static/dynamic background image.
- (define WindowMask ())
+ (define TCOLOR #f)
+ (define TCURSOR-VISIBLE #t)
+ (define PASTLASTCOLUMN #f) ; Last char sent was to last column.  Cursor in two places now.
+ (define WINDOW-VEC (make-vector MAXWINDOWCOUNT #f)) ; Vector of window objects by ID
+ (define WINDOW-LIST ()) ; List of window objects, in display order
+ (define WINDOW-GRID ()) ; 2D table of visible window object or #f
+ (define SEMAPHORE-TERMINAL (open-semaphore 1))
+ (define SEMAPHORE-PUBLIC (open-semaphore 1))
 
- ; Disable Terminal updates to the remote console.  Allows for hidden screen refresh/redraws.
- (define (TerminalEnable)
+ ; Disable/enable physical terminal updates allowing for hidden terminal drawing.
+ (define (enable)
    (set! ENABLE #t)
-   (RefreshTerminal))
-
- (define (TerminalDisable)
+   (redraw))
+ (define (disable)
    (set! ENABLE #f))
 
- (define (InsideTerminal? ty tx)
-   (and (>= ty 0) (>= tx 0) (< ty Theight) (< tx Twidth)))
+ ; Toggle the terminal's cursor visible state
+ (define (cursorToggle)
+   (semaphore-down SEMAPHORE-TERMINAL)
+   (set! TCURSOR-VISIBLE (not TCURSOR-VISIBLE))
+   (send (if TCURSOR-VISIBLE "\e[?25h" "\e[?25l") stdout)
+   (semaphore-up SEMAPHORE-TERMINAL))
 
- (define (topWin ty tx)
-   (and (InsideTerminal? ty tx)
-        (vector-vector-ref WindowMask ty tx)))
+ ; Public semaphore
+ (define (lock) (semaphore-down SEMAPHORE-PUBLIC))
+ (define (unlock) (semaphore-up SEMAPHORE-PUBLIC))
 
- ; Return first window object in window list that is visible at this location.
- (define (TopmostWindowDiscover gy gx)
-   (let ~ ((w WindowList))
-     (if (null? w) #f ; No windows are visible at this location
-     (if (((car w) 'InsideWindow?) gy gx) (car w) ; A window is visible at this location
-     (~ (cdr w))))))
+ (define (enclosed? ty tx)
+   (and (<= 0 ty) (< ty Theight)
+        (<= 0 tx) (< tx Twidth)))
 
- ; Reset the terminal window mask and adjust the window's visible count
- ; The window mask is the terminal size.
- (define (WindowMaskReset y0 x0 y1 x1)
-   (loop2 y0 y1 x0 x1 (lambda (gy gx) ; Over every terminal char position in the specified box
-   (if (InsideTerminal? gy gx)
-     (let ((prevwin (topWin gy gx)) ; Consider the cached and actual top win at this loc
-           (topwin (TopmostWindowDiscover gy gx)))
-       ; Update the visible count for the window(s) at this global location.
-       ; A different window implies we need to decreement the last window's count (if any)
-       ; and inc the new window's count (if any).
-       (or (eq? prevwin topwin)
-         (begin
-           (vector-vector-set! WindowMask gy gx topwin) ; Update the window reference at this position
-           (if prevwin ((prevwin 'visibleCountAdd) -1))
-           (if topwin  ((topwin 'visibleCountAdd) 1))))
-       ; Redraw the glyph (or background)
-       (if topwin
-         ((topwin 'globalRefresh) gy gx)
-         (drawBackgroundCell gy gx)))))))
+ ; Return visible window at location
+ (define (windowGridTop ty tx)
+   (and (enclosed? ty tx)
+        (vector-vector-ref WINDOW-GRID ty tx)))
 
- (define (ResetTerminal termSize)
-  (set! Theight (cdr termSize)) (if (< Theight 2) (set! Theight 2))
-  (set! Twidth  (car termSize)) (if (< Twidth 2) (set! Twidth 2))
-  (set! WindowMask (make-vector-vector Theight Twidth #f))
-  ; Clear each window's visible count to coincide with the uninitialized WindowMask array
-  ; then reset each window's visibile count and terminal window mask.
-  (map (lambda (w) ((w 'visibleCountClear))) WindowList)
-  (WindowMaskReset 0 0 Theight Twidth))
+ ; Scan window list for first visible window at location.  Ignores terminal bounds.
+ (define (windowListTop ty tx)
+   (let ~ ((w WINDOW-LIST))
+     (cond ((null? w)
+            #f)      ; No window in the list is visible
+           ((((car w) 'visible?) ty tx)
+            (car w)) ; The window visible at this location
+           (else
+            (~ (cdr w))))))
 
- (define (RefreshTerminal)
-   ;(loop2 0 Theight 0 Twidth (lambda (ty tx) (gputc #\. #x0001 ty tx))) ; Clear every terminal char position
-   (loop2 0 Theight 0 Twidth (lambda (ty tx) ; Over every terminal char position
-     (let ((win (topWin ty tx)))
-       (if win
-         ((win 'globalRefresh) ty tx)   ; Ask window to draw one of its characters to the terminal
-         (drawBackgroundCell ty tx)))))); No window at this location so draw the background
-
- (define (tgoto y x)
-   (if (and (or (!= y TY) (!= x TX))
-            (InsideTerminal? y x))
+ (define (tgoto ty tx)
+   (if (and (or (!= ty TY) (!= tx TX))
+            (enclosed? ty tx))
      (begin
-       (semaphore-down TerminalSemaphore)
+       (semaphore-down SEMAPHORE-TERMINAL)
        (set! PASTLASTCOLUMN #f)
        (send "\e[" stdout)
-       (display (+ y 1))
+       (display (+ ty 1))
        (send ";" stdout)
-       (display (+ x 1))
+       (display (+ tx 1))
        (send "H" stdout)
-       (set! TY y)
-       (set! TX x)
-       (semaphore-up TerminalSemaphore))))
+       (set! TY ty)
+       (set! TX tx)
+       (semaphore-up SEMAPHORE-TERMINAL))))
 
  ; Match the behavior of sane terminals internally.  Sending a printable char
  ; advances the cursor including non-glyph chars which are represented by a
- ; generic the generic glyph '.'.  The cursor is expected not to advance past
- ; the last column until another char is displayed which occurs on the next row
- ; and first column.
- (define (gputc char color y x)
+ ; generic glyph '.'  The cursor is expected not to advance past the last column
+ ; until another char is displayed which occurs on the next row and first column
+ ; or the first column again if on the last row already (no scrolling allowed).
+ (define (tputchar char color y x)
   (and ENABLE (begin
-    (semaphore-down TerminalSemaphore)
-    ; Set color.
-    (if (!= TCOLOR color) (begin
-      (set! TCOLOR color)
-      (send (integer->colorstring color) stdout)))
+    ; Move virtual terminal cursor to column 0 and next line if last char was on last column.
+    ; If already on the last line, move cursor to column 0 only to prevent a physical terminal scroll.
     (if PASTLASTCOLUMN
-      ; Adjust virtual terminal cursor to next line if last char was displayed on the last column.
-      ; If already on the last line, send a return to prevent the screen from scrolling.
       (begin
         (set! PASTLASTCOLUMN #f)
         (set! TX 0)
@@ -222,39 +193,86 @@
             (set! TY (+ TY 1))
             (send "\r" stdout))))
     ; Set cursor location.
-    (if (or (!= y TY) (!= x TX)) (begin
-      (send "\e[" stdout)
-      (display (+ y 1))
-      (send ";" stdout)
-      (display (+ x 1))
-      (send "H" stdout)
-      (set! TY y) (set! TX x)))
-    ; Draw char as something (even non-glyphed chars).
+    (if (or (!= y TY) (!= x TX))
+      (begin
+        (send "\e[" stdout)
+        (display (+ y 1))
+        (send ";" stdout)
+        (display (+ x 1))
+        (send "H" stdout)
+        (set! TY y) (set! TX x)))
+    ; Set color
+    (if (!= TCOLOR color)
+      (begin
+        (set! TCOLOR color)
+        (send (integer->colorstring color) stdout)))
+    ; Always draw something.  Non-printable get a standard glyph as well.
     (display (char->visible char))
-    ; Advance cursor.  The cursor's visible range is [0 .. Twidth - 1]
-    ; A character was sent to the last column, keep TX on the
-    ; last column but set end of physical line EOPL flag.
+    ; Advance cursor (aloowed between [0 .. Twidth-1])  A char sent to the cast
+    ; column keeps the TX on the last column but sets the last column flag.
     (if (< TX (- Twidth 1))
       (set! TX (+ 1 TX))
-      (set! PASTLASTCOLUMN #t))
-    (semaphore-up TerminalSemaphore))))
+      (set! PASTLASTCOLUMN #t)))))
+
+ (define (tputc char color y x)
+   (and ENABLE (begin
+     (semaphore-down SEMAPHORE-TERMINAL)
+     (tputchar  char color y x)
+     (semaphore-up SEMAPHORE-TERMINAL))))
 
  ; Given a global terminal coordinate, plot a background character.
  (define drawBackgroundCell (let ((i 0)) (lambda (ty tx)
-   (gputc (vector-ref #(#\[ #\t #\m #\] #\  ) i) ; The char
+   (define y ty)
+   (define x (/ tx 4))
+   (tputchar (vector-ref #(#\[ #\t #\m #\] #\  ) i) ; The char
           #xeb16                            ; The 8bit background and 8bit foreground color
           ty tx)                            ; physical terminal y and x location
    (if (< i 4) (set! i (+ i 1)))
    (if (and (= i 4) (= 0 (random 20))) (set! i 0)))))
 
- (define (tcursor-visible)
-   (semaphore-down TerminalSemaphore)
-   (display (if TCURSOR-VISIBLE "\e[?25l" "\e[?25h"))
-   (set! TCURSOR-VISIBLE (not TCURSOR-VISIBLE))
-   (semaphore-up TerminalSemaphore))
+ ; Reset range of the window grid and reset each window's visible count in the same range
+ (define (_windowGridReset! y0 x0 y1 x1)
+   (loop2 y0 y1 x0 x1 (lambda (ty tx) ; Over every terminal char position in the specified box
+     (if (enclosed? ty tx)
+       (let ((prevwin (windowGridTop ty tx)) ; Cached visible window 
+             (topwin (windowListTop ty tx))) ; Actual visible window
+         ; Update the visible count for the window(s) at this global location.
+         ; A different window implies we need to decreement the last window's count (if any)
+         ; and inc the new window's count (if any).
+         (or (eq? prevwin topwin)
+             (begin
+               (vector-vector-set! WINDOW-GRID ty tx topwin) ; Update the window reference at this position
+               (if prevwin ((prevwin 'visibleCountAdd) -1))
+               (if topwin  ((topwin 'visibleCountAdd) 1))))
+         ; Redraw window or background char to terminal
+         (if topwin
+           ((topwin 'globalRefresh) ty tx)
+           (drawBackgroundCell ty tx)))))))
 
- (define (lock) (semaphore-down PublicSemaphore))
- (define (unlock) (semaphore-up PublicSemaphore))
+ (define (windowGridReset! y0 x0 y1 x1)
+   (semaphore-down SEMAPHORE-TERMINAL)
+   (_windowGridReset! y0 x0 y1 x1)
+   (semaphore-up SEMAPHORE-TERMINAL))
+
+ (define (resize termSize)
+   (semaphore-down SEMAPHORE-TERMINAL)
+   (set! Theight (cdr termSize)) (if (< Theight 2) (set! Theight 2))
+   (set! Twidth  (car termSize)) (if (< Twidth 2) (set! Twidth 2))
+   (set! WINDOW-GRID (make-vector-vector Theight Twidth #f))
+   ; Clear each window's visible count to coincide with the uninitialized WINDOW-GRID array
+   ; then reset each window's visibile count and terminal window mask.
+   (map (lambda (w) ((w 'visibleCountClear))) WINDOW-LIST)
+   (_windowGridReset! 0 0 Theight Twidth)
+   (semaphore-up SEMAPHORE-TERMINAL))
+
+ (define (redraw)
+   (semaphore-down SEMAPHORE-TERMINAL)
+   (loop2 0 Theight 0 Twidth (lambda (ty tx) ; Over every terminal char position
+     (let ((win (windowGridTop ty tx)))
+       (if win
+         ((win 'globalRefresh) ty tx)   ; Ask window to draw one of its characters to the terminal
+         (drawBackgroundCell ty tx))))); No window at this location so draw the background
+   (semaphore-up SEMAPHORE-TERMINAL))
 
  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
  ;; Window_subclass
@@ -266,9 +284,9 @@
        (cond ((= i MAXWINDOWCOUNT)
               (display "ERROR: WindowNew: MAXWINDOWCOUNT exceeded")
               #f)
-             ((vector-ref WindowVec i)
+             ((vector-ref WINDOW-VEC i)
               (~ (+ i 1)))
-             (else (vector-set! WindowVec i self)
+             (else (vector-set! WINDOW-VEC i self)
                    i))))
    (define Y1 (+ Y0 Wheight))
    (define X1 (+ X0 Wwidth))
@@ -282,13 +300,13 @@
    ; visible or invisible allowing the window beneath to show.
    ; Initially every location of the window is visible, assuming
    ; it's within the terminal boundary.
-   (define ALPHA (make-vector-vector Wheight Wwidth #t))
+   (define ALPHA-GRID (make-vector-vector Wheight Wwidth #t))
    (define CURSOR-VISIBLE #t)
    (define ENABLED #t)
    (define topRow 0) ; For vertical scrolling.  The logical "top row" of the DESC array
    (define PASTLASTCOLUMN #f) ; For last column cursor positioning
    (define (cursor-visible s) (set! CURSOR-VISIBLE s))
-   (define WindowSemaphore (open-semaphore 1))
+   (define SEMAPHORE_WINDOW (open-semaphore 1))
    (define ScrollbackHack #f)
    (define VisibleCount 0) ; Number of visible non-obstructed locations
 	; Methods
@@ -296,6 +314,7 @@
    (define (getChar  y x) (vector-ref (vector-vector-ref DESC y x) 1))
    (define (visibleCountClear) (set! VisibleCount 0))
    (define (visibleCountAdd c) (set! VisibleCount (+ VisibleCount c)))
+   ; Move window cursor.  Don't exceed window boundary.
    (define (goto y x)
      (set! PASTLASTCOLUMN #f)
      (set! WY (min (max 0 y) (- Wheight 1)))
@@ -305,13 +324,12 @@
      (set! COLOR (+ (* 256 b) f))) ; 256 colors each fg and bg packed into 16 bits
    (define (set-color-word c)
      (set! COLOR c))
-   (define (InsideWindow? gy gx)
+   ; Is the terminal coordinate within my visible window region (honors alpha setting of the location but ignores terminal bounds)
+   (define (visible? ty tx)
      (and ENABLED
-          (>= gy Y0)
-          (>= gx X0)
-          (<  gy Y1)
-          (<  gx X1)
-          (vector-vector-ref ALPHA (- gy Y0) (- gx X0))))
+          (<= Y0 ty) (< ty Y1)
+          (<= X0 tx) (< tx X1)
+          (vector-vector-ref ALPHA-GRID (- ty Y0) (- tx X0))))
    (define (hardwareScrollable?)
      (and (= Wwidth Twidth)
           (< 1 Wheight)
@@ -320,7 +338,7 @@
    (define (scrollUp)
      (if (hardwareScrollable?)
        (begin
-         (semaphore-down TerminalSemaphore)
+         (semaphore-down SEMAPHORE-TERMINAL)
          ; Manually update the terminal color
          (if (!= COLOR TCOLOR)
            (send (integer->colorstring COLOR) stdout))
@@ -339,8 +357,7 @@
          (if (!= COLOR TCOLOR) ; Manually sync terminal color
            (set! TCOLOR COLOR))
          (set! topRow (modulo (+ topRow 1) Wheight)) ; Shift the buffer's top-row index.
-         (semaphore-up TerminalSemaphore)
-         (return)) ; Send the cursor to the beginning of bottom row.
+         (semaphore-up SEMAPHORE-TERMINAL)) ; Send the cursor to the beginning of bottom row.
        (begin
          ; Clear top-row which is to become the bottom row.
          ; Force topmost line off the top of the terminal in hopes
@@ -354,38 +371,36 @@
                   (displayl (integer->colorstring (vector-ref desc 0)) (vector-ref desc 1))
                   (~ (+ x 1)))))
            (display "\e[K\n\n\e[r\e8")
-           (WindowMaskReset 0 0 2 Twidth)))
+           (windowGridReset! 0 0 2 Twidth)))
          (loop Wwidth (lambda (x) ; Clear row which will become the bottom row
            (let ((desc (vector-vector-ref DESC topRow x)))
              (vector-set! desc 0 COLOR)
              (vector-set! desc 1 #\ ))))
          (set! topRow (modulo (+ topRow 1) Wheight)) ; Shift buffer
          ; Refresh window.
-         (repaint)
-         (return))))
+         (repaint)))
+     (return))
    (define (repaintRow row)
      (loop Wwidth (lambda (x)
        (let ((desc (vector-vector-ref DESC (modulo (+ row topRow) Wheight) x)))
-         (and (InsideTerminal? (+ row Y0) (+ x X0))
-              (eq? self (topWin (+ row Y0) (+ x X0)))
-              (gputc #\- ;(vector-ref desc 1)
-                     (vector-ref desc 0)
-                     (+ row Y0) (+ x X0)))))))
+         (if (eq? self (windowGridTop (+ row Y0) (+ x X0)))
+           (tputc #\- ;(vector-ref desc 1)
+                  (vector-ref desc 0)
+                  (+ row Y0) (+ x X0)))))))
    (define (repaint)
      (loop2 0 Wheight 0 Wwidth (lambda (y x)
        (let ((desc (vector-vector-ref DESC (modulo (+ y topRow) Wheight) x)))
-         (and (InsideTerminal? (+ y Y0) (+ x X0))
-              (eq? self (topWin (+ y Y0) (+ x X0)))
-              (gputc (vector-ref desc 1)
-                     (vector-ref desc 0)
-                     (+ y Y0) (+ x X0)))))))
-   ; Repaint char given global coordinate.  Does not mutate window
-   ; state.  Modulo the Y coordinate due to horizontal scrolling.
+         (if (eq? self (windowGridTop (+ y Y0) (+ x X0)))
+           (tputc (vector-ref desc 1)
+                  (vector-ref desc 0)
+                  (+ y Y0) (+ x X0)))))))
+   ; Repaint char given global coordinate.  Does not mutate window state.
+   ; Should only be called from the terminal object.
    (define (globalRefresh gy gx)
      (let ((desc (vector-vector-ref DESC
-                   (modulo (+ (- gy Y0) topRow) Wheight)
+                   (modulo (+ (- gy Y0) topRow) Wheight) ; The logical top row shifts as the window scrolls
                    (- gx X0))))
-       (gputc (vector-ref desc 1) (vector-ref desc 0) gy gx)))
+       (tputchar (vector-ref desc 1) (vector-ref desc 0) gy gx)))
    (define (return)
      (set! PASTLASTCOLUMN #f)
      (set! WX 0)
@@ -396,31 +411,8 @@
          (set! WY (+ WY 1))
          (scrollUp))
      (tgoto (+ Y0 WY) (+ X0 WX)))
-   (define (home)
-     (goto 0 0))
-   (define (_back)
-     ; If just displayed last char in row, do nothing.
-     (if (and (< 0 WX) (< WX Wwidth))
-       (begin
-         (or PASTLASTCOLUMN
-           (set! WX (- WX 1)))
-         (set! PASTLASTCOLUMN #f))))
-   (define (back)
-     (semaphore-down WindowSemaphore)
-     (_back)
-     (goto WY WX)
-     (semaphore-up WindowSemaphore))
-   (define (backspace c) ; backspacing with a non glyph is dangerous
-     (semaphore-down WindowSemaphore)
-     (if (and (< 0 WX) (< WX Wwidth))
-       (begin
-         (_back)
-         (putchar c)
-         (_back)
-         (goto WY WX)))
-     (semaphore-up WindowSemaphore))
-   (define (putchar c)
-     (if (not (eq? TCURSOR-VISIBLE CURSOR-VISIBLE)) (tcursor-visible)) ; Sync window and terminal's cursor visibility
+   (define (_putchar c)
+     (if (not (eq? TCURSOR-VISIBLE CURSOR-VISIBLE)) (cursorToggle)) ; Sync window and terminal's cursor visibility
      (if (eq? c NEWLINE) (newline) ; This should actually move the cursor
       (if (eq? c RETURN) (return) ; This should actually move the cursor
        (if (eq? c CHAR-CTRL-G) (display c) ; Bell doesn't physically print anything so no state to adjust.
@@ -437,8 +429,8 @@
           (let ((ty (+ WY Y0)) ; Consider terminal coordinate location for next character
                 (tx (+ WX X0)))
             ; Send character only if the this location is in the window and visible
-            (if (eq? self (topWin ty tx))
-              (gputc c COLOR ty tx))
+            (if (eq? self (windowGridTop ty tx))
+              (tputc c COLOR ty tx))
             ; Cache color and char to buffer.  The modulo is required to compute
             ; the actual row since it depends on the topRow value which increments
             ; whenever the window scrolls up.
@@ -454,50 +446,73 @@
    ; puts is autonomous to guarantee the string output is not altered.  putc must be autonomous as well
    ; for its homgeneity.
    (define (puts str)
-     (semaphore-down WindowSemaphore)
-     (loop (string-length str) (lambda (i) (putchar (string-ref str i))))
-     (semaphore-up WindowSemaphore))
+     (semaphore-down SEMAPHORE_WINDOW)
+     (loop (string-length str) (lambda (i) (_putchar (string-ref str i))))
+     (semaphore-up SEMAPHORE_WINDOW))
    (define (putc c)
-     (semaphore-down WindowSemaphore)
-     (putchar c)
-     (semaphore-up WindowSemaphore))
+     (semaphore-down SEMAPHORE_WINDOW)
+     (_putchar c)
+     (semaphore-up SEMAPHORE_WINDOW))
+   (define (home)
+     (goto 0 0))
+   (define (_back)
+     ; If just displayed last char in row, do nothing.
+     (if (and (< 0 WX) (< WX Wwidth))
+       (begin
+         (or PASTLASTCOLUMN
+           (set! WX (- WX 1)))
+         (set! PASTLASTCOLUMN #f))))
+   (define (back)
+     (semaphore-down SEMAPHORE_WINDOW)
+     (_back)
+     (goto WY WX)
+     (semaphore-up SEMAPHORE_WINDOW))
+   (define (backspace c) ; backspacing with a non glyph is dangerous
+     (semaphore-down SEMAPHORE_WINDOW)
+     (if (and (< 0 WX) (< WX Wwidth))
+       (begin
+         (_back)
+         (_putchar c)
+         (_back)
+         (goto WY WX)))
+     (semaphore-up SEMAPHORE_WINDOW))
    ; Clears rest of line.  Output will resume at original column.
    (define (clearToEnd)
-     (semaphore-down WindowSemaphore)
+     (semaphore-down SEMAPHORE_WINDOW)
      (let ((ox WX) (oy WY))
        (let ~ ((i WX))
          (if (< i Wwidth)
            (begin
-             (putchar #\ )
+             (_putchar #\ )
              (~ (+ i 1)))))
        (set! WX ox)
        (set! WY oy))
-     (semaphore-up WindowSemaphore))
+     (semaphore-up SEMAPHORE_WINDOW))
    (define (toggle . state)
      (let ((newstate (if (null? state) (not ENABLED) (car state))))
        (or (= state newstate) (begin ; If same state, do nothing
          (set! ENABLED newstate)
-         (WindowMaskReset Y0 X0 Y1 X1)))))
+         (windowGridReset! Y0 X0 Y1 X1)))))
    (define (alpha y x a) ; Create transparent 'pixel'
-     (vector-vector-set! ALPHA y x a)
-     (if ENABLED (WindowMaskReset (+ y Y0) (+ x X0) (+ y Y0 1) (+ x X0 1))))
+     (vector-vector-set! ALPHA-GRID y x a)
+     (if ENABLED (windowGridReset! (+ y Y0) (+ x X0) (+ y Y0 1) (+ x X0 1))))
    (define (move y x)
      (let ((oY0 Y0)
            (oX0 X0)
            (oY1 Y1)
            (oX1 X1))
-       (semaphore-down WindowSemaphore)
+       (semaphore-down SEMAPHORE_WINDOW)
        (set! Y0 y)
        (set! X0 x)
        (set! Y1 (+ Y0 Wheight))
        (set! X1 (+ X0 Wwidth))
-       (if ENABLED (WindowMaskReset (min oY0 Y0) (min oX0 X0) (max oY1 Y1) (max oX1 X1))) ; Redraw window
-       (semaphore-up WindowSemaphore)))
+       (if ENABLED (windowGridReset! (min oY0 Y0) (min oX0 X0) (max oY1 Y1) (max oX1 X1))) ; Redraw window
+       (semaphore-up SEMAPHORE_WINDOW)))
    (define (resize h w)
      (let ((oY1 Y1)
            (oX1 X1)
            (oldDesc DESC))
-       (semaphore-down WindowSemaphore)
+       (semaphore-down SEMAPHORE_WINDOW)
        (set! Wheight (if (< h 1) 1 h)) ; Silently reset invalid height
        (set! Wwidth  (if (< w 1) 1 w)) ; Silently reset invalid width
        (set! Y1 (+ Y0 Wheight))
@@ -505,23 +520,23 @@
        (set! WY (min WY (- Wheight 1))) ; Make sure cursor is not out of bounds.
        (set! WX (min WX (- Wwidth 1)))
        ; Reset alpha mask (no cell is transparent)
-       (set! ALPHA (make-vector-vector Wheight Wwidth #t))
+       (set! ALPHA-GRID (make-vector-vector Wheight Wwidth #t))
        ; Reset descriptor table (each cell is a space with current color set)
        (set! DESC
          (vector-vector-map! (lambda (x) (vector COLOR #\ ))
                                (make-vector-vector Wheight Wwidth ())))
-       ;(vector-vector-set-vector-vector! DESC 0 0 oldDesc 0 0)  ; For this to be useful, the call to WindowMaskReset should be smarter and not redraw the entire window (plus the new area)
+       ;(vector-vector-set-vector-vector! DESC 0 0 oldDesc 0 0)  ; For this to be useful, the call to windowGridReset! should be smarter and not redraw the entire window (plus the new area)
        ; Recompute the window mask for the terminal.  Redraw the window it it's enabled.
        (if ENABLED
-         (WindowMaskReset Y0 X0 (max oY1 Y1) (max oX1 X1)))
+         (windowGridReset! Y0 X0 (max oY1 Y1) (max oX1 X1)))
        (set! topRow 0)
-       (semaphore-up WindowSemaphore)))
+       (semaphore-up SEMAPHORE_WINDOW)))
    (define (moveresize y x h w)
      (let ((oY0 Y0)
            (oX0 X0)
            (oY1 Y1)
            (oX1 X1))
-       (semaphore-down WindowSemaphore)
+       (semaphore-down SEMAPHORE_WINDOW)
        ; Mutate the window's upper left (Y0 X0) and lower right (Y1 X1) coordinates
        (set! Y0 y)
        (set! X0 x)
@@ -532,19 +547,19 @@
        ; Make sure cursor is not out of bounds
        (set! WY (min WY (- Wheight 1)))
        (set! WX (min WX (- Wwidth 1)))
-       (set! ALPHA (make-vector-vector Wheight Wwidth #t)) ; Reset the alpha mask (TODO?)
+       (set! ALPHA-GRID (make-vector-vector Wheight Wwidth #t)) ; Reset the alpha mask (TODO?)
        (set! DESC (vector-vector-map! (lambda (x) (vector COLOR #\ ))
                                       (make-vector-vector Wheight Wwidth ())))
-       (if ENABLED (WindowMaskReset
+       (if ENABLED (windowGridReset!
                       (min oY0 Y0) (min oX0 X0) ; Redraw window
                       (max oY1 Y1) (max oX1 X1)))
        (set! topRow 0)
-       (semaphore-up WindowSemaphore)))
+       (semaphore-up SEMAPHORE_WINDOW)))
    (define (delete)
-    (vector-set! WindowVec id #f)
-    (set! WindowList (list-delete WindowList self))
-    (close-semaphore WindowSemaphore)
-    (WindowMaskReset Y0 X0 Y1 X1))
+    (vector-set! WINDOW-VEC id #f)
+    (set! WINDOW-LIST (list-delete WINDOW-LIST self))
+    (close-semaphore SEMAPHORE_WINDOW)
+    (windowGridReset! Y0 X0 Y1 X1))
 
    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
    ;; Buffer_subclass -- Implements a
@@ -712,8 +727,8 @@
    ; window area.
    (if id
     (begin
-      (set! WindowList (cons self WindowList)) ; TODO this needs a semaphore.
-      (WindowMaskReset Y0 X0 Y1 X1)
+      (set! WINDOW-LIST (cons self WINDOW-LIST)) ; TODO this needs a semaphore.
+      (windowGridReset! Y0 X0 Y1 X1)
       (if (pair? ChildStack)
         ; childstack = ((child parameters) child-macro . reset of child stack)
         (apply (cadr ChildStack) self (append (car ChildStack) (cddr ChildStack)))
@@ -757,7 +772,7 @@
    (mouseQueueRegister win #f))
 
  (define (mouseDispatch event y x) ; Send the handler "'mouse0 2 3" for example.
-   (letrec ((win (topWin y x))
+   (letrec ((win (windowGridTop y x))
             (id (if win (win 'id) #f))
             (q (if id (vector-ref mouseQueueVector id) #f)))
      ;(or win (WinChatDisplay "\r\n" (list event y x)))
@@ -899,7 +914,7 @@
  ; Initialize everything and return this object
  (thread (keyScannerAgentLoop))
  (display "\e[?1000h") ; Enable mouse reporting
- (ResetTerminal (terminal-size))
+ (resize (terminal-size))
  self)
 ;;
 ;; Terminal of Windows, Keyboard and Mouse Class

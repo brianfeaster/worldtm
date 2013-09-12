@@ -172,8 +172,8 @@
   (letrec ((newTermSize (if (null? forcedSize) (terminal-size) (car forcedSize)))
            (tw #f)
            (th #f))
-    ((Terminal 'TerminalDisable))
-    ((Terminal 'ResetTerminal) newTermSize)
+    ((Terminal 'disable))
+    ((Terminal 'resize) newTermSize)
     (set! tw (Terminal 'Twidth))
     (set! th (Terminal 'Theight))
     (WinConsoleDisplay "\r\nSIGWINCH: newTermSize " (cons tw th))
@@ -181,8 +181,8 @@
     ((avatarViewport 'move)       0 (- tw (avatarViewport 'Wwidth) 2))
     ((WinInput 'resize)           1 tw)
     ((WinInput 'move)      (- th 1) 0)
-    ((Terminal 'TerminalEnable))
-    (redrawTalk)) ; Redraw the talk input line after the screen is redrawing so cursor is in the right spot. TODO fix redraw so this happens automatically.  I need to refactor the terminal class into two parts (1) direct terminal drawing and (2) virtual terminal drawing.  The window class does and should talk to the terminal class but out-of-band behavior (scrolling, refresh, cursor positioning) need to be separated.
+    ((Terminal 'enable))
+    (redrawTalk)) ; Redraw the talk input line after the screen is redrawing so cursor is in the right spot. TODO fix redraw so this happens automatically.
   (set! handlerCount 0))
 
 (define sigwinch
@@ -668,8 +668,8 @@
    (setButton CHAR-CTRL-F '(writeIco))
    (setButton #\z
     '(if (Terminal 'ENABLE)
-         ((Terminal 'TerminalDisable))
-         ((Terminal 'TerminalEnable))))
+         ((Terminal 'disable))
+         ((Terminal 'enable))))
 ))
 
 ; Perform button's action
@@ -715,10 +715,10 @@
          (if (not (eq? "" talkInput))
            (begin (if (eq? cmd 'whisper)
                     (begin (WinInputPutc #\ )
-                           ((WinInput 'back))
-                           ((WinInput 'backspace) #\)))
-                    ((WinInput 'backspace) #\ ))
-                  (set! talkInput (substring talkInput 0 (- (string-length talkInput) 1)))))
+                           ((WinInput 'back))))
+                  ((WinInput 'backspace) #\ )
+                  (set! talkInput (substring talkInput 0 (- (string-length talkInput) 1)))
+                  (if (= 0 (WinInput 'WX)) (redrawTalk))))
          'more)
      ; Send accumulated buffer as a talk message
      (if (or (eq? c RETURN)
