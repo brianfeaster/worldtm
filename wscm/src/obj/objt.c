@@ -18,27 +18,27 @@
    create a stack with objects pushed on.
 */
 void TESTCreateObjects (void) {
-	objNewInt((Int)0xdeadbeefb00b1355l); r1=r0;
-	objCopyInteger(); r2=r1;
-	objNewInt(-1l); r3=r0;
-	objNewInt(LONG_MAX); r4=r0;
-	objNewInt(0xdea1f00d); vmPush(r0);
-	objNewReal(1.3);  vmPush(r0);
-	objNewReal(15.0); vmPush(r0);
+	objNewInt((Int)0xdeadbeefb00b1355l); r01=r00;
+	objCopyInteger(); r02=r01;
+	objNewInt(-1l); r03=r00;
+	objNewInt(LONG_MAX); r04=r00;
+	objNewInt(0xdea1f00d); vmPush(r00);
+	objNewReal(1.3);  vmPush(r00);
+	objNewReal(15.0); vmPush(r00);
 }
 
 
 /* Verify registers and stack contain expected object values.
 */
 void TESTVerifyObjects (void) {
-	assert(0xdeadbeefb00b1355l == *(Int*)r1);
-	assert(0xdeadbeefb00b1355l == *(Int*)r2);
-	assert(-1l == *(Int*)r3);
-	assert(LONG_MAX == *(Int*)r4);
-	assert(3 == memStackLength(rf));
-	assert(15.0 == *(Real*)memStackObject(rf, 0));
-	assert(1.3 == *(Real*)memStackObject(rf, 1));
-	assert(0xdea1f00d == *(Int*)memStackObject(rf, 2));
+	assert(0xdeadbeefb00b1355l == *(Int*)r01);
+	assert(0xdeadbeefb00b1355l == *(Int*)r02);
+	assert(-1l == *(Int*)r03);
+	assert(LONG_MAX == *(Int*)r04);
+	assert(3 == memVecStackLength(rstack));
+	assert(15.0 == *(Real*)memVecStackObject(rstack, 0));
+	assert(1.3 == *(Real*)memVecStackObject(rstack, 1));
+	assert(0xdea1f00d == *(Int*)memVecStackObject(rstack, 2));
 }
 
 
@@ -48,38 +48,38 @@ void TESTVerifyStackMutation (void) {
 	assert(15.0 == *(Real*)vmPop());
 	assert(1.3 == *(Real*)vmPop());
 	assert(0xdea1f00d == *(Int*)vmPop());
-	assert(0 == memStackLength(rf));
+	assert(0 == memVecStackLength(rstack));
 }
 
 
 void TESTDoublyLinkedList (void) {
-	/* Create doubly linked list in r4 */
-	objNewDoublyLinkedListNode(); r4=r0;
-	assert(1 == objDoublyLinkedListLength(r4)); /* Verify length */
+	/* Create doubly linked list in r04 */
+	objNewDoublyLinkedListNode(); r04=r00;
+	assert(1 == objDoublyLinkedListLength(r04)); /* Verify length */
 
 	objNewInt(69); /* Set its cargo */
-	memVectorSet(r4, 0, r0);
+	memVectorSet(r04, 0, r00);
 
-	objNewDoublyLinkedListNode(); r1=r0;
-	objDoublyLinkedListAdd(r4, r1); /* Add another node to dllist */
+	objNewDoublyLinkedListNode(); r01=r00;
+	objDoublyLinkedListAdd(r04, r01); /* Add another node to dllist */
 
 	objNewInt(100); /* Set its cargo */
-	memVectorSet(r1, 0, r0);
+	memVectorSet(r01, 0, r00);
 
-	objNewDoublyLinkedListNode(); r1=r0;
-	objDoublyLinkedListInsert(r4, r1); /* Add another node to dllist */
-	assert(3 == objDoublyLinkedListLength(r4)); /* Verify length */
+	objNewDoublyLinkedListNode(); r01=r00;
+	objDoublyLinkedListInsert(r04, r01); /* Add another node to dllist */
+	assert(3 == objDoublyLinkedListLength(r04)); /* Verify length */
 
 	objNewInt(42);
-	memVectorSet(r1, 0, r0);
+	memVectorSet(r01, 0, r00);
 
 	/* Verify doubly linked list traversal */
-	assert(*(Int*)car(r4) == 69);
-	r4 = objDoublyLinkedListNext(r4); assert(*(Int*)car(r4) == 100);
-	r4 = objDoublyLinkedListNext(r4); assert(*(Int*)car(r4) == 42);
-	r4 = objDoublyLinkedListPrev(r4); assert(*(Int*)car(r4) == 100);
-	r4 = objDoublyLinkedListPrev(r4); assert(*(Int*)car(r4) == 69);
-	r4 = objDoublyLinkedListPrev(r4); assert(*(Int*)car(r4) == 42);
+	assert(*(Int*)car(r04) == 69);
+	r04 = objDoublyLinkedListNext(r04); assert(*(Int*)car(r04) == 100);
+	r04 = objDoublyLinkedListNext(r04); assert(*(Int*)car(r04) == 42);
+	r04 = objDoublyLinkedListPrev(r04); assert(*(Int*)car(r04) == 100);
+	r04 = objDoublyLinkedListPrev(r04); assert(*(Int*)car(r04) == 69);
+	r04 = objDoublyLinkedListPrev(r04); assert(*(Int*)car(r04) == 42);
 }
 
 
@@ -90,20 +90,20 @@ void TESTDump (void) {
 	objDisplay(onull, FB);
 	objDisplay(oeof, FB);
 	objDisplay(onullvec, FB);
-	objNewInt(69); r3=r0; objDisplay(r0, FB);
-	objNewInt(-42); r4=r0; objDisplay(r0, FB);
-	objNewSymbol((Str)"donuts", 6); objDisplay(r0, FB);
-	r0 = objCons(r3, r4); objDisplay(r0, FB);
-	r0 = objCons(r3, onull); objDisplay(r0, FB);
-	r0 = objCons(r4, r0); objDisplay(r0, FB);
-	r0 = objCons(onull, objCons(onullvec, objCons(ofalse, objCons(otrue, onullstr)))); objDisplay(r0, FB);
+	objNewInt(69); r03=r00; objDisplay(r00, FB);
+	objNewInt(-42); r04=r00; objDisplay(r00, FB);
+	objNewSymbol((Str)"donuts", 6); objDisplay(r00, FB);
+	r00 = objCons(r03, r04); objDisplay(r00, FB);
+	r00 = objCons(r03, onull); objDisplay(r00, FB);
+	r00 = objCons(r04, r00); objDisplay(r00, FB);
+	r00 = objCons(onull, objCons(onullvec, objCons(ofalse, objCons(otrue, onullstr)))); objDisplay(r00, FB);
 	objNewVector(4);
-	memVectorSet(r0, 0, ofalse);
-	memVectorSet(r0, 1, otrue);
-	memVectorSet(r0, 2, onull);
-	memVectorSet(r0, 3, onullvec); objDisplay(r0, FB);
-	r0 = (Obj)0xdeadbeefl; objDisplay(r0, FB);
-	r0 = (Obj)-0xdeadbeefl; objDisplay(r0, FB);
+	memVectorSet(r00, 0, ofalse);
+	memVectorSet(r00, 1, otrue);
+	memVectorSet(r00, 2, onull);
+	memVectorSet(r00, 3, onullvec); objDisplay(r00, FB);
+	r00 = (Obj)0xdeadbeefl; objDisplay(r00, FB);
+	r00 = (Obj)-0xdeadbeefl; objDisplay(r00, FB);
 
 	FBFinalize("#f#t()#eof#()69-42donuts(69 . -42)(69)(-42 69)(() #() #f #t . )#(#f #t () #())#<deadbeef>#<-deadbeef>");
 }
@@ -126,10 +126,10 @@ void TESTDumpSerializeCallback (void) {
 
 	FBInit();
 
-	r0 = memNewArray(0x70, 2);
-	memArraySet(r0, 0, 'a');
-	memArraySet(r0, 1, 'z');
-	objDisplay(r0, FB);
+	r00 = memNewArray(0x70, 2);
+	memArraySet(r00, 0, 'a');
+	memArraySet(r00, 1, 'z');
+	objDisplay(r00, FB);
 
 	FBFinalize("{az}");
 }

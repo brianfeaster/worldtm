@@ -4,62 +4,78 @@
 #include <stdio.h>
 #include "globals.h"
 
-/* Global virtual machine register aliases */
-#define rtge       r8 /* Global Environment */
-#define rretenv    r9 /* Caller's env */
-#define rretip     ra /* Caller's ip */
-#define rretcode   rb /* Caller's code block */
-#define renv       rc /* Current running thread's environment */
 
-#define rcode      re /* Currently running code object */
-#define rstack     rf /* Global stack created and used by VM module */
+/* Object registers:  These make up the root set for the garbage collector.
+   All scheme objects should only ever be assigned to these variables since
+   a GC moves objects around.
+*/
+extern Obj r00, r01, r02, r03, r04, r05, r06, r07, r08,
+           r09, // TGE global environment
+           r0a, // environment link
+           r0b, // environment
+           r0c, // code link
+           r0d, // code 
+           r0e, // stack of integers
+           r0f; // stack of objects
 
-#define dip        de /* Current running program instruction pointer */
+/* Integer registers
+*/
+extern Obj r10, r11, r12, r13, r14, r15, r16, r17, r18, r19, r1a, r1b,
+           r1c, // code index link
+           r1d, // code index/ptr
+           r1e, // stack of integers index/ptr
+           r1f; // stack of objects index/ptr
 
+/* Register aliases
+ */
+#define rtge      r09 /* Global Environment */
+#define renvlink  r0a /* Linked Local environment */
+#define renv      r0b /* Local environment */
+#define rcodelink r0c /* Linked code object */
+#define rcode     r0d /* Currently code object */
+#define rdstack   r0e /* Data stack.  Only $1? and integer constants are pushed/popped. */
+#define rstack    r0f /* Object stack.  Only $0? are pushed/popped. */
+
+#define riplink   r1c /* Linked code instruction pointer index */
+#define rip       r1d /* Code instruction pointer or index into the code object */
+#define rdstackp  r1e /* Data stack pointer.  Synced as the stack's pointer when the VM is inerrupted. */
+#define rstackp   r1f /* Object stack pointer.  Synced as the stack's pointer when the VM is inerrupted. */
+
+
+/* Object types used by this module
+*/
 #define TCODE 0xefl
 
-/* Registers:  These make up the root set for the garbage collector.  All
-   computation should use only these as variables since a GC could move an 
-   objects location in memory at any time.
+
+/* Stack calls
 */
-extern Obj r0,  r1,  r2,  r3,  r4,  r5,  r6,  r7,
-           r8,  r9,  ra,  rb,  rc,  rd,  re,  rf;
-
-extern Int d0,  d1,  d2,  d3,  d4,  d5,  d6,  d7,
-           d8,  d9,  da,  db,  dc,  dd,  de,  df;
-
 void vmPush (Obj o);
 Obj vmPop (void);
 
+void vmAryPush (Obj o);
+Obj vmAryPop (void);
 
-/* Virtual machine instruction opcodes.  Really just C goto addresses.
+
+/* Opcodes.  Create all the global external declarations for the opcode goto label pointers.
+   VMOP's parameter o is ignored as it is only required for the serializer.
+    void *vmNOP;
+    void *vmMV_R00_I;
+    void *vmPUSH_R01;
+    ...
 */
-extern void *vmNOP,
-     *vmMVI0, *vmMVI1, *vmMVI2, *vmMVI3, *vmMVI4, *vmMVI5, *vmMVI6, *vmMVI7,
-     *vmMV01, *vmMV02, *vmMV03, *vmMV04, *vmMV07, *vmMV0E,
-     *vmMV10, *vmMV13, *vmMV20, *vmMV23, *vmMV30,
-     *vmMV50, *vmMV58, *vmMV5C, *vmMV61, *vmMV72, *vmMVC0, *vmMVC5, *vmMVC8,
-     *vmLDI00, *vmLDI02, *vmLDI0C, *vmLDI11, *vmLDI20, *vmLDI22,
-     *vmLDI50, *vmLDIC0, *vmLDI1C,
-     *vmLD012,
-*LD_D1_R1,
-     *vmSTI01, *vmSTI05, *vmSTI0C, *vmSTI21, *vmSTI20, *vmSTI30, *vmSTI40, *vmSTI50,
-     *vmST012, *vmST201,
-*ST_D1_R1,
-     *vmPUSH0, *vmPUSH1, *vmPUSH2, *vmPUSH3, *vmPUSH4, *vmPUSH5, *vmPUSH7,
-     *vmPUSH9, *vmPUSHA, *vmPUSHB, *vmPUSHC,
-     *vmPOP0,  *vmPOP1,  *vmPOP2,  *vmPOP3,  *vmPOP4,  *vmPOP5, *vmPOP7, *vmPOP9, *vmPOPA,  *vmPOPB, *vmPOPC,
-     *vmADDI0, *vmADDI1, *vmADDI2, *vmADD10,
-*ADD_D1_I,
-     *vmMUL10,
-     *vmBLTI1,
-     *vmBEQI0, *vmBEQI1, *vmBEQI7,
-     *vmBNEI0, *vmBNEI1, *vmBNEI2, *vmBNEI5,
-     *vmBRTI0, *vmBNTI0, *vmBRA,
-*BEQ_D1_I,
-     *vmJMP0, *vmJMP2,
-     *vmJAL0, *vmJAL2, *vmRET,
-     *vmSYSI, *vmSYS0, *vmQUIT;
+#define _
+#define VMOP(op,d,n,i,o) VMOP_(op, _##d, _##n, _##i)
+#define VMOP_(op,d,n,i) VMOP__(op, d, n, i)
+#define VMOP__(op,d,n,i) VMOP___(vm##op##d##n##i)
+#define VMOP___(op) extern void *op;
+// Load and transform the opcode definitions
+#include "op.h"
+// Cleanup the unneeded macros
+#undef VMOP___
+#undef VMOP__
+#undef VMOP_
+#undef VMOP
+#undef _
 
 extern Int vmInterrupt;
 

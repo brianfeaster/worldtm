@@ -1,6 +1,7 @@
 # Makefile for Wscheme.  It's getting complicated.
 
 # Path of the source files and include files
+CC         = clang
 SRC_PATH   = src
 H_DIR      = h
 TEST_DIR   = test
@@ -10,7 +11,7 @@ SRC_DIRS   = $(wildcard $(SRC_PATH)/*)
 # The individual modules proper that make up World Scheme (ignoring h and test dir): mem vm obj sys os asm comp wscm
 MODULES = $(filter-out $(H_DIR) $(TEST_DIR), $(patsubst src/%,%,$(SRC_DIRS)))
 
-CFLAGS = -I. -I$(H_PATH) -Wall -march=native -Wconversion -Wno-trigraphs -Wno-format -Werror -O3
+CFLAGS = -I. -I$(H_PATH) -Wall -march=native -Wconversion -Wno-trigraphs -Wno-format -Werror -O3 -ggdb
 # -I                Include this directory for h file searches
 # -Wall             Many warnings.
 # -ggdb             Debugging
@@ -39,18 +40,18 @@ wscm: $(OBJS)
 build: $(H_PATH)/*.h $(addsuffix .c,$(MODULES))
 	echo '/*' $^ > build.c '*/'
 	cat $^ >> build.c
-	gcc $(CFLAGS) $(LDFLAGS) build.c -o wscm
+	$(CC) $(CFLAGS) $(LDFLAGS) build.c -o wscm
 	rm build.c
 
 # Module dependencies 
 mem.o:                                     mem.h globals.h debug.h
-vm.o:                                 vm.h mem.h globals.h debug.h
-obj.o:                          obj.h vm.h mem.h globals.h debug.h
-sys.o:                    sys.h obj.h vm.h mem.h globals.h debug.h
-os.o:                os.h sys.h obj.h vm.h mem.h globals.h debug.h
-asm.o:         asm.h            obj.h vm.h mem.h globals.h debug.h
-comp.o: comp.h asm.h os.h sys.h obj.h vm.h mem.h globals.h debug.h
-wscm.o: comp.h asm.h os.h sys.h obj.h vm.h mem.h globals.h debug.h
+vm.o:                                 vm.h mem.h globals.h debug.h op.h
+obj.o:                          obj.h vm.h mem.h globals.h debug.h op.h
+sys.o:                    sys.h obj.h vm.h mem.h globals.h debug.h op.h
+os.o:                os.h sys.h obj.h vm.h mem.h globals.h debug.h op.h
+asm.o:         asm.h            obj.h vm.h mem.h globals.h debug.h op.h
+comp.o: comp.h asm.h os.h sys.h obj.h vm.h mem.h globals.h debug.h op.h
+wscm.o: comp.h asm.h os.h sys.h obj.h vm.h mem.h globals.h debug.h op.h
 
 # C test names one-to-one with MODULES
 TESTS_C := $(addsuffix test, $(MODULES))
@@ -69,14 +70,14 @@ COMPTOBJS := comp.o asm.o os.o sys.o obj.o vm.o mem.o
 WSCMTOBJS := comp.o asm.o os.o sys.o obj.o vm.o mem.o
 
 
-memt.o:  test.h
-vmt.o:   test.h
-objt.o:  test.h
-syst.o:  test.h
-ost.o:   test.h
-asmt.o:  test.h
-compt.o: test.h
-wscmt.o: test.h
+memt.o:  mem.o      test.h
+vmt.o:   mem.o vm.o test.h
+objt.o:             test.h
+syst.o:             test.h
+ost.o:              test.h
+asmt.o:             test.h
+compt.o:            test.h
+wscmt.o:            test.h
 
 # Create the unit test binaries
 memt:  $(MEMTOBJS)
@@ -121,6 +122,7 @@ links:
 	ln -s src/h/mem.h      mem.h
 	ln -s src/h/vm.h       vm.h
 	ln -s src/h/obj.h      obj.h
+	ln -s src/h/op.h       op.h
 	ln -s src/h/sys.h      sys.h
 	ln -s src/h/os.h       os.h
 	ln -s src/h/asm.h      asm.h
@@ -134,12 +136,20 @@ links:
 	ln -s src/asm/asm.c   asm.c
 	ln -s src/comp/comp.c comp.c
 	ln -s src/wscm/wscm.c wscm.c
-	ln -s lib/scm.scm      scm.scm
+	ln -s lib/scm.scm       scm.scm
+	ln -s src/mem/memt.c   memt.c
+	ln -s src/vm/vmt.c     vmt.c
+	ln -s src/obj/objt.c   objt.c
+	ln -s src/sys/syst.c   syst.c
+	ln -s src/os/ost.c     ost.c
+	ln -s src/asm/asmt.c   asmt.c
+	ln -s src/comp/compt.c compt.c
+	ln -s src/wscm/wscmt.c wscmt.c
 
 .PHONY : linksclean clean
 
 linksclean:
-	rm -f globals.h debug.h mem.h vm.h obj.h sys.h os.h asm.h comp.h test.h mem.c vm.c obj.c sys.c os.c asm.c comp.c wscm.c scm.scm
+	rm -f globals.h debug.h mem.h vm.h obj.h op.h sys.h os.h asm.h comp.h test.h mem.c vm.c obj.c sys.c os.c asm.c comp.c wscm.c scm.scm memt.c vmt.c objt.c syst.c ost.c asmt.c compt.c wscmt.c
 
 clean: linksclean
-	rm -f $(MEMTOBJS) $(VMTOBJS) $(ASMTOBJS) $(OBJTOBJS) $(OSTOBJS) $(SYSTOBJS) $(COMPTOBJS) $(WSCMTOBJS) $(WSCMOBJS) memt vmt objt syst ost asmt compt wscmt wscm build.c build.o
+	rm -f $(MEMTOBJS) $(VMTOBJS) $(ASMTOBJS) $(OBJTOBJS) $(OSTOBJS) $(SYSTOBJS) $(COMPTOBJS) $(WSCMTOBJS) $(WSCMOBJS) $(OBJS) memt vmt objt syst ost asmt compt wscmt wscm build.c build.o

@@ -41,8 +41,9 @@ typedef void (*Func2ObjFile) (Obj o, FILE *f);
 
 /* Printf format strings for the above types.
 */
-#define CHR "%c"
-#define STR "%s"
+#define CHR  "%c"
+#define STR  "%s"
+#define STR4 "%-4s"
 
 #define X8  "%x"
 #define X16 "%x"
