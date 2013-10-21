@@ -26,11 +26,11 @@
   About mem.c
 
    Two sets of objects, old and young,  will be maintained.  Normally, the
-   young object heap will be copy collected, when it fills up, to a new
-   young heap.  The old heap will not be touched.  Only when the young heap
-   doesn't have enough garabge objects to reduce its size substantially will
-   a GC over the old and young be performed.  The resulting new heap of objects
-   will become a new old heap with the young heap being completely empty.
+   young object heap will be copy collected, when it fills up, to a new young
+   heap.  The old heap will not be touched.  Only when the young heap doesn't
+   have enough garabge objects to reduce its size substantially will a GC over
+   the old and young be performed.  The resulting new heap of objects will
+   become a new old heap with the young heap being completely empty.
 
    Cheesy state diagram:
    [old 0XXX] [young0X  ]
@@ -41,15 +41,15 @@
 
   TERMINOLOGY
 
-  Size    Inspired by sizeof() operator.  The foot print this object requires
+   Size   Inspired by sizeof() operator.  The foot print this object requires
           internally in bytes.  This also includes the object's descriptor,
           unset vector locations, unused bytes for uneven sized strings or
           unused stack locations.
 
-  Count   Number of blocks this object uses in memory.  Will always be a multiple/
+   Count  Number of blocks this object uses in memory.  Will always be a multiple/
           fraction of its size such as a memory block or bit field.
 
-  Length  Inspired by scheme primitives length and string-length.  Number of active
+   Length Inspired by scheme primitives length and string-length.  Number of active
           'elements' this object references.  In a vector, the number of objects
           locations.  In an array, the bytes required to represent the value or string
           (such as number of characters).  In a stack, the number of objects pushed.
@@ -86,7 +86,7 @@ void memRaiseException (void) {
 	else {
 		fprintf (stderr, "\nERROR: memRaiseException() Halting process with a seg fault.\n");
 		fflush(stdout);
-		*(int*)0 = 0; // Force a crash to catch in debugger.
+		__builtin_trap(); // *(int*)0 = 0; // Force a crash to catch in debugger.
 	}
 }
 
@@ -96,7 +96,7 @@ void memRaiseException (void) {
 
  Simple table insertion and lookup of a string to a pointer value aka object
 *******************************************************************************/
-#define OBJ_STR_MAX 256
+#define OBJ_STR_MAX 512
 typedef struct {Obj obj;  Str str;} ObjStr;
 ObjStr memObjStrDB[OBJ_STR_MAX];
 Num ObjStrCount = 0;
@@ -200,14 +200,6 @@ void memTypeStringDumpAll (FILE *stream) {
 /*******************************************************************************
  Descriptors
 *******************************************************************************/
-#define DescSize           sizeof(Descriptor)
-#define DescBitCount       (8 * DescSize)
-#define DescTypeBitCount   8
-#define DescLengthBitCount (DescBitCount - DescTypeBitCount)
-
-#define DescTypeBitMask   (~(Length)0 << (DescBitCount - DescTypeBitCount))   /* 0xff000000... */
-#define DescLengthBitMask (~(Length)0 >> (DescBitCount - DescLengthBitCount)) /* 0x00ffffff... */
-
 /* A 'Type' is 8 bits composed of a 1 bit 'class' and 7 bit 'id'.  If the class
    bit is 0 then the object and contents are considered raw data and copied
    as-is during a garbage collection.
@@ -254,7 +246,8 @@ Num memIsObjectBaseVectorOrArray (Obj o) { return memObjectType(o) <= TMAXVECTOR
 Num memIsObjectSemaphore (Obj o)   { return memIsObjectValid(o) && memObjectType(o) == TSEMAPHORE; }
 Num memIsObjectFinalizer (Obj o)   { return memIsObjectValid(o) && memObjectType(o) == TFINALIZER; }
 Num memIsObjectPointer (Obj o)     { return                        memObjectType(o) == TPOINTER; } /* During a garbage collection, memIsObjectValid would fail because the object is in the temporary 'new' heap */
-Num memIsObjectStack (Obj o)       { return memIsObjectValid(o) && memObjectType(o) == TSTACK; }
+Num memIsObjectVecStack (Obj o)       { return memIsObjectValid(o) && memObjectType(o) == TVECSTACK; }
+Num memIsObjectAryStack (Obj o)       { return memIsObjectValid(o) && memObjectType(o) == TARYSTACK; }
 Num memIsObjectShadow (Obj o)      { return memIsObjectValid(o) && memObjectType(o) == TSHADOW; }
 Num memIsObjectType (Obj o, Type t){ return memIsObjectValid(o) && memObjectType(o) == t; }
 
@@ -270,7 +263,7 @@ Num memArrayLengthToObjectSize (Length length) {
 /* Compute object size based on vector's 'length'.
 */
 Num memVectorLengthToObjectSize (Length length) {
-	return DescSize + length*ObjSize;
+	return DescSize + length * ObjSize;
 }
 
 /* Get object's size in bytes including the descriptor.  Used to find the
@@ -312,6 +305,18 @@ void memRootSetRegisterAnonymous (Obj *objp) {
 void memRootSetUnRegisterAnonymous (Obj *objp) {
 	assert(0 < MemRootSetCount);
 	assert(objp == MemRootSet[--MemRootSetCount]);
+}
+
+/* Data objects (VM registers) aren't garbage collected and are used for
+   immediate computation and values.
+*/
+Obj *MemDataSet[MemRootSetCountMax];
+Num MemDataSetCount = 0;
+
+void memSetDataRegisterString (Obj *objp, Str desc) {
+	assert(MemDataSetCount < MemRootSetCountMax);
+	MemDataSet[MemDataSetCount++] = objp;
+	memPointerRegisterString(objp, desc);
 }
 
 
@@ -522,7 +527,7 @@ Obj memNewObject (Descriptor desc, Num byteSize) {
 */
 Obj memNewStaticObject (Descriptor desc, Num byteSize) {
  Obj o;
-	DB("  desc:"HEX016"  byteSize:"HEX, desc, byteSize);
+	DBBEG("  desc:"HEX016"  byteSize:"HEX, desc, byteSize);
 	*(Descriptor*)heapStatic.next = desc;
 	o = heapStatic.next + DescSize;
 	heapStatic.next += byteSize;
@@ -542,7 +547,7 @@ Obj memNewStatic (Type type, Length length) {
 	DBBEG("  type:"HEX02"  length:"HEX, type, length);
 	o = memNewStaticObject (memMakeDescriptor(type, length),
 	                    memArrayLengthToObjectSize(length));
-	DBEND();
+	DBEND("");
 	return o;
 }
 
@@ -582,7 +587,7 @@ Obj memNewSemaphore (void) {
  Obj o;
 	DBBEG();
 	o = memNewObject (memMakeDescriptor(TSEMAPHORE, 1),
-	              memVectorLengthToObjectSize(1));
+	                  memVectorLengthToObjectSize(1));
 	DBEND();
 	return o;
 }
@@ -613,15 +618,25 @@ Obj memNewPointer (void) {
 	return o;
 }
 
-/* First item in stack vector is a pointer to an address in the vector.
-   Initially it points to itself, implying an empty stack.
+/* First item in stack vector is a byte offset to the top object.
+   Initially it references itself as 0, implying an empty stack.
 */
-Obj memNewStack (void) {
+Obj memNewVecStack (void) {
  Obj o;
 	DBBEG();
-	o = memNewObject (memMakeDescriptor(TSTACK, STACK_COUNT+1),
-	              memVectorLengthToObjectSize(STACK_COUNT+1));
-	*(Obj*)o = (Obj)o;
+	o = memNewObject (memMakeDescriptor(TVECSTACK, STACK_COUNT+1),
+	                  memVectorLengthToObjectSize(STACK_COUNT+1));
+	*(Num*)o = 1*ObjSize;
+	DBEND();
+	return o;
+}
+
+Obj memNewAryStack (void) {
+ Obj o;
+	DBBEG();
+	o = memNewObject (memMakeDescriptor(TARYSTACK, (STACK_COUNT+1)*ObjSize),
+	                  memVectorLengthToObjectSize(STACK_COUNT+1));
+	*(Num*)o = 1*ObjSize;
 	DBEND();
 	return o;
 }
@@ -662,7 +677,7 @@ void memArraySet (Obj obj, Num offset, u8 item) {
 		printf("ERROR memArraySet(obj "OBJ" offset "NUM" item %02x) Not array class.",
 		    obj, offset, item);
 		memRaiseException();
-	} else if(offset<0 || memObjectLength(obj)<=offset ) {
+	} else if(memObjectLength(obj)<=offset ) {
 		printf("ERROR memArraySet(obj "OBJ" offset "NUM" item %02x) Invalid offset.",
 		    obj, offset, item);
 		memRaiseException();
@@ -681,7 +696,7 @@ void memVectorSet (Obj obj, Num offset, Obj item) {
 		printf ("ERROR memVectorSet(obj "OBJ" offset "NUM" item "OBJ") Not vector class.",
 		    obj, offset, item);
 		memRaiseException();
-	} else if (offset < 0 || memObjectLength(obj) <= offset ) {
+	} else if (memObjectLength(obj) <= offset ) {
 		printf ("ERROR memVectorSet(obj "OBJ" offset "NUM" item "OBJ") Invalid offset.",
 		    obj, offset, item);
 		memRaiseException();
@@ -690,58 +705,121 @@ void memVectorSet (Obj obj, Num offset, Obj item) {
 	*((Obj*)obj+offset)=item;
 }
 
-void memStackPush (Obj obj, Obj item) {
+void memVecStackPush (Obj obj, Obj item) {
 	#if DEBUG_ASSERT_STACK
 	if (!memIsObjectValid(obj) && !memIsObjectInHeap(&heapNew, obj)) {
-		printf ("ERROR memStackPush(obj "OBJ" item "OBJ") Invalid object.", obj, item);
+		printf ("ERROR memVecStackPush(obj "OBJ" item "OBJ") Invalid object.", obj, item);
 		memRaiseException();
-	} else if (!memIsObjectStack(obj)) {
-		printf ("ERROR memStackPush(obj "OBJ" item "OBJ") Not stack type.", obj, item);
+	} else if (!memIsObjectVecStack(obj)) {
+		printf ("ERROR memVecStackPush(obj "OBJ" item "OBJ") Not a vector-stack type.", obj, item);
 		memRaiseException();
-	} else if (STACK_COUNT <= memStackLength(obj)) {
-		printf ("ERROR memStackPush(obj "OBJ" item "OBJ") Stack overflow.", obj, item);
+	} else if (STACK_COUNT <= memVecStackLength(obj)) {
+		printf ("\nERROR: Stack Overflow:  memVecStackPush(obj, item)\n", obj, item);
 		memDebugDumpObject(obj, stderr);
+		printf("\n");
+		memDebugDumpObject(item, stderr);
 		memRaiseException();
-	}
+	} else
 	#endif
-	*++*(Obj**)obj=item;
+	{
+		*(Obj*)(obj + *(Num*)obj) = item;
+		*(Num*)obj += ObjSize;
+	}
 }
 
-void memStackSet (Obj obj, Num topOffset, Obj item) {
+void memVecStackSet (Obj obj, Num topOffset, Obj item) {
 	#if DEBUG_ASSERT
 	if (!memIsObjectValid(obj)) {
-		printf ("ERROR memStackSet(obj "OBJ" topOffset %x item "OBJ") Invalid object.",
+		printf ("ERROR memVecStackSet(obj "OBJ" topOffset %x item "OBJ") Invalid object.",
 		    obj, topOffset, item);
 		memRaiseException();
-	} else if (!memIsObjectStack(obj)) {
-		printf ("ERROR memStackSet(obj "OBJ" topOffset %x item "OBJ") Not stack type.",
+	} else if (!memIsObjectVecStack(obj)) {
+		printf ("ERROR memVecStackSet(obj "OBJ" topOffset %x item "OBJ") Not a vector-stack type.",
 		    obj, topOffset, item);
 		memRaiseException();
-	} else if (topOffset<0 || memStackLength(obj)<=topOffset) {
-		printf ("ERROR memStackSet(obj "OBJ" topOffset %x item "OBJ") Invalid offset. memStackLength(obj)=>%x", obj, topOffset, item, memStackLength(obj));
+	} else if (memVecStackLength(obj)<=topOffset) {
+		printf ("ERROR memVecStackSet(obj "OBJ" topOffset %x item "OBJ") Invalid offset. memVecStackLength(obj)=>%x", obj, topOffset, item, memVecStackLength(obj));
 		memRaiseException();
 	}
 	#endif
-	*(*(Obj**)obj-topOffset)=item;
+
+	*(Obj*)(obj + *(Num*)obj - (topOffset + 1)*ObjSize) = item;
 }
 
-Obj  memStackPop (Obj obj) {
- Obj ret;
+Obj  memVecStackPop (Obj obj) {
 	#if DEBUG_ASSERT
 	if (!memIsObjectValid(obj) && !memIsObjectInHeap(&heapNew, obj)) {
-		printf ("ERROR memStackPop(obj "OBJ") Invalid object.", obj);
+		printf ("ERROR memVecStackPop(obj "OBJ") Invalid object.", obj);
 		memRaiseException();
-	} else if (!memIsObjectStack(obj)) {
-		printf ("ERROR memStackPop(obj "OBJ") Not stack type.", obj);
+	} else if (!memIsObjectVecStack(obj)) {
+		printf ("ERROR memVecStackPop(obj "OBJ") Not a vector-stack type.", obj);
 		memRaiseException();
-	} else if (memStackLength(obj) <= 0) {
-		printf ("ERROR memStackPop(obj "OBJ") Stack underflow.", obj);
+	} else if (memVecStackLength(obj) < 1 || STACK_COUNT < memVecStackLength(obj)) {
+		printf ("ERROR: Stack out of bounds:  memVecStackPop(obj "OBJ")", obj);
 		memRaiseException();
 	}
 	#endif
-	ret = *(*(Obj**)obj)--; /* Dereference the pointer then decrement it */
+	*(Num*)obj -= ObjSize;
+	return *(Obj*)(obj + *(Num*)obj);
+}
 
-	return  ret;
+void memAryStackPush (Obj obj, Obj item) {
+	#if DEBUG_ASSERT_STACK
+	if (!memIsObjectValid(obj) && !memIsObjectInHeap(&heapNew, obj)) {
+		printf ("ERROR memAryStackPush(obj "OBJ" item "NUM") Invalid object.", obj, item);
+		memRaiseException();
+	} else if (!memIsObjectAryStack(obj)) {
+		printf ("ERROR memAryStackPush(obj "OBJ", item "NUM") Not an array-stack type.", obj, item);
+		memDebugDumpObject(obj, stderr);
+		printf("\n");
+		memDebugDumpObject((Obj)item, stderr);
+		memRaiseException();
+	} else if (STACK_COUNT <= memAryStackLength(obj)) {
+		printf ("\nERROR: Stack Overflow:  memAryStackPush(obj "OBJ", item"NUM")\n", obj, item);
+		memDebugDumpObject(obj, stderr);
+		printf("\n");
+		memRaiseException();
+	} else
+	#endif
+	{
+		*(Obj*)(obj + *(Num*)obj) = item;
+		*(Num*)obj += ObjSize;
+	}
+}
+
+void memAryStackSet (Obj obj, Num topOffset, Obj item) {
+	#if DEBUG_ASSERT
+	if (!memIsObjectValid(obj)) {
+		printf ("ERROR memAryStackSet(obj "OBJ" topOffset %x item "NUM") Invalid object.",
+		    obj, topOffset, item);
+		memRaiseException();
+	} else if (!memIsObjectAryStack(obj)) {
+		printf ("ERROR memAryStackSet(obj "OBJ" topOffset %x item "NUM") Not an array-stack type.",
+		    obj, topOffset, item);
+		memRaiseException();
+	} else if (memAryStackLength(obj)<=topOffset) {
+		printf ("ERROR memAryStackSet(obj "OBJ" topOffset %x item "NUM") Invalid offset. memAryStackLength(obj)=>%x", obj, topOffset, item, memAryStackLength(obj));
+		memRaiseException();
+	}
+	#endif
+	*(Obj*)(obj + *(Num*)obj - (topOffset+1)*ObjSize) = item;
+}
+
+Obj memAryStackPop (Obj obj) {
+	#if DEBUG_ASSERT
+	if (!memIsObjectValid(obj) && !memIsObjectInHeap(&heapNew, obj)) {
+		printf ("ERROR memAryStackPop(obj "OBJ") Invalid object.", obj);
+		memRaiseException();
+	} else if (!memIsObjectAryStack(obj)) {
+		printf ("ERROR memAryStackPop(obj "OBJ") Not an array-stack type.", obj);
+		memRaiseException();
+	} else if (memAryStackLength(obj) < 1 || STACK_COUNT < memAryStackLength(obj)) {
+		printf ("ERROR: Stack out of bounds:  memAryStackPop(obj "OBJ")", obj);
+		memRaiseException();
+	}
+	#endif
+	*(Num*)obj -= ObjSize;
+	return *( (Obj*)obj + (*(Num*)obj) );
 }
 
 
@@ -758,7 +836,7 @@ u8 memArrayObject (Obj obj, Num offset) {
 		printf ("ERROR memArrayObject(obj "OBJ" offset "NUM") Not array class.",
 		    obj, offset);
 		memRaiseException();
-	} else if (offset<0 || memObjectLength(obj)<=offset ) {
+	} else if (memObjectLength(obj)<=offset ) {
 		printf ("ERROR memArrayObject(obj "OBJ" offset "NUM") Invalid offset.",
 		    obj, offset);
 		memRaiseException();
@@ -781,54 +859,91 @@ Obj memVectorObject (Obj obj, Num offset) {
 //		objDump(obj, stderr);
 //		vmDebugDumpCode(r1e, stderr);
 		memRaiseException();
-	} else if (offset<0 || memObjectLength(obj)<=offset ) {
+	} else if (memObjectLength(obj)<=offset ) {
 		printf ("ERROR memVectorObject(obj "OBJ" offset "NUM") Invalid index.",
 		    obj, offset);
 		memRaiseException();
 	}
 	#endif
-	return *((Obj*)obj+offset);
+	return *((Obj*)obj + offset);
 }
 
-Obj memStackObject (Obj obj, Num topOffset) {
+Obj memVecStackObject (Obj obj, Num topOffset) {
 	#if DEBUG_ASSERT
 	if (!memIsObjectValid(obj)) {
-		printf ("ERROR memStackObject(obj "OBJ" topOffset "NUM"): Invalid object.",
+		printf ("ERROR memVecStackObject(obj "OBJ" topOffset "NUM"): Invalid object.",
 		    obj, topOffset);
 		memRaiseException();
-	} else if (!memIsObjectStack(obj)) {
-		printf ("ERROR memStackObject(obj "OBJ" topOffset "NUM"): Not stack type.",
+	} else if (!memIsObjectVecStack(obj)) {
+		printf ("ERROR memVecStackObject(obj "OBJ" topOffset "NUM"): Not stack type.",
 		    obj, topOffset);
 		memRaiseException();
-	} else if (topOffset<0 || memStackLength(obj)<=topOffset ) {
-		printf ("ERROR memStackObject(obj "OBJ" topOffset "NUM"): Invalid top offset.",
+	} else if (memVecStackLength(obj)<=topOffset ) {
+		printf ("ERROR memVecStackObject(obj "OBJ" topOffset "NUM"): Invalid top offset.",
 		    obj, topOffset);
 		memRaiseException();
 	}
 	#endif
-	return *(*(Obj**)obj-topOffset);
+	return *(Obj*)(obj + *(Num*)obj - (topOffset+1)*ObjSize);
 }
 
 /* Number of elements pushed onto stack.  It is empty if the pointer address
    is the same as the object's address.
 */
-Num memStackLength (Obj obj) {
+Num memVecStackLength (Obj obj) {
 	#if DEBUG_ASSERT_STACK
 	if (!(memIsObjectInHeap(&heap, obj)
 	      || memIsObjectInHeap(&heapOld, obj)
 	      || memIsObjectInHeap(&heapStatic, obj)
 		   || memIsObjectInHeap(&heapNew, obj))) {
-		printf("ERROR memStackLength(obj "OBJ") Invalid object.", obj);
+		printf("ERROR memVecStackLength(obj "OBJ") Invalid object.", obj);
 		memRaiseException();
-	} else if (!memIsObjectStack(obj)) {
-		printf("ERROR memStackLength(obj "OBJ") Not stack type.", obj);
+	} else if (!memIsObjectVecStack(obj)) {
+		printf("ERROR memVecStackLength(obj "OBJ") Not stack type.", obj);
 		memRaiseException();
 	}
 	#endif
-	return (Num)(((Obj**)obj)[0] - (Obj*)obj);
+	return *(Num*)obj/ObjSize - 1;
 }
 
+Obj memAryStackObject (Obj obj, Num topOffset) {
+	#if DEBUG_ASSERT
+	if (!memIsObjectValid(obj)) {
+		printf ("ERROR memAryStackObject(obj "OBJ" topOffset "NUM"): Invalid object.",
+		    obj, topOffset);
+		memRaiseException();
+	} else if (!memIsObjectAryStack(obj)) {
+		printf ("ERROR memAryStackObject(obj "OBJ" topOffset "NUM"): Not stack type.",
+		    obj, topOffset);
+		memRaiseException();
+	} else if (memAryStackLength(obj)<=topOffset ) {
+		printf ("ERROR memAryStackObject(obj "OBJ" topOffset "NUM"): Invalid top offset.",
+		    obj, topOffset);
+		memRaiseException();
+	}
+	#endif
+	//return *(*(Obj**)obj-topOffset);
+	return *(Obj*)(obj + *(Num*)obj - (topOffset+1)*ObjSize);
+}
 
+/* Number of elements pushed onto stack.  It is empty if the pointer address
+   is one word past the object's address (vector index 1).
+*/
+Num memAryStackLength (Obj obj) {
+	#if DEBUG_ASSERT_STACK
+	if (!(memIsObjectInHeap(&heap, obj)
+	      || memIsObjectInHeap(&heapOld, obj)
+	      || memIsObjectInHeap(&heapStatic, obj)
+		   || memIsObjectInHeap(&heapNew, obj))) {
+		printf("ERROR memAryStackLength(obj "OBJ") Invalid object.", obj);
+		memRaiseException();
+	} else if (!memIsObjectAryStack(obj)) {
+		printf("ERROR memAryStackLength(obj "OBJ") Not stack type.", obj);
+		memRaiseException();
+	}
+	#endif
+	return *(Num*)obj - 1*ObjSize;
+}
 
 
 
@@ -898,14 +1013,14 @@ void memObjectCopyToHeapNew (Obj *objp) {
 	
 		/* Copy bytes that make up the stack which include the descriptor,
 		   pointer and live object pointers... */
-		if (memIsObjectStack (*objp)) {
+		if (memIsObjectVecStack (*objp)) {
 			DB ("Stack");
-			len = memStackLength(*objp);
-			/* Add 1 to stack length to account for the stack pointer in the first location. */
+			len = memVecStackLength(*objp);
+			/* Add 1 to stack length to account for the stack length in the first location. */
 			memcpy(heapNew.next, (*objp - DescSize), (DescSize + ObjSize * (len + 1)));
 			/* Update this stack's internal pointer (first word in the vector) to
 				point to the proper position in the vector. */
-			*(Obj*)newObjectLocation = (Obj*)newObjectLocation + len;
+			//*(Obj*)newObjectLocation = (Obj*)newObjectLocation + len;
 		} else { /* ... or just copy bytes that make up this object. */
 			DB ("Array/Vector");
 			memcpy(heapNew.next, *objp-DescSize, memObjectSize(*objp));
@@ -962,9 +1077,9 @@ void memCopyHeapObjectsToHeapNew (Heap *heap) {
 				   if the object is in an old heap and a young GC is being
 				   performed.*/
 				memVectorSet(newObj, 0, (Obj)memVectorObject(newObj, 1)+len);
-			} else if (memIsObjectStack(newObj)) {
-				for (i=0; i<memStackLength(newObj); i++) {
-					DB("  Stack in old heap   location "HEX"/"HEX" "OBJ, i, memStackLength(newObj), (Obj*)newObj+i+1);
+			} else if (memIsObjectVecStack(newObj)) {
+				for (i=0; i<memVecStackLength(newObj); i++) {
+					DB("  Stack in old heap   location "HEX"/"HEX" "OBJ, i, memVecStackLength(newObj), (Obj*)newObj+i+1);
 					memObjectCopyToHeapNew((Obj*)newObj+i+1);
 				}
 			} else {
@@ -1148,7 +1263,10 @@ void memGarbageCollect () {
 /* Dump heap and root object details
 */
 void memDebugDumpHeapHeaders (FILE *stream) {
+ Chr buff[17];
  Num i;
+ Obj stk=NULL, o;
+ Obj istk=NULL;
 	// Set a default stream.
 	if (stream == NULL) stream=stderr;
 
@@ -1175,10 +1293,49 @@ void memDebugDumpHeapHeaders (FILE *stream) {
 	        heapStatic.finalizerCount,  heapOld.finalizerCount,
 	        heap.finalizerCount,        heapNew.finalizerCount);
 
-	for (i=0; i<MemRootSetCount; ++i) {
+	for (i=0; i<16 /*MemRootSetCount*/; ++i) {
 		if (0 == i%4) printf ("\n");
-		fprintf (stream, "%9s "OBJ, memPointerString(MemRootSet[i]), *MemRootSet[i]);
+		o = *MemRootSet[i];
+		if (memIsObjectVecStack(o)) { stk = o; } // Look for stack
+		if (memIsObjectAryStack(o)) { istk = o; } // Look for istack
+		sprintf ((char*)buff, "%012llX", o);
+		fprintf (stream, "%5s %-16s", memPointerString(MemRootSet[i]), buff);
 	}
+
+	if (stk) // Display the top 5 stack elements
+	{
+		i = memVecStackLength(stk);
+		fprintf(stream, NL HEX04"[", i);
+		if (6 < i) {
+			i = 6;
+			fprintf(stream, "...");
+		}
+		while (0<i) {
+			fprintf(stream, OBJ " ", memVecStackObject(stk, i-1));
+			--i;
+		}
+	}
+
+	for (i=0; i<MemDataSetCount; ++i) {
+		if (0 == i%4) printf ("\n");
+		o = *MemDataSet[i];
+		fprintf (stream, "%5s "OBJ0, memPointerString(MemDataSet[i]), o);
+	}
+
+	if (istk) // Display the top 5 integer stack elements
+	{
+		i = memAryStackLength(istk);
+		fprintf(stream, NL HEX04"[", i);
+		if (6 < i) {
+			i = 6;
+			fprintf(stream, "...");
+		}
+		while (0<i) {
+			fprintf(stream, OBJ " ", memAryStackObject(istk, i-1));
+			--i;
+		}
+	}
+
 	fprintf (stream, "\n");
 }
 
@@ -1188,6 +1345,7 @@ void memDebugDumpHeapHeaders (FILE *stream) {
 */
 void memDebugDumpObject (Obj o, FILE *stream) {
  Int i, fdState;
+ Num len;
  Str s;
  Obj obj;
  Chr c;
@@ -1217,16 +1375,27 @@ void memDebugDumpObject (Obj o, FILE *stream) {
 			/* Some objects are just an instance of the descriptor such as #f and #() they have no content. */
 			fprintf(stderr, (char*)memPointerString(o));
 		} else if (memIsObjectBaseArray(o)) {
-			/* Array's contents generically dumped */
-			for (i=0; i<memObjectLength(o); i++) {
-				fprintf (stream, "%s%x", i==0?"(":" ", ((u8*)o)[i]);
+         if (memIsObjectAryStack(o)) {
+				/* Array stack's ontents */
+				len = memAryStackLength(o);
+				fprintf (stream, "("HEX04" |", len);
+				if (STACK_COUNT < len) { len = STACK_COUNT; }
+				for (i=0; (i < len); i++) {
+					fprintf (stream, " %x", ((Num*)o)[i+1]);
+				}
+				fprintf (stream, ")");
+         } else {
+				/* Array's contents generically dumped */
+				for (i=0; i<memObjectLength(o); i++) {
+					fprintf (stream, "%s%x", i==0?"(":" ", ((u8*)o)[i]);
+				}
+				fprintf (stream, ") \"");
+				for (i=0; i<memObjectLength(o); i++) {
+					c = ((Chr*)o)[i];
+					fprintf (stream, CHR, ((32<=c && c<=126) || (161<=c && c<=255)) ? c : '.'); // 0xb7
+				}
+				fprintf (stream, "\"");
 			}
-			fprintf (stream, ") \"");
-			for (i=0; i<memObjectLength(o); i++) {
-				c = ((Chr*)o)[i];
-				fprintf (stream, CHR, ((32<=c && c<=126) || (161<=c && c<=255)) ? c : 0xb7);
-			}
-			fprintf (stream, "\"");
 		} else {
 			if (memIsObjectFinalizer(o)) {
 				/* Finalizer */
@@ -1234,11 +1403,13 @@ void memDebugDumpObject (Obj o, FILE *stream) {
 			} else if (memIsObjectPointer(o)) {
 				/* Pointer */
 				fprintf (stream, OBJ" "OBJ"["NUM"]",((Obj*)o)[0], ((Obj*)o)[1], ((Obj*)o)[0] - ((Obj*)o)[1]);
-			} else if (memIsObjectStack(o)) {
-				/* Stack */
-				fprintf (stream, "["HEX04" | ", memStackLength(o));
-				for (i=0; i<memStackLength(o); i++) {
-					fprintf (stream, OBJ" ", ((Obj*)o)[i+1]);
+			} else if (memIsObjectVecStack(o)) {
+				/* Vector Stack */
+				len = memVecStackLength(o);
+				fprintf (stream, "["HEX04" |", len);
+				if (STACK_COUNT < len) { len = STACK_COUNT; }
+				for (i=0; (i < len); i++) {
+					fprintf (stream, " "OBJ, ((Obj*)o)[i+1]);
 				}
 				fprintf (stream, "]");
 			} else if (memIsObjectShadow(o)) {
@@ -1248,7 +1419,7 @@ void memDebugDumpObject (Obj o, FILE *stream) {
 				/* Vector's contents generically dumped */
 				for (i=0; i<memObjectLength(o); i++) {
 					obj = ((Obj*)o)[i];
-					fprintf (stream, "%s"OBJ, ((i==0)?"#(":" "), obj);
+					fprintf (stream, "%s"HEX, ((i==0)?"#(":" "), obj);
 					/* Internal pointer address */
 					if ((s = memPointerString(obj))) fprintf (stream, ":%s", s);
 				}
@@ -1343,7 +1514,7 @@ void memDebugDumpAll (FILE *stream) {
 void memValidateObject (Obj o) {
  Obj oo, op;
  Int valid=1;
- Num i;
+ Num i, stackLen;
 //	DBBEG();
 	
 	if ((memIsObjectInHeap(&heapOld, o)
@@ -1365,11 +1536,12 @@ void memValidateObject (Obj o) {
 				fprintf (stderr, "\nERROR memValidateObject() pointer is out of object range.");
 				valid=0;
 			}
-		} else if (memIsObjectStack(o)) {
-			op = memVectorObject(o, 0);
-			if (!(o <= op
-			      && (op < o + memObjectSize(o) - DescSize))) {
-				fprintf (stderr, "\nERROR memValidateObject() stack "OBJ" out of bounds. ptr:"OBJ"  end:"OBJ"", o, op, o + memObjectSize(o) - DescSize);
+		} else if (memIsObjectVecStack(o)) {
+			//op = memVectorObject(o, 0);
+			stackLen = memVecStackLength(o);
+			//if (!(o <= op && (op < o + memObjectSize(o) - DescSize))) {
+			if (STACK_COUNT < stackLen) {
+				fprintf (stderr, "\nERROR memValidateObject() stack "OBJ" out of bounds. len:"NUM"", o, stackLen);
 				valid=0;
 			}
 		} else if (memIsObjectShadow(o))
@@ -1396,7 +1568,7 @@ void memValidateObject (Obj o) {
 	if (!valid) {
 		fprintf (stderr, "\nERROR memValidateObject() found bad object:"OBJ NL, o);
 		memDebugDumpObject (o, stderr);
-		*(int*)0=0;
+		__builtin_trap(); // *(int*)0=0;
 	}
 //	DBEND();
 }
@@ -1442,10 +1614,11 @@ void memInitialize (Func preGC, Func postGC, Func exceptionHandlerCallback) {
 		assert(TMAXINTERNAL < MEMMAXTYPES);
 		shouldInitialize=0;
 		DB("Register the internal object types");
+		memTypeRegisterStringInternal(TARYSTACK, (Str)"ASTK");
+		memTypeRegisterStringInternal(TVECSTACK, (Str)"VSTK");
 		memTypeRegisterStringInternal(TSEMAPHORE,(Str)"SEM");
 		memTypeRegisterStringInternal(TFINALIZER,(Str)"FIN");
 		memTypeRegisterStringInternal(TPOINTER,  (Str)"PTR");
-		memTypeRegisterStringInternal(TSTACK,    (Str)"STK");
 		memTypeRegisterStringInternal(TSHADOW,   (Str)"SHDW");
 		DB("Create heaps");
 		memInitializeHeap  (&heap, HEAP_BLOCK_COUNT);

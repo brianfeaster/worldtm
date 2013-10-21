@@ -4261,3 +4261,37 @@ Researching control characters, I found these useful articles:
   http://www.ecma-international.org/publications/files/ECMA-ST/Ecma-043.pdf
 
   http://en.wikipedia.org/wiki/C0_and_C1_control_codes
+
+
+
+Thu Sep 12 20:03:33 UTC 2013
+
+Implementing two stacks:  One for the $D registers, array based, and the other
+for the $R registers, object based.  The stack length will be stored as an
+index in the first word of the array or vector.  Currently the stack is a vector
+type with the first word being a pointer to the top object.
+
+The virtual machine will keep track of the stacks in $rf and $re and use $df and
+$de as pointers into their associated stacks.  During a garbage colection, the
+stack objects will have their index values updated.  After the garbage collection
+the data registers will be updated to point to the new location of the top stack
+elements.
+
+
+
+Sat Sep 28 15:16:58 UTC 2013
+
+While refactoring the ASM module I ran into issues with stack manipulation.
+Originally I treated the stack as a special case of the pointer object (which
+I never really used?)  I decided to represent the stack count with an index
+instead of a pointer.  I believe this is more efficient than performing pointer
+arithmatic and it works better with the extra set of non-object registers I've
+added to the virtual machine.
+
+The stack, which is a variant of the vector object, has an index as the first
+entry.  0 implies the stack is empty.  When the VM is running, one of the non-
+object pointers becomes a pointer into the stack object facilitating fast stack
+operations.  When the VM quits or is interrupted, the stack object is updated
+with the byte offset of the stack count.  I'm choosing the byte count so that
+a simple add with no cast is required to convert the stack object pointer back
+into a pointer (stackObject + *(Num)stackObject[0])

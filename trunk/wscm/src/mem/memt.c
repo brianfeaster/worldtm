@@ -14,7 +14,7 @@ Num memHeapLength (Num h);
 
 /* Root objects similar to vm's
 */
-Obj r0, r1, r2, r3, r4, r1f;
+Obj r0, r1, r2, r3, r4, rf;
 
 
 /* Object types similar to obj's
@@ -28,8 +28,8 @@ Num TVECTOR = 0x81;
 
 /* Abstractions
 */
-void push (Obj o) { memStackPush(r1f, o); }
-Obj   pop (void) { return memStackPop(r1f); }
+void push (Obj o) { memVecStackPush(rf, o); }
+Obj   pop (void) { return memVecStackPop(rf); }
 
 
 
@@ -147,8 +147,8 @@ void TESTVerifyObjectCreationAndCollection (void) {
 	push(r2);
 	push(r3);
 	push(r4);
-	push(r1f);
-	assert(memStackLength(r1f) == 5);
+	push(rf);
+	assert(memVecStackLength(rf) == 5);
 
 	memVectorSet(r4, 0, r1);
 	memVectorSet(r4, 1, r2);
@@ -158,21 +158,22 @@ void TESTVerifyObjectCreationAndCollection (void) {
 		push(r0);
 		for (j=0; j<16; j++) ((Chr*)r0)[j] = (Chr)(j+i);
 	}
-	assert(memStackLength(r1f) == 21);
+	assert(memVecStackLength(rf) == 21);
 
-
-	for (i=0; i<16; i++) pop();
+	for (i=0; i<16; i++) {
+		pop();
+	}
 	assert(memtVerifyHeapLengths(0, 0, 21, 0));
 
 	memGarbageCollect();
-	assert(memStackLength(r1f) == 5);
+	assert(memVecStackLength(rf) == 5);
 
 	/* Although I popped the stack of all the integers, register 0 still
 	   points to the last integer created */
 	assert(memtVerifyHeapLengths(0, 0, 6, 0));
 
 	/* Clear the registers and force a full garbage collection to clean all heaps */
-	r0=r1=r2=r3=r4=r1f=0;
+	r0=r1=r2=r3=r4=rf=0;
 	GarbageCollectionMode = 1;
 	memGarbageCollect();
 	assert(memtVerifyHeapLengths(0, 0, 0, 0));
@@ -296,7 +297,7 @@ int main (int argc, char *argv[]) {
 	memRootSetRegister(r2);
 	memRootSetRegister(r3);
 	memRootSetRegister(r4);
-	memRootSetRegister(r1f);
+	memRootSetRegister(rf);
 
 	memTypeRegisterString(TSYMBOL,  (Str)"sym");
 	memTypeRegisterString(TINTEGER, (Str)"int");
@@ -304,7 +305,7 @@ int main (int argc, char *argv[]) {
 	memTypeRegisterString(TSTRING,  (Str)"str");
 	memTypeRegisterString(TVECTOR,  (Str)"vec");
 
-	r1f = memNewStack(); /* Create the stack for the machine */
+	rf = memNewVecStack(); /* Create the stack for the machine */
 
 	TEST(TESTSizeof);
 	TEST(TESTMmap);
@@ -315,7 +316,7 @@ int main (int argc, char *argv[]) {
 	TEST(TESTNewLargeVectorObject);
 	TEST(TESTAutomaticGarbageCollect);
 
-   memDebugDumpHeapHeaders(stdout);
+   //memDebugDumpHeapHeaders(stdout);
 	//memDebugDumpAll(stdout);
 	return 0;
 }

@@ -4,10 +4,10 @@
 #include <stdarg.h>
 #include <fcntl.h>
 #include <assert.h>
-#include "asm.h"
-#include "obj.h"
-#include "vm.h"
 #include "mem.h"
+#include "vm.h"
+#include "obj.h"
+#include "asm.h"
 
 /*
 TABLE OF CONTENTS
@@ -87,15 +87,15 @@ Obj asmICodeField (Obj ic, Num i) {
 
 void asmNewICode (Obj op, Obj r, Obj s, Obj t, Obj i, Obj b) {
 	vmPush(i); /* Immediate value might be a scheme object and moved during a GC within memNewVector() */
-	r0 = memNewVector(TICODE, 6);
+	r00 = memNewVector(TICODE, 6);
 	i = vmPop();
-	memVectorSet(r0, 0, op);/* Opcode */
-	memVectorSet(r0, 1, r); /* Register 0 */
-	memVectorSet(r0, 2, s); /* Register 0 */
-	memVectorSet(r0, 3, t); /* Register 0 */
-	memVectorSet(r0, 4, i); /* Immediate value */
-	memVectorSet(r0, 5, b); /* Branch offset */
-	asmICodePush(r0);
+	memVectorSet(r00, 0, op);/* Opcode */
+	memVectorSet(r00, 1, r); /* Register 0 */
+	memVectorSet(r00, 2, s); /* Register 0 */
+	memVectorSet(r00, 3, t); /* Register 0 */
+	memVectorSet(r00, 4, i); /* Immediate value */
+	memVectorSet(r00, 5, b); /* Branch offset */
+	asmICodePush(r00);
 }
 	
 void asmICodePushNewMV (Obj r, Obj s)         { asmNewICode(MV,   r,  s, NA, NA, NA); }
@@ -106,12 +106,12 @@ void asmICodePushNewSTI (Obj r, Obj s, Obj i) { asmNewICode(STI,  r,  s, NA,  i,
 void asmICodePushNewST (Obj r, Obj s, Obj t)  { asmNewICode(ST,   r,  s,  t, NA, NA); }
 void asmICodePushNewPUSH (Obj r)              { asmNewICode(PUSH, r, NA, NA, NA, NA); }
 void asmICodePushNewPOP (Obj r)               { asmNewICode(POP,  r, NA, NA, NA, NA); }
+void asmICodePushNewLSLI (Obj r, Obj i)       { asmNewICode(LSLI, r, NA, NA,  i, NA); }
+void asmICodePushNewLSRI (Obj r, Obj i)       { asmNewICode(LSRI, r, NA, NA,  i, NA); }
 void asmICodePushNewADDI (Obj r, Obj i)       { asmNewICode(ADDI, r, NA, NA,  i, NA); }
 void asmICodePushNewBLTI (Obj r, Obj i, Obj l){ asmNewICode(BLTI, r, NA, NA,  i,  l); }
 void asmICodePushNewBEQI (Obj r, Obj i, Obj l){ asmNewICode(BEQI, r, NA, NA,  i,  l); }
 void asmICodePushNewBNEI (Obj r, Obj i, Obj l){ asmNewICode(BNEI, r, NA, NA,  i,  l); }
-void asmICodePushNewBRTI (Obj r, Obj t, Obj l){ asmNewICode(BRTI, r, NA, NA,  t,  l); }
-void asmICodePushNewBNTI (Obj r, Obj t, Obj l){ asmNewICode(BNTI, r, NA, NA,  t,  l); }
 void asmICodePushNewBRA (Obj l)               { asmNewICode(BRA, NA, NA, NA, NA,  l); }
 void asmICodePushNewJMP (Obj r)               { asmNewICode(JMP,  r, NA, NA, NA, NA); }
 void asmICodePushNewJAL (Obj r)               { asmNewICode(JAL,  r, NA, NA, NA, NA); }
@@ -214,16 +214,16 @@ void asmIBlockConditionalTagSet (Obj ib, Obj tag) {
 	memVectorSet(ib, IBLOCK_INDEX_CONDITIONAL, tag);
 }
 
-/*   r1 = temp
-     r2 = temp
-     r3 = temp
+/*   r01 = temp
+     r02 = temp
+     r03 = temp
 */
 void asmIBlockIncomingListAdd (Obj ib, Obj o) {
-	r3 = ib;
-	r1 = o;
-	r2 = memVectorObject(r3, IBLOCK_INDEX_INCOMING);
+	r03 = ib;
+	r01 = o;
+	r02 = memVectorObject(r03, IBLOCK_INDEX_INCOMING);
 	objCons12();
-	memVectorSet(r3, IBLOCK_INDEX_INCOMING, r0);
+	memVectorSet(r03, IBLOCK_INDEX_INCOMING, r00);
 }
 
 void asmIBlockIncomingListDel (Obj ib, Obj o) {
@@ -340,7 +340,7 @@ Obj asmOpcodesNext (void) {
 	DB("OpcodesNext="HEX, OpcodesNext);
 	if (OpcodesNext >= OpcodesCount) {
 		DB("\nWe have a problems!!!\n");
-		*(int*)0=0;
+		__builtin_trap(); //*(int*)0=0;
 	}
 	o = memVectorObject(ropcodes, OpcodesNext++);
 	if (OpcodesNext == OpcodesCount) {
@@ -497,6 +497,16 @@ void asmAsmInternal (Obj f, ...) {
 			o = asmOpcodesNext();
 			DB("pop ["HEX"]", o);
 			asmICodePushNewPOP(o);
+		} else if (LSLI == obj) {
+			r = asmOpcodesNext();
+			o = asmOpcodesNext();
+			DB("lsli["HEX" "HEX"]", r, o);
+			asmICodePushNewLSLI(r, o);
+		} else if (LSRI == obj) {
+			r = asmOpcodesNext();
+			o = asmOpcodesNext();
+			DB("lsli["HEX" "HEX"]", r, o);
+			asmICodePushNewLSRI(r, o);
 		} else if (ADDI == obj) {
 			r = asmOpcodesNext();
 			o = asmOpcodesNext();
@@ -526,24 +536,6 @@ void asmAsmInternal (Obj f, ...) {
 			l = asmOpcodesNext();
 			DB("bnei["HEX" "HEX" "HEX"]", r, i, l);
 			asmICodePushNewBNEI(r, i, l);
-			asmGenerateIBlockWithPushedIcodes();
-			asmIBlockDefaultTagSet(riblock, otrue); /* signal this block's default is the next one */
-			asmIBlockConditionalTagSet(riblock, l); /* signal this block conditional is a label */
-		} else if (BRTI == obj) {
-			r = asmOpcodesNext();
-			i = asmOpcodesNext();
-			l = asmOpcodesNext();
-			DB("brti["HEX" "HEX" "HEX"]", r, i, l);
-			asmICodePushNewBRTI(r, i, l);
-			asmGenerateIBlockWithPushedIcodes();
-			asmIBlockDefaultTagSet(riblock, otrue); /* signal this block's default is the next one */
-			asmIBlockConditionalTagSet(riblock, l); /* signal this block conditional is a label */
-		} else if (BNTI == obj) {
-			r = asmOpcodesNext();
-			i = asmOpcodesNext();
-			l = asmOpcodesNext();
-			DB("bnti["HEX" "HEX" "HEX"]", r, i, l);
-			asmICodePushNewBNTI(r, i, l);
 			asmGenerateIBlockWithPushedIcodes();
 			asmIBlockDefaultTagSet(riblock, otrue); /* signal this block's default is the next one */
 			asmIBlockConditionalTagSet(riblock, l); /* signal this block conditional is a label */
@@ -646,225 +638,256 @@ void asmEmitIblockOpcodes (void) {
 	asmIBlockTagSet (riblock, (Obj)pccode);
 
 	for (i=0; i<asmIBlockICodeLength(riblock); ++i) {
-		r0 = asmIBlockICode(riblock, i); /* Consider icode object in r0 */
-		field0 = asmICodeField(r0, 0);
+		r00 = asmIBlockICode(riblock, i); /* Consider icode object in r00 */
+		field0 = asmICodeField(r00, 0);
 		DB("field0 = "HEX, field0);
 		switch ((Num)field0) {
 		case (Num)MV:
-			field1 = asmICodeField(r0, 1);
-			field2 = asmICodeField(r0, 2);
+			field1 = asmICodeField(r00, 1);
+			field2 = asmICodeField(r00, 2);
+			DB("field1 = "HEX, field1);
+			DB("field2 = "HEX, field2);
 			switch ((Num)field1) {
-				case (Num)R0 : switch ((Num)field2) {
-				               case (Num)R1 : asmEmitOpcode(vmMV01); break;
-				               case (Num)R3 : asmEmitOpcode(vmMV03); break;
-				               case (Num)R4 : asmEmitOpcode(vmMV04); break;
-				               case (Num)RE : asmEmitOpcode(vmMV0E); break;
+				case (Num)R00 : switch ((Num)field2) {
+				               case (Num)R01 : asmEmitOpcode(vmMV_R00_R01); break;
+				               case (Num)R03 : asmEmitOpcode(vmMV_R00_R03); break;
+				               case (Num)R04 : asmEmitOpcode(vmMV_R00_R04); break;
+				               case (Num)R0D : asmEmitOpcode(vmMV_R00_R0D); break;
+				               case (Num)R0E : asmEmitOpcode(vmMV_R00_R0E); break;
 				               default : assert(!"Unsuported icode MV $0 ??"); } break;
-				case (Num)R1 : switch ((Num)field2) {
-				               case (Num)R0 : asmEmitOpcode(vmMV10); break;
-				               case (Num)R3 : asmEmitOpcode(vmMV13); break;
+				case (Num)R01 : switch ((Num)field2) {
+				               case (Num)R00 : asmEmitOpcode(vmMV_R01_R00); break;
+				               case (Num)R03 : asmEmitOpcode(vmMV_R01_R03); break;
 				               default : assert(!"Unsuported icode MV $1 ??"); } break;
-				case (Num)R2 : switch ((Num)field2) {
-				               case (Num)R0 : asmEmitOpcode(vmMV20); break;
+				case (Num)R02 : switch ((Num)field2) {
+				               case (Num)R00 : asmEmitOpcode(vmMV_R02_R00); break;
 				               default : assert(!"Unsuported icode MV $2 ??"); } break;
-				case (Num)R3 : switch ((Num)field2) {
-				               case (Num)R0 : asmEmitOpcode(vmMV30); break;
+				case (Num)R03 : switch ((Num)field2) {
+				               case (Num)R00 : asmEmitOpcode(vmMV_R03_R00); break;
 				               default : assert(!"Unsuported icode MV $3 ??"); } break;
-				case (Num)R5 : switch ((Num)field2) {
-				               case (Num)R0 : asmEmitOpcode(vmMV50); break;
-				               case (Num)R8 : asmEmitOpcode(vmMV58); break;
-				               case (Num)RC : asmEmitOpcode(vmMV5C); break;
+				case (Num)R05 : switch ((Num)field2) {
+				               case (Num)R00 : asmEmitOpcode(vmMV_R05_R00); break;
+				               case (Num)R08 : asmEmitOpcode(vmMV_R05_R08); break;
+				               case (Num)R09 : asmEmitOpcode(vmMV_R05_R09); break;
+				               case (Num)R0B : asmEmitOpcode(vmMV_R05_R0B); break;
+				               case (Num)R0C : asmEmitOpcode(vmMV_R05_R0C); break;
 				               default : assert(!"Unsuported icode MV $5 ??"); } break;
-				case (Num)RC: switch ((Num)field2) {
-				               case (Num)R0 : asmEmitOpcode(vmMVC0); break;
-				               case (Num)R5 : asmEmitOpcode(vmMVC5); break;
-				               case (Num)R8 : asmEmitOpcode(vmMVC8); break;
+				case (Num)R08: switch ((Num)field2) {
+				               case (Num)R00 : asmEmitOpcode(vmMV_R08_R00); break;
+				               default : assert(!"Unsuported icode MV $08 ??"); } break;
+				case (Num)R0B: switch ((Num)field2) {
+				               case (Num)R00 : asmEmitOpcode(vmMV_R0B_R00); break;
+				               case (Num)R05 : asmEmitOpcode(vmMV_R0B_R05); break;
+				               case (Num)R09 : asmEmitOpcode(vmMV_R0B_R09); break;
+				               default : assert(!"Unsuported icode MV $B ??"); } break;
+				case (Num)R0C: switch ((Num)field2) {
+				               case (Num)R00 : asmEmitOpcode(vmMV_R0C_R00); break;
+				               case (Num)R05 : asmEmitOpcode(vmMV_R0C_R05); break;
+				               case (Num)R08 : asmEmitOpcode(vmMV_R0C_R08); break;
 				               default : assert(!"Unsuported icode MV $C ??"); } break;
 				default : assert(!"Unsuported icode MV ?? reg"); }
 			break;
 		case (Num)MVI:
-			field1 = asmICodeField(r0, 1);
-			field4 = asmICodeField(r0, 4);
+			field1 = asmICodeField(r00, 1);
+			field4 = asmICodeField(r00, 4);
 			switch ((Num)field1) {
-				case (Num)R0 : asmEmitOpcode(vmMVI0); break;
-				case (Num)R1 : asmEmitOpcode(vmMVI1); break;
-				case (Num)R2 : asmEmitOpcode(vmMVI2); break;
-				case (Num)R3 : asmEmitOpcode(vmMVI3); break;
-				case (Num)R4 : asmEmitOpcode(vmMVI4); break;
-				case (Num)R5 : asmEmitOpcode(vmMVI5); break;
-				case (Num)R6 : asmEmitOpcode(vmMVI6); break;
-				case (Num)R7 : asmEmitOpcode(vmMVI7); break;
+				case (Num)R00 : asmEmitOpcode(vmMV_R00_I); break;
+				case (Num)R01 : asmEmitOpcode(vmMV_R01_I); break;
+				case (Num)R02 : asmEmitOpcode(vmMV_R02_I); break;
+				case (Num)R03 : asmEmitOpcode(vmMV_R03_I); break;
+				case (Num)R04 : asmEmitOpcode(vmMV_R04_I); break;
+				case (Num)R05 : asmEmitOpcode(vmMV_R05_I); break;
+				case (Num)R06 : asmEmitOpcode(vmMV_R06_I); break;
+				case (Num)R07 : asmEmitOpcode(vmMV_R07_I); break;
 				default : assert(!"Unsuported field MVI ?reg? imm"); }
 			asmEmitOpcode(field4);
 			break;
 		case (Num)LDI:
-			field1 = asmICodeField(r0, 1);
-			field2 = asmICodeField(r0, 2);
-			field4 = asmICodeField(r0, 4);
+			field1 = asmICodeField(r00, 1);
+			field2 = asmICodeField(r00, 2);
+			field4 = asmICodeField(r00, 4);
+			DB("field1 = "HEX, field1);
+			DB("field2 = "HEX, field2);
+			DB("field4 = "HEX, field4);
 			switch ((Num)field1) {
-				case (Num)R0 : switch ((Num)field2) {
-				          case (Num)R0 : asmEmitOpcode(vmLDI00); break;
-				          case (Num)R2 : asmEmitOpcode(vmLDI02); break;
-				          case (Num)RC: asmEmitOpcode(vmLDI0C); break;
-				          default : assert(!"Unsuported field LDI $0 ?reg? imm"); } break;
-				case (Num)R1 : switch ((Num)field2) {
-				          case (Num)R1 : asmEmitOpcode(vmLDI11); break;
-				          case (Num)RC: asmEmitOpcode(vmLDI1C); break;
-				          default : assert(!"Unsuported field LDI $1 ?reg? imm"); } break;
-				case (Num)R2 : switch ((Num)field2) {
-				          case (Num)R0 : asmEmitOpcode(vmLDI20); break;
-				          case (Num)R2 : asmEmitOpcode(vmLDI22); break;
-				          default : assert(!"Unsuported field LDI $2 ?reg? imm"); } break;
-				case (Num)R5 : switch ((Num)field2) {
-				          case (Num)R0 : asmEmitOpcode(vmLDI50); break;
-				          default : assert(!"Unsuported field LDI $5 ?reg? imm"); } break;
-				case (Num)RC: switch ((Num)field2) {
-				          case (Num)R0 : asmEmitOpcode(vmLDIC0); break;
-				          default : assert(!"Unsuported field LDI $C ?reg? imm"); } break;
+				case (Num)R00 : switch ((Num)field2) {
+				          case (Num)R00 : asmEmitOpcode(vmLD_R00_R00_I); break;
+				          case (Num)R02 : asmEmitOpcode(vmLD_R00_R02_I); break;
+				          case (Num)R0C : asmEmitOpcode(vmLD_R00_R0C_I); break;
+				          case (Num)R0B : asmEmitOpcode(vmLD_R00_R0B_I); break;
+				          default : assert(!"Unsuported field LDI $00 ?reg? imm"); } break;
+				case (Num)R01 : switch ((Num)field2) {
+				          case (Num)R00 : asmEmitOpcode(vmLD_R01_R00_I); break;
+				          case (Num)R01 : asmEmitOpcode(vmLD_R01_R01_I); break;
+				          case (Num)R0B: asmEmitOpcode(vmLD_R01_R0B_I); break;
+				          case (Num)R0C: asmEmitOpcode(vmLD_R01_R0C_I); break;
+				          default : assert(!"Unsuported field LDI $01 ?reg? imm"); } break;
+				case (Num)R02 : switch ((Num)field2) {
+				          case (Num)R00 : asmEmitOpcode(vmLD_R02_R00_I); break;
+				          case (Num)R02 : asmEmitOpcode(vmLD_R02_R02_I); break;
+				          default : assert(!"Unsuported field LDI $02 ?reg? imm"); } break;
+				case (Num)R05 : switch ((Num)field2) {
+				          case (Num)R00 : asmEmitOpcode(vmLD_R05_R00_I); break;
+				          default : assert(!"Unsuported field LDI $05 ?reg? imm"); } break;
+				case (Num)R0B: switch ((Num)field2) {
+				          case (Num)R00 : asmEmitOpcode(vmLD_R0B_R00_I); break;
+				          default : assert(!"Unsuported field LDI $0b ?reg? imm"); } break;
+				case (Num)R0C: switch ((Num)field2) {
+				          case (Num)R00 : asmEmitOpcode(vmLD_R0C_R00_I); break;
+				          default : assert(!"Unsuported field LDI $0c ?reg? imm"); } break;
+				case (Num)R10: switch ((Num)field2) {
+				          case (Num)R00 : asmEmitOpcode(vmLD_R10_R00_I); break;
+				          default : assert(!"Unsuported field LDI $10 ?reg? imm"); } break;
 				default : assert(!"Unsuported field LDI ?reg? reg imm"); }
 			asmEmitOpcode(field4);
 			break;
 		case (Num)LD:
-			field1 = asmICodeField(r0, 1);
-			field2 = asmICodeField(r0, 2);
-			field3 = asmICodeField(r0, 3);
+			field1 = asmICodeField(r00, 1);
+			field2 = asmICodeField(r00, 2);
+			field3 = asmICodeField(r00, 3);
 			switch ((Num)field1) {
-				case (Num)R0 : switch ((Num)field2) {
-				               case (Num)R1 : switch ((Num)field3) {
-				                              case (Num)R2 : asmEmitOpcode(vmLD012); break;
+				case (Num)R00 : switch ((Num)field2) {
+				               case (Num)R01 : switch ((Num)field3) {
+				                              case (Num)R02 : asmEmitOpcode(vmLD_R00_R01_R02); break;
 				                              default : assert(!"Unsuported field LD $0 $1 ?reg?"); } break;
 				               default : assert(!"Unsuported field LD $0 ?reg? reg"); } break;
 				default : assert(!"Unsuported field LD ?reg? reg reg"); }
 			break;
 		case (Num)STI:
-			field1 = asmICodeField(r0, 1);
-			field2 = asmICodeField(r0, 2);
-			field4 = asmICodeField(r0, 4);
+			field1 = asmICodeField(r00, 1);
+			field2 = asmICodeField(r00, 2);
+			field4 = asmICodeField(r00, 4);
+			DB("field1 = "HEX, field1);
+			DB("field2 = "HEX, field2);
+			DB("field4 = "HEX, field4);
 			switch ((Num)field1) {
-				case (Num)R0 : switch ((Num)field2) {
-				               case (Num)R1 : asmEmitOpcode(vmSTI01); break;
-				               case (Num)R5: asmEmitOpcode(vmSTI05); break;
-				               case (Num)RC: asmEmitOpcode(vmSTI0C); break;
+				case (Num)R00 : switch ((Num)field2) {
+				               case (Num)R01 : asmEmitOpcode(vmST_R00_R01_I); break;
+				               case (Num)R05: asmEmitOpcode(vmST_R00_R05_I); break;
+				               case (Num)R0B: asmEmitOpcode(vmST_R00_R0B_I); break;
+				               case (Num)R0C: asmEmitOpcode(vmST_R00_R0C_I); break;
 				               default : assert(!"Unsuported field STI $0 ?reg? imm"); } break;
-				case (Num)R2 : switch ((Num)field2) {
-				               case (Num)R0 : asmEmitOpcode(vmSTI20); break;
-				               case (Num)R1 : asmEmitOpcode(vmSTI21); break;
+				case (Num)R02 : switch ((Num)field2) {
+				               case (Num)R00 : asmEmitOpcode(vmST_R02_R00_I); break;
+				               case (Num)R01 : asmEmitOpcode(vmST_R02_R01_I); break;
 				               default : assert(!"Unsuported field STI $2 ?reg? imm"); } break;
-				case (Num)R3 : switch ((Num)field2) {
-				               case (Num)R0 : asmEmitOpcode(vmSTI30); break;
+				case (Num)R03 : switch ((Num)field2) {
+				               case (Num)R00 : asmEmitOpcode(vmST_R03_R00_I); break;
 				               default : assert(!"Unsuported field STI $3 ?reg? imm"); } break;
-				case (Num)R5 : switch ((Num)field2) {
-				               case (Num)R0 : asmEmitOpcode(vmSTI50); break;
+				case (Num)R05 : switch ((Num)field2) {
+				               case (Num)R00 : asmEmitOpcode(vmST_R05_R00_I); break;
 				               default : assert(!"Unsuported field STI $5 ?reg? imm"); } break;
 				default : assert(!"Unsuported field STI ?reg? reg imm"); }
 			asmEmitOpcode(field4);
 			break;
 		case (Num)ST:
-			field1 = asmICodeField(r0, 1);
-			field2 = asmICodeField(r0, 2);
-			field3 = asmICodeField(r0, 3);
+			field1 = asmICodeField(r00, 1);
+			field2 = asmICodeField(r00, 2);
+			field3 = asmICodeField(r00, 3);
 			switch ((Num)field1) {
-				case (Num)R0 : switch ((Num)field2) {
-				               case (Num)R1 : switch ((Num)field3) {
-				                              case (Num)R2 :  asmEmitOpcode(vmST012); break;
+				case (Num)R00 : switch ((Num)field2) {
+				               case (Num)R01 : switch ((Num)field3) {
+				                              case (Num)R02 :  asmEmitOpcode(vmST_R00_R01_R02); break;
 				                              default : assert(!"Unsuported field ST $0 $1 ?reg?"); } break;
 				               default : assert(!"Unsuported field ST $0 ?reg? reg"); } break;
 				default : assert(!"Unsuported field ST ?reg? reg reg"); }
 			break;
 		case (Num)PUSH:
-			field1 = asmICodeField(r0, 1);
+			field1 = asmICodeField(r00, 1);
+			DB("field1 = "HEX, field1);
 			switch ((Num)field1) {
-				case (Num)R0 : asmEmitOpcode(vmPUSH0); break;
-				case (Num)R1 : asmEmitOpcode(vmPUSH1); break;
-				case (Num)R2 : asmEmitOpcode(vmPUSH2); break;
-				case (Num)R3 : asmEmitOpcode(vmPUSH3); break;
-				case (Num)R4 : asmEmitOpcode(vmPUSH4); break;
-				case (Num)R5 : asmEmitOpcode(vmPUSH5); break;
-				case (Num)R7 : asmEmitOpcode(vmPUSH7); break;
-				case (Num)R9: asmEmitOpcode(vmPUSH9); break;
-				case (Num)RA: asmEmitOpcode(vmPUSHA); break;
-				case (Num)RB: asmEmitOpcode(vmPUSHB); break;
-				case (Num)RC: asmEmitOpcode(vmPUSHC); break;
+				case (Num)R00 : asmEmitOpcode(vmPUSH_R00); break;
+				case (Num)R01 : asmEmitOpcode(vmPUSH_R01); break;
+				case (Num)R02 : asmEmitOpcode(vmPUSH_R02); break;
+				case (Num)R03 : asmEmitOpcode(vmPUSH_R03); break;
+				case (Num)R04 : asmEmitOpcode(vmPUSH_R04); break;
+				case (Num)R05 : asmEmitOpcode(vmPUSH_R05); break;
+				case (Num)R07 : asmEmitOpcode(vmPUSH_R07); break;
+				case (Num)R09: asmEmitOpcode(vmPUSH_R09); break;
+				case (Num)R0A: asmEmitOpcode(vmPUSH_R0A); break;
+				case (Num)R0B: asmEmitOpcode(vmPUSH_R0B); break;
+				case (Num)R0C: asmEmitOpcode(vmPUSH_R0C); break;
+				case (Num)R1C: asmEmitOpcode(vmPUSH_R1C); break;
 				default : assert(!"Unsuported field PUSH ?reg?"); }
 			break;
 		case (Num)POP:
-			field1 = asmICodeField(r0, 1);
+			field1 = asmICodeField(r00, 1);
+			DB("field1 = "HEX, field1);
 			switch ((Num)field1) {
-				case (Num)R0 : asmEmitOpcode(vmPOP0); break;
-				case (Num)R1 : asmEmitOpcode(vmPOP1); break;
-				case (Num)R2 : asmEmitOpcode(vmPOP2); break;
-				case (Num)R3 : asmEmitOpcode(vmPOP3); break;
-				case (Num)R4 : asmEmitOpcode(vmPOP4); break;
-				case (Num)R5 : asmEmitOpcode(vmPOP5); break;
-				case (Num)R7 : asmEmitOpcode(vmPOP7); break;
-				case (Num)R9: asmEmitOpcode(vmPOP9); break;
-				case (Num)RA: asmEmitOpcode(vmPOPA); break;
-				case (Num)RB: asmEmitOpcode(vmPOPB); break;
-				case (Num)RC: asmEmitOpcode(vmPOPC); break;
+				case (Num)R00 : asmEmitOpcode(vmPOP_R00); break;
+				case (Num)R01 : asmEmitOpcode(vmPOP_R01); break;
+				case (Num)R02 : asmEmitOpcode(vmPOP_R02); break;
+				case (Num)R03 : asmEmitOpcode(vmPOP_R03); break;
+				case (Num)R04 : asmEmitOpcode(vmPOP_R04); break;
+				case (Num)R05 : asmEmitOpcode(vmPOP_R05); break;
+				case (Num)R07 : asmEmitOpcode(vmPOP_R07); break;
+				case (Num)R09: asmEmitOpcode(vmPOP_R09); break;
+				case (Num)R0A: asmEmitOpcode(vmPOP_R0A); break;
+				case (Num)R0B: asmEmitOpcode(vmPOP_R0B); break;
+				case (Num)R0C: asmEmitOpcode(vmPOP_R0C); break;
+				case (Num)R1C: asmEmitOpcode(vmPOP_R1C); break;
 				default : assert(!"Unsuported field POP ?reg?"); }
 			break;
-		case (Num)ADDI:
-			field1 = asmICodeField(r0, 1);
-			field4 = asmICodeField(r0, 4);
+		case (Num)LSLI:
+			field1 = asmICodeField(r00, 1);
+			field4 = asmICodeField(r00, 4);
 			switch ((Num)field1) {
-				case (Num)R0 : asmEmitOpcode(vmADDI0); break;
-				case (Num)R1 : asmEmitOpcode(vmADDI1); break;
-				case (Num)R2 : asmEmitOpcode(vmADDI2); break;
+				case (Num)R02 : asmEmitOpcode(vmLSL_R02_I); break;
+				case (Num)R10 : asmEmitOpcode(vmLSL_R10_I); break;
+				default : assert(!"Unsuported field LSLI ?reg? imm"); }
+			asmEmitOpcode(field4);
+			break;
+		case (Num)LSRI:
+			field1 = asmICodeField(r00, 1);
+			field4 = asmICodeField(r00, 4);
+			switch ((Num)field1) {
+				case (Num)R10 : asmEmitOpcode(vmLSR_R10_I); break;
+				default : assert(!"Unsuported field LSRI ?reg? imm"); }
+			asmEmitOpcode(field4);
+			break;
+		case (Num)ADDI:
+			field1 = asmICodeField(r00, 1);
+			field4 = asmICodeField(r00, 4);
+			switch ((Num)field1) {
+				case (Num)R00 : asmEmitOpcode(vmADD_R00_I); break;
+				case (Num)R01 : asmEmitOpcode(vmADD_R01_I); break;
+				case (Num)R02 : asmEmitOpcode(vmADD_R02_I); break;
 				default : assert(!"Unsuported field ADDI ?reg? imm"); }
 			asmEmitOpcode(field4);
 			break;
 		case (Num)BLTI:
-			field1 = asmICodeField(r0, 1);
-			field4 = asmICodeField(r0, 4);
+			field1 = asmICodeField(r00, 1);
+			field4 = asmICodeField(r00, 4);
 			/* field5 ignored */
 			switch ((Num)field1) {
-				case (Num)R1 : asmEmitOpcode(vmBLTI1); break;
+				case (Num)R01 : asmEmitOpcode(vmBLT_R01_I); break;
 				default : assert(!"Unsuported field BLTI ?reg? imm offset"); }
 			asmEmitOpcode(field4);
 			asmEmitOpcode((Obj)(-3*8)); /* Branch address left unresolved */
 			break;
 		case (Num)BEQI:
-			field1 = asmICodeField(r0, 1);
-			field4 = asmICodeField(r0, 4);
+			field1 = asmICodeField(r00, 1);
+			field4 = asmICodeField(r00, 4);
 			/* field5 ignored */
 			switch ((Num)field1) {
-				case (Num)R0 : asmEmitOpcode(vmBEQI0); break;
-				case (Num)R1 : asmEmitOpcode(vmBEQI1); break;
-				case (Num)R7 : asmEmitOpcode(vmBEQI7); break;
+				case (Num)R00 : asmEmitOpcode(vmBEQ_R00_I); break;
+				case (Num)R01 : asmEmitOpcode(vmBEQ_R01_I); break;
+				case (Num)R07 : asmEmitOpcode(vmBEQ_R07_I); break;
+				case (Num)R10 : asmEmitOpcode(vmBEQ_R10_I); break;
 				default : assert(!"Unsuported field BEQI ?reg? imm offset"); }
 			asmEmitOpcode(field4);
 			asmEmitOpcode((Obj)(-3*8)); /* Branch address left unresolved */
 			break;
 		case (Num)BNEI:
-			field1 = asmICodeField(r0, 1);
-			field4 = asmICodeField(r0, 4);
+			field1 = asmICodeField(r00, 1);
+			field4 = asmICodeField(r00, 4);
 			/* field5 ignored */
 			switch ((Num)field1) {
-				case (Num)R0 : asmEmitOpcode(vmBNEI0); break;
-				case (Num)R1 : asmEmitOpcode(vmBNEI1); break;
-				case (Num)R2 : asmEmitOpcode(vmBNEI2); break;
-				case (Num)R5 : asmEmitOpcode(vmBNEI5); break;
+				case (Num)R00 : asmEmitOpcode(vmBNE_R00_I); break;
+				case (Num)R01 : asmEmitOpcode(vmBNE_R01_I); break;
+				case (Num)R02 : asmEmitOpcode(vmBNE_R02_I); break;
+				case (Num)R05 : asmEmitOpcode(vmBNE_R05_I); break;
 				default : assert(!"Unsuported field BNEI ?reg? imm offset"); }
-			asmEmitOpcode(field4);
-			asmEmitOpcode((Obj)(-3*8)); /* Branch address left unresolved */
-			break;
-		case (Num)BRTI:
-			field1 = asmICodeField(r0, 1);
-			field4 = asmICodeField(r0, 4);
-			/* field5 ignored */
-			switch ((Num)field1) {
-				case (Num)R0 : asmEmitOpcode(vmBRTI0); break;
-				default : assert(!"Unsuported field BRTI ?reg? imm offset"); }
-			asmEmitOpcode(field4);
-			asmEmitOpcode((Obj)(-3*8)); /* Branch address left unresolved */
-			break;
-		case (Num)BNTI:
-			field1 = asmICodeField(r0, 1);
-			field4 = asmICodeField(r0, 4);
-			/* field5 ignored */
-			switch ((Num)field1) {
-				case (Num)R0 : asmEmitOpcode(vmBNTI0); break;
-				default : assert(!"Unsuported field BNTI ?reg? imm offset"); }
 			asmEmitOpcode(field4);
 			asmEmitOpcode((Obj)(-3*8)); /* Branch address left unresolved */
 			break;
@@ -872,31 +895,31 @@ void asmEmitIblockOpcodes (void) {
 			/* Emitted by parent logic */
 			break;
 		case (Num)JMP :
-			field1 = asmICodeField(r0, 1);
+			field1 = asmICodeField(r00, 1);
 			switch ((Num)field1) {
-				case (Num)R0 : asmEmitOpcode(vmJMP0); break;
-				case (Num)R2 : asmEmitOpcode(vmJMP2); break;
+				case (Num)R00 : asmEmitOpcode(vmJMP_R00); break;
+				case (Num)R02 : asmEmitOpcode(vmJMP_R02); break;
 				default : assert(!"Unsuported field JMP ?reg?"); }
 			break;
 		case (Num)JAL :
-			field1 = asmICodeField(r0, 1);
+			field1 = asmICodeField(r00, 1);
 			switch ((Num)field1) {
-				case (Num)R0 : asmEmitOpcode(vmJAL0); break;
-				case (Num)R2 : asmEmitOpcode(vmJAL2); break;
+				case (Num)R00 : asmEmitOpcode(vmJAL_R00); break;
+				case (Num)R02 : asmEmitOpcode(vmJAL_R02); break;
 				default : assert(!"Unsuported field JAL ?reg?"); }
 			break;
 		case (Num)RET :
 			asmEmitOpcode(vmRET);
 			break;
 		case (Num)SYS :
-			field1 = asmICodeField(r0, 1);
+			field1 = asmICodeField(r00, 1);
 			switch ((Num)field1) {
-				case (Num)R0 : asmEmitOpcode(vmSYS0); break;
+				case (Num)R00 : asmEmitOpcode(vmSYS_R00); break;
 				default : assert(!"Unsuported field SYS ?imm?"); }
 			break;
 		case (Num)SYSI:
-			field4 = asmICodeField(r0, 4);
-			asmEmitOpcode2(vmSYSI, field4);
+			field4 = asmICodeField(r00, 4);
+			asmEmitOpcode2(vmSYS_I, field4);
 			break;
 		case (Num)QUIT:
 			asmEmitOpcode(vmQUIT);
@@ -907,7 +930,7 @@ void asmEmitIblockOpcodes (void) {
 		default:
 			if (field0 == NA) break; /* The NA fake opcode is OK.  It's an opcode removed during optimization. */
 			fprintf(stderr, "\nCan't assemble opcode ");
-			objDisplay(r3, stderr);
+			objDisplay(r03, stderr);
 			assert(!"Unsuported opcode");
 		}
 	}
@@ -1009,7 +1032,7 @@ void asmResolveDefault (void) {
 		defBlockAddr = asmIBlockTag(defBlock);
 		assert(otrue != defBlockAddr); /* If it wasn't placed, it wouldn't be tagged #t */
  		/* Set the jump-opcode's offset */
-		memVectorSet(rcodenew, opcodeFieldAddr, (Obj)(((Int)defBlockAddr-(Int)opcodeFieldAddr-1)*8));
+		memVectorSet(rcodenew, opcodeFieldAddr, (Obj)(((Int)defBlockAddr-(Int)opcodeFieldAddr-1+2)*8));
 		asmIBlockDefaultTagSet(riblock, defBlock); /* Set default tag back to target iblock */
 	}
 	DBEND();
@@ -1033,7 +1056,7 @@ void asmResolveConditional (void) {
 		condBlockAddr = asmIBlockTag(condBlock);
 		assert(otrue != condBlockAddr); /* If it wasn't placed, it would be tagged #t */
  		/* Set the jump-opcode's offset */
-		memVectorSet(rcodenew, opcodeFieldAddr, (Obj)(((Int)condBlockAddr-(Int)opcodeFieldAddr-1)*8));
+		memVectorSet(rcodenew, opcodeFieldAddr, (Obj)(((Int)condBlockAddr-(Int)opcodeFieldAddr-1+3)*8));
 		asmIBlockConditionalTagSet(riblock, condBlock); /* Set conditional tag back to target iblock */
 	}
 	DBEND();
@@ -1097,23 +1120,23 @@ void asmInitIBlockBranchTagsToIBlocks (Obj ib) {
 	DBBEG();
 	DBE asmDumpIBlock(ib);
 
-	r4 = ib; /* Protect object reference from garbage collector */
-	tag = asmIBlockDefaultTag(r4);
+	r04 = ib; /* Protect object reference from garbage collector */
+	tag = asmIBlockDefaultTag(r04);
 	if (ofalse != tag) {
 		if (otrue == tag) {
 			/* Default block is via 'next logical' */
-			asmIBlockLinkDefault(asmIBlockID(r4), 1 + asmIBlockID(r4)); 
+			asmIBlockLinkDefault(asmIBlockID(r04), 1 + asmIBlockID(r04)); 
 		} else if (!asmIsObjectTypeIBlock(tag)) { /* Could already be connected if non ASM flow */
 			/* Default block is via 'labeled block' */
-			asmIBlockLinkDefault(asmIBlockID(r4), asmLabels((Num)tag));
+			asmIBlockLinkDefault(asmIBlockID(r04), asmLabels((Num)tag));
 		}
 	}
 
-	tag = asmIBlockConditionalTag(r4);
+	tag = asmIBlockConditionalTag(r04);
 	if (ofalse != tag) {
 		/* Conditional block is a labeled block */
 		if (!asmIsObjectTypeIBlock(tag)) { /* Could already be connected if non ASM flow */
-			asmIBlockLinkConditional(asmIBlockID(r4), asmLabels((Num)tag)); 
+			asmIBlockLinkConditional(asmIBlockID(r04), asmLabels((Num)tag)); 
 		}
 	}
 	DBEND();
@@ -1444,12 +1467,12 @@ void asmAssemble (void) {
 
 		asmResolveBranchOpcodeAddresses();
 
-		r0 = rcodenew;
+		r00 = rcodenew;
 
-//		if (ofalse != odebug) objDisplay(rlabels, stdout);
+		if (ofalse != odebug) objDisplay(rlabels, stdout);
 		if (ofalse != odebug) objDisplay(rcodenew, stderr);
 	} else {
-		r0 = ofalse;
+		r00 = ofalse;
 	}
 
 	asmEnd();
@@ -1464,9 +1487,9 @@ void asmAssemble (void) {
 *******************************************************************************/
 void asmDumpICodeFields (Obj ic) {
  Obj f;
-	if ((Obj)NA != (f = asmICodeField(ic, 1))) { assert(f<=RF); fprintf(stderr, " $"HEX, f); }
-	if ((Obj)NA != (f = asmICodeField(ic, 2))) { assert(f<=RF); fprintf(stderr, " $"HEX, f); }
-	if ((Obj)NA != (f = asmICodeField(ic, 3))) { assert(f<=RF); fprintf(stderr, " $"HEX, f); }
+	if ((Obj)NA != (f = asmICodeField(ic, 1))) { fprintf(stderr, " $"HEX, f); assert(f<=R1F); }
+	if ((Obj)NA != (f = asmICodeField(ic, 2))) { assert(f<=R0F); fprintf(stderr, " $"HEX, f); }
+	if ((Obj)NA != (f = asmICodeField(ic, 3))) { assert(f<=R0F); fprintf(stderr, " $"HEX, f); }
 	if ((Obj)NA != (f = asmICodeField(ic, 4))) { fprintf(stderr, " "); objDisplay(f, stderr); fflush(stderr); }
 	if ((Obj)NA != (f = asmICodeField(ic, 5))) { fprintf(stderr, " "); objDisplay(f, stderr); fflush(stderr); }
 }
@@ -1483,12 +1506,12 @@ void asmDumpICode (Obj ic) {
 			case (Num)ST  : fprintf(stderr, "st  "); asmDumpICodeFields(ic); break;
 			case (Num)PUSH: fprintf(stderr, "push"); asmDumpICodeFields(ic); break;
 			case (Num)POP : fprintf(stderr, "pop "); asmDumpICodeFields(ic); break;
+			case (Num)LSLI: fprintf(stderr, "lsli"); asmDumpICodeFields(ic); break;
+			case (Num)LSRI: fprintf(stderr, "lsri"); asmDumpICodeFields(ic); break;
 			case (Num)ADDI: fprintf(stderr, "addi"); asmDumpICodeFields(ic); break;
 			case (Num)BLTI: fprintf(stderr, "blti"); asmDumpICodeFields(ic); break;
 			case (Num)BEQI: fprintf(stderr, "beqi"); asmDumpICodeFields(ic); break;
 			case (Num)BNEI: fprintf(stderr, "bnei"); asmDumpICodeFields(ic); break;
-			case (Num)BRTI: fprintf(stderr, "brti"); asmDumpICodeFields(ic); break;
-			case (Num)BNTI: fprintf(stderr, "bnti"); asmDumpICodeFields(ic); break;
 			case (Num)BRA : fprintf(stderr, "bra "); asmDumpICodeFields(ic); break;
 			case (Num)JMP : fprintf(stderr, "jmp "); asmDumpICodeFields(ic); break;
 			case (Num)JAL : fprintf(stderr, "jal "); asmDumpICodeFields(ic); break;
@@ -1618,17 +1641,17 @@ void asmInitialize (void) {
 		memTypeRegisterString(TICODE, (Str)"icode");
 		memTypeRegisterString(TIBLOCK, (Str)"iblock");
 
-		DB("Initializing compiler related objects");
-		objNewSymbolStatic("sasmend"); sasmend = r0;
-		objNewSymbolStatic("sasmna"); sasmna = r0;
+		DB("Initializing compiler related objects and symbols");
+		objNewSymbolStatic("sasmend"); sasmend = r00;
+		objNewSymbolStatic("sasmna"); sasmna = r00;
 		objNewVector(IBLOCK_VECTOR_SIZE);
-		riblocks = r0;
+		riblocks = r00;
 		objNewVector(ICODE_VECTOR_SIZE);
-		ricodes = r0;
+		ricodes = r00;
 		objNewVector(LABELS_DB_SIZE);
-		rlabels = r0;
+		rlabels = r00;
 		objNewVector(OPCODES_VEC_SIZE);
-		ropcodes = r0;
+		ropcodes = r00;
 	} else {
 		DB("Module already activated");
 	}

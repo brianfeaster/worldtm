@@ -72,7 +72,7 @@ void objNewString  (Str str, Num len);
 void objNewStringString  (Str str1, Num len1, Str str2, Num len2);
 void objCopyString  (void);
 void objNewSymbol  (Str str, Num len);
-void objNewSymbolR5R6 (void); /* Like objNewSymbol only 'str'/'len' are in r5/r6 */
+void objNewSymbolR05R06 (void); /* Like objNewSymbol only 'str'/'len' are in r05/r06 */
 void objNewSymbolStatic (char *s);
 void objNewSyscall   (Func f);
 void objNewPrimitive (Func f);
@@ -87,7 +87,7 @@ void objCons12 (void); /* New pair using r1 and r2 */
 void objCons23 (void);
 void objNewDoublyLinkedListNode (void); /* Doubly linked list node.  #(item prev next) */
 void objNewVector  (Num len);
-void objNewVector1 ();
+void objNewVector01 ();
 
 void objNewPort (void);
 int objPortDescriptor (Obj p);

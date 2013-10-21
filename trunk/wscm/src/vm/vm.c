@@ -13,45 +13,44 @@
 
  About vm.c
 
-   While the virtual machine is running, register dip/r1d, which is the opcode
+   While the virtual machine is running, register rip/r1d, which is the opcode
    index, is transformed into a pointer into the rcode/re vector object.  This
-   transformation is undone and dip reverted to an immediate index value when
-   a SYS opcode is performed or the interrupt handler called.  */
-
-/* Debug dump the current opcode
+   transformation is undone and rip reverted to an immediate index value when
+   a SYS opcode is performed or the interrupt handler called. 
 */
-#define OPDB(s,...) DBE fprintf(stderr,"\n"OBJ":"HEX" " s, rcode, ((Obj*)dip-(Obj*)rcode), ##__VA_ARGS__)
 
 
 
-void vmPush (Obj o) {
-	memStackPush(rf, o);
-}
+void vmPush (Obj o)    {        memVecStackPush(rstack, o); } 
+Obj  vmPop (void)      { return memVecStackPop(rstack); }
+void vmAryPush (Obj o) {        memAryStackPush(rdstack, o); }
+Obj  vmAryPop (void)   { return memAryStackPop(rdstack); }
 
 
-Obj vmPop (void) {
-	return memStackPop(rf);
-}
-
+void vmVecPushInternal (Obj o) { *(Obj*)rstackp=o; rstackp+=8; }
+Obj  vmVecPopInternal  (void)  { rstackp-=8; return *(Obj*)rstackp; }
+void vmAryPushInternal (Obj o) { *(Obj*)rdstackp=o; rdstackp+=8; }
+Obj  vmAryPopInternal  (void)  { rdstackp-=8; return *(Obj*)rdstackp; }
 
 int vmRunCount=0;
 
 void vmRunRestore (void) {
-	DBBEG("  ip:"OBJ"  code:"OBJ, dip, rcode);
+	DBBEG("  ip:"OBJ"  code:"OBJ, rip, rcode);
 	assert(1 == vmRunCount--); // Verify non-reentrant
-	/* Only convert ip to offset if it's a pointer (big number larger pointing into
-		the code object).  Multiply by eight to force opcode offset (not byte). */
-	dip = (Obj)dip - rcode;
-	DBEND("  ip:"OBJ"  code:"OBJ, dip, rcode);
+	// Set the stack's internal pointer to the correct offset.
+	*(Obj*)rstack = rstackp = (Obj)((rstackp - rstack));
+	*(Obj*)rdstack = rdstackp = (Obj)((rdstackp - rdstack));
+	rip = (Obj)(rip - rcode);
+	DBEND("  ip:"OBJ"  code:"OBJ, rip, rcode);
 }
 
 void vmRunSetup (void) {
-	DBBEG("  ip:"OBJ"  code:"OBJ, dip, rcode);
+	DBBEG("  ip:"OBJ"  code:"OBJ, rip, rcode);
 	assert(0 == vmRunCount++); // Verify non-reentrant
-	/* Only convert ip to pointer if it's an offset (low number below the
-		code's address). */
-	dip = (Int)(rcode + dip);
-	DBEND("  ip:"OBJ"  code:"OBJ, dip, rcode);
+	rstackp = (Obj)(rstack + *(Num*)rstack);
+	rdstackp = (Obj)(rdstack + *(Num*)rdstack);
+	rip = (Obj)(rcode + (Num)rip);
+	DBEND("  ip:"OBJ"  code:"OBJ, rip, rcode);
 }
 
 
@@ -63,14 +62,14 @@ Int vmInterrupt = 0;
 Func vmInterruptHandler = NULL;
 
 void vmProcessInterrupt (void) {
-	DBBEG("  rcode:"OBJ" dip:"OBJ, rcode, dip);
+	DBBEG("  rcode:"OBJ" rip:"OBJ, rcode, rip);
 	assert (vmInterrupt);
 	assert (vmInterruptHandler);
 	vmInterrupt = 0;
 	vmRunRestore();
 	vmInterruptHandler();
 	vmRunSetup();
-	DBEND("  rcode:"OBJ" dip:"OBJ, rcode, dip);
+	DBEND("  rcode:"OBJ" rip:"OBJ, rcode, rip);
 }
 
 
@@ -78,534 +77,365 @@ void vmProcessInterrupt (void) {
 /*******************************************************************************
  Virtual_Machine
 *******************************************************************************/
-/* Rootset objects.  Virtual machine registers.
+
+/* Registers r00 through r0f should be C and World Scheme Mem module objects.
+   r10 through r1f can be any value but must not represent Mem objects since
+   the garbage collector would try and relocate them.
  */
-Obj r0,  r1,  r2,  r3,  r4,  r5,  r6,  r7,
-    r8,  r9,  ra,  rb,  rc,  rd,  re,  rf;
-
-Int d0,  d1,  d2,  d3,  d4,  d5,  d6,  d7,
-    d8,  d9,  da,  db,  dc,  dd,  de,  df;
+Obj r00, r01, r02, r03, r04, r05, r06, r07, r08, r09, r0a, r0b, r0c, r0d, r0e, r0f;
+Obj r10, r11, r12, r13, r14, r15, r16, r17, r18, r19, r1a, r1b, r1c, r1d, r1e, r1f;
 
 
-/* Opcodes
+/* Opcodes.  Create all the global opcode goto label pointers.
+    VMOP's parameter o is ignored as it is only required for the serializer.
+    void *NOP;
+    void *MV_R00_I;
+    void *PUSH_R01;
+    ...
 */
+#define _
+#define VMOP(op,d,n,i,o) VMOP_(op, _##d, _##n, _##i)
+#define VMOP_(op,d,n,i) VMOP__(op, d, n, i)
+#define VMOP__(op,d,n,i) VMOP___(vm##op##d##n##i)
+#define VMOP___(op) void *op;
+// Load and transform the opcode definitions
+#include "op.h"
+// Cleanup the unneeded macros
+#undef VMOP___
+#undef VMOP__
+#undef VMOP_
+#undef VMOP
+#undef _
 
-void *vmNOP,
-     *vmMVI0, *vmMVI1, *vmMVI2, *vmMVI3, *vmMVI4, *vmMVI5, *vmMVI6, *vmMVI7,
-     *vmMV01, *vmMV02, *vmMV03, *vmMV04, *vmMV07, *vmMV0E, *vmMV10, *vmMV13,
-     *vmMV20, *vmMV23, *vmMV30, *vmMV5C, *vmMV58,
-     *vmMV50, *vmMVC0, *vmMVC5, *vmMVC8,
-     *vmMV61, *vmMV72,
-     *vmLDI00, *vmLDI02, *vmLDI0C, *vmLDI11, *vmLDI20, *vmLDI22, *vmLDI50, *vmLDIC0, *vmLDI1C,
-     *vmLD012,
-*LD_D1_R1,
-     *vmSTI01, *vmSTI05, *vmSTI0C, *vmSTI21, *vmSTI20, *vmSTI30, *vmSTI40, *vmSTI50,
-     *vmST012, *vmST201,
-*ST_D1_R1,
-     *vmPUSH0, *vmPUSH1, *vmPUSH2, *vmPUSH3, *vmPUSH4, *vmPUSH5, *vmPUSH7, *vmPUSH9,
-     *vmPUSHA, *vmPUSHB, *vmPUSHC,
-     *vmPOP0, *vmPOP1, *vmPOP2, *vmPOP3, *vmPOP4, *vmPOP5, *vmPOP7, *vmPOP9, *vmPOPA, *vmPOPB, *vmPOPC,
-     *vmADDI0, *vmADDI1, *vmADDI2, *vmADD10, *vmMUL10,
-*ADD_D1_I,
-     *vmBLTI1,
-     *vmBEQI0, *vmBEQI1, *vmBEQI7, *vmBNEI0, *vmBNEI1, *vmBNEI2, *vmBNEI5, *vmBRTI0, *vmBNTI0, *vmBRA,
-*BEQ_D1_I,
-     *vmJMP0, *vmJMP2, *vmJAL0, *vmJAL2, *vmRET,
-     *vmSYSI, *vmSYS0, *vmQUIT;
-
-
-/* Macro which associates the opcode symbol with (1) a goto address (for the virtual machine)
-   and (2) a string (for debug dumps):
-     vmOPCODE = &&gOPCODE;
-     memPointerRegister(vmOPCODE); // Associates an address with a string
-*/
-#define memRegisterOpcode(OP) vm##OP=&&g##OP; memPointerRegister(vm##OP);
-#define memRegisterOpcodeNew(OP) OP=&&OP; memPointerRegister(OP);
 
 void vmVm (void) {
  static Num NeedToInitialized = 1;
 	if (NeedToInitialized) {
 		NeedToInitialized = 0;
 		DBBEG("  Initializing opcodes' addresses and strings");
-		/* Assign C jump label addresses of each opcode implementation to each opcode object symbol */
-		memRegisterOpcode(NOP);
 
-		memRegisterOpcode(MVI0); memRegisterOpcode(MVI1); memRegisterOpcode(MVI2); memRegisterOpcode(MVI3);
-		memRegisterOpcode(MVI4); memRegisterOpcode(MVI5); memRegisterOpcode(MVI6); memRegisterOpcode(MVI7);
+		/* Assign C jump label addresses of each opcode implementation to each opcode object symbol.  Tricky
+		   macros are used along with a shared opcode definitions file.  Each opcode definition in the file
+		   is transformed into:
 
-		memRegisterOpcode(MV01); memRegisterOpcode(MV02); memRegisterOpcode(MV03); memRegisterOpcode(MV04);
-		memRegisterOpcode(MV07); memRegisterOpcode(MV0E);
-		memRegisterOpcode(MV10); memRegisterOpcode(MV13); memRegisterOpcode(MV20);
-		memRegisterOpcode(MV23); memRegisterOpcode(MV30);
-		memRegisterOpcode(MV50); memRegisterOpcode(MV5C); memRegisterOpcode(MV58);
-		memRegisterOpcode(MV61);
-		memRegisterOpcode(MV72);
-		memRegisterOpcode(MVC0); memRegisterOpcode(MVC5); memRegisterOpcode(MVC8);
+		   NOP        = &&NOP;        memPointerRegister(NOP);
+		   MV_R00_R01 = &&MV_R00_R01; memPointerRegister(MV_R00_R01);
+		   PUSH_R00   = &&PUSH_R00;   memPointerRegister(PUSH_R00);
+		   ...
 
-		memRegisterOpcode(LDI00); memRegisterOpcode(LDI02); memRegisterOpcode(LDI0C);
-		memRegisterOpcode(LDI11); memRegisterOpcode(LDI1C);
-		memRegisterOpcode(LDI20); memRegisterOpcode(LDI22);
-		memRegisterOpcode(LDI50);
-		memRegisterOpcode(LDIC0);
+		   Associate an opcode symbol with a goto address (for the virtual machine) and a string (for
+         debug dumps) Prepare for opcode definition transformation.
 
-		memRegisterOpcode(LD012);
-memRegisterOpcodeNew(LD_D1_R1);
-
-		memRegisterOpcode(STI01); memRegisterOpcode(STI05); memRegisterOpcode(STI0C);
-		memRegisterOpcode(STI20); memRegisterOpcode(STI21);
-		memRegisterOpcode(STI30);
-		memRegisterOpcode(STI40);
-		memRegisterOpcode(STI50);
-
-		memRegisterOpcode(ST012);
-		memRegisterOpcode(ST201);
-memRegisterOpcodeNew(ST_D1_R1);
-
-		memRegisterOpcode(PUSH0); memRegisterOpcode(PUSH1); memRegisterOpcode(PUSH2); memRegisterOpcode(PUSH3);
-		memRegisterOpcode(PUSH4); memRegisterOpcode(PUSH5); memRegisterOpcode(PUSH7);
-		memRegisterOpcode(PUSH9); memRegisterOpcode(PUSHA); memRegisterOpcode(PUSHB); memRegisterOpcode(PUSHC);
-
-		memRegisterOpcode(POP0); memRegisterOpcode(POP1); memRegisterOpcode(POP2); memRegisterOpcode(POP3);
-		memRegisterOpcode(POP4); memRegisterOpcode(POP5); memRegisterOpcode(POP7);
-		memRegisterOpcode(POP9); memRegisterOpcode(POPA); memRegisterOpcode(POPB); memRegisterOpcode(POPC);
-
-		memRegisterOpcode(ADDI0); memRegisterOpcode(ADDI1); memRegisterOpcode(ADDI2);
-
-		memRegisterOpcode(ADD10);
-memRegisterOpcodeNew(ADD_D1_I);
-
-		memRegisterOpcode(MUL10);
-
-		memRegisterOpcode(BLTI1);
-
-		memRegisterOpcode(BEQI0); memRegisterOpcode(BEQI1); memRegisterOpcode(BEQI7);
-
-		memRegisterOpcode(BNEI0); memRegisterOpcode(BNEI1); memRegisterOpcode(BNEI2); memRegisterOpcode(BNEI5);
-
-		memRegisterOpcode(BRTI0);
-
-		memRegisterOpcode(BNTI0);
-
-		memRegisterOpcode(BRA);
-
-memRegisterOpcodeNew(BEQ_D1_I);
-
-		memRegisterOpcode(JMP0); memRegisterOpcode(JMP2);
-
-		memRegisterOpcode(JAL0); memRegisterOpcode(JAL2);
-
-		memRegisterOpcode(RET);
-
-		memRegisterOpcode(SYSI); memRegisterOpcode(SYS0);
-
-		memRegisterOpcode(QUIT);
+			VMOP's parameter o (branch offset) is ignored as it is only required for the serializer.
+		*/
+		#define _
+		#define VMOP(op,d,n,i,o) VMOP_(op, _##d, _##n, _##i)
+		#define VMOP_(op,d,n,i) VMOP__(op, d, n, i)
+		#define VMOP__(op,d,n,i) VMOP___(vm##op##d##n##i)
+		#define VMOP___(op) op=&&op; memPointerRegister(op);
+		// Load and transform the opcode definitions
+		#include "op.h"
+		// Cleanup the unneeded macros
+		#undef VMOP___
+		#undef VMOP__
+		#undef VMOP_
+		#undef VMOP
+		#undef _
 
 		DBEND();
-
 		return;
 	}
 
-	vmRunSetup();
-
-	DBBEG("  Starting VM:  ip="HEX"  code="HEX"  *ip="HEX, dip, rcode, *(void**)dip);
-	goto **(void**)dip; /* Run machine code execution by "gotoing" the first opcode (code=r13  dip=r1b). */
-
-	/* NOP */
-	gNOP: OPDB("NOP");  goto **(void**)(dip+=8);
-
-	/* Load immediate value into register. */
-	gMVI0: OPDB("mvi0"); r0=*(Obj*)(dip+=8); goto **(void**)(dip+=8);
-	gMVI1: OPDB("mvi1"); r1=*(Obj*)(dip+=8); goto **(void**)(dip+=8);
-	gMVI2: OPDB("mvi2"); r2=*(Obj*)(dip+=8); goto **(void**)(dip+=8);
-	gMVI3: OPDB("mvi3"); r3=*(Obj*)(dip+=8); goto **(void**)(dip+=8);
-	gMVI4: OPDB("mvi4"); r4=*(Obj*)(dip+=8); goto **(void**)(dip+=8);
-	gMVI5: OPDB("mvi5"); r5=*(Obj*)(dip+=8); goto **(void**)(dip+=8);
-	gMVI6: OPDB("mvi6"); r6=*(Obj*)(dip+=8); goto **(void**)(dip+=8);
-	gMVI7: OPDB("mvi7"); r7=*(Obj*)(dip+=8); goto **(void**)(dip+=8);
-
-	/* Copy regster to another. */
-	gMV01: OPDB("mv01"); r0=r1; goto **(void**)(dip+=8);
-	gMV02: OPDB("mv02"); r0=r2; goto **(void**)(dip+=8);
-	gMV03: OPDB("mv03"); r0=r3; goto **(void**)(dip+=8);
-	gMV04: OPDB("mv04"); r0=r4; goto **(void**)(dip+=8);
-	gMV07: OPDB("mv07"); r0=r7; goto **(void**)(dip+=8);
-	gMV0E: OPDB("mv0e"); r0=re; goto **(void**)(dip+=8);
-	gMV10: OPDB("mv10"); r1=r0; goto **(void**)(dip+=8);
-	gMV13: OPDB("mv13"); r1=r3; goto **(void**)(dip+=8);
-	gMV20: OPDB("mv20"); r2=r0; goto **(void**)(dip+=8);
-	gMV23: OPDB("mv23"); r2=r3; goto **(void**)(dip+=8);
-	gMV30: OPDB("mv30"); r3=r0; goto **(void**)(dip+=8);
-	gMV50: OPDB("mv50"); r5=r0; goto **(void**)(dip+=8);
-	gMV5C: OPDB("mv5c"); r5=rc; goto **(void**)(dip+=8);
-	gMV58: OPDB("mv58"); r5=r8; goto **(void**)(dip+=8);
-	gMV61: OPDB("mv61"); r6=r1; goto **(void**)(dip+=8);
-	gMV72: OPDB("mv72"); r7=r2; goto **(void**)(dip+=8);
-	gMVC0: OPDB("mvc0"); rc=r0; goto **(void**)(dip+=8);
-	gMVC5: OPDB("mvc5"); rc=r5; goto **(void**)(dip+=8);
-	gMVC8: OPDB("mvc8"); rc=r8; goto **(void**)(dip+=8);
-
-	/* Load r2 <- *(r0 + immediate) */
-	gLDI00: OPDB("ldi00");
-	r0=memVectorObject(r0, *(Num*)(dip+=8));//*((Obj*)r0 + *(Num*)(dip+=8));
-	goto **(void**)(dip+=8);
-	gLDI02: OPDB("ldi02");
-	r0=memVectorObject(r2, *(Num*)(dip+=8));//*((Obj*)r2 + *(Num*)(dip+=8));
-	goto **(void**)(dip+=8);
-	gLDI0C: OPDB("ldi0c");
-	r0=memVectorObject(rc, *(Num*)(dip+=8));//*((Obj*)rc + *(Num*)(dip+=8));
-	goto **(void**)(dip+=8);
-	gLDI11: OPDB("ldi11");
-	r1=memVectorObject(r1, *(Num*)(dip+=8));//*((Obj*)r1 + *(Num*)(dip+=8));
-	goto **(void**)(dip+=8);
-	gLDI1C: OPDB("ldi1c");
-	r1=memVectorObject(rc, *(Num*)(dip+=8));//*((Obj*)rc + *(Num*)(dip+=8));
-	goto **(void**)(dip+=8);
-	gLDI20: OPDB("ldi20");
-	r2=//memVectorObject(r0, *(Num*)(dip+=8));
-		*((Obj*)r0 + *(Num*)(dip+=8));
-	goto **(void**)(dip+=8);
-	gLDI22: OPDB("ldi22");
-	r2=//memVectorObject(r2, *(Num*)(dip+=8));
-		*((Obj*)r2 + *(Num*)(dip+=8));
-	goto **(void**)(dip+=8);
-	gLDI50: OPDB("ldi50");
-	r5=memVectorObject(r0, *(Num*)(dip+=8));//*((Obj*)r0 + *(Num*)(dip+=8));
-	goto **(void**)(dip+=8);
-	gLDIC0: OPDB("ldic0");
-	rc=memVectorObject(r0, *(Num*)(dip+=8));//*((Obj*)r0 + *(Num*)(dip+=8));
-	goto **(void**)(dip+=8);
-
-	/* Load value in register's address plus register offset into register. */
-	gLD012: OPDB("ld012"); r0=*((Obj*)r1 + (Num)r2);  goto **(void**)(dip+=8);
-
-	// Load r1's object value into data register
-	LD_D1_R1: OPDB("LD_D1_R1"); d1 = *(Int*)r1;  goto **(void**)(dip+=8);
-
-	/* Store r0 -> *(r1 + immediate). */
-	gSTI01:OPDB("sti01");
-#if VALIDATE
-		if (!(0 <= *(Num*)(dip+8) && *(Num*)(dip+8) < memObjectLength(r1))) fprintf (stderr, "[ERROR opcode sti01 %d < %d", memObjectLength(r1), *(Num*)(dip+8));
-#endif
-		*((Obj*)r1 + *(Num*)(dip+=8))=r0; goto **(void**)(dip+=8);
-	gSTI05:OPDB("sti05");
-#if VALIDATE
-		if (!(0 <= *(Num*)(dip+8) && *(Num*)(dip+8) < memObjectLength(r5))) fprintf (stderr, "[ERROR opcode sti05 %d < %d", memObjectLength(r5), *(Num*)(dip+8));
-#endif
-		*((Obj*)r5 + *(Num*)(dip+=8))=r0; goto **(void**)(dip+=8);
-	gSTI0C:OPDB("sti0c");
-#if VALIDATE
-		if (!(0 <= *(Num*)(dip+8) && *(Num*)(dip+8) < memObjectLength(rc))) fprintf (stderr, "[ERROR opcode sti01c %d < %d", memObjectLength(rc), *(Num*)(dip+8));
-#endif
-		*((Obj*)rc + *(Num*)(dip+=8))=r0; goto **(void**)(dip+=8);
-	gSTI20:OPDB("sti20");
-#if VALIDATE
-		if (!(0 <= *(Num*)(dip+8) && *(Num*)(dip+8) < memObjectLength(r0))) fprintf (stderr, "[ERROR opcode sti20 %d < %d", memObjectLength(r0), *(Num*)(dip+8));
-#endif
-		*((Obj*)r0 + *(Num*)(dip+=8))=r2; goto **(void**)(dip+=8);
-	gSTI21:OPDB("sti21");
-#if VALIDATE
-		if (!(0 <= *(Num*)(dip+8) && *(Num*)(dip+8) < memObjectLength(r1))) fprintf (stderr, "[ERROR opcode sti21 %d < %d", memObjectLength(r1), *(Num*)(dip+8));
-#endif
-		*((Obj*)r1 + *(Num*)(dip+=8))=r2; goto **(void**)(dip+=8);
-	gSTI30:OPDB("sti30");
-#if VALIDATE
-		if (!(0 <= *(Num*)(dip+8) && *(Num*)(dip+8) < memObjectLength(r0))) fprintf (stderr, "[ERROR opcode sti30 %d < %d", memObjectLength(r0), *(Num*)(dip+8));
-#endif
-		*((Obj*)r0 + *(Num*)(dip+=8))=r3; goto **(void**)(dip+=8);
-	gSTI40:OPDB("sti40");
-#if VALIDATE
-		if (!(0 <= *(Num*)(dip+8) && *(Num*)(dip+8) < memObjectLength(r0))) fprintf (stderr, "[ERROR opcode sti40 %d < %d", memObjectLength(r0), *(Num*)(dip+8));
-#endif
-		*((Obj*)r0 + *(Num*)(dip+=8))=r4; goto **(void**)(dip+=8);
-	gSTI50:OPDB("sti50");
-#if VALIDATE
-		if (!((0 <= *(Num*)(dip+8)) && (*(Num*)(dip+8) < memObjectLength(r0)))) fprintf (stderr, "[ERROR opcode sti50 %08x < %08x]\n", memObjectLength(r0), *(Num*)(dip+8));
-#endif
-		*((Obj*)r0 + *(Num*)(dip+=8))=r5; goto **(void**)(dip+=8);
-
-	/* Store r0 -> *(r1 + r2). */
-	gST012: OPDB("st012");
-#if VALIDATE
-		if (!(0 <= r2 &&  (Int)r2 < memObjectLength(r1))) fprintf (stderr, "[ERROR opcode st012 %d < %d", memObjectLength(r1), r2);
-#endif
-		*((Obj*)r1 + (Num)r2) = r0;  goto **(void**)(dip+=8);
-	gST201: OPDB("st201"); *((Obj*)r0 + (Num)r1) = r2;  goto **(void**)(dip+=8);
-
-   // Store D1's value into R1's object
-	ST_D1_R1: OPDB("ST_D1_R1"); *(Int*)r1 = d1;  goto **(void**)(dip+=8);
-
-	/* Push register using local stack pointer. */
-	gPUSH0: OPDB("push0");  vmPush(r0);  goto **(void**)(dip+=8);
-	gPUSH1: OPDB("push1");  vmPush(r1);  goto **(void**)(dip+=8);
-	gPUSH2: OPDB("push2");  vmPush(r2);  goto **(void**)(dip+=8);
-	gPUSH3: OPDB("push3");  vmPush(r3);  goto **(void**)(dip+=8);
-	gPUSH4: OPDB("push4");  vmPush(r4);  goto **(void**)(dip+=8);
-	gPUSH5: OPDB("push5");  vmPush(r5);  goto **(void**)(dip+=8);
-	gPUSH7: OPDB("push7");  vmPush(r7);  goto **(void**)(dip+=8);
-	gPUSH9: OPDB("push9");  vmPush(r9);  goto **(void**)(dip+=8);
-	gPUSHA: OPDB("pusha");  vmPush(ra);  goto **(void**)(dip+=8);
-	gPUSHB: OPDB("pushb");  vmPush(rb);  goto **(void**)(dip+=8);
-	gPUSHC: OPDB("pushc");  vmPush(rc);  goto **(void**)(dip+=8);
-
-
-	/* Pop into a register. */
-	gPOP0: OPDB("pop0");  r0 = vmPop();  goto **(void**)(dip+=8);
-	gPOP1: OPDB("pop1");  r1 = vmPop();  goto **(void**)(dip+=8);
-	gPOP2: OPDB("pop2");  r2 = vmPop();  goto **(void**)(dip+=8);
-	gPOP3: OPDB("pop3");  r3 = vmPop();  goto **(void**)(dip+=8);
-	gPOP4: OPDB("pop4");  r4 = vmPop();  goto **(void**)(dip+=8);
-	gPOP5: OPDB("pop5");  r5 = vmPop();  goto **(void**)(dip+=8);
-	gPOP7: OPDB("pop7");  r7 = vmPop();  goto **(void**)(dip+=8);
-	gPOP9: OPDB("pop9");  r9 = vmPop();  goto **(void**)(dip+=8);
-	gPOPA: OPDB("popa");  ra = vmPop();  goto **(void**)(dip+=8);
-	gPOPB: OPDB("popb");  rb = vmPop();  goto **(void**)(dip+=8);
-	gPOPC: OPDB("popc");  rc = vmPop();  goto **(void**)(dip+=8);
-
-	/* Add immediate to r0. */
-	gADDI0: OPDB("addi0"); r0 += *(Int*)(dip+=8); goto **(void**)(dip+=8);
-	gADDI1: OPDB("addi1"); r1 += *(Int*)(dip+=8); goto **(void**)(dip+=8);
-	gADDI2: OPDB("addi2"); r2 += *(Int*)(dip+=8); goto **(void**)(dip+=8);
-
-	/* Mutate object r1 with (object r1 + object r0). */
-	gADD10: OPDB("add10"); *(Int*)r1 += *(Int*)r0; goto **(void**)(dip+=8);
-	gMUL10: OPDB("mul10"); *(Int*)r1 *= *(Int*)r0; goto **(void**)(dip+=8);
-
-	// Add immediate to D1
-	ADD_D1_I: OPDB("ADD_D1_I"); d1 += *(Int*)(dip+=8); goto **(void**)(dip+=8);
-
-	gBLTI1: OPDB("blti1");
-	if (r1<*(void**)(dip+=8)) {
-		dip += 8;
-		dip += *(Int*)dip;
-		dip += 8;
-		if (vmInterrupt) vmProcessInterrupt();
-		goto **(void**)(dip);
-	} else {
-		dip += 2*8;
-		if (vmInterrupt) vmProcessInterrupt();
-		goto **(void**)(dip);
-	}
-
-	/* Jump to immediate2 if r0 equal to immediate 1
+	/* Convert the normalized ip and stack pointers to actual addresses.  This must be undone whenever
+	   the VM is existed or interrupted either via an actual interrupt or syscall.
 	*/
-	gBEQI0: OPDB("beqi0");
-	if (r0 == *(void**)(dip+=8)) {
-		dip += 8;
-		dip += *(Int*)dip;
-		dip += 8;
-		if (vmInterrupt) vmProcessInterrupt();
-		goto **(void**)(dip);
-	} else {
-		dip += 2*8;
-		if (vmInterrupt) vmProcessInterrupt();
-		goto **(void**)(dip);
-	}
-
-	gBEQI1: OPDB("beqi1");
-	if (r1 == *(Obj*)(dip+=8)) {
-		dip += 8;
-		dip += *(Int*)dip;
-		dip += 8;
-		if (vmInterrupt) vmProcessInterrupt();
-		goto **(void**)(dip);
-	} else {
-		dip += 2*8;
-		if (vmInterrupt) vmProcessInterrupt();
-		goto **(void**)(dip);
-	}
-
-	gBEQI7: OPDB("beqi7");
-	if (r7 == *(void**)(dip+=8)) {
-		dip += 8;
-		dip += *(Int*)dip;
-		dip += 8;
-		if (vmInterrupt) vmProcessInterrupt();
-		goto **(void**)(dip);
-	} else {
-		dip += 2*8;
-		if (vmInterrupt) vmProcessInterrupt();
-		goto **(void**)(dip);
-	}
-
-	/* Jump to immediate2 if r0 not equal to immediate 1. */
-	gBNEI0: OPDB("bnei0 r0="OBJ" type="HEX, r0, *(void**)(dip+8));
-	if (r0 != *(void**)(dip+=8)) {
-		dip += 8;
-		dip += *(Int*)dip;
-		dip += 8;
-		if (vmInterrupt) vmProcessInterrupt();
-		goto **(void**)(dip);
-	} else {
-		dip += 2*8;
-		if (vmInterrupt) vmProcessInterrupt();
-		goto **(void**)(dip);
-	}
-
-	/* Jump to immediate2 if r1 not equal to immediate 1. */
-	gBNEI1: OPDB("bnei1");
-	if (r1 != *(void**)(dip+=8)) {
-		dip += 8;
-		dip += *(Int*)dip;
-		dip +=8;
-		if (vmInterrupt) vmProcessInterrupt();
-		goto **(void**)(dip);
-	} else {
-		dip += 2*8;
-		if (vmInterrupt) vmProcessInterrupt();
-		goto **(void**)(dip);
-	}
-
-	/* Jump to immediate2 if r1 not equal to immediate 1. */
-	gBNEI2: OPDB("bnei2");
-	if (r2 != *(void**)(dip+=8)) {
-		dip += 8;
-		dip += *(Int*)dip;
-		dip +=8;
-		if (vmInterrupt) vmProcessInterrupt();
-		goto **(void**)(dip);
-	} else {
-		dip += 2*8;
-		if (vmInterrupt) vmProcessInterrupt();
-		goto **(void**)(dip);
-	}
-
-	gBNEI5: OPDB("bnei5");
-	if (r5 != *(void**)(dip+=8)) {
-		dip += 8;
-		dip += *(Int*)dip;
-		dip +=8;
-		if (vmInterrupt) vmProcessInterrupt();
-		goto **(void**)(dip);
-	} else {
-		dip += 2*8;
-		if (vmInterrupt) vmProcessInterrupt();
-		goto **(void**)(dip);
-	}
-
-	/* Jump to immediate 2 if r0's type equals to immediate 1. */
-	gBRTI0: OPDB("brti0");
-	if (((Num)r0>0xfffff) && (memObjectType(r0))==*(Num*)(dip+=8)) {
-		dip += 8;
-		dip += *(Int*)dip;
-		dip += 8;
-		if (vmInterrupt) vmProcessInterrupt();
-		goto **(void**)(dip);
-	} else {
-		dip += 2*8;
-		if (vmInterrupt) vmProcessInterrupt();
-		goto **(void**)(dip);
-	}
-
-	/* Jump to immediate 2 if r0's type not equal to immediate 1. */
-	gBNTI0: OPDB("bnti0");
-	if (((Num)r0<0x430000) || (memObjectType(r0))!=*(Num*)(dip+=8)) {
-		dip += 8l;
-		dip += *(Int*)dip;
-		dip += 8l;
-		if (vmInterrupt) vmProcessInterrupt();
-		goto **(void**)(dip);
-	} else {
-		dip += 2*8l;
-		if (vmInterrupt) vmProcessInterrupt();
-		goto **(void**)(dip);
-	}
-
-	/* Branch always. */
-	gBRA: OPDB("bra");
-	dip += 8l;
-	dip += *(Int*)dip;
-	dip += 8l;
-	if (vmInterrupt) vmProcessInterrupt();
-	goto **(void**)(dip);
-
-	// Branch to immediate if D1 is equal to an immediate
-	BEQ_D1_I: OPDB("BEQ_D1_I");
-	if (d1 == *(Int*)(dip+=8)) {
-		dip += 8; // Skip immediate
-		dip += *(Int*)dip + 8; // Add offset and skip immediate
-		if (vmInterrupt) vmProcessInterrupt();
-		goto **(void**)(dip);
-	} else {
-		dip += 2*8;
-		if (vmInterrupt) vmProcessInterrupt();
-		goto **(void**)(dip);
-	}
-
-
-	/* Jump to first instruction in block in r0. */
-	gJMP0: OPDB("jmp0");
-	dip = (Int)(rcode = r0);
-	if (vmInterrupt) vmProcessInterrupt();
-	goto **(void**)dip;
-
-	gJMP2: OPDB("jmp2");
-	dip = (Int)(rcode = r2);
-	if (vmInterrupt) vmProcessInterrupt();
-	goto **(void**)dip;
-
-	/* Link block/offset then jump to first instruction in block in acc. */
-	gJAL0: OPDB("jal0");
-	/* Save the pc and program. */
-	rretip = (Obj)((Obj)dip - rcode);
-	rretcode = rcode;
-	rretenv = renv;
-	dip = (Int)(rcode = r0);
-	if (vmInterrupt) vmProcessInterrupt();
-	goto **(void**)dip;
-
-	/* Link block/offset then jump to first instruction in block in acc. */
-	gJAL2: OPDB("jal2");
-	/* Save the pc and program. */
-	rretip = (Obj)((Obj)dip - rcode);
-	rretcode = rcode;
-	rretenv = renv;
-	dip = (Int)(rcode = r2);
-	if (vmInterrupt) vmProcessInterrupt();
-	goto **(void**)dip;
-
-	/* Ret to caller. */
-	gRET: OPDB("ret");
-	renv = rretenv;
-	rcode = rretcode;
-	dip = (Int)(rcode + (Int)rretip);
-	dip += 8;
-	if (vmInterrupt) vmProcessInterrupt();
-	goto **(void**)(dip);
-
-	/* Immediate syscall.  Like 'sys' only C address is immediate value.  Set
-		the dip to next instruction right first so that the syscall runs with
-		the IP at the next instruction. */ 
-	gSYSI: OPDB("sysi");
-	dip += (2*8);
-	vmRunRestore();
-	(*(void(**)(void))((Obj)rcode+dip-8))();
 	vmRunSetup();
-	if (vmInterrupt) vmProcessInterrupt();
-	goto **(void**)dip;
 
-	/* System call.  Really just a C function call, address in accumulator. 
-		imediate field is passed to C function.  See sysi comment for other
-		information. */
-	gSYS0: OPDB("sys0");
-	dip += 8;
-	vmRunRestore();
-	(*(void(*)(void))r0)();
-	vmRunSetup();
+	// Jump to the instruction register's (rip==r1d) goto label address.  First honor any interrupts.
 	if (vmInterrupt) vmProcessInterrupt();
-	goto **(void**)dip;
 
-	/* Halt virtual machine.  Return to OS?*/
-	gQUIT: OPDB("quit");
-	vmRunRestore();
-	DBEND();
-	return;
+	#define GOTOIP goto **(void**)rip
+
+	// Run machine code execution by "goto'ing" the instruction pointer (rip==r1d pointing inside of rcode==r0d)
+	DBBEG("  Starting VM:  ip="HEX"  code="HEX"  *ip="HEX, rip, rcode, *(void**)rip);
+	GOTOIP;
+
+	// Opcode arguments for a register or immediate
+	#define arg
+	#define argR00 r00
+	#define argR01 r01
+	#define argR02 r02
+	#define argR03 r03
+	#define argR04 r04
+	#define argR05 r05
+	#define argR06 r06
+	#define argR07 r07
+	#define argR08 r08
+	#define argR09 r09
+	#define argR0A r0a
+	#define argR0B r0b
+	#define argR0C r0c
+	#define argR0D r0d
+	#define argR0E r0e
+	#define argR0F r0f
+	#define argR10 r10
+	#define argR11 r11
+	#define argR12 r12
+	#define argR13 r13
+	#define argR14 r14
+	#define argR15 r15
+	#define argR16 r16
+	#define argR17 r17
+	#define argR18 r18
+	#define argR19 r19
+	#define argR1A r1a
+	#define argR1B r1b
+	#define argR1C r1c
+	#define argR1D r1d
+	#define argR1E r1e
+	#define argR1F r1f
+	#define argI   *(Obj*)(rip+1*ObjSize)
+
+	#define imm
+	#define immR02 + (Num)r02
+	#define immR10 + (Num)r10
+	#define immI   + *(Num*)(rip+1*ObjSize)
+
+	/* Expression for incrementing the instruction pointer based on the
+      last opcode argument.
+	*/
+	#define IPINC  rip+=1*ObjSize
+	#define IPINC2 rip+=2*ObjSize
+	#define IPINCR00 IPINC
+	#define IPINCR01 IPINC
+	#define IPINCR02 IPINC
+	#define IPINCR03 IPINC
+	#define IPINCR04 IPINC
+	#define IPINCR05 IPINC
+	#define IPINCR07 IPINC
+	#define IPINCR08 IPINC
+	#define IPINCR0B IPINC
+	#define IPINCR0C IPINC
+	#define IPINCR0D IPINC
+	#define IPINCR0E IPINC
+	#define IPINCR10 IPINC
+	#define IPINCR11 IPINC
+	#define IPINCR01R02 IPINC
+	#define IPINCR01R02 IPINC
+	#define IPINCR00I IPINC2
+	#define IPINCR01I IPINC2
+	#define IPINCR02I IPINC2
+	#define IPINCR03I IPINC2
+	#define IPINCR05I IPINC2
+	#define IPINCR07I IPINC2
+	#define IPINCR0BI IPINC2
+	#define IPINCR0CI IPINC2
+	#define IPINCI    IPINC2
+
+	/* NOP
+	   NOP: OPDB("NOP");  goto **(void**)(rip += ObjSize);
+	*/
+	#define VMOP_NOP(d,n,i) \
+	   IPINC; \
+	   if (vmInterrupt) vmProcessInterrupt()
+
+	/* MV Rd [Rn | I]
+	   MV_R00_I: OPDB("MV_R00_I");    r00 = *(Obj*)(rip+8);  goto **(void**)(rip+=2*ObjSize);
+	   MV_R00_I: OPDB("MV_R00_R01");  r00 = r01;             goto **(void**)(rip+=ObjSize);
+	*/
+	#define VMOP_MV(argd,argn,argi) \
+	   arg##argd = arg##argn arg##argi; \
+	   IPINC##argi; \
+	   if (vmInterrupt) vmProcessInterrupt()
+
+	/* LD Rd Rn [Rm | I]
+	   LD_R00_R01:     OPDB("LD_R00_R01");    r00 = *(Obj*)r01;                   goto **(void**)(rip+=ObjSize);
+	   LD_R00_I:       OPDB("LD_R00_I");      r00 = *(Obj*)(*(Obj*)(rip+8));      goto **(void**)(rip+=ObjSize); TODO this should proably be *(Obj*)( *(Obj*)(rip+8) )  But since an equivalent ST op wouldn't make sense, maybe this shouldn't exist?  (Unless I want self modifying code?)
+	   LD_R00_R01_I:   OPDB("LD_R00_R01_I");  r00 = *(Obj*)(r01 + *(Num*)(rip+8));goto **(void**)(rip+=ObjSize);
+	   LD_R00_R01_R02: OPDB("LD_R00_R01_R02");r00 = *(Obj*)(r01 + (Num)r02);      goto **(void**)(rip+=ObjSize);
+	*/
+	#define VMOP_LD(argd,argn,argi) \
+	   arg##argd = *(Obj*)(arg##argn imm##argi); \
+	   IPINC##argn##argi; \
+	   if (vmInterrupt) vmProcessInterrupt()
+
+	/* ST Rd Rn (Rm | I)
+	   ST_R00_R01:   OPDB("ST_R00_R01");  *(Obj*)r01                  = r00;  goto **(void**)(rip+=ObjSize);
+	   ST_R00_I:     OPDB("ST_R00_I");    *(Obj*)*(*(Obj)(rip+8))     = r00;  goto **(void**)(rip+=ObjSize);
+	   ST_R00_R01_I: OPDB("ST_R00_R01");  *(Obj*)(r01 *(Num*)(rip+8)) = r00;  goto **(void**)(rip+=ObjSize);
+	   ST_R00_I:     OPDB("ST_R00_I");    *(Obj*)(rip+8)              = r00;  goto **(void**)(rip+=ObjSize);
+	*/
+	#define VMOP_ST(argd,argn,argi) \
+	   *(Obj*)(arg##argn imm##argi) = arg##argd; \
+	   IPINC##argn##argi; \
+	   if (vmInterrupt) vmProcessInterrupt()
+
+	/* PUSH Rd
+	   PUSH_R00: OPDB("PUSH_R00");  vmVecPushInternal(r00);  goto **(void**)(rip+=ObjSize);
+	*/
+	#define VMOP_PUSH(argd,argn,argi) \
+	   vmVecPushInternal(arg##argd); \
+	   IPINC; \
+	   if (vmInterrupt) vmProcessInterrupt()
+
+	/* POP Rd
+	   POP_R00: OPDB("POP_R00");  r00 = vmVecPopInternal();  goto **(void**)(rip+=ObjSize);
+	*/
+	#define VMOP_POP(argd,argn,argi) \
+	   arg##argd=vmVecPopInternal(); \
+	   IPINC; \
+	   if (vmInterrupt) vmProcessInterrupt()
+
+	/* ADD Rd [Rn | I]
+	   ADD_R00_I:   OPDB("ADD_R00_I");    r00 += *(Num*)(rip+8);  goto **(void**)(rip+=2*ObjSize);
+	   ADD_R00_R01: OPDB("ADD_R00_R01");  r00 += (Num)R01;        goto **(void**)(rip+=ObjSize);
+	*/
+	#define VMOP_ADD(argd,argn,argi) \
+	   arg##argd += (Num)(arg##argn imm##argi); \
+	   IPINC##argn##argi; \
+	   if (vmInterrupt) vmProcessInterrupt()
+
+	/* LSL Rd I
+	*/
+	#define VMOP_LSL(argd,argn,argi) \
+	   arg##argd = (Obj)((Num)arg##argd << (Num)arg##argn imm##argi); \
+	   IPINC##argi; \
+	   if (vmInterrupt) vmProcessInterrupt()
+
+	/* LSR Rd I
+	*/
+	#define VMOP_LSR(argd,argn,argi) \
+	   arg##argd = (Obj)((Num)arg##argd >> (Num)arg##argn imm##argi); \
+	   IPINC##argi; \
+	   if (vmInterrupt) vmProcessInterrupt()
+
+	/* BEQ Rd I O
+	*/
+	#define VMOP_BEQ(argd,argn,argi) \
+	   if (arg##argd == arg##argn arg##argi) { \
+	      rip += *(Num*)(rip + 2*ObjSize); \
+	   } else { \
+	      rip += 3 * ObjSize;\
+	   } \
+	   if (vmInterrupt) vmProcessInterrupt()
+
+	/* BNE [Rd | I]
+	*/
+	#define VMOP_BNE(argd,argn,argi) \
+	   if (arg##argd != arg##argn arg##argi) { \
+	      rip += *(Num*)(rip + 2*ObjSize); \
+	   } else { \
+	      rip += 3*ObjSize;\
+	   } \
+	   if (vmInterrupt) vmProcessInterrupt()
+
+	/* BLT [Rd | I]
+	*/
+	#define VMOP_BLT(argd,argn,argi) \
+	   if (arg##argd < arg##argn arg##argi) { \
+	      rip += *(Num*)(rip + 2*ObjSize); \
+	   } else { \
+	      rip += 3*ObjSize;\
+	   } \
+	   if (vmInterrupt) vmProcessInterrupt()
+
+	/* BRA I
+	*/
+	#define VMOP_BRA(argd,argn,argi) \
+	   rip += *(Num*)(rip + 1*ObjSize); \
+	   if (vmInterrupt) vmProcessInterrupt()
+
+	/* JMP [Rd | I]
+	*/
+	#define VMOP_JMP(argd,argn,argi) \
+	   rip = rcode = arg##argd; \
+	   if (vmInterrupt) vmProcessInterrupt()
+
+	/* JAL Rd
+	    Link block/offset then jump to first instruction in block in acc.
+	    JAL_R00: OPDB("JAL_R00");
+
+	    TODO handle immediate
+	*/
+	#define VMOP_JAL(argd,argn,argi) \
+	   riplink   = (Obj)(rip - rcode + 1*ObjSize); \
+	   rcodelink = rcode; \
+	   renvlink  = renv; \
+	   rip = rcode = arg##argd; \
+	   if (vmInterrupt) vmProcessInterrupt()
+
+	/* RET
+	    Return from a JAL call.  Copy link register back to their parent registers.
+	*/
+	#define VMOP_RET(argd,argn,argi) \
+	   renv  = renvlink; \
+	   rcode = rcodelink; \
+	   rip   = rcode + (Int)riplink; \
+	   if (vmInterrupt) vmProcessInterrupt()
+
+	/* SYS [Rd | I]
+	    Syscall to C function in either a register or an immediate. Sets
+	    the rip to next instruction first so that the syscall runs with
+	    the IP at the next instruction.
+	*/ 
+	#define ADDR
+	#define ADDRR00 r00
+	#define ADDRI   *(Obj*)(rcode + (Num)rip - 1*ObjSize)
+	#define VMOP_SYS(argd,argn,argi) \
+	   IPINC##argi; \
+	   vmRunRestore(); \
+	   ( (Func) ADDR##argd ADDR##argi ) (); \
+	   vmRunSetup(); \
+	   if (vmInterrupt) vmProcessInterrupt()
+
+	/* QUIT
+	    Exits the virtual machine
+	*/
+	#define VMOP_QUIT(argd,argn,argi) \
+	   vmRunRestore(); \
+	   DBEND(); \
+	   return
+
+
+	/* Creates the opcode implementation of the form:
+      VMOP's parameter o is ignored as it is only required for the serializer.
+	    {C goto label} : {debug message displaying the code, ip, and opcode during runtime};
+	    {one of the opcode implementations defined above};
+	    {call to jump to the next opcode pointed to by the instruction pointer ip=r1d};
+	*/
+
+	/* Debug dump the current opcode */
+	#if DEBUG == 1
+	 #define OPDB(s,...) DBE fprintf(stderr,"\n"OBJ":"HEX" " s, rcode, (rip-rcode)/ObjSize, ##__VA_ARGS__);
+	#else
+	 #define OPDB(s,...)
+	#endif
+
+	#define _
+	#define VMOP(op,d,n,i,o) VMOP_(op, _##d, _##n, _##i, d, n, i)
+	#define VMOP_(op,dd,nn,ii,d,n,i) VMOP__(op, dd, nn, ii, d, n, i)
+	#define VMOP__(op,dd,nn,ii,d,n,i) \
+	   vm##op##dd##nn##ii: \
+	   OPDB("vm"#op#dd#nn#ii) \
+	   VMOP_##op(d, n, i); \
+	   GOTOIP;
+
+	// Load and transform the opcode definitions into actual opcode implementations
+	#include "op.h"
+
+	// Cleanup the unneeded macros
+	#undef VMOP__
+	#undef VMOP_
+	#undef VMOP
+	#undef _
 }
 
+
 /* Starts virtual machine using the program code (rc) starting at instruction
-   offset in immediate dip (r1b).
+   offset in immediate rip (r1b).
 */
 void vmRun (void) {
-	DBBEG("  code:"OBJ  " ip:"INT, rcode, dip);
+	DBBEG("  code:"OBJ  " ip:"INT, rcode, rip);
 	assert(memIsObjectType(rcode, TCODE) && "Not a code type");
 	vmVm();
 	DBEND();
@@ -632,140 +462,97 @@ void (*vmObjectDumper)(Obj o, FILE *tream) = vmObjectDumperDefault;
 /* Convert an instruction pointer (Obj) to an instruction address
    given the code object pointer (Obj) it is pointing into.
 */
-Int vmOffsetToPosition (Obj codeBlock, Obj *instPtr) {
- Int pos = 3 + instPtr - (Obj*)codeBlock + (Int)*(instPtr+2) / (Int)ObjSize;
-	return (memObjectLength(codeBlock) < pos) ? (Int)*(instPtr+2) : pos;
-}
-
-Int vmBraOffsetToPosition (Obj codeBlock, Obj *instPtr) {
- Int pos = 2 + instPtr - (Obj*)codeBlock + (Int)*(instPtr+1) / (Int)ObjSize;
-	return (memObjectLength(codeBlock) < pos) ? (Int)*(instPtr+1) : pos;
+Int vmOffsetToPosition (Obj codeBlock, Int lineNumber, Obj *instPtr) {
+ Int pos = lineNumber + (Int)*instPtr;
+	return (memObjectLength(codeBlock)*ObjSize < pos) ? (Int)*instPtr : pos;
 }
 
 void vmDisplayTypeCode (Obj c, FILE *stream) {
- Obj *i = c;
- Num lineNumber;
+ Int idx=0, lineNumber;
+ static char *buff="                                ";
+ static int indent=-1;
+ char *ind;
 
-	DBBEG ("  "OBJ"  rcode:"OBJ"  dip:"OBJ, c, rcode, dip);
+	memRootSetRegisterAnonymous(&c);
+	++indent;
+	if (indent < 32) ind = buff+32-indent;
+	else ind = buff;
+
+	DBBEG ("  "OBJ"  rcode:"OBJ"  rip:"OBJ, c, rcode, rip);
 	assert(stream);
 	assert(memIsObjectType(c, TCODE));
 
-	while (i < ((Obj*)c + memObjectLength(c))) { // Forcing pointer arithmetic.
-		lineNumber = (Num)(i-(Obj*)c);
-		fprintf (stream, NL OBJ STR HEX04" ",
-			i,
-			((Int)i==dip || lineNumber==dip)?"*":" ",
-			lineNumber);
-		if      (*i==vmNOP)   {fprintf(stream, "nop");}
-		else if (*i==vmMVI0)  {fprintf(stream, "mvi  $0 "); vmObjectDumper(*++i, stream);}
-		else if (*i==vmMVI1)  {fprintf(stream, "mvi  $1 "); vmObjectDumper(*++i, stream);}
-		else if (*i==vmMVI2)  {fprintf(stream, "mvi  $2 "); vmObjectDumper(*++i, stream);}
-		else if (*i==vmMVI3)  {fprintf(stream, "mvi  $3 "); vmObjectDumper(*++i, stream);}
-		else if (*i==vmMVI4)  {fprintf(stream, "mvi  $4 "); vmObjectDumper(*++i, stream);}
-		else if (*i==vmMVI5)  {fprintf(stream, "mvi  $5 "); vmObjectDumper(*++i, stream);}
-		else if (*i==vmMVI6)  {fprintf(stream, "mvi  $6 "); vmObjectDumper(*++i, stream);}
-		else if (*i==vmMVI7)  {fprintf(stream, "mvi  $7 "); vmObjectDumper(*++i, stream);}
-		else if (*i==vmMV01)  {fprintf(stream, "mv   $0 $1 ");}
-		else if (*i==vmMV02)  {fprintf(stream, "mv   $0 $2 ");}
-		else if (*i==vmMV03)  {fprintf(stream, "mv   $0 $3 ");}
-		else if (*i==vmMV04)  {fprintf(stream, "mv   $0 $4 ");}
-		else if (*i==vmMV07)  {fprintf(stream, "mv   $0 $7 ");}
-		else if (*i==vmMV0E)  {fprintf(stream, "mv   $0 $e ");}
-		else if (*i==vmMV10)  {fprintf(stream, "mv   $1 $0 ");}
-		else if (*i==vmMV13)  {fprintf(stream, "mv   $1 $3 ");}
-		else if (*i==vmMV20)  {fprintf(stream, "mv   $2 $0 ");}
-		else if (*i==vmMV23)  {fprintf(stream, "mv   $2 $3 ");}
-		else if (*i==vmMV30)  {fprintf(stream, "mv   $3 $0 ");}
-		else if (*i==vmMV50)  {fprintf(stream, "mv   $5 $0 ");}
-		else if (*i==vmMV5C)  {fprintf(stream, "mv   $5 $c ");}
-		else if (*i==vmMV58)  {fprintf(stream, "mv   $5 $8 ");}
-		else if (*i==vmMVC0)  {fprintf(stream, "mv   $c $0 ");}
-		else if (*i==vmMVC5)  {fprintf(stream, "mv   $c $5 ");}
-		else if (*i==vmMVC8)  {fprintf(stream, "mv   $c $8 ");}
-		else if (*i==vmMV61)  {fprintf(stream, "mv   $6 $1 ");}
-		else if (*i==vmMV72)  {fprintf(stream, "mv   $7 $2 ");}
-		else if (*i==vmLDI00) {fprintf(stream, "ldi  $0 $0 "); vmObjectDumper(*++i, stream);}
-		else if (*i==vmLDI02) {fprintf(stream, "ldi  $0 $2 "); vmObjectDumper(*++i, stream);}
-		else if (*i==vmLDI0C) {fprintf(stream, "ldi  $0 $c "); vmObjectDumper(*++i, stream);}
-		else if (*i==vmLDI11) {fprintf(stream, "ldi  $1 $1 "); vmObjectDumper(*++i, stream);}
-		else if (*i==vmLDI1C) {fprintf(stream, "ldi  $1 $c "); vmObjectDumper(*++i, stream);}
-		else if (*i==vmLDI20) {fprintf(stream, "ldi  $2 $0 "); vmObjectDumper(*++i, stream);}
-		else if (*i==vmLDI22) {fprintf(stream, "ldi  $2 $2 "); vmObjectDumper(*++i, stream);}
-		else if (*i==vmLDI50) {fprintf(stream, "ldi  $5 $0 "); vmObjectDumper(*++i, stream);}
-		else if (*i==vmLDIC0) {fprintf(stream, "ldi  $c $0 "); vmObjectDumper(*++i, stream);}
-		else if (*i==vmLD012) {fprintf(stream, "ld0  $1 $2");}
-else if (*i==LD_D1_R1){fprintf(stream, "ld   $d1 $r1");}
-		else if (*i==vmSTI01) {fprintf(stream, "sti  $0 $1 "); vmObjectDumper(*++i, stream);}
-		else if (*i==vmSTI05) {fprintf(stream, "sti  $0 $5 "); vmObjectDumper(*++i, stream);}
-		else if (*i==vmSTI0C){fprintf(stream, "sti  $0 $c "); vmObjectDumper(*++i, stream);}
-		else if (*i==vmSTI20) {fprintf(stream, "sti  $2 $0 "); vmObjectDumper(*++i, stream);}
-		else if (*i==vmSTI21) {fprintf(stream, "sti  $2 $1 "); vmObjectDumper(*++i, stream);}
-		else if (*i==vmSTI30) {fprintf(stream, "sti  $3 $0 "); vmObjectDumper(*++i, stream);}
-		else if (*i==vmSTI40) {fprintf(stream, "sti  $4 $0 "); vmObjectDumper(*++i, stream);}
-		else if (*i==vmSTI50) {fprintf(stream, "sti  $5 $0 "); vmObjectDumper(*++i, stream);}
-		else if (*i==vmST012) {fprintf(stream, "st   $0 $1 $2 ");}
-		else if (*i==vmST201) {fprintf(stream, "st   $2 $0 $1 ");}
-else if (*i==ST_D1_R1) {fprintf(stream,"st   $d1 $r1");}
-		else if (*i==vmPUSH0) {fprintf(stream, "push $0 ");}
-		else if (*i==vmPUSH1) {fprintf(stream, "push $1 ");}
-		else if (*i==vmPUSH2) {fprintf(stream, "push $2 ");}
-		else if (*i==vmPUSH3) {fprintf(stream, "push $3 ");}
-		else if (*i==vmPUSH4) {fprintf(stream, "push $4 ");}
-		else if (*i==vmPUSH5) {fprintf(stream, "push $5 ");}
-		else if (*i==vmPUSH7) {fprintf(stream, "push $7 ");}
-		else if (*i==vmPUSH9) {fprintf(stream, "push $9 ");}
-		else if (*i==vmPUSHA) {fprintf(stream, "push $a ");}
-		else if (*i==vmPUSHB) {fprintf(stream, "push $b ");}
-		else if (*i==vmPUSHC) {fprintf(stream, "push $c ");}
-		else if (*i==vmPOP0)  {fprintf(stream, "pop  $0 ");}
-		else if (*i==vmPOP1)  {fprintf(stream, "pop  $1 ");}
-		else if (*i==vmPOP2)  {fprintf(stream, "pop  $2 ");}
-		else if (*i==vmPOP3)  {fprintf(stream, "pop  $3 ");}
-		else if (*i==vmPOP4)  {fprintf(stream, "pop  $4 ");}
-		else if (*i==vmPOP5)  {fprintf(stream, "pop  $5 ");}
-		else if (*i==vmPOP7)  {fprintf(stream, "pop  $7 ");}
-		else if (*i==vmPOP9)  {fprintf(stream, "pop  $9 ");}
-		else if (*i==vmPOPA)  {fprintf(stream, "pop  $a ");}
-		else if (*i==vmPOPB)  {fprintf(stream, "pop  $b ");}
-		else if (*i==vmPOPC)  {fprintf(stream, "pop  $c ");}
-		else if (*i==vmADDI0) {fprintf(stream, "addi $0 %ld", *(i+1)); i++; }
-		else if (*i==vmADDI1) {fprintf(stream, "addi $1 %ld", *(i+1)); i++; }
-		else if (*i==vmADDI2) {fprintf(stream, "addi $2 %ld", *(i+1)); i++; }
-		else if (*i==vmADD10) {fprintf(stream, "add  $1 $0 "); }
-		else if (*i==vmMUL10) {fprintf(stream, "mul  $1 $0 "); }
-else if (*i==ADD_D1_I) {fprintf(stream,"add  $d1  "HEX, *(i+1)); i++;}
+	while (idx < memObjectLength(c)) {
+		lineNumber = idx;
+		fprintf (stream, NL STR OBJ STR HEX04" ",
+			ind,
+			c, //c+idx*ObjSize
+			((c+idx*ObjSize) == rip) ? "*" : " ",
+			idx*ObjSize);
 
-		else if (*i==vmBLTI1) {fprintf(stream, "blti $1 "HEX" "HEX04, *(i+1), vmOffsetToPosition(c, i)); i+=2;}
-		else if (*i==vmBEQI0) {fprintf(stream, "beqi $0 "HEX" "HEX04, *(i+1), vmOffsetToPosition(c, i)); i+=2;}
-		else if (*i==vmBEQI1) {fprintf(stream, "beqi $1 "HEX" "HEX04, *(i+1), vmOffsetToPosition(c, i)); i+=2;}
-		else if (*i==vmBEQI7) {fprintf(stream, "beqi $7 "HEX" "HEX04, *(i+1), vmOffsetToPosition(c, i)); i+=2;}
-		else if (*i==vmBNEI0) {fprintf(stream, "bnei $0 "HEX" "HEX04, *(i+1), vmOffsetToPosition(c, i)); i+=2;}
-		else if (*i==vmBNEI1) {fprintf(stream, "bnei $1 "HEX" "HEX04, *(i+1), vmOffsetToPosition(c, i)); i+=2;}
-		else if (*i==vmBNEI2) {fprintf(stream, "bnei $2 "HEX" "HEX04, *(i+1), vmOffsetToPosition(c, i)); i+=2;}
-		else if (*i==vmBNEI5) {fprintf(stream, "bnei $5 "HEX" "HEX04, *(i+1), vmOffsetToPosition(c, i)); i+=2;}
-		else if (*i==vmBRTI0) {fprintf(stream, "brti $0 "HEX" "HEX04, *(i+1), vmOffsetToPosition(c, i)); i+=2;}
-		else if (*i==vmBNTI0) {fprintf(stream, "bnti $0 "HEX" "HEX04, *(i+1), vmOffsetToPosition(c, i)); i+=2;}
-		else if (*i==vmBRA)   {fprintf(stream, "bra "HEX04, vmBraOffsetToPosition(c, i)); i++;}
+		/* Setup macro aliases for opcode serializer generation to produce the following:
+		    if (*idx == vmNOP) {fprintf(stream, "%-4s" "    " "    ", "NOP"); ; ; } else
+		    if (*idx == vmMV_R00_I) {fprintf(stream, "%-4s" " $00" "    ", "MV"); fprintf(stream," ");vmObjectDumper(*++idx, stream); ; } else
+		    if (*idx == vmBEQ_R00_I) {fprintf(stream, "%-4s" " $00" "    ", "BEQ"); fprintf(stream," ");vmObjectDumper(*++idx, stream); fprintf(stream," ""%04lx", vmOffsetToPosition(c, lineNumber, ++idx));; } else
+		    ...
+		*/
+		#define PRINTREG    "    "
+		#define PRINTREGR00 " $00"
+		#define PRINTREGR01 " $01"
+		#define PRINTREGR02 " $02"
+		#define PRINTREGR03 " $03"
+		#define PRINTREGR04 " $04"
+		#define PRINTREGR05 " $05"
+		#define PRINTREGR06 " $06"
+		#define PRINTREGR07 " $07"
+		#define PRINTREGR08 " $08"
+		#define PRINTREGR09 " $09"
+		#define PRINTREGR0A " $0a"
+		#define PRINTREGR0B " $0b"
+		#define PRINTREGR0C " $0c"
+		#define PRINTREGR0D " $0d"
+		#define PRINTREGR0E " $0e"
+		#define PRINTREGR10 " $10"
+		#define PRINTREGR11 " $11"
+		#define PRINTREGR12 " $12"
+		#define PRINTREGR13 " $13"
+		#define PRINTREGR1C " $1c"
 
-else if (*i==BEQ_D1_I) {fprintf(stream, "beq  $d1  "HEX" "HEX04, *(i+1), vmOffsetToPosition(c, i)); i+=2;}
+		#define PRINT
+		#define PRINTR02
+		#define PRINTIO ++idx; fprintf(stream, " #<"OBJ0"> ", *(Obj*)(c+idx*ObjSize)); ++idx; fprintf(stream,    HEX04" ", vmOffsetToPosition(c, lineNumber*ObjSize, c+idx*ObjSize));  vmObjectDumper(*(Obj*)(c+(idx-1)*ObjSize), stream); 
+		#define PRINTI  ++idx; fprintf(stream, " #<"OBJ0"> ", *(Obj*)(c+idx*ObjSize));        fprintf(stream, "     ");                                                               vmObjectDumper(*(Obj*)(c+(idx)*ObjSize), stream); 
+		#define PRINTO                                                       ++idx; fprintf(stream, " "HEX04,    vmOffsetToPosition(c, lineNumber*ObjSize, c+idx*ObjSize));
 
-		else if (*i==vmJMP0) {fprintf(stream, "jmp  $0 ");}
-		else if (*i==vmJMP2) {fprintf(stream, "jmp  $2 ");}
-		else if (*i==vmJAL0)  {fprintf(stream, "jal  $0 ");}
-		else if (*i==vmJAL2)  {fprintf(stream, "jal  $2 ");}
-		else if (*i==vmRET)   {fprintf(stream, "ret");}
-		else if (*i==vmSYSI)  {fprintf(stream, "sysi "); vmObjectDumper(*++i, stream);}
-		else if (*i==vmSYS0)  {fprintf(stream, "sys  $0 ");}
-		else if (*i==vmQUIT)  {fprintf(stream, "quit");}
-		else {
-			fprintf(stream, "INVALID ");
-			vmObjectDumper(*i, stream);
+		#define _
+		#define VMOP(op,d,n,i,o) VMOP_(op, _##d, _##n, _##i, d, n, i, o)
+		#define VMOP_(op,dd,nn,ii,d,n,i,o) VMOP__(op, dd, nn, ii, d, n, i, o)
+		#define VMOP__(op,dd,nn,ii,d,n,i,o) \
+		   if (*(Obj*)(c+idx*ObjSize) == vm##op##dd##nn##ii) {fprintf(stream, STR4 PRINTREG##d PRINTREG##n, #op); PRINT##i##o } else
+
+		// Load and transform the opcode definitions into serializing logic
+		#include "op.h"
+
+		// Cleanup the unneeded macros
+		#undef VMOP__
+		#undef VMOP_
+		#undef VMOP
+		#undef _
+      // else clause -- the default opcode serializer case
+		{
+			fprintf(stream, "??? ");
+			vmObjectDumper(*(Obj*)(c+idx*1*ObjSize), stream);
 		}
 
-		i++;
+		++idx;
 		fflush(stdout);
 	}
+
 	printf (NL);
+
+	--indent;
+	memRootSetUnRegisterAnonymous(&c);
+
 	DBEND ();
 }
 
@@ -782,15 +569,25 @@ void vmInitialize (Func interruptHandler, Func2ObjFile vmObjDumper) {
 		shouldInitialize = 0;
 		memInitialize(0, 0, 0);
 
-		DB("Registering rootset objects pointers r0 through rf");
-		memRootSetRegister(r0);  memRootSetRegister(r1);  memRootSetRegister(r2);  memRootSetRegister(r3);
-		memRootSetRegister(r4);  memRootSetRegister(r5);  memRootSetRegister(r6);  memRootSetRegister(r7);
+		DB("Registering rootset objects pointers r00 through r0f");
+		#define REGISTER_ROOT_REG(n) memRootSetRegisterString(&r##n, (Str)"$"#n);
+		REGISTER_ROOT_REG(00);  REGISTER_ROOT_REG(01);  REGISTER_ROOT_REG(02);  REGISTER_ROOT_REG(03);
+		REGISTER_ROOT_REG(04);  REGISTER_ROOT_REG(05);  REGISTER_ROOT_REG(06);  REGISTER_ROOT_REG(07);
+		REGISTER_ROOT_REG(08);  REGISTER_ROOT_REG(09);  REGISTER_ROOT_REG(0a);  REGISTER_ROOT_REG(0b);
+		REGISTER_ROOT_REG(0c);  REGISTER_ROOT_REG(0d);  REGISTER_ROOT_REG(0e);  REGISTER_ROOT_REG(0f);
 
-		memRootSetRegister(r8);  memRootSetRegister(r9);  memRootSetRegister(ra);  memRootSetRegister(rb);
-		memRootSetRegister(rc);  memRootSetRegister(rd);  memRootSetRegister(re);  memRootSetRegister(rf);
+		DB("Registering rootset objects pointers r10 through r1f");
+		#define REGISTER_DATA_REG(n) memSetDataRegisterString(&r##n, (Str)"$"#n);
+		REGISTER_DATA_REG(10);  REGISTER_DATA_REG(11);  REGISTER_DATA_REG(12);  REGISTER_DATA_REG(13);
+		REGISTER_DATA_REG(14);  REGISTER_DATA_REG(15);  REGISTER_DATA_REG(16);  REGISTER_DATA_REG(17);
+		REGISTER_DATA_REG(18);  REGISTER_DATA_REG(19);  REGISTER_DATA_REG(1a);  REGISTER_DATA_REG(1b);
+		REGISTER_DATA_REG(1c);  REGISTER_DATA_REG(1d);  REGISTER_DATA_REG(1e);  REGISTER_DATA_REG(1f);
 
-		DB("Create the stack");
-		rf = memNewStack();
+		DB("Create the array stack");
+		rdstack = memNewAryStack();
+
+		DB("Create the vector stack");
+		rstack = memNewVecStack();
 
 		DB("Register the internal object types");
 		memTypeRegisterString(TCODE, (Str)"code");

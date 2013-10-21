@@ -19,7 +19,8 @@
    is implemented.
 */ 
 #define MEMMAXTYPES   0x100l
-#define TSTACK         0xfbl
+#define TARYSTACK      0x7bl
+#define TVECSTACK      0xfbl
 
 /* Limit the size of any object to 16Mb (2^24) bytes for sanity. */
 #define MEMOBJECTMAXSIZE ((Num)0x1000000)
@@ -30,8 +31,17 @@
 #define BLOCK_BYTE_SIZE ((Num)0x1000)
 
 
-/* Byte count of an object which is a pointer */
-#define ObjSize sizeof(Obj)
+/* Byte count of an object (which is really a void pointer) */
+#define ObjSize (Int)sizeof(Obj)
+
+/* Descriptor details */
+#define DescSize           sizeof(Descriptor)
+#define DescBitCount       (8 * DescSize)
+#define DescTypeBitCount   8
+#define DescLengthBitCount (DescBitCount - DescTypeBitCount)
+
+#define DescTypeBitMask   (~(Length)0 << (DescBitCount - DescTypeBitCount))   /* 0xff000000... */
+#define DescLengthBitMask (~(Length)0 >> (DescBitCount - DescLengthBitCount)) /* 0x00ffffff... */
 
 
 /* An object's 'type' and length type.  They are unioned to form a descriptor.
@@ -88,7 +98,8 @@ Type memObjectType   (Obj obj);
 Num  memObjectLength (Obj obj);
 
 Num memIsObjectBaseArray (Obj o);
-Num memIsObjectStack (Obj o);
+Num memIsObjectVecStack (Obj o);
+Num memIsObjectAryStack (Obj o);
 Num memIsObjectType (Obj o, Type t);
 
 Num memArrayLengthToObjectSize  (Length length);
@@ -100,6 +111,9 @@ Num memVectorLengthToObjectSize  (Length length);
 ***************************************/
 void memRootSetRegisterString (Obj *objp, Str desc);
 #define memRootSetRegister(op) memRootSetRegisterString(&op, (Str)#op)
+
+void memSetDataRegisterString (Obj *objp, Str desc);
+#define memSetDataRegister(op) memSetDataRegisterString(&op, (Str)#op)
 
 
 /***************************************
@@ -115,23 +129,37 @@ Obj memNewVector      (Type t, Length objLength);
 Obj memNewSemaphore   (void);
 Obj memNewFinalizer   (void);
 Obj memNewPointer     (void);
-Obj memNewStack       (void);
+Obj memNewVecStack    (void);
+Obj memNewAryStack    (void);
 
 Num memIsObjectValid  (Obj o);
 
-/* Object mutators.  Need to go through this abstraction since the generational
-   collector might need to keep track of mutated vector objects in the 'old'
-   heap.  */
-void memArraySet  (Obj obj, Num offset, u8  item);
-void memVectorSet (Obj obj, Num offset, Obj item);
-void memStackPush (Obj stack, Obj item);
-void memStackSet  (Obj stack, Num topOffset, Obj item);
-Obj  memStackPop  (Obj stack);
+/* Object mutators and accessors.  Need to go through this abstraction since the
+   generational collector might need to keep track of mutated vector objects in
+   the 'old' heap.
+*/
+void memArraySet    (Obj obj, Num offset, u8  item);
+u8   memArrayObject (Obj obj, Num offset);
 
-u8   memArrayObject  (Obj obj, Num offset);
+void memVectorSet    (Obj obj, Num offset, Obj item);
 Obj  memVectorObject (Obj obj, Num offset);
-Obj  memStackObject  (Obj obj, Num topOffset);
-Num  memStackLength  (Obj obj);
+
+Num  memVecStackLength (Obj stack);
+void memVecStackPush   (Obj stack, Obj item);
+Obj  memVecStackPop    (Obj stack);
+void memVecStackSet    (Obj stack, Num topOffset, Obj item);
+Obj  memVecStackObject (Obj stack, Num topOffset);
+
+/* Array stacks are just that, array objects used as a stack.  The GC skips
+   the contents entirely.  Used for static pointers or immediate numbers.
+*/
+Num  memAryStackLength (Obj stack);
+void memAryStackPush   (Obj stack, Obj item);
+Obj  memAryStackPop    (Obj stack);
+void memAryStackSet    (Obj stack, Num topOffset, Obj item);
+Obj  memAryStackObject (Obj stack, Num topOffset);
+
+
 
 
 /***************************************

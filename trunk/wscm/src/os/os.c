@@ -35,48 +35,50 @@ Func ExceptionHandlerDefault = 0;
    must be defined in the global environment in the ERRORS vector indexed by
    thread ID.
   str <= Useful string (object or C) to include along with stack args
-   r1 <= stack argument count
-   rf <= stack of arguments
+   r01 <= stack argument count
+   r0f <= stack of arguments
 */
 void osException (Obj str) {
 	DBBEG();
 
+//syscallDebugger(); // TODO TEMP
+
 	/* Force str to a scheme string object if not already */
 	if (!memIsObjectValid(str)) {
 		objNewString(str, strlen(str));
-		r3 = r0;
+		r03 = r00;
 	} else {
 		assert(memIsObjectType(str, TSTRING) && "Parameter 'str' not a STRING object");
-		r3 = str;
+		r03 = str;
 	}
 	
 	/* Attach stack arguments to message expression */
 	sysStackToList();
-	r2 = r0;
-	r1 = r3;
+	r02 = r00;
+	r01 = r03;
 	objCons12();
-	r3 = r0;
+	r03 = r00;
 
 	/* Lookup ERRORS binding in TGE.
 	   TODO this should be a static object and global symbol */
-	objNewSymbol ((Str)"ERRORS", 6);  r1=r0;  sysTGEFind();
+	objNewSymbol ((Str)"ERRORS", 6);  r01=r00;  sysTGEFind();
 
-	if (onull != r0) {
-		r0 = car(r0); /* The ERROR vector */
+	if (onull != r00) {
+		r00 = car(r00); /* The ERROR vector */
 		/* The closure in the vector */
-		r0 = memVectorObject(r0, *(Num*)osThreadId(rrunning));
-		if (!memIsObjectType(r0, TCLOSURE)) r0 = onull;
+		r00 = memVectorObject(r00, *(Num*)osThreadId(rrunning));
+		if (!memIsObjectType(r00, TCLOSURE)) r00 = onull;
 	}
 
-	if (onull == r0) {
+	if (onull == r00) {
 		if (ExceptionHandlerDefault) {
-			r0 = r3;
+			r00 = r03;
 			ExceptionHandlerDefault();
 			return;
 		} else {
 			/* No exception handler closure found in global 'ERRORS' vector so halt process */
 			fprintf (stderr, "A runtime error/exception has occured:");
-			sysWrite(r3, stderr);
+			sysWrite(r03, stderr);
 			fprintf (stderr, "\nEntering debugger");
 			syscallDebugger();
 			exit(-1);
@@ -90,12 +92,12 @@ void osException (Obj str) {
 	/* r0 needs to remain the closure when a code block is first run since the
 	   called code expects to find a lexical enviroment in the closure in r0.
 	   #closure<code-block lexical-env> */
-	rcode = car(r0);
+	rcode = car(r00);
 	rip=0;
 
-	/* Pass message expression as one argument to the error handler.  r1 = arg count.  */
-	vmPush(r3);
-	r1=(Obj)1;
+	/* Pass message expression as one argument to the error handler.  r01 = arg count.  */
+	vmPush(r03);
+	r01=(Obj)1;
 	DBEND();
 }
 
@@ -113,8 +115,8 @@ void osException (Obj str) {
 /* Semaphores are just immediate numbers.
 */
 void osOpenSemaphore (void) {
-	r0 = memNewSemaphore();
-	memVectorSet(r0, 0, (Obj)*(Int*)vmPop()); /* Initialize the semaphore's counter */
+	r00 = memNewSemaphore();
+	memVectorSet(r00, 0, (Obj)*(Int*)vmPop()); /* Initialize the semaphore's counter */
 }
 
 void osNewThreadDescriptor (void) {
@@ -157,11 +159,11 @@ void osRemoveThread (Obj t) {
 }
 
 /* Creates a new thread object which is inserted into the running queue.
-   r0 <= code block
-    r1 = used
-    r2 = used
-    r1 => thread descriptor object
-    r0 => thread id object
+   r00 <= code block
+    r01 = used
+    r02 = used
+    r01 => thread descriptor object
+    r00 => thread id object
 */
 void osNewThread (void) {
  Num tid;
@@ -172,50 +174,51 @@ void osNewThread (void) {
 	for (tid=1; memVectorObject(rthreads, tid) != onull; ++tid)
 		if (MAX_THREADS <= tid) {
 			fprintf (stderr, "WARNING: osNewThread: Too many rthreads.");
-			r0 = ofalse;
+			r00 = ofalse;
 			goto done;
 		}
 
 	DB("tid="NUM, tid);
 
 	/* Create thread's stack (in an un-running state). */
-	r1=r0; /* Code block */
-	r2 = memNewStack();
-	memStackPush(r2, renv); /* Initial environment. */
-	memStackPush(r2, 0);   /* Initial ip. */
-	memStackPush(r2, r1);  /* Initial code. */
-	memStackPush(r2, 0);   /* Initial retenv. */
-	memStackPush(r2, 0);   /* Initial retip. */
-	memStackPush(r2, 0);   /* Initial retcode. */
-	memStackPush(r2, 0);   /* Initial r7. */
-	memStackPush(r2, 0);   /* Initial r6. */
-	memStackPush(r2, 0);   /* Initial r5. */
-	memStackPush(r2, 0);   /* Initial r4. */
-	memStackPush(r2, 0);   /* Initial r3. */
-	memStackPush(r2, 0);   /* Initial r2. */
-	memStackPush(r2, 0);   /* Initial r1. */
-	memStackPush(r2, 0);   /* Initial r0. */
+	r01=r00; /* Code block */
+	r02 = memNewVecStack();
+	memVecStackPush(r02, r10); // Using this register when determining object types in assembled code
+	memVecStackPush(r02, renv); /* Initial environment. */
+	memVecStackPush(r02, 0);   /* Initial ip. */
+	memVecStackPush(r02, r01);  /* Initial code. */
+	memVecStackPush(r02, 0);   /* Initial retenv. */
+	memVecStackPush(r02, 0);   /* Initial retip. */
+	memVecStackPush(r02, 0);   /* Initial retcode. */
+	memVecStackPush(r02, 0);   /* Initial r07. */
+	memVecStackPush(r02, 0);   /* Initial r06. */
+	memVecStackPush(r02, 0);   /* Initial r05. */
+	memVecStackPush(r02, 0);   /* Initial r04. */
+	memVecStackPush(r02, 0);   /* Initial r03. */
+	memVecStackPush(r02, 0);   /* Initial r02. */
+	memVecStackPush(r02, 0);   /* Initial r01. */
+	memVecStackPush(r02, 0);   /* Initial r00. */
 
-	objNewInt((Int)tid); r1 = r0; /* ID as an integer object */
+	objNewInt((Int)tid); r01 = r00; /* ID as an integer object */
 	/* Create thread descriptor #( #<stack> tid 'state) and add to thread table vector */
 	osNewThreadDescriptor();
-	memVectorSet(r0, 0, r2);      /* Set stack */
-	memVectorSet(r0, 1, r1); /* Set id */
-	memVectorSet(r0, 2, sready);  /* Set 'ready' state */
+	memVectorSet(r00, 0, r02);      /* Set stack */
+	memVectorSet(r00, 1, r01); /* Set id */
+	memVectorSet(r00, 2, sready);  /* Set 'ready' state */
 
 	/* Add thread descriptor to thread table vector and increment count */
-	memVectorSet(rthreads, tid, r0);
+	memVectorSet(rthreads, tid, r00);
 	memVectorSet(rthreads, 0, osThreadCount()+1);
 
 	/* Create new doubly linked list queue element for this thread descriptor and
 	   insert into the ready queue before the current running thread */
-	r2 = r1; /* Thread ID */
-	r1 = r0; /* Thread descriptor */
+	r02 = r01; /* Thread ID */
+	r01 = r00; /* Thread descriptor */
 	objNewDoublyLinkedListNode();
-	memVectorSet(r0, 0, r1);
-	objDoublyLinkedListInsert (rrunning, r0); /* Insert new thread before current thread */
+	memVectorSet(r00, 0, r01);
+	objDoublyLinkedListInsert (rrunning, r00); /* Insert new thread before current thread */
 
-	r0 = r2;
+	r00 = r02;
 	/* Return thread ID in r0 and thread descriptor in r1. */
 done:
 	DBEND("  =>  tid:"NUM, tid);
@@ -232,7 +235,7 @@ void osScheduleSleeping (void) {
 
 	/* Only sleeping threads exist so wait for next one to wakeup.
 	   Next thread's wakeup time on top of its stack. */
-	wakeupTime = *(s64*)memStackObject(osThreadDescStack(sleepingThreadDescriptor),0) - sysTime();
+	wakeupTime = *(s64*)memVecStackObject(osThreadDescStack(sleepingThreadDescriptor),0) - sysTime();
 	if (wakeupTime > 0
 	    && osIsQueueEmpty(rready)
 	    && osIsQueueEmpty(rblocked)) {
@@ -247,7 +250,7 @@ void osScheduleSleeping (void) {
 		usleep((useconds_t)wakeupTime*1000);
 
 		/* Consider wakeup time again.  An interrupt might have prematurely interrupted usleep() */
-		wakeupTime = *(s64*)memStackObject(osThreadDescStack(sleepingThreadDescriptor),0) - sysTime();
+		wakeupTime = *(s64*)memVecStackObject(osThreadDescStack(sleepingThreadDescriptor),0) - sysTime();
 		DB("Remaining "INT"ms", wakeupTime);
 	}
 
@@ -255,7 +258,7 @@ void osScheduleSleeping (void) {
 	if (wakeupTime <= 0) {
 		DB("Waking next sleeping thread");
 		/* Pop wake-time from stack. */
-		memStackPop(osThreadDescStack(sleepingThreadDescriptor));
+		memVecStackPop(osThreadDescStack(sleepingThreadDescriptor));
 		osMoveToQueue(objDoublyLinkedListNext(rsleeping), rready, sready);
 	}
 
@@ -268,7 +271,7 @@ void osScheduleSleeping (void) {
    Have yet to block threads on a remote connection...blocks the
    entire process on an (open-socket "remote" port). FIXED.
 
-	use r1 r5
+	use r01 r05
 */
 void osScheduleBlocked (void) {
  Num timedOut;
@@ -276,109 +279,109 @@ void osScheduleBlocked (void) {
 	   objDoublyLinkedListLength(rblocked)-1,
 	   objDoublyLinkedListLength(rsleeping)-1);
 	/* For each doubly linked list node of blocked threads... */
-	r5=objDoublyLinkedListNext(rblocked);
-	while (r5!=rblocked) {
-	DB("considering blocked thread "NUM, *(Num*)osThreadId(r5));
+	r05=objDoublyLinkedListNext(rblocked);
+	while (r05!=rblocked) {
+	DB("considering blocked thread "NUM, *(Num*)osThreadId(r05));
 		/* Consider status in the descriptor of this thread. */
-		r1 = osThreadState(r5);
+		r01 = osThreadState(r05);
 
-		if (r1 == sreadblocked) {
+		if (r01 == sreadblocked) {
 			DB("dealing with a read blocked thread");
-			r1 = memStackObject(osThreadStack(r5), 1l); /* port */
-			r2 = memStackObject(osThreadStack(r5), 2l); /* timeout */
-			r3 = memStackObject(osThreadStack(r5), 3l); /* buffer */
-			r4 = memStackObject(osThreadStack(r5), 4l); /* count */
+			r01 = memVecStackObject(osThreadStack(r05), 1l); /* port */
+			r02 = memVecStackObject(osThreadStack(r05), 2l); /* timeout */
+			r03 = memVecStackObject(osThreadStack(r05), 3l); /* buffer */
+			r04 = memVecStackObject(osThreadStack(r05), 4l); /* count */
 			sysRecv();
-			timedOut = (r2!=ofalse) && (*(Int*)r2 <= sysTime());
-			if (r0 != ofalse || timedOut) {
+			timedOut = (r02!=ofalse) && (*(Int*)r02 <= sysTime());
+			if (r00 != ofalse || timedOut) {
 				/* If timed out but partial read, return the partial string */
-				if (r0==ofalse && timedOut && 0<(Num)r4) {
-					objNewString(NULL, (Num)r4);
-   				memcpy(r0, r3, (Num)r4);
+				if (r00==ofalse && timedOut && 0<(Num)r04) {
+					objNewString(NULL, (Num)r04);
+   				memcpy(r00, r03, (Num)r04);
 				}
 				/* Set thread's return value (r0 register top of stack) with
 			   	newly-read string or #f if it has timed out. */
-				memStackSet(osThreadStack(r5), 0, r0);
-				r1=objDoublyLinkedListNext(r5);
-				osMoveToQueue(r5, rready, sready);
-				r5=r1;
+				memVecStackSet(osThreadStack(r05), 0, r00);
+				r01=objDoublyLinkedListNext(r05);
+				osMoveToQueue(r05, rready, sready);
+				r05=r01;
 			/* Store back registers into thread keeping it blocked. */
 			} else {
-				memStackSet(osThreadStack(r5), 1l, r1);
-				memStackSet(osThreadStack(r5), 2l, r2);
-				memStackSet(osThreadStack(r5), 3l, r3);
-				memStackSet(osThreadStack(r5), 4l, r4);
-				r5=objDoublyLinkedListNext(r5);
+				memVecStackSet(osThreadStack(r05), 1l, r01);
+				memVecStackSet(osThreadStack(r05), 2l, r02);
+				memVecStackSet(osThreadStack(r05), 3l, r03);
+				memVecStackSet(osThreadStack(r05), 4l, r04);
+				r05=objDoublyLinkedListNext(r05);
 			}
 		}
-		else if (r1 == swriteblocked) {
+		else if (r01 == swriteblocked) {
 			DB("dealing with a write blocked thread");
-			r1 = memStackObject(osThreadStack(r5), 1);
-			r2 = memStackObject(osThreadStack(r5), 2);
-			r3 = memStackObject(osThreadStack(r5), 3);
+			r01 = memVecStackObject(osThreadStack(r05), 1);
+			r02 = memVecStackObject(osThreadStack(r05), 2);
+			r03 = memVecStackObject(osThreadStack(r05), 3);
 			sysSend();
-			if (r0 != ofalse) {
+			if (r00 != ofalse) {
 				DB(" unblocking thread");
-				/* Set thread's return value (r0 register top of stack) with
+				/* Set thread's return value (r00 register top of stack) with
 			   	sent string. */
-				memStackSet(osThreadStack(r5), 0, r2);
-				r1=objDoublyLinkedListNext(r5);
-				osMoveToQueue(r5, rready, sready);
-				r5=r1;
+				memVecStackSet(osThreadStack(r05), 0, r02);
+				r01=objDoublyLinkedListNext(r05);
+				osMoveToQueue(r05, rready, sready);
+				r05=r01;
 			/* Store back registers into thread since osSend more than likely
 			   changed them and keep this thread blocked. */
 			} else {
 				DB(" not unblocking thread");
-				memStackSet(osThreadStack(r5), 1, r1);
-				memStackSet(osThreadStack(r5), 2, r2);
-				memStackSet(osThreadStack(r5), 3, r3);
-				r5=objDoublyLinkedListNext(r5);
+				memVecStackSet(osThreadStack(r05), 1, r01);
+				memVecStackSet(osThreadStack(r05), 2, r02);
+				memVecStackSet(osThreadStack(r05), 3, r03);
+				r05=objDoublyLinkedListNext(r05);
 			}
-		} else if (r1 == sopenblocked) {
+		} else if (r01 == sopenblocked) {
 			DB("dealing with a open-blocked thread");
-			/* Snag port from sleeping thread (r1). */
-			r1 = memStackObject(osThreadStack(r5),1);
+			/* Snag port from sleeping thread (r01). */
+			r01 = memVecStackObject(osThreadStack(r05),1);
 			/* If a connection is made on the port and set to a non-accepting
-			   state, set the threads return value (r0) to the port and move the
+			   state, set the threads return value (r00) to the port and move the
 			   thread to the ready queue. */
-			if (memVectorObject(r1, 3) == saccepting) {
+			if (memVectorObject(r01, 3) == saccepting) {
 				DB(" dealing with a new incomming stream connection thread");
-				vmPush(r5); /* Since the following clobbers r5. */
-				sysAcceptLocalStream(); r1=r0;
-				r5=vmPop();
-				if (memVectorObject(r1, 3) != saccepting) {
-					memStackSet(osThreadStack(r5), 0, r1);
-					r1=objDoublyLinkedListNext(r5);
-					osMoveToQueue(r5, rready, sready);
-					r5=r1;
+				vmPush(r05); /* Since the following clobbers r05. */
+				sysAcceptLocalStream(); r01=r00;
+				r05=vmPop();
+				if (memVectorObject(r01, 3) != saccepting) {
+					memVecStackSet(osThreadStack(r05), 0, r01);
+					r01=objDoublyLinkedListNext(r05);
+					osMoveToQueue(r05, rready, sready);
+					r05=r01;
 				} else {
-					r5=objDoublyLinkedListNext(r5);
+					r05=objDoublyLinkedListNext(r05);
 				}
-			} else if (memVectorObject(r1, 3) == sconnecting) {
+			} else if (memVectorObject(r01, 3) == sconnecting) {
 				DB(" dealing with a new remote stream connection thread");
 				sysAcceptRemoteStream();
-				if (r1==oeof || memVectorObject(r1, 3) != sconnecting) {
-					memStackSet(osThreadStack(r5), 0, r1);
-					r1=objDoublyLinkedListNext(r5);
-					osMoveToQueue(r5, rready, sready);
-					r5=r1;
+				if (r01==oeof || memVectorObject(r01, 3) != sconnecting) {
+					memVecStackSet(osThreadStack(r05), 0, r01);
+					r01=objDoublyLinkedListNext(r05);
+					osMoveToQueue(r05, rready, sready);
+					r05=r01;
 				} else {
-					r5=objDoublyLinkedListNext(r5);
+					r05=objDoublyLinkedListNext(r05);
 				}
-			} else if (memVectorObject(r1, 3) == sclosed) {
-				memStackSet(osThreadStack(r5), 0, oeof);
-				r1=objDoublyLinkedListNext(r5);
-				osMoveToQueue(r5, rready, sready);
-				r5=r1;
+			} else if (memVectorObject(r01, 3) == sclosed) {
+				memVecStackSet(osThreadStack(r05), 0, oeof);
+				r01=objDoublyLinkedListNext(r05);
+				osMoveToQueue(r05, rready, sready);
+				r05=r01;
 			} else { /* Must be in a connecting state. */
-				r5=objDoublyLinkedListNext(r5);
+				r05=objDoublyLinkedListNext(r05);
 			}
-		} else if (r1 == ssemaphore) {
+		} else if (r01 == ssemaphore) {
 			/* Skip semaphore blocked threads. */
-			r5=objDoublyLinkedListNext(r5);
+			r05=objDoublyLinkedListNext(r05);
 		} else {
 			fprintf (stderr, "ERROR: osScheduleBlocked: unknown thread state");
-			r5=objDoublyLinkedListNext(r5);
+			r05=objDoublyLinkedListNext(r05);
 		}
 	}
 	DBEND();
@@ -393,20 +396,21 @@ void osRun (void) {
 	} else {
 		/* Get stack from descriptor. */
 		rstack = osThreadStack(rrunning);
-		r0 = vmPop();
-		r1 = vmPop();
-		r2 = vmPop();
-		r3 = vmPop();
-		r4 = vmPop();
-		r5 = vmPop();
-		r6 = vmPop();
-		r7 = vmPop();
-		rretcode=vmPop();
-		rretip=vmPop();
-		rretenv=vmPop();
+		r00 = vmPop();
+		r01 = vmPop();
+		r02 = vmPop();
+		r03 = vmPop();
+		r04 = vmPop();
+		r05 = vmPop();
+		r06 = vmPop();
+		r07 = vmPop();
+		rcodelink=vmPop();
+		riplink=vmPop();
+		renvlink=vmPop();
 		rcode=vmPop();
 		rip=vmPop();
 		renv=vmPop();
+		r10=vmPop();
 		memVectorSet(osThreadDescriptor(rrunning), 2, srunning);
 	}
 	DBEND(" => ");
@@ -492,20 +496,21 @@ void osUnRun (void) {
 	assert(osThreadDescState(threadDescriptor) == srunning);
 	memVectorSet(threadDescriptor, 2, sready);
 
+	vmPush(r10);
 	vmPush(renv);
 	vmPush(rip);
 	vmPush(rcode);
-	vmPush(rretenv);
-	vmPush(rretip);
-	vmPush(rretcode);
-	vmPush(r7);
-	vmPush(r6);
-	vmPush(r5);
-	vmPush(r4);
-	vmPush(r3);
-	vmPush(r2);
-	vmPush(r1);
-	vmPush(r0);
+	vmPush(renvlink);
+	vmPush(riplink);
+	vmPush(rcodelink);
+	vmPush(r07);
+	vmPush(r06);
+	vmPush(r05);
+	vmPush(r04);
+	vmPush(r03);
+	vmPush(r02);
+	vmPush(r01);
+	vmPush(r00);
 
 	DBEND();
 }
@@ -516,22 +521,22 @@ void osUnRun (void) {
 void osSleepThread (void) {
  s64 wakeupTime;
 	DBBEG();
-	r0 = vmPop(); /* The call to sleep returns the argument passed to it. */
+	r00 = vmPop(); /* The call to sleep returns the argument passed to it. */
 	osUnRun();
-	wakeupTime = sysTime() + *(Int*)r0;
+	wakeupTime = sysTime() + *(Int*)r00;
 	DB("wakeupTime %lldms = %lld-%lld", wakeupTime-sysTime(), wakeupTime, sysTime());
 	/* Wakeup time (u64) goes on top of stack. */
 	objNewInt(wakeupTime);
-	vmPush(r0);
+	vmPush(r00);
 
 	/* Put this thread in order of wakup time in the sleeping list.  */
-	r3=objDoublyLinkedListNext(rsleeping);
-	while (r3 != rsleeping) {
-		if (*(s64*)memStackObject(osThreadStack(r3),0) > wakeupTime)
+	r03=objDoublyLinkedListNext(rsleeping);
+	while (r03 != rsleeping) {
+		if (*(s64*)memVecStackObject(osThreadStack(r03),0) > wakeupTime)
 			break;
-		r3 = objDoublyLinkedListNext(r3);
+		r03 = objDoublyLinkedListNext(r03);
 	}
-	osMoveToQueue(rrunning, r3, ssleeping); /* Insert thread into list. */
+	osMoveToQueue(rrunning, r03, ssleeping); /* Insert thread into list. */
 
 	/* Go setup another thread to start running. */
 	osScheduler();
@@ -544,26 +549,26 @@ void osUnblockSemaphoreBlocked (Obj sem, Num all) {
  Obj semaphore, next;
  Int found=0;
 	DBBEG();
-	r4=objDoublyLinkedListNext(rblocked); /* For each thread r4 in blocked queue... */
-	while (!found && r4!=rblocked) {
-		next=objDoublyLinkedListNext(r4);
+	r04=objDoublyLinkedListNext(rblocked); /* For each thread r04 in blocked queue... */
+	while (!found && r04!=rblocked) {
+		next=objDoublyLinkedListNext(r04);
 		/* Check thread status in its descriptor. */
-		if (osThreadState(r4) == ssemaphore) {
-			/* Look at thread's r1 register stored on its stack. */
-			semaphore = memStackObject(osThreadStack(r4),1);
+		if (osThreadState(r04) == ssemaphore) {
+			/* Look at thread's r01 register stored on its stack. */
+			semaphore = memVecStackObject(osThreadStack(r04),1);
 			DB("considering blocked thread with sem:");
 			DBE objDisplay(sem, stderr);
 			DBE objDisplay(semaphore, stderr);
 			if (semaphore == sem) {
-				DB("unblocking thread tid:"NUM, *(Num*)osThreadId(r4));
-				/* Set thread's return value (r0 register which is found at the top of the thread's stack)
+				DB("unblocking thread tid:"NUM, *(Num*)osThreadId(r04));
+				/* Set thread's return value (r00 register which is found at the top of the thread's stack)
 				   to #t if another thread down'ed the semaphore and #f if close-semaphore called. */
-				memStackSet(osThreadStack(r4), 0, all?ofalse:otrue);
-				osMoveToQueue(r4, rready, sready);
+				memVecStackSet(osThreadStack(r04), 0, all?ofalse:otrue);
+				osMoveToQueue(r04, rready, sready);
 				if (!all) found=1;
 			}
 		}
-		r4=next;
+		r04=next;
 	}
 	if (!all && !found) {
 		fprintf (stderr, "ERROR: Couldn't find thread blocked on semaphore:");
@@ -588,21 +593,21 @@ void osSpawnSignalHandler(void) {
 		if (caughtSignals[i]) {
 			DB("caughtSignals["NUM"]="NUM, i, caughtSignals[i]);
 			caughtSignals[i] = 0;
-			vmPush(r0); /* Save state */
-			vmPush(r1);
-			vmPush(r2);
-			vmPush(r3);
-				r1 = ssignalhandlers;  sysTGEFind(); r0=car(r0); /* Consider vector of ssignalhandlers. */
-				r3 = memVectorObject(r0, i); /* Consider the closure */
-				r0 = car(r3);
+			vmPush(r00); /* Save state */
+			vmPush(r01);
+			vmPush(r02);
+			vmPush(r03);
+				r01 = ssignalhandlers;  sysTGEFind(); r00=car(r00); /* Consider vector of ssignalhandlers. */
+				r03 = memVectorObject(r00, i); /* Consider the closure */
+				r00 = car(r03);
 				osNewThread();
-				/* Set the new thread's r0 register to the closure object as
+				/* Set the new thread's r00 register to the closure object as
 				   this is expected state during a procedure application */
-				memStackSet(osThreadDescStack(r1), 0, r3);
-			r3=vmPop();
-			r2=vmPop();
-			r1=vmPop();
-			r0=vmPop();
+				memVecStackSet(osThreadDescStack(r01), 0, r03);
+			r03=vmPop();
+			r02=vmPop();
+			r01=vmPop();
+			r00=vmPop();
 		}
 	}
 	DBEND();
@@ -631,11 +636,11 @@ void osDebugDumpThreadInfo (void) {
  IO
 *******************************************************************************/
 /* Called by syscallRecv or VM syscall instruction.
-     r1 <= port object
-     r2 <= timout (imm:int or #f)
-     r3 <= buffer (""=any length str  ()=one char  "..."=fill string)
-      r4 = read count
-     r0  => string buffer
+     r01 <= port object
+     r02 <= timout (imm:int or #f)
+     r03 <= buffer (""=any length str  ()=one char  "..."=fill string)
+      r04 = read count
+     r00  => string buffer
 */
 void osRecvBlock (void) {
  s64 wakeupTime;
@@ -644,30 +649,30 @@ void osRecvBlock (void) {
 
 	/* Time can be false meaning wait forever or the time the thread
 	   should be woken up regardless of character availability. */
-	if (r2 != ofalse) {
-		wakeupTime = sysTime() + *(Int*)r2;
+	if (r02 != ofalse) {
+		wakeupTime = sysTime() + *(Int*)r02;
 		objNewInt(wakeupTime);
-		r2=r0;
+		r02=r00;
 	}
 
-	r4 = 0; /* Character read count initialized to 0. */
+	r04 = 0; /* Character read count initialized to 0. */
 
 	sysRecv();
-	timedOut = (r2!=ofalse) && (*(Int*)r2 <= sysTime()); // BF: TODO move this inside the following if
-	if (r0 == ofalse)
+	timedOut = (r02!=ofalse) && (*(Int*)r02 <= sysTime()); // BF: TODO move this inside the following if
+	if (r00 == ofalse)
 		if (!timedOut) {
 			/* Nothing read and haven't timed out yet so block thread */
 			osUnRun();
 			osMoveToQueue(rrunning, rblocked, sreadblocked);
 			osScheduler();
-		} if (timedOut && 0 < (Num)r4) {
+		} if (timedOut && 0 < (Num)r04) {
 			/* Timeout with a partial read so return partial string */
-			objNewString(NULL, (Num)r4);
-   		memcpy(r0, r3, (Num)r4);
+			objNewString(NULL, (Num)r04);
+   		memcpy(r00, r03, (Num)r04);
 		}
 
-	DBEND("  =>  r0:");
-	DBE memDebugDumpObject(r0, stderr);
+	DBEND("  =>  r00:");
+	DBE memDebugDumpObject(r00, stderr);
 }
 
 
@@ -692,20 +697,21 @@ void osInitialize (Func exceptionHandler) {
 		memRootSetRegister(rready);
 
 		DB("Registering static pointer description strings");
-		memPointerString(osNewThread);
-		memPointerString(osRecvBlock);
+		memPointerRegister(osNewThread);
+		//memPointerRegister(osUnthread);
+		memPointerRegister(osRecvBlock);
 
 		/* Create empty thread vector.  All active threads are assigned a number
 		   1-1024 and stored here for easy constant time lookup.  The first entry
 		   in the thread table is the thread count as an immediate number. */
 		DB("Creating thread vector");
-		objNewVector(MAX_THREADS+1);  rthreads=r0;
+		objNewVector(MAX_THREADS+1);  rthreads=r00;
 		memVectorSet(rthreads, 0, 0); /* Initialize thread count. */
 		for (i=1; i<=MAX_THREADS; i++) memVectorSet(rthreads, i, onull);
 
 		DB("Creating ready thread list");
-		objNewDoublyLinkedListNode (); rready=r0;
-		rready = r0;
+		objNewDoublyLinkedListNode (); rready=r00;
+		rready = r00;
 		memVectorSet(rready, 0, sready);
 		memVectorSet(rready, 1, rready);
 		memVectorSet(rready, 2, rready);
@@ -713,13 +719,13 @@ void osInitialize (Func exceptionHandler) {
 		rrunning = rready;
 	
 		DB("Creating sleeping thread list");
-		objNewDoublyLinkedListNode (); rsleeping=r0;
+		objNewDoublyLinkedListNode (); rsleeping=r00;
 		memVectorSet(rsleeping, 0, ssleeping);
 		memVectorSet(rsleeping, 1, rsleeping);
 		memVectorSet(rsleeping, 2, rsleeping);
 
 		DB("Creating blocked thread list");
-		objNewDoublyLinkedListNode (); rblocked=r0;
+		objNewDoublyLinkedListNode (); rblocked=r00;
 		memVectorSet(rblocked, 0, sblocked);
 		memVectorSet(rblocked, 1, rblocked);
 		memVectorSet(rblocked, 2, rblocked);
