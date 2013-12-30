@@ -336,9 +336,9 @@
           (= VisibleCount (* Wwidth Wheight))))
    ; Assumtions: Window cursor X is back to column 0
    (define (scrollUp)
+     (semaphore-down SEMAPHORE-TERMINAL)
      (if (hardwareScrollable?)
        (begin
-         (semaphore-down SEMAPHORE-TERMINAL)
          ; Manually update the terminal color
          (if (!= COLOR TCOLOR)
            (send (integer->colorstring COLOR) stdout))
@@ -356,8 +356,8 @@
          (display "\e[r\e8")
          (if (!= COLOR TCOLOR) ; Manually sync terminal color
            (set! TCOLOR COLOR))
-         (set! topRow (modulo (+ topRow 1) Wheight)) ; Shift the buffer's top-row index.
-         (semaphore-up SEMAPHORE-TERMINAL)) ; Send the cursor to the beginning of bottom row.
+         (set! topRow (modulo (+ topRow 1) Wheight))) ; Shift the buffer's top-row index.
+         ; Send the cursor to the beginning of bottom row.
        (begin
          ; Clear top-row which is to become the bottom row.
          ; Force topmost line off the top of the terminal in hopes
@@ -379,6 +379,7 @@
          (set! topRow (modulo (+ topRow 1) Wheight)) ; Shift buffer
          ; Refresh window.
          (repaint)))
+     (semaphore-up SEMAPHORE-TERMINAL)
      (return))
    (define (repaintRow row)
      (loop Wwidth (lambda (x)
