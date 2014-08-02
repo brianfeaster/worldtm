@@ -344,7 +344,7 @@ void wscmOpenLocalStream (void) {
 void syscallFun (void) {
 	//objDisplay(rcode, stderr);
 	//memTypeStringDumpAll(stderr);
-	//fprintf(stderr, "\n");memDebugDumpObject(rstack, stderr);
+	//fprintf(stderr, "\n");memPrintObject(rstack, stderr);
 	//fprintf(stderr, "\n");objDisplay(rstack, stderr);
 	//fprintf(stderr, "pwd=%s\n", get_current_dir_name());
 	r00 = otrue;
@@ -815,6 +815,7 @@ ret:
 	DBEND();
 }
 
+/*
 void syscallAdd (void) {
  Int sum=0, c=(Int)r01;
 	DBBEG();
@@ -830,6 +831,7 @@ void syscallMul (void) {
 	objNewInt(product);
 	DBEND();
 }
+*/
 
 /* Multiply all but the first, then divide the first by the product.
 */
@@ -1122,7 +1124,7 @@ void syscallReadDirectory (void) {
 		while (len--) {
 			r01=vmPop();
 			r02=r00;
-			objCons12();
+			objCons012();
 		}
 	}
 ret:
@@ -1286,13 +1288,13 @@ void syscallSend (void) {
 		}
 	} else {
 		fprintf (stderr, "WARNING: trying to send:");
-		memDebugDumpObject(r02, stderr);
+		memPrintObject(r02, stderr);
 		syscallDebugger();
 		r00 = ofalse;
 	}
 ret:
 	DBEND(" => r00:");
-	DBE memDebugDumpObject(r00, stderr);
+	DBE memPrintObject(r00, stderr);
 }
 
 void syscallSeek (void) {
@@ -1345,7 +1347,7 @@ void syscallTerminalSize (void) {
 	ioctl(1, TIOCGWINSZ, &win);
 	objNewInt(win.ws_col); r01=r00;
 	objNewInt(win.ws_row); r02=r00;
-	objCons12();
+	objCons012();
 	DBEND();
 }
 
@@ -1444,7 +1446,7 @@ void sysNewHex (void) {
 void syscallDebugDumpAll (void) {
 	DBBEG();
 	if (wscmAssertArgCount0(__func__)) goto ret;
-	memDebugDumpAll(NULL);
+	memPrintAll(NULL);
 ret:
 	DBEND();
 }
@@ -1625,7 +1627,7 @@ ret:
 */
 void wscmSysTransition (void) {
 	DBBEG(" <= state:r04="HEX"  char:r03=", r04);
-	DBE memDebugDumpObject(r03, stderr);
+	DBE memPrintObject(r03, stderr);
 
 	/* Make the transition on char in r03 given state in r04. */
 	if (oeof == r03)
@@ -1702,7 +1704,7 @@ void wscmCreateRead (void) {
 		/* Call syscallReadChar to read one char.  It contains logic
 		   to handle string-ports so osRecvBlock not called any longer. */
 		PUSH, R04, // r04 clobbered so push
-			MVI, R03, ofalse, /* tell recv to not timeout */
+			MVI, R02, ofalse, /* tell recv to not timeout */
 			PUSH, R02, /* arg 1: timeout */ 
 			PUSH, R01, /* arg 2: port object */
 			MVI, R01, 2l, /* arg count */
@@ -1767,10 +1769,10 @@ void wscmCreateRead (void) {
 		PUSH, R02, /* Save r01 and r02 */
 			MV, R01, R00,           /* Car object. */
 			MVI, R02, onull,/* Cdr object. */
-			SYSI, objCons12,
+			SYSI, objCons012,
 			MVI, R01, squote,/* Car object. */
 			MV, R02, R00,            /* Cdr object. */
-			SYSI, objCons12,
+			SYSI, objCons012,
 		POP, R02,
 		POP, R01,   /* Restore r01 and r02 */
 		BRA, Ldone,
@@ -1789,10 +1791,10 @@ void wscmCreateRead (void) {
 		PUSH, R01, PUSH, R02, /* Save r01 and r02 */
 			MV, R01, R00,           /* Car object. */
 			MVI, R02, onull,/* Cdr object. */
-			SYSI, objCons12,
+			SYSI, objCons012,
 			MVI, R01, sunquotesplicing,/* Car object. */
 			MV, R02, R00,            /* Cdr object. */
-			SYSI, objCons12,
+			SYSI, objCons012,
 		POP, R02,
 		POP, R01,   /* Restore r01 and r02 */
 		BRA, Ldone,
@@ -1807,10 +1809,10 @@ void wscmCreateRead (void) {
 		PUSH, R01, PUSH, R02, /* Save r01 and r02 */
 			MV, R01, R00,            /* Car object. */
 			MVI, R02, onull,      /* Cdr object. */
-			SYSI, objCons12,
+			SYSI, objCons012,
 			MVI, R01, sunquote,  /* Car object. */
 			MV, R02, R00,            /* Cdr object. */
-			SYSI, objCons12,
+			SYSI, objCons012,
 		POP, R02, POP, R01,   /* Restore r01 and r02 */
 		BRA, Ldone,
 		/* quasiquote? */
@@ -1829,10 +1831,10 @@ void wscmCreateRead (void) {
 		PUSH, R02, /* Save r01 and r02 */
 			MV, R01, R00,             /* Car object. */
 			MVI, R02, onull,       /* Cdr object. */
-			SYSI, objCons12,
+			SYSI, objCons012,
 			MVI, R01, squasiquote,/* Car object. */
 			MV, R02, R00,             /* Cdr object. */
-			SYSI, objCons12,
+			SYSI, objCons012,
 		POP, R02,
 		POP, R01,   /* Restore r01 and r02 */
 		BRA, Ldone,
@@ -1913,7 +1915,7 @@ void wscmCreateRead (void) {
 		PUSH, R01, PUSH, R02, /* Save r01 and r02 */
 		MV, R01, R03, /* Car object. */
 		MV, R02, R00, /* Cdr object. */
-		SYSI, objCons12,
+		SYSI, objCons012,
 		POP, R02, POP, R01,   /* Restore r01 and r02 */
 	
 	 LABEL, Lret,
@@ -1983,7 +1985,7 @@ void wscmCreateRepl (void) {
 	objNewSymbol ((Str)"stdin", 5);  r01=r00;  sysTGEFind(); r03=r00; /* The stdin binding, not value incase it changes */
 	objNewSymbol ((Str)"read", 4);  r01=r00;  sysTGEFind();  r04=caar(r00); /* The binding value is a closure so we need to car again for the code object. */
 	objNewString ((Str)"bye\n", 4);  r05=r00;
-	objNewString ((Str)"Entering repl2\n", 14);  r06=r00;
+	objNewString ((Str)"Entering repl2\n", 15);  r06=r00;
 	asmInit();
 	Lrepl = asmNewLabel();
 	Ldone = asmNewLabel();
@@ -2014,6 +2016,13 @@ void wscmCreateRepl (void) {
 		BEQI, R00, ofalse, Lcompileerror,
 		/* Run code. */
 		PUSH, RIPLINK, PUSH, RCODELINK, PUSH, R09,
+
+		/* Display code block
+		PUSH, R00,
+		MVI, R01, 1l,
+		SYSI, syscallDisplay,
+		*/
+
 		JAL, R00,
 		POP, R09, POP, RCODELINK, POP, RIPLINK,
 		/* (display ...) */
@@ -2049,9 +2058,9 @@ void wscmInitialize (void) {
 	/* Register objects and pointer addresses with their
 	   C source names for object debug dumps. */
 	DB("Registering static pointer description strings");
-	memPointerRegister(wscmSysTransition);
-	memPointerRegister(sysEnvGet);
-	memPointerRegister(wscmSocketFinalizer);
+	MEM_ADDRESS_REGISTER(wscmSysTransition);
+	MEM_ADDRESS_REGISTER(sysEnvGet);
+	MEM_ADDRESS_REGISTER(wscmSocketFinalizer);
 
 	/* Bind usefull values r02=value r01=symbol. */
 	DB("Registering syscalls");
@@ -2081,8 +2090,8 @@ void wscmInitialize (void) {
 	sysDefineSyscall(syscallLessEqualThan, "<=");
 	sysDefineSyscall(syscallGreaterThan, ">");
 	sysDefineSyscall(syscallGreaterEqualThan, ">=");
-	sysDefineSyscall(syscallAdd, "+");
-	sysDefineSyscall(syscallMul, "*");
+	//sysDefineSyscall(syscallAdd, "+");
+	//sysDefineSyscall(syscallMul, "*");
 	sysDefineSyscall(syscallDiv, "/");
 	sysDefineSyscall(syscallShiftLeft, "<<");
 	sysDefineSyscall(syscallShiftRight, ">>");
@@ -2135,7 +2144,7 @@ void wscmInitialize (void) {
 	objNewInt(69);  sysDefine ("x");
 	objNewSymbol((Str)"a", 1);  r01=r00; /* It's also nice to have a pair ready to go */
 	objNewSymbol((Str)"b", 1);  r02=r00;
-	objCons12();  sysDefine("c");
+	objCons012();  sysDefine("c");
 
 	DBEND();
 }
@@ -2186,7 +2195,7 @@ void wscmCReadEvalPrintLoop (void) {
 		if (ofalse == r00) {
 			fprintf(stderr, "\n*Compile failed*");
 		} else {
-			//objDisplay(rcode, stderr);
+			objDisplay(rcode, stderr);
 			fprintf(stderr, "== Execute and return value =====\n");
 			if (ofalse != r00) {
 				vmRun();
@@ -2195,7 +2204,7 @@ void wscmCReadEvalPrintLoop (void) {
 		}
 
 		DBE fprintf(stderr, "== Debug =======================");
-		DBE memDebugDumpHeapHeaders(stderr);
+		DBE memPrintStructures(stderr);
 		DBE sysWrite(rstack, stderr);
 		DBE for (i=memVecStackLength(rstack); 0<i; --i) sysWrite(memVecStackObject(rstack, i-1), stdout);
 	}
@@ -2286,7 +2295,7 @@ void wscmBindArgs (Num argc, char *argv[]) {
 
 
 int main (int argc, char *argv[]) {
-	setbuf(stdout, NULL);
+	//setbuf(stdout, NULL);
 	signal(SIGPIPE, SIG_IGN);
 	srandom((unsigned int)time(NULL));
 
@@ -2307,8 +2316,8 @@ int main (int argc, char *argv[]) {
 	/* Set the C interrupt alarm handler and start its countdown timer.  The
 	   handler will periodicaly set vmInterrupt causing wscmSchdule to be called
 	   from the vm module. */
-	signal(SIGALRM, wscmSigAlarmHandler);
-	wscmSigAlarmReset(); /* Enable scheduler's interrupt timer. */
+	//signal(SIGALRM, wscmSigAlarmHandler);
+	//wscmSigAlarmReset(); /* Enable scheduler's interrupt timer. */
 
 	/* REPL in a blocking C loop */
 	//wscmCReadEvalPrintLoop();  return 0;

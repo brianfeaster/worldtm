@@ -91,6 +91,9 @@ void TESTSizeof (void) {
 	// Verify size of integer constants.
 	assert(sizeof(1)==4);
 	assert(sizeof(1l)==8);
+
+	assert(DescSize == 8);
+	assert(DescBitCount == 64);
 }
 
 
@@ -164,7 +167,6 @@ void TESTVerifyObjectCreationAndCollection (void) {
 		pop();
 	}
 	assert(memtVerifyHeapLengths(0, 0, 21, 0));
-
 	memGarbageCollect();
 	assert(memVecStackLength(rf) == 5);
 
@@ -195,7 +197,7 @@ void callbackFinalizerFunction (Obj o) {
 
 void TESTFinalizer (void) {
 
-	memPointerRegister(callbackFinalizerFunction);
+	MEM_ADDRESS_REGISTER(callbackFinalizerFunction);
 
 	/* The integer */
 	r1 = memNewArray(TINTEGER, 4);
@@ -217,6 +219,9 @@ void TESTFinalizer (void) {
 	memGarbageCollect();
 
 	assert(1 == MyFinalizerFlag);
+	assert(0 == memHeapUsedSize(&heap));
+	assert(0 == memHeapUsedSize(&heapOld));
+	assert(0 == memHeapUsedSize(&heapNew));
 }
 
 
@@ -292,18 +297,18 @@ int main (int argc, char *argv[]) {
 
 	/* Register root set object.  These are the "registers" or
 	   machine's global variables */
-	memRootSetRegister(r0);
-	memRootSetRegister(r1);
-	memRootSetRegister(r2);
-	memRootSetRegister(r3);
-	memRootSetRegister(r4);
-	memRootSetRegister(rf);
+	memRootSetAddressRegister(&r0); MEM_ADDRESS_REGISTER(&r0);
+	memRootSetAddressRegister(&r1); MEM_ADDRESS_REGISTER(&r1);
+	memRootSetAddressRegister(&r2); MEM_ADDRESS_REGISTER(&r2);
+	memRootSetAddressRegister(&r3); MEM_ADDRESS_REGISTER(&r3);
+	memRootSetAddressRegister(&r4); MEM_ADDRESS_REGISTER(&r4);
+	memRootSetAddressRegister(&rf); MEM_ADDRESS_REGISTER(&rf);
 
-	memTypeRegisterString(TSYMBOL,  (Str)"sym");
-	memTypeRegisterString(TINTEGER, (Str)"int");
-	memTypeRegisterString(TPAIR,    (Str)"pair");
-	memTypeRegisterString(TSTRING,  (Str)"str");
-	memTypeRegisterString(TVECTOR,  (Str)"vec");
+	memTypeStringRegister(TSYMBOL,  (Str)"sym");
+	memTypeStringRegister(TINTEGER, (Str)"int");
+	memTypeStringRegister(TPAIR,    (Str)"pair");
+	memTypeStringRegister(TSTRING,  (Str)"str");
+	memTypeStringRegister(TVECTOR,  (Str)"vec");
 
 	rf = memNewVecStack(); /* Create the stack for the machine */
 
@@ -316,7 +321,7 @@ int main (int argc, char *argv[]) {
 	TEST(TESTNewLargeVectorObject);
 	TEST(TESTAutomaticGarbageCollect);
 
-   //memDebugDumpHeapHeaders(stdout);
-	//memDebugDumpAll(stdout);
+	//memPrintAll(stdout);
+
 	return 0;
 }

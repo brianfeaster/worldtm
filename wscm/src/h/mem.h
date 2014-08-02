@@ -2,13 +2,14 @@
 #define _MEM_H
 #include "globals.h"
 /*
- Pointer_Strings
- Type_stuff
+ Types
  Descriptors
- Root_Set
  Object_creation
+ Root_Set
  Garbage_collector
- Debugging_aids
+ Type_Strings
+ Address_Strings
+ Debugging_And_Printing
  Init
 
    Automatic compacting object heap system
@@ -18,6 +19,7 @@
    removal of objects are required.  Currently, a generational bi-heap collector
    is implemented.
 */ 
+
 #define MEMMAXTYPES   0x100l
 #define TARYSTACK      0x7bl
 #define TVECSTACK      0xfbl
@@ -25,11 +27,9 @@
 /* Limit the size of any object to 16Mb (2^24) bytes for sanity. */
 #define MEMOBJECTMAXSIZE ((Num)0x1000000)
 
-
 /* Byte count of a Linux virtual memory block and the resolution of mmap.
    0x1000 = 2^12 = 4Kb = 4096b*/
 #define BLOCK_BYTE_SIZE ((Num)0x1000)
-
 
 /* Byte count of an object (which is really a void pointer) */
 #define ObjSize (Int)sizeof(Obj)
@@ -62,35 +62,6 @@ extern Heap heapStatic, heap, heapOld, heapNew;
 
 
 /***************************************
- Pointer_Strings
-
- Mechanism to associate a C pointer address with a string.  A macro is
- provided to associate a pointer addresses and its string representation.
- The anonymous obj pointer functions are used to temporarily protect
- local C obj variables.
-***************************************/
-void memPointerRegisterString (Obj obj, Str str);
-#define memPointerRegister(o) memPointerRegisterString(o, (Str)#o)
-void memRootSetRegisterAnonymous (Obj *objp);
-void memRootSetUnRegisterAnonymous (Obj *objp);
-
-Str memPointerString (Obj obj);
-
-void memPointerStringDumpAll (FILE *stream);
-
-
-/***************************************
- Type_stuff
-***************************************/
-void memTypeRegisterString (Type type, Str description);
-#define memTypeRegister(t) memTypeRegisterString(t, (Str)#t)
-
-Str memTypeString (Type t);
-
-void memTypeStringDumpAll (FILE *stream);
-
-
-/***************************************
  Descriptors
 ***************************************/
 Descriptor memObjectDescriptor (Obj o);
@@ -107,13 +78,9 @@ Num memVectorLengthToObjectSize  (Length length);
 
 
 /***************************************
- Root_Set
+ Heap_stuff
 ***************************************/
-void memRootSetRegisterString (Obj *objp, Str desc);
-#define memRootSetRegister(op) memRootSetRegisterString(&op, (Str)#op)
-
-void memSetDataRegisterString (Obj *objp, Str desc);
-#define memSetDataRegister(op) memSetDataRegisterString(&op, (Str)#op)
+Num memHeapUsedSize (Heap *h);
 
 
 /***************************************
@@ -160,6 +127,11 @@ void memAryStackSet    (Obj stack, Num topOffset, Obj item);
 Obj  memAryStackObject (Obj stack, Num topOffset);
 
 
+/***************************************
+ Root_Set
+***************************************/
+void memRootSetAddressRegister (Obj *objp);
+void memRootSetAddressUnRegister (Obj *objp);
 
 
 /***************************************
@@ -170,16 +142,42 @@ void memGarbageCollect ();
 
 
 /***************************************
- Debugging_aids
+ Type_Strings
 ***************************************/
-void memDebugDumpHeapHeaders (FILE *stream);
-void memDebugDumpObject (Obj o, FILE *stream);
-void memDebugDumpStaticHeap (FILE *stream);
-void memDebugDumpOldHeap (FILE *stream);
-void memDebugDumpYoungHeap (FILE *stream);
-void memDebugDumpNewHeap (FILE *stream);
-void memDebugDumpAll (FILE *stream);
-void memValidateObject (Obj o);
+void memTypeStringRegister (Type type, Str description);
+Str  memTypeString (Type t);
+
+
+/***************************************
+ Address_Strings
+
+ Mechanism to associate a C pointer address with a string.  A macro is
+ provided to associate a pointer addresses and its string representation.
+
+ The anonymous obj pointer functions are used to temporarily protect
+ local C obj variables whos address should be registered in case a GC
+ occurs wich would move the object it points to.
+***************************************/
+#define MEM_ADDRESS_REGISTER(o) memAddressStringRegister(o, (Str)#o)
+void memAddressStringRegister (Obj obj, Str str);
+Str  memAddressString (Obj obj);
+
+
+/***************************************
+ Debugging_And_Printing
+***************************************/
+void memPrintStructures (FILE *stream);
+void memPrintRootSet (FILE *stream);
+void memPrintTypes (FILE *stream);
+void memPrintAddresses (FILE *stream);
+void memPrintObject (Obj o, FILE *stream);
+void memPrintHeapStatic (FILE *stream);
+void memPrintHeapOld (FILE *stream);
+void memPrintHeapYoung (FILE *stream);
+void memPrintHeapNew (FILE *stream);
+void memPrintHeaps (FILE *stream);
+void memPrintAll (FILE *stream);
+Int  memValidateObject (Obj o);
 void memValidateHeapStructures (void);
 
 

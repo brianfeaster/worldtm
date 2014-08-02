@@ -20,7 +20,7 @@ void FBInit (void) {
 }
 
 /* Dump character file buffer's contents.  Finalize related objects. */
-void FBDump () {
+void FBDump (void) {
 	fflush(FB);
 	fclose(FB);
 	fprintf(stderr, FBBuff);

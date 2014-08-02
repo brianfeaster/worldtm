@@ -49,18 +49,21 @@
 #define POP  (Obj)0x37
 #define LSLI (Obj)0x38
 #define LSRI (Obj)0x39
-#define ADDI (Obj)0x3a
-#define BLTI (Obj)0x3b
-#define BEQI (Obj)0x3c
-#define BNEI (Obj)0x3d
-#define BRA  (Obj)0x3e
-#define JMP  (Obj)0x3f
-#define JAL  (Obj)0x40
-#define RET  (Obj)0x41
-#define SYS  (Obj)0x42
-#define SYSI (Obj)0x43
-#define NOP  (Obj)0x44
-#define QUIT (Obj)0x45
+#define ADD  (Obj)0x3a
+#define ADDI (Obj)0x3b
+#define MUL  (Obj)0x3c
+#define MULI (Obj)0x3d
+#define BLTI (Obj)0x3e
+#define BEQI (Obj)0x3f
+#define BNEI (Obj)0x40
+#define BRA  (Obj)0x41
+#define JMP  (Obj)0x42
+#define JAL  (Obj)0x43
+#define RET  (Obj)0x44
+#define SYS  (Obj)0x45
+#define SYSI (Obj)0x46
+#define NOP  (Obj)0x47
+#define QUIT (Obj)0x48
 
 
 #define END sasmend
@@ -78,6 +81,13 @@ extern Obj ropcodes, riblock, riblocks, ricodes, rlabels, rexpr, rcodenew;
  Labels
 ***************************************/
 Obj asmNewLabel();
+
+
+/***************************************
+ Iregisters
+***************************************/
+Num asmNewOregister(void);
+Num asmNewIregister(void);
 
 
 /***************************************

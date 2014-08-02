@@ -154,6 +154,8 @@ int main (int argc, char *argv[]) {
 	TEST(TESTsandbox);
 	TEST(TESTnetworkLocalClientServerConnection);
 	TEST(TESTverifyLocalStreamBlocks);
+
+	// TODO: Implement a network read/write test. These require human intervention.
 	//TEST(networkingReadStuff);
 	//TEST(networkingWriteStuff);
 

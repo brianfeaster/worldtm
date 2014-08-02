@@ -11,7 +11,7 @@ SRC_DIRS   = $(wildcard $(SRC_PATH)/*)
 # The individual modules proper that make up World Scheme (ignoring h and test dir): mem vm obj sys os asm comp wscm
 MODULES = $(filter-out $(H_DIR) $(TEST_DIR), $(patsubst src/%,%,$(SRC_DIRS)))
 
-CFLAGS = -I. -I$(H_PATH) -Wall -march=native -Wconversion -Wno-trigraphs -Wno-format -Werror -O3 -ggdb
+CFLAGS = -I$(H_PATH) -Wall -march=native -Wconversion -Wno-trigraphs -Wno-format -Werror -g -O3
 # -I                Include this directory for h file searches
 # -Wall             Many warnings.
 # -ggdb             Debugging
@@ -111,7 +111,11 @@ wscmtest: wscmt
 $(TESTS_SCM): wscm
 	./wscm lib/$(@:%test=%t).scm
 
-test: $(TESTS_C) $(TESTS_SCM)
+testc: $(TESTS_C)
+
+testscm:  $(TESTS_SCM)
+
+test: testc testscm
 
 linecount:
 	wc Makefile $(H_PATH)/*.h $(foreach m, $(MODULES), $(SRC_PATH)/$(m)/$(m).c) $(foreach m, $(MODULES), $(SRC_PATH)/$(m)/$(m)t.c) lib/*.scm
