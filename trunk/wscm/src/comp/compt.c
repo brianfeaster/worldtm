@@ -23,20 +23,52 @@ extern void compErrorReset (void);
 extern Num compIsError (void);
 
 /* VM step hander.  Perform the following at the start of a test
+*/
 
-vmInitialize(comptStepHandler, NULL);
-vmInterrupt = 1;
 static void comptStepHandler (void) {
-	memDebugDumpHeapHeaders(stdout);
+	memPrintStructures(stdout);
+	vmPrintRegisters(stdout);
 	vmDisplayTypeCode(rcode, stdout);
 	getchar();
 	vmInterrupt = 1; // Force interrupt after next instruction to this stepHandler
 }
+
+
+/* System calls expect args on stack and argcount in r01
 */
+void comptSyscallSub (void) {
+ Int sum=0, c=(Int)r01;
+	if (1 == c) sum = -*(Int*)vmPop();
+	else {
+		while (--c) sum += *(Int*)vmPop();
+		sum = *(Int*)vmPop() - sum;
+	}
+	objNewInt(sum);
+}
+
+/* This needs to occur before any evaluation.  The codelink and iplink registers
+   need to be initialized to something so that compiled code that tries to return
+   does so to something legitimate.
+*/
+void setupVM (void) {
+	asmInit();
+	asmICodePushNewQUIT();
+	asmICodePushNewQUIT();
+	asmAssemble();
+	rcodelink = r00;
+	riplink = 0;
+	//renv = rtge; // Probably dont' need this.
+	objNewInt(5);  sysDefine ("x"); // Create a nice global var
+	objNewInt(7);  sysDefine ("y"); // Create a nice global var
+	sysDefineSyscall(comptSyscallSub, "-"); // Create a nice useful systemcall
+}
+
+
 
 /*******************************************************************************
  TESTS
 *******************************************************************************/
+
 /* Verify the argument list can be parsed and errors detected
 */
 
@@ -296,14 +328,6 @@ void compilerunsimpleLambda (void) {
 
 
 void compilerunaif (void) { // Enable stepping TODO DEBUGGING
-
-	asmInit();
-	asmICodePushNewQUIT();
-	asmICodePushNewQUIT();
-	asmAssemble();
-	rcodelink = r00;
-	riplink = 0;
-
 	yy_scan_string ((Str)"(let ~ () (=> 9 (lambda (x) x) 8))");
 	yyparse(); /* Use the internal parser */
 	compCompile();
@@ -374,6 +398,7 @@ void errorbegincar (void) {
 	FBFinalize("(Syntax error 'car' (car) (begin (car) 2))");
 }
 
+
 void errorconscarcarifcar (void) {
 	FBInit();
 	yy_scan_string ((Str)"(cons 1 (car (car (if 1 (car)))))");
@@ -383,6 +408,7 @@ void errorconscarcarifcar (void) {
 	FBFinalize("(Syntax error 'car' (car) (if 1 (car)) (car (if 1 (car))) (car (car (if 1 (car)))) (cons 1 (car (car (if 1 (car))))))");
 
 }
+
 
 void runtimeerrorcarcar (void) {
 	FBInit();
@@ -405,19 +431,19 @@ void runtimeerrorcarcar (void) {
 	FBFinalize("(car expects pair for target 9 (car 9) (car (car 9)))");
 }
 
+
 extern Obj rcomperrortrace;
 extern Obj rcomperrormessage;
 void parsepushoperands (void) {
-
 	FBInit();
 	yy_scan_string ((Str)"((lambda 1))");  yyparse();  rexpr = r00;
 	compCompile();
 	assert(compIsError());
 	FBFinalize("(Syntax error procedure args 1 ((lambda 1)))");
 
-	renv = rtge;
+
 	FBInit();
-	yy_scan_string ((Str)"((lambda (x) x)z)");  yyparse();  rexpr = r00;
+	yy_scan_string ((Str)"((lambda (x) x) z)");  yyparse();  rexpr = r00;
 	compCompile();
 	assert(!compIsError());
 	rcode = r00;
@@ -435,12 +461,96 @@ void parsepushoperands (void) {
 }
 
 
+void addonevar (void) {
+	FBInit();
+	yy_scan_string ((Str)"(+ x -69 x)");  yyparse();  rexpr = r00;
+
+	compCompile();
+	//objDisplay(r00, stderr);
+	assert(!compIsError());
+
+	rcode = r00;
+	rip = 0;
+	vmRun();
+	objDisplay(r00, FB);
+
+	FBFinalize("-59");
+}
+
+
+void addcompiled (void) {
+	FBInit();
+	yy_scan_string ((Str)"(- 1 59 1)");  yyparse();  rexpr = r00;
+
+	compCompile();
+	assert(!compIsError());
+
+	rcode = r00;
+	rip = 0;
+	vmRun();
+	objDisplay(r00, FB);
+
+	FBFinalize("-59");
+}
+
+void define (void) {
+        
+	FBInit();
+
+	yy_scan_string ((Str)"(define (^2 x) (* x x))");  yyparse();  rexpr = r00;
+	compCompile();
+	assert(!compIsError());
+	rcode = r00;
+	rip = 0;
+	vmRun();
+
+	yy_scan_string ((Str)"(^2 9)");  yyparse();  rexpr = r00;
+	compCompile();
+	assert(!compIsError());
+	rcode = r00;
+	rip = 0;
+	vmRun();
+
+	objDisplay(r00, FB);
+
+	FBFinalize("81");
+}
+
+void largeExpression (void) {
+ char *expr = "(+ (* 4 2) (^2 1))";
+	FBInit();
+   // (+ 4 1) => 5
+	yy_scan_string ((Str)expr);  yyparse();  rexpr = r00;
+
+//odebug=otrue;
+	compCompile();
+//odebug=ofalse;
+	//fprintf(stderr, expr); objDisplay(r00, stderr);
+	assert(!compIsError());
+
+	rcode = r00;
+	rip = 0;
+vmInitialize(comptStepHandler, NULL);
+vmInterrupt = 0;
+	vmRun();
+
+	objDisplay(r00, FB);
+	FBFinalize("5");
+}
+
 int main (void) {
 	compInitialize();
 	osInitialize(exceptionHandler);
 	testInitialize();
 
-	assert(0 == memVecStackLength(rstack));
+	assert(0 == memVecStackLength(rstack)); // Not that it matters that the stack is empty.
+
+	setupVM();
+
+	//memPrintStructures(stderr);
+	//memPrintTypes(stderr);
+	//memPrintAddresses(stderr);
+	//memPrintRootSet(stderr);
 
 	TEST(matchargs);
 	TEST(parselambda);
@@ -455,6 +565,10 @@ int main (void) {
 	TEST(errorconscarcarifcar);
 	TEST(runtimeerrorcarcar);
 	TEST(parsepushoperands);
+	TEST(addonevar);
+	TEST(addcompiled);
+	TEST(define);
+	//TEST(largeExpression);
 
 	assert(0 == memVecStackLength(rstack));
 	return 0;

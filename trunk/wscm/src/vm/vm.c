@@ -9,6 +9,7 @@
 /*
  Virtual_Machine
  Serializer
+ Debugging
  Init
 
  About vm.c
@@ -118,9 +119,9 @@ void vmVm (void) {
 		   macros are used along with a shared opcode definitions file.  Each opcode definition in the file
 		   is transformed into:
 
-		   NOP        = &&NOP;        memPointerRegister(NOP);
-		   MV_R00_R01 = &&MV_R00_R01; memPointerRegister(MV_R00_R01);
-		   PUSH_R00   = &&PUSH_R00;   memPointerRegister(PUSH_R00);
+		   NOP        = &&NOP;        MEM_ADDRESS_REGISTER(NOP);
+		   MV_R00_R01 = &&MV_R00_R01; MEM_ADDRESS_REGISTER(MV_R00_R01);
+		   PUSH_R00   = &&PUSH_R00;   MEM_ADDRESS_REGISTER(PUSH_R00);
 		   ...
 
 		   Associate an opcode symbol with a goto address (for the virtual machine) and a string (for
@@ -132,7 +133,7 @@ void vmVm (void) {
 		#define VMOP(op,d,n,i,o) VMOP_(op, _##d, _##n, _##i)
 		#define VMOP_(op,d,n,i) VMOP__(op, d, n, i)
 		#define VMOP__(op,d,n,i) VMOP___(vm##op##d##n##i)
-		#define VMOP___(op) op=&&op; memPointerRegister(op);
+		#define VMOP___(op) op=&&op; MEM_ADDRESS_REGISTER(op);
 		// Load and transform the opcode definitions
 		#include "op.h"
 		// Cleanup the unneeded macros
@@ -220,6 +221,8 @@ void vmVm (void) {
 	#define IPINCR0E IPINC
 	#define IPINCR10 IPINC
 	#define IPINCR11 IPINC
+	#define IPINCR12 IPINC
+	#define IPINCR13 IPINC
 	#define IPINCR01R02 IPINC
 	#define IPINCR01R02 IPINC
 	#define IPINCR00I IPINC2
@@ -230,6 +233,7 @@ void vmVm (void) {
 	#define IPINCR07I IPINC2
 	#define IPINCR0BI IPINC2
 	#define IPINCR0CI IPINC2
+	#define IPINCR1FI IPINC2
 	#define IPINCI    IPINC2
 
 	/* NOP
@@ -291,7 +295,16 @@ void vmVm (void) {
 	   ADD_R00_R01: OPDB("ADD_R00_R01");  r00 += (Num)R01;        goto **(void**)(rip+=ObjSize);
 	*/
 	#define VMOP_ADD(argd,argn,argi) \
-	   arg##argd += (Num)(arg##argn imm##argi); \
+	   arg##argd = (Obj)((Int)arg##argd + (Int)(arg##argn imm##argi)); \
+	   IPINC##argn##argi; \
+	   if (vmInterrupt) vmProcessInterrupt()
+
+	/* MUL Rd [Rn | I]
+	   MUL_R00_I:   OPDB("MUL_R00_I");    r00 *= *(Num*)(rip+8);  goto **(void**)(rip+=2*ObjSize);
+	   MUL_R00_R01: OPDB("MUL_R00_R01");  r00 *= (Num)R01;        goto **(void**)(rip+=ObjSize);
+	*/
+	#define VMOP_MUL(argd,argn,argi) \
+	   arg##argd = (Obj)((Int)arg##argd * (Int)(arg##argn imm##argi)); \
 	   IPINC##argn##argi; \
 	   if (vmInterrupt) vmProcessInterrupt()
 
@@ -398,15 +411,15 @@ void vmVm (void) {
 
 
 	/* Creates the opcode implementation of the form:
-      VMOP's parameter o is ignored as it is only required for the serializer.
 	    {C goto label} : {debug message displaying the code, ip, and opcode during runtime};
 	    {one of the opcode implementations defined above};
 	    {call to jump to the next opcode pointed to by the instruction pointer ip=r1d};
+      VMOP's parameter o is ignored as it is only required for the serializer.
 	*/
 
 	/* Debug dump the current opcode */
 	#if DEBUG == 1
-	 #define OPDB(s,...) DBE fprintf(stderr,"\n"OBJ":"HEX" " s, rcode, (rip-rcode)/ObjSize, ##__VA_ARGS__);
+	 #define OPDB(s,...) DBE fprintf(stderr,"\n"OBJ":"HEX" " s, rcode, rip-rcode, ##__VA_ARGS__);
 	#else
 	 #define OPDB(s,...)
 	#endif
@@ -445,14 +458,13 @@ void vmRun (void) {
 
 /*******************************************************************************
  Serializer
-
 *******************************************************************************/
 /* Default Object serializer and its mutable callback pointer.
  */
 void vmObjectDumperDefault (Obj o, FILE *stream) {
  static Str p;
 	fprintf (stream, "#<"HEX, o);
-	if ((p = memPointerString(o))) fprintf (stream, ":%s", p);
+	if ((p = memAddressString(o))) fprintf (stream, ":%s", p);
 	fprintf (stream, ">");
 }
 
@@ -473,21 +485,25 @@ void vmDisplayTypeCode (Obj c, FILE *stream) {
  static int indent=-1;
  char *ind;
 
-	memRootSetRegisterAnonymous(&c);
-	++indent;
-	if (indent < 32) ind = buff+32-indent;
-	else ind = buff;
-
 	DBBEG ("  "OBJ"  rcode:"OBJ"  rip:"OBJ, c, rcode, rip);
 	assert(stream);
 	assert(memIsObjectType(c, TCODE));
 
+	memRootSetAddressRegister(&c); // Protect pointer in case of a GC
+
+	++indent;
+	if (indent < 32) ind = buff+32-indent;
+	else ind = buff;
+
+	/* idx is in ObjSize bytes
+	*/
 	while (idx < memObjectLength(c)) {
 		lineNumber = idx;
+
 		fprintf (stream, NL STR OBJ STR HEX04" ",
 			ind,
 			c, //c+idx*ObjSize
-			((c+idx*ObjSize) == rip) ? "*" : " ",
+			((rip - c) == idx*ObjSize) || ((Num)rip == idx*ObjSize) ? "*" : " ", // Indicate current instruction pointer if register "rip" is an address within the code object or object byte offset to this instruction
 			idx*ObjSize);
 
 		/* Setup macro aliases for opcode serializer generation to produce the following:
@@ -497,6 +513,7 @@ void vmDisplayTypeCode (Obj c, FILE *stream) {
 		    ...
 		*/
 		#define PRINTREG    "    "
+		#define PRINTREGI
 		#define PRINTREGR00 " $00"
 		#define PRINTREGR01 " $01"
 		#define PRINTREGR02 " $02"
@@ -512,13 +529,19 @@ void vmDisplayTypeCode (Obj c, FILE *stream) {
 		#define PRINTREGR0C " $0c"
 		#define PRINTREGR0D " $0d"
 		#define PRINTREGR0E " $0e"
+		#define PRINTREGR0F " $0f"
 		#define PRINTREGR10 " $10"
 		#define PRINTREGR11 " $11"
 		#define PRINTREGR12 " $12"
 		#define PRINTREGR13 " $13"
+		#define PRINTREGR14 " $14"
 		#define PRINTREGR1C " $1c"
+		#define PRINTREGR1D " $1d"
+		#define PRINTREGR1E " $1e"
+		#define PRINTREGR1F " $1F"
 
 		#define PRINT
+		// This is expanded for the opcode with three registers so the immediate field is not rendered.  [LD $00 $01 $02] is the only opcode for now
 		#define PRINTR02
 		#define PRINTIO ++idx; fprintf(stream, " #<"OBJ0"> ", *(Obj*)(c+idx*ObjSize)); ++idx; fprintf(stream,    HEX04" ", vmOffsetToPosition(c, lineNumber*ObjSize, c+idx*ObjSize));  vmObjectDumper(*(Obj*)(c+(idx-1)*ObjSize), stream); 
 		#define PRINTI  ++idx; fprintf(stream, " #<"OBJ0"> ", *(Obj*)(c+idx*ObjSize));        fprintf(stream, "     ");                                                               vmObjectDumper(*(Obj*)(c+(idx)*ObjSize), stream); 
@@ -528,7 +551,7 @@ void vmDisplayTypeCode (Obj c, FILE *stream) {
 		#define VMOP(op,d,n,i,o) VMOP_(op, _##d, _##n, _##i, d, n, i, o)
 		#define VMOP_(op,dd,nn,ii,d,n,i,o) VMOP__(op, dd, nn, ii, d, n, i, o)
 		#define VMOP__(op,dd,nn,ii,d,n,i,o) \
-		   if (*(Obj*)(c+idx*ObjSize) == vm##op##dd##nn##ii) {fprintf(stream, STR4 PRINTREG##d PRINTREG##n, #op); PRINT##i##o } else
+		   if (*(Obj*)(c+idx*ObjSize) == vm##op##dd##nn##ii) {fprintf(stream, STR4 PRINTREG##d PRINTREG##n PRINTREG##i, #op); PRINT##i##o } else
 
 		// Load and transform the opcode definitions into serializing logic
 		#include "op.h"
@@ -551,9 +574,35 @@ void vmDisplayTypeCode (Obj c, FILE *stream) {
 	printf (NL);
 
 	--indent;
-	memRootSetUnRegisterAnonymous(&c);
+	memRootSetAddressUnRegister(&c);
 
 	DBEND ();
+}
+
+
+
+/*******************************************************************************
+ Debugging
+*******************************************************************************/
+void vmPrintRegisters (FILE *stream)
+{
+	fprintf(stream, "\n-- vmPrintRegisters ----");
+	fprintf(stream, "\n       $00 "OBJ"       $10 "OBJ0,  r00, r10);
+	fprintf(stream, "\n       $01 "OBJ"       $11 "OBJ0,  r01, r11);
+	fprintf(stream, "\n       $02 "OBJ"       $12 "OBJ0,  r02, r12);
+	fprintf(stream, "\n       $03 "OBJ"       $13 "OBJ0,  r03, r13);
+	fprintf(stream, "\n       $04 "OBJ"       $14 "OBJ0,  r04, r14);
+	fprintf(stream, "\n       $05 "OBJ"       $15 "OBJ0,  r05, r15);
+	fprintf(stream, "\n       $06 "OBJ"       $16 "OBJ0,  r06, r16);
+	fprintf(stream, "\n       $07 "OBJ"       $17 "OBJ0,  r07, r17);
+	fprintf(stream, "\n       $08 "OBJ"       $18 "OBJ0,  r08, r18);
+	fprintf(stream, "\n tge   $09 "OBJ"       $19 "OBJ0,  r09, r19);
+	fprintf(stream, "\n envl  $0a "OBJ"       $1a "OBJ0,  r0a, r1a);
+	fprintf(stream, "\n env   $0b "OBJ"       $1b "OBJ0,  r0b, r1b);
+	fprintf(stream, "\n codel $0c "OBJ" ipl   $1c "OBJ0,  r0c, r1c);
+	fprintf(stream, "\n code  $0d "OBJ" ip    $1d "OBJ0,  r0d, r1d);
+	fprintf(stream, "\n istk  $0e "OBJ" istkp $1e "OBJ0,  r0e, r1e);
+	fprintf(stream, "\n ostk  $0f "OBJ" ostkp $1f "OBJ0,  r0f, r1f);
 }
 
 
@@ -570,18 +619,18 @@ void vmInitialize (Func interruptHandler, Func2ObjFile vmObjDumper) {
 		memInitialize(0, 0, 0);
 
 		DB("Registering rootset objects pointers r00 through r0f");
-		#define REGISTER_ROOT_REG(n) memRootSetRegisterString(&r##n, (Str)"$"#n);
-		REGISTER_ROOT_REG(00);  REGISTER_ROOT_REG(01);  REGISTER_ROOT_REG(02);  REGISTER_ROOT_REG(03);
-		REGISTER_ROOT_REG(04);  REGISTER_ROOT_REG(05);  REGISTER_ROOT_REG(06);  REGISTER_ROOT_REG(07);
-		REGISTER_ROOT_REG(08);  REGISTER_ROOT_REG(09);  REGISTER_ROOT_REG(0a);  REGISTER_ROOT_REG(0b);
-		REGISTER_ROOT_REG(0c);  REGISTER_ROOT_REG(0d);  REGISTER_ROOT_REG(0e);  REGISTER_ROOT_REG(0f);
+		#define REGISTER_ROOT_OBJECT(o) {memRootSetAddressRegister(&o); MEM_ADDRESS_REGISTER(&o);}
+		REGISTER_ROOT_OBJECT(r00);  REGISTER_ROOT_OBJECT(r01);  REGISTER_ROOT_OBJECT(r02);  REGISTER_ROOT_OBJECT(r03);
+		REGISTER_ROOT_OBJECT(r04);  REGISTER_ROOT_OBJECT(r05);  REGISTER_ROOT_OBJECT(r06);  REGISTER_ROOT_OBJECT(r07);
+		REGISTER_ROOT_OBJECT(r08);  REGISTER_ROOT_OBJECT(r09);  REGISTER_ROOT_OBJECT(r0a);  REGISTER_ROOT_OBJECT(r0b);
+		REGISTER_ROOT_OBJECT(r0c);  REGISTER_ROOT_OBJECT(r0d);  REGISTER_ROOT_OBJECT(r0e);  REGISTER_ROOT_OBJECT(r0f);
 
 		DB("Registering rootset objects pointers r10 through r1f");
-		#define REGISTER_DATA_REG(n) memSetDataRegisterString(&r##n, (Str)"$"#n);
-		REGISTER_DATA_REG(10);  REGISTER_DATA_REG(11);  REGISTER_DATA_REG(12);  REGISTER_DATA_REG(13);
-		REGISTER_DATA_REG(14);  REGISTER_DATA_REG(15);  REGISTER_DATA_REG(16);  REGISTER_DATA_REG(17);
-		REGISTER_DATA_REG(18);  REGISTER_DATA_REG(19);  REGISTER_DATA_REG(1a);  REGISTER_DATA_REG(1b);
-		REGISTER_DATA_REG(1c);  REGISTER_DATA_REG(1d);  REGISTER_DATA_REG(1e);  REGISTER_DATA_REG(1f);
+		#define REGISTER_DATA_REG(v) MEM_ADDRESS_REGISTER(&v);
+		REGISTER_DATA_REG(r10);  REGISTER_DATA_REG(r11);  REGISTER_DATA_REG(r12);  REGISTER_DATA_REG(r13);
+		REGISTER_DATA_REG(r14);  REGISTER_DATA_REG(r15);  REGISTER_DATA_REG(r16);  REGISTER_DATA_REG(r17);
+		REGISTER_DATA_REG(r18);  REGISTER_DATA_REG(r19);  REGISTER_DATA_REG(r1a);  REGISTER_DATA_REG(r1b);
+		REGISTER_DATA_REG(r1c);  REGISTER_DATA_REG(r1d);  REGISTER_DATA_REG(r1e);  REGISTER_DATA_REG(r1f);
 
 		DB("Create the array stack");
 		rdstack = memNewAryStack();
@@ -590,7 +639,7 @@ void vmInitialize (Func interruptHandler, Func2ObjFile vmObjDumper) {
 		rstack = memNewVecStack();
 
 		DB("Register the internal object types");
-		memTypeRegisterString(TCODE, (Str)"code");
+		memTypeStringRegister(TCODE, (Str)"code");
 
 		DB("Initialize opcode values");
 		vmVm(); /* The first call to vmVm() initializes opcode values */

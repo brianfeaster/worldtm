@@ -10,7 +10,8 @@
 
 /* Debugging - Uncomment this and make the two calls below to enable VM stepping.
 static void vmtStepHandler (void) {
-	memDebugDumpHeapHeaders(stdout);
+	memPrintStructures(stdout);
+	memPrintRootSet(stdout);
 	vmDisplayTypeCode(rcode, stdout);
 	getchar();
 	vmInterrupt = 1; // Force interrupt after next instruction to this stepHandler
@@ -59,7 +60,7 @@ void displayStringR01 (void) {
 }
 
 void debugDumpAll (void) {
-	memDebugDumpAll(stdout);
+	memPrintAll(stdout);
 }
 
 void keyboardPause (void) {
@@ -157,11 +158,13 @@ void TESTLdStImm (void) {
 		vmLD_R00_R01_I, (Obj)(2*ObjSize),
 		vmSYS_I,        displayHex00,
 		vmQUIT}));
-
+	//vmDisplayTypeCode(rcode, stdout);
+	//memPrintObject(r02, stdout);
 	rcode = r00;
-	rip = 0;
+	rip = (Obj)0;
 	vmRun();
-
+	//memPrintHeapYoung(stdout);
+	//memPrintRootSet(stdout);
 	//vmDisplayTypeCode(rcode, stdout);
 	//memGarbageCollect();
 	//memDebugDumpAll(stdout);
@@ -535,19 +538,19 @@ int main (int argc, char *argv[]) {
 	testInitialize();
 	vmInitialize(0, 0);
 	// Register external function names
-	memTypeRegisterString(TINT,    (Str)"TINT");
-	memTypeRegisterString(TREAL,   (Str)"TREAL");
-	memTypeRegisterString(TCHAR,   (Str)"TCHAR");
-	memTypeRegisterString(TSTR,    (Str)"TSTR");
-	memTypeRegisterString(TVEC,    (Str)"TVEC");
-	memTypeRegisterString(TTUPLE,  (Str)"TTUPLE");
-	memTypeRegisterString(TPAIR,   (Str)"TPAIR");
-	memPointerRegister(debugDumpAll);
-	memPointerRegister(displayHex11);
-	memPointerRegister(displayHexR01);
-	memPointerRegister(rcode);
-	memPointerRegister(displayHex11016);
-	memPointerRegister(displayChar10);
+	memTypeStringRegister(TINT,    (Str)"TINT");
+	memTypeStringRegister(TREAL,   (Str)"TREAL");
+	memTypeStringRegister(TCHAR,   (Str)"TCHAR");
+	memTypeStringRegister(TSTR,    (Str)"TSTR");
+	memTypeStringRegister(TVEC,    (Str)"TVEC");
+	memTypeStringRegister(TTUPLE,  (Str)"TTUPLE");
+	memTypeStringRegister(TPAIR,   (Str)"TPAIR");
+	MEM_ADDRESS_REGISTER(debugDumpAll);
+	MEM_ADDRESS_REGISTER(displayHex11);
+	MEM_ADDRESS_REGISTER(displayHexR01);
+	MEM_ADDRESS_REGISTER(rcode);
+	MEM_ADDRESS_REGISTER(displayHex11016);
+	MEM_ADDRESS_REGISTER(displayChar10);
 
 	TEST(TESTStacks);
 	TEST(TESTMvLdSt);
@@ -562,5 +565,6 @@ int main (int argc, char *argv[]) {
 	TEST(TESTRecursiveLoop);
 	TEST(TESTByteLd);
 	//TEST(TESTEndlessLoop);
+	//memPrintAll(0);
 	return 0;
 }

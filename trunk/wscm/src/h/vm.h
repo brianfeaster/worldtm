@@ -18,7 +18,7 @@ extern Obj r00, r01, r02, r03, r04, r05, r06, r07, r08,
            r0e, // stack of integers
            r0f; // stack of objects
 
-/* Integer registers
+/* Immediate/Integer registers (not garbage collected)
 */
 extern Obj r10, r11, r12, r13, r14, r15, r16, r17, r18, r19, r1a, r1b,
            r1c, // code index link
@@ -39,7 +39,7 @@ extern Obj r10, r11, r12, r13, r14, r15, r16, r17, r18, r19, r1a, r1b,
 #define riplink   r1c /* Linked code instruction pointer index */
 #define rip       r1d /* Code instruction pointer or index into the code object */
 #define rdstackp  r1e /* Data stack pointer.  Synced as the stack's pointer when the VM is inerrupted. */
-#define rstackp   r1f /* Object stack pointer.  Synced as the stack's pointer when the VM is inerrupted. */
+#define rstackp   r1f /* Object stack pointer.  Synced as the stack's pointer when the VM is interrupted. */
 
 
 /* Object types used by this module
@@ -82,5 +82,6 @@ extern Int vmInterrupt;
 void vmRun (void);
 void vmInitialize (Func intHandler, Func2ObjFile vmObjDumper);
 void vmDisplayTypeCode (Obj c, FILE *stream);
+void vmPrintRegisters (FILE *stream);
 
 #endif

@@ -121,12 +121,12 @@ void objtDisplayTypeDchar (Obj o, FILE *serializer) {
 }
 
 void TESTDumpSerializeCallback (void) {
-	memTypeRegister(TDCHAR); /* Register new type ID */
+	memTypeStringRegister(TDCHAR, (Str)"chr"); /* Register new type ID */
 	objDisplayTypeRegister(TDCHAR, objtDisplayTypeDchar); /* Register serializer */
 
 	FBInit();
 
-	r00 = memNewArray(0x70, 2);
+	r00 = memNewArray(TDCHAR, 2);
 	memArraySet(r00, 0, 'a');
 	memArraySet(r00, 1, 'z');
 	objDisplay(r00, FB);
@@ -134,6 +134,108 @@ void TESTDumpSerializeCallback (void) {
 	FBFinalize("{az}");
 }
 
+void TESTobjOrderedSetAdd0102 (void) {
+	FBInit();
+
+	r00 = onull; // Initial empty set
+
+	r01 = (Obj)6; objOrderedSetAdd0(r00, r01);
+	r01 = (Obj)2; objOrderedSetAdd0(r00, r01);
+	r01 = (Obj)4; objOrderedSetAdd0(r00, r01);
+	r01 = (Obj)3; objOrderedSetAdd0(r00, r01);
+
+	objDisplay(r00, FB);
+	FBFinalize("(#<6> #<4> #<3> #<2>)");
+}
+
+void TESTobjOrderedSetSub0102 (void) {
+	FBInit();
+
+	r00 = onull; // Initial empty set
+
+	r01 = (Obj)6; objOrderedSetAdd0(r00, r01);
+	r01 = (Obj)2; objOrderedSetAdd0(r00, r01);
+	r01 = (Obj)4; objOrderedSetAdd0(r00, r01);
+	r01 = (Obj)3; objOrderedSetAdd0(r00, r01);
+
+	r01 = (Obj)4;
+	objOrderedSetSub0(r00, r01);
+
+	objDisplay(r00, FB);
+	FBFinalize("(#<6> #<3> #<2>)");
+}
+
+void TESTobjOrderedSetUnion001 (void) {
+	FBInit();
+
+	r00 = onull; // Initial empty set
+	r01 = (Obj)6; objOrderedSetAdd0(r00, r01);
+	r01 = (Obj)4; objOrderedSetAdd0(r00, r01);
+	r01 = (Obj)2; objOrderedSetAdd0(r00, r01);
+	r01 = (Obj)0; objOrderedSetAdd0(r00, r01);
+	r02 = r00;
+
+	r00 = onull; // Initial empty set
+	r01 = (Obj)7; objOrderedSetAdd0(r00, r01);
+	r01 = (Obj)5; objOrderedSetAdd0(r00, r01);
+	r01 = (Obj)3; objOrderedSetAdd0(r00, r01);
+	r01 = (Obj)1; objOrderedSetAdd0(r00, r01);
+
+	r01=r02;
+
+	objOrderedSetUnion0(r00, r01);
+
+	objDisplay(r00, FB);
+	FBFinalize("(#<7> #<6> #<5> #<4> #<3> #<2> #<1> #<0>)");
+}
+
+void TESTobjOrderedSetIntersection001 (void) {
+	FBInit();
+
+	r00 = onull; // Initial empty set
+	r01 = (Obj)6; objOrderedSetAdd0(r00, r01);
+	r01 = (Obj)4; objOrderedSetAdd0(r00, r01);
+	r01 = (Obj)2; objOrderedSetAdd0(r00, r01);
+	r01 = (Obj)0; objOrderedSetAdd0(r00, r01);
+	r02 = r00;
+
+	r00 = onull; // Initial empty set
+	r01 = (Obj)7; objOrderedSetAdd0(r00, r01);
+	r01 = (Obj)5; objOrderedSetAdd0(r00, r01);
+	r01 = (Obj)2; objOrderedSetAdd0(r00, r01);
+	r01 = (Obj)1; objOrderedSetAdd0(r00, r01);
+
+	r01=r02;
+
+	objOrderedSetIntersection001();
+	objDisplay(r00, FB);
+
+	FBFinalize("(#<2>)");
+}
+void TESTobjOrderedSetSubtraction001 (void) {
+	FBInit();
+
+	r00 = onull; // Set of objects
+	r01 = (Obj)6; objOrderedSetAdd0(r00, r01);
+	r01 = (Obj)4; objOrderedSetAdd0(r00, r01);
+	r01 = (Obj)2; objOrderedSetAdd0(r00, r01);
+	r01 = (Obj)0; objOrderedSetAdd0(r00, r01);
+	r02 = r00;
+
+	r00 = onull; // Elements to remove
+	r01 = (Obj)7; objOrderedSetAdd0(r00, r01);
+	r01 = (Obj)5; objOrderedSetAdd0(r00, r01);
+	r01 = (Obj)2; objOrderedSetAdd0(r00, r01);
+	r01 = (Obj)1; objOrderedSetAdd0(r00, r01);
+	r01 = r00;
+
+	r00=r02;
+
+	objOrderedSetSubtract001();
+	objDisplay(r00, FB);
+
+	FBFinalize("(#<6> #<4> #<0>)");
+}
 
 int main (int argc, char *argv[]) {
 	objInitialize();
@@ -148,5 +250,10 @@ int main (int argc, char *argv[]) {
 	TEST(TESTDoublyLinkedList);
 	TEST(TESTDump);
 	TEST(TESTDumpSerializeCallback);
+	TEST(TESTobjOrderedSetAdd0102);
+	TEST(TESTobjOrderedSetSub0102);
+	TEST(TESTobjOrderedSetUnion001);
+	TEST(TESTobjOrderedSetIntersection001);
+	TEST(TESTobjOrderedSetSubtraction001);
 	return 0;
 }

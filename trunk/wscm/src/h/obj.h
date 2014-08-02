@@ -76,36 +76,38 @@ void objNewSymbolR05R06 (void); /* Like objNewSymbol only 'str'/'len' are in r05
 void objNewSymbolStatic (char *s);
 void objNewSyscall   (Func f);
 void objNewPrimitive (Func f);
-Obj  objCons   (Obj a, Obj b);
-void objCons010(void);
-void objCons101(void);
-void objCons303 (void);
-void objConsStack0 (void);
-void objCons01 (void);
-void objCons10 (void); /* New pair using r1 and r0 */
-void objCons12 (void); /* New pair using r1 and r2 */
-void objCons23 (void);
+
+Obj  objCons    (Obj a, Obj b); // r00 <= (cons a b)
+Obj objConsSTK0 (void);         // return => (cons (pop) r00) 
+void objCons010 (void);         // r00 <= (cons r01  r00)
+void objCons101 (void);         // r01 <= (cons r00  r01)
+void objCons303 (void);         // r03 <= (cons r00  r03)
+void objCons012 (void);         // r00 <= (cons r01  r02)
+void objCons023 (void);         // r00 <= (cons r02  r03)
+
 void objNewDoublyLinkedListNode (void); /* Doubly linked list node.  #(item prev next) */
 void objNewVector  (Num len);
 void objNewVector01 ();
 
 void objNewPort (void);
-int objPortDescriptor (Obj p);
-Obj objPortState (Obj p);
+int  objPortDescriptor (Obj p);
+Obj  objPortState (Obj p);
 
 Obj objIntegerToChar (Num i);
 
 /* Object operations
  */
 Num objIsPair   (Obj o);
+Num objIsVector (Obj o);
 Num objIsSymbol (Obj o);
 
-Obj car (Obj o);
-Obj caar (Obj o);
-Obj cdar (Obj o);
+Obj car  (Obj o);
+Obj cdr  (Obj o);
 
-Obj cdr (Obj o);
+Obj caar (Obj o);
 Obj cadr (Obj o);
+
+Obj cdar (Obj o);
 Obj cddr (Obj o);
 
 
@@ -118,6 +120,33 @@ void objDoublyLinkedListAdd    (Obj lst, Obj node);
 void objDoublyLinkedListInsert (Obj lst, Obj node);
 
 void objListToVector (void);
+
+/* Predicates
+*/
+Num objEqualP (Obj a, Obj b); // WARNING: NOT TESTED
+
+Obj objMemq (Obj e, Obj lst);
+Obj objAssq (Obj e, Obj lst);
+
+/* Count and push all list elements in o to current stack
+   r00 ends up being null (or first non-pair cdr)
+*/
+Num objCountListToStack (Obj o);
+
+/* Pop c elements into a new list in r00.
+   RET, r00 => {new list}
+*/
+Obj objCountStackToList0 (Num c);
+
+/* Copy decending ordered set in r00 adding immediate integer r01.
+   Really a non-duplicate scheme list.
+ */
+Obj objOrderedSetAdd0 (Obj set, Obj o);
+Obj objOrderedSetSub0 (Obj set, Obj e);
+Obj objOrderedSetUnion0 (Obj seta, Obj setb);
+void objOrderedSetIntersection001 (void);
+void objOrderedSetSubtract001 (void);
+Num objOrderedSetIsMember (Obj s, Obj e);
 
 /* Module
 */

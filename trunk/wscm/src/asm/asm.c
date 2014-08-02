@@ -14,19 +14,19 @@ TABLE OF CONTENTS
  I_Code
  Igraph_and_iblocks
  Labels
+ Intermediate_Registers
  ASM
+ Assemble
+  Register_Allocation
  Debugging
  Init
 
 TERMS
   I-Graph   Intermediate graph composed of I-blocks
-  I-Block   I-graph node composed of a list of incoming iblocks, outgoing iblocks and icode statements
+  I-Block   I-graph node composed of a list of incoming iblocks, outgoing iblocks
+            and icode statements
   I-Code    I-block statement composed of multiple code fields
 */
-
-void asmDumpIBlock (Obj ib);
-void asmDumpIBlocks (void);
-void asmDumpIBlockParentAndChildren (Obj ib);
 
 
 /* Rootset objects
@@ -46,16 +46,34 @@ Num asmIsObjectTypeICode  (Obj ic) { return memIsObjectType(ic, TICODE); }
 Num asmIsObjectTypeIBlock (Obj ib) { return memIsObjectType(ib, TIBLOCK); }
 
 
+/* Forward declaration
+*/
+void asmDumpIBlocks (void);
+void asmDumpICode (Obj ic);
+void asmPrintIblock (Obj ib);
+void asmDumpIBlockParentAndChildren (Obj ib);
+
+
 
 /*******************************************************************************
  I_Code
 
- Vector's of length 6 containing: an opcode, 0-3 register, possible immediate and
+ Vector containing: an opcode, 0-3 registers, possible immediate and
  possible branch field.
 
  New icode objects are pushed to a vector with the count in ICodeCount.  They are
  eventually popped off the vector and added to new iblocks.
 *******************************************************************************/
+#define ICODE_INDEX_OPCODE      0
+#define ICODE_INDEX_REGISTER_A  1
+#define ICODE_INDEX_REGISTER_B  2
+#define ICODE_INDEX_REGISTER_C  3
+#define ICODE_INDEX_IMMEDIATE   4
+#define ICODE_INDEX_BRANCH      5
+#define ICODE_INDEX_OBJREGSET   6
+#define ICODE_INDEX_INTREGSET   7
+#define  ICODE_OBJECT_SIZE       8
+
 #define ICODE_VECTOR_SIZE 0x1000 /* I don't expect an iblock to have this many instructions */
 Obj ricodes;
 Num ICodeCount = 0;
@@ -73,8 +91,6 @@ Obj asmICodePop (void) {
 	return ic;
 }
 
-/* Will always return 6
-*/
 Num asmICodeFieldLength (Obj ic) {
 	assert(asmIsObjectTypeICode(ic));
 	return memObjectLength(ic);
@@ -86,16 +102,33 @@ Obj asmICodeField (Obj ic, Num i) {
 }
 
 void asmNewICode (Obj op, Obj r, Obj s, Obj t, Obj i, Obj b) {
-	vmPush(i); /* Immediate value might be a scheme object and moved during a GC within memNewVector() */
-	r00 = memNewVector(TICODE, 6);
-	i = vmPop();
-	memVectorSet(r00, 0, op);/* Opcode */
-	memVectorSet(r00, 1, r); /* Register 0 */
-	memVectorSet(r00, 2, s); /* Register 0 */
-	memVectorSet(r00, 3, t); /* Register 0 */
-	memVectorSet(r00, 4, i); /* Immediate value */
-	memVectorSet(r00, 5, b); /* Branch offset */
+	memRootSetAddressRegister(&i); // Immediate value might be a scheme object and moved during a GC within memNewVector()
+
+	objNewVector(3); // Forward intermediate register structure
+	memVectorSet(r00, 0, onull);
+	memVectorSet(r00, 1, onull);
+	memVectorSet(r00, 2, onull);
+	vmPush(r00);
+
+	objNewVector(3); // Reverse intermediate register structure
+	memVectorSet(r00, 0, onull);
+	memVectorSet(r00, 1, onull);
+	memVectorSet(r00, 2, onull);
+	vmPush(r00);
+
+	r00 = memNewVector(TICODE, ICODE_OBJECT_SIZE);
+	memVectorSet(r00, ICODE_INDEX_OPCODE,      op);/* Opcode */
+	memVectorSet(r00, ICODE_INDEX_REGISTER_A,  r); /* Register 0 */
+	memVectorSet(r00, ICODE_INDEX_REGISTER_B,  s); /* Register 1 */
+	memVectorSet(r00, ICODE_INDEX_REGISTER_C,  t); /* Register 2 */
+	memVectorSet(r00, ICODE_INDEX_IMMEDIATE,   i); /* Immediate value */
+	memVectorSet(r00, ICODE_INDEX_BRANCH,      b); /* Branch offset */
+	memVectorSet(r00, ICODE_INDEX_OBJREGSET, vmPop()); /* Set of forward intermediate registers which indicate their extent. */
+	memVectorSet(r00, ICODE_INDEX_INTREGSET, vmPop()); /* Set of reverse intermediate registers which indicate their extent. */
+
 	asmICodePush(r00);
+
+	memRootSetAddressUnRegister(&i);
 }
 	
 void asmICodePushNewMV (Obj r, Obj s)         { asmNewICode(MV,   r,  s, NA, NA, NA); }
@@ -108,7 +141,10 @@ void asmICodePushNewPUSH (Obj r)              { asmNewICode(PUSH, r, NA, NA, NA,
 void asmICodePushNewPOP (Obj r)               { asmNewICode(POP,  r, NA, NA, NA, NA); }
 void asmICodePushNewLSLI (Obj r, Obj i)       { asmNewICode(LSLI, r, NA, NA,  i, NA); }
 void asmICodePushNewLSRI (Obj r, Obj i)       { asmNewICode(LSRI, r, NA, NA,  i, NA); }
+void asmICodePushNewADD  (Obj r, Obj s)       { asmNewICode(ADD,  r,  s, NA, NA, NA); }
 void asmICodePushNewADDI (Obj r, Obj i)       { asmNewICode(ADDI, r, NA, NA,  i, NA); }
+void asmICodePushNewMUL  (Obj r, Obj s)       { asmNewICode(MUL,  r,  s, NA, NA, NA); }
+void asmICodePushNewMULI (Obj r, Obj i)       { asmNewICode(MULI, r, NA, NA,  i, NA); }
 void asmICodePushNewBLTI (Obj r, Obj i, Obj l){ asmNewICode(BLTI, r, NA, NA,  i,  l); }
 void asmICodePushNewBEQI (Obj r, Obj i, Obj l){ asmNewICode(BEQI, r, NA, NA,  i,  l); }
 void asmICodePushNewBNEI (Obj r, Obj i, Obj l){ asmNewICode(BNEI, r, NA, NA,  i,  l); }
@@ -126,6 +162,25 @@ Num asmICodeOpcodeSize (Obj icode) {
 	if (NA == asmICodeField(icode, 0)) return 0; /* Ignore NAs since they're not emitted */
 	return 1 + (Num)(NA != asmICodeField(icode, 4)) + (Num)(NA != asmICodeField(icode, 5));
 }
+
+void asmICodeSetField (Obj icode, Num idx, Obj o) {
+	assert(asmIsObjectTypeICode(icode));
+	memVectorSet(icode, idx, o);
+}
+
+Obj asmIcodeObjRegSetIRegList (Obj icode) { return memVectorObject(memVectorObject(icode, ICODE_INDEX_OBJREGSET), 0); }
+Obj asmIcodeObjRegSetRegList (Obj icode)  { return memVectorObject(memVectorObject(icode, ICODE_INDEX_OBJREGSET), 1); }
+Obj asmIcodeObjRegSetTmp (Obj icode)      { return memVectorObject(memVectorObject(icode, ICODE_INDEX_OBJREGSET), 2); }
+Obj asmIcodeIntRegSetIRegList (Obj icode) { return memVectorObject(memVectorObject(icode, ICODE_INDEX_INTREGSET), 0); }
+Obj asmIcodeIntRegSetRegList (Obj icode)  { return memVectorObject(memVectorObject(icode, ICODE_INDEX_INTREGSET), 1); }
+Obj asmIcodeIntRegSetTmp (Obj icode)      { return memVectorObject(memVectorObject(icode, ICODE_INDEX_INTREGSET), 2); }
+
+void asmIcodeObjRegSetIRegListSet (Obj icode, Obj lst) { memVectorSet(memVectorObject(icode, ICODE_INDEX_OBJREGSET), 0, lst); }
+void asmIcodeObjRegSetRegListSet (Obj icode, Obj lst)  { memVectorSet(memVectorObject(icode, ICODE_INDEX_OBJREGSET), 1, lst); }
+void asmIcodeObjRegSetTmpSet (Obj icode, Obj lst)      { memVectorSet(memVectorObject(icode, ICODE_INDEX_OBJREGSET), 2, lst); }
+void asmIcodeIntRegSetIRegListSet (Obj icode, Obj lst) { memVectorSet(memVectorObject(icode, ICODE_INDEX_INTREGSET), 0, lst); }
+void asmIcodeIntRegSetRegListSet (Obj icode, Obj lst)  { memVectorSet(memVectorObject(icode, ICODE_INDEX_INTREGSET), 1, lst); }
+void asmIcodeIntRegSetTmpSet (Obj icode, Obj lst)      { memVectorSet(memVectorObject(icode, ICODE_INDEX_INTREGSET), 2, lst); }
 
 
 
@@ -145,29 +200,41 @@ Num asmICodeOpcodeSize (Obj icode) {
 #define IBLOCK_VECTOR_SIZE 0x1000
 Num IBlockCount=0;
 
-#define IBLOCK_INDEX_ID          0
-#define IBLOCK_INDEX_TAG         1
-#define IBLOCK_INDEX_DEFAULT     2
-#define IBLOCK_INDEX_CONDITIONAL 3
-#define IBLOCK_INDEX_INCOMING    4
-#define IBLOCK_INDEX_ICODE       5
+#define IBLOCK_INDEX_ID           0
+#define IBLOCK_INDEX_TAG          1
+#define IBLOCK_INDEX_INCOMING     2
+#define IBLOCK_INDEX_ICODES       3
+#define IBLOCK_INDEX_DEFAULT      4
+#define IBLOCK_INDEX_CONDITIONAL  5
+#define IBLOCK_INDEX_OBJREGISTERS 6
+#define IBLOCK_INDEX_INTREGISTERS 7
+#define IBLOCK_OBJECT_SIZE        8
 
 Num asmIBlockID (Obj ib)             { return (Num)memVectorObject(ib, IBLOCK_INDEX_ID); }
 Obj asmIBlockTag (Obj ib)            { return memVectorObject(ib, IBLOCK_INDEX_TAG); }
+Obj asmIBlockIncomingList (Obj ib)   { return memVectorObject(ib, IBLOCK_INDEX_INCOMING); }
+Obj asmIBlockIcodes (Obj ib)         { return memVectorObject(ib, IBLOCK_INDEX_ICODES); }
 Obj asmIBlockDefaultTag (Obj ib)     { return memVectorObject(ib, IBLOCK_INDEX_DEFAULT); }
 Obj asmIBlockConditionalTag (Obj ib) { return memVectorObject(ib, IBLOCK_INDEX_CONDITIONAL); }
-Obj asmIBlockIncomingList (Obj ib)   { return memVectorObject(ib, IBLOCK_INDEX_INCOMING); }
+Obj asmIBlockObjRegisters (Obj ib)   { return memVectorObject(ib, IBLOCK_INDEX_OBJREGISTERS); }
+Obj asmIBlockIntRegisters (Obj ib)   { return memVectorObject(ib, IBLOCK_INDEX_INTREGISTERS); }
 
 Num asmIBlockICodeLength (Obj ib) {
 	assert(asmIsObjectTypeIBlock(ib));
-	return memObjectLength(ib) - IBLOCK_INDEX_ICODE;
+	return memObjectLength(asmIBlockIcodes(ib));
 }
 
 /* Get ith icode object in iblock 
 */
 Obj asmIBlockICode (Obj ib, Num i) {
-	assert(asmIsObjectTypeIBlock(ib));
-	return memVectorObject(ib, IBLOCK_INDEX_ICODE + i);
+	return (i < asmIBlockICodeLength(ib)) ? memVectorObject(asmIBlockIcodes(ib), i) : ofalse;
+}
+
+/* Get last icode object in iblock .  #f if 0 length iblock
+  DEPRECATED?
+*/
+Obj asmIBlockLastICode (Obj ib) {
+	return asmIBlockICode(ib, asmIBlockICodeLength(ib) - 1);
 }
 
 /* Lookup iblock by ID
@@ -198,6 +265,17 @@ Obj asmIBlockNextValid (Num id) {
 	return ofalse;
 }
 
+/* Given an iblock ID, return the next valid live iblock based on
+   incrementing ID numbers.
+*/
+Obj asmIBlockNextValidIblock (Obj ib) {
+ Num id = asmIBlockID(ib);
+	while (++id < IBlockCount) {
+		ib = asmIBlock(id);
+		if (otrue == asmIBlockTag(ib)) return ib;
+	}
+	return ofalse;
+}
 
 /* Set iblock's various tag values
 */
@@ -222,7 +300,7 @@ void asmIBlockIncomingListAdd (Obj ib, Obj o) {
 	r03 = ib;
 	r01 = o;
 	r02 = memVectorObject(r03, IBLOCK_INDEX_INCOMING);
-	objCons12();
+	objCons012();
 	memVectorSet(r03, IBLOCK_INDEX_INCOMING, r00);
 }
 
@@ -250,8 +328,16 @@ void asmIBlockIncomingListDel (Obj ib, Obj o) {
 }
 
 void asmIBlockSetICode (Num offset, Obj op) {
-	assert(offset < memObjectLength(riblock));
-	memVectorSet(riblock, IBLOCK_INDEX_ICODE+offset, op);
+	assert(offset < asmIBlockICodeLength(riblock));
+	memVectorSet(asmIBlockIcodes(riblock), offset, op);
+}
+
+void asmIBlockObjRegistersSet (Obj ib, Obj regs) {
+	memVectorSet(ib, IBLOCK_INDEX_OBJREGISTERS, regs);
+}
+
+void asmIBlockIntRegistersSet (Obj ib, Obj regs) {
+	memVectorSet(ib, IBLOCK_INDEX_INTREGISTERS, regs);
 }
 
 
@@ -260,7 +346,15 @@ void asmIBlockSetICode (Num offset, Obj op) {
     iblock => iblock object
 */
 void asmGenerateNewIBlock (Num icodeSize) {
-	riblock = memNewVector(TIBLOCK, icodeSize + IBLOCK_INDEX_ICODE);
+	// Create and push icode vector which might actually be empty so explicitly use the empty vector.
+	if (icodeSize) {
+		objNewVector(icodeSize);
+		vmPush(r00);
+	} else {
+		vmPush(onullvec);
+	}
+
+	riblock = memNewVector(TIBLOCK, IBLOCK_OBJECT_SIZE);
 
 	/* Unique ID number set automatically */
 	memVectorSet(riblock, IBLOCK_INDEX_ID, (Obj)IBlockCount);
@@ -271,9 +365,17 @@ void asmGenerateNewIBlock (Num icodeSize) {
 	/* Incoming iblock list defaults to empty list */
 	memVectorSet(riblock, IBLOCK_INDEX_INCOMING, onull);
 
-	/* Outgoing default and conditional branch tags */
+	/* Set the currently empty icode vector */
+	memVectorSet(riblock, IBLOCK_INDEX_ICODES, vmPop());
+
+	/* Outgoing default and conditional branch iblocks */
 	memVectorSet(riblock, IBLOCK_INDEX_DEFAULT, ofalse);
 	memVectorSet(riblock, IBLOCK_INDEX_CONDITIONAL, ofalse);
+
+	/* Outgoing lists of intermediate (object and integer)
+	   registers.  Initially empty */
+	asmIBlockObjRegistersSet (riblock, onull);
+	asmIBlockIntRegistersSet (riblock, onull);
 
 	/* Append to igraph vector */
 	memVectorSet(riblocks, IBlockCount, riblock);
@@ -287,7 +389,7 @@ void asmGenerateNewIBlock (Num icodeSize) {
  Labels
 
  DB of iblock numbers.  Used to associate a label, just a number, with an iblock
- index, a number.
+ index, a number.  The label index is set by the assembler to an iblock.
 *******************************************************************************/
 #define LABELS_DB_SIZE 0x1000
 const Num LABELS_INVALID_ID = (Num)-1;
@@ -304,7 +406,8 @@ Obj asmNewLabel() {
 
 Num asmLabels (Num i) {
  Num labelsBlockID;
-	assert(i < LabelsCount); /* Invalid label */
+	if (LabelsCount <= i) return (Num)-1; /* Invalid label */
+
 	labelsBlockID = (Num)memVectorObject(rlabels, i);
 	assert(LABELS_INVALID_ID != labelsBlockID); /* Label has no registered block */
 	return labelsBlockID;
@@ -318,6 +421,46 @@ void asmLabelsSet (Num i, Num blockNumber) {
 	memVectorSet(rlabels, i, (Obj)blockNumber);
 }
 
+
+
+/*******************************************************************************
+ Intermediate_Registers
+
+ DB of iregister numbers.  Around 32k each can be specified.  Overkill?
+*******************************************************************************/
+#define OREGISTER_FIRST_VALID 0x0100
+#define OREGISTER_LAST_VALID  0x7fff
+
+#define IREGISTER_FIRST_VALID 0x8000
+#define IREGISTER_LAST_VALID  0xffff
+Num OregisterCount;
+Num IregisterCount;
+
+/* Generate a new intermediate object or integer register
+*/
+Num asmNewOregister() {
+//fprintf(stderr, "\noregister = %d", OregisterCount+1);
+	return OregisterCount++;
+}
+
+Num asmNewIregister() {
+//fprintf(stderr, "\niregister = %d", IregisterCount+1);
+	return IregisterCount++;
+}
+
+/* Assume up to 256 actual registers
+ */
+Num asmIsRegister (Obj o) {
+	return (OREGISTER_FIRST_VALID > (Num)o);
+}
+
+Num asmIsOregister (Obj o) {
+	return (OREGISTER_FIRST_VALID <= (Num)o) && ((Num)o <= OREGISTER_LAST_VALID);
+}
+
+Num asmIsIregister (Obj o) {
+	return (IREGISTER_FIRST_VALID <= (Num)o) && ((Num)o <= IREGISTER_LAST_VALID);
+}
 
 
 /*******************************************************************************
@@ -364,6 +507,7 @@ Num asmIBlockFrameCount (void) {
 Obj asmIBlockFrame (Num i) {
 	assert(i < asmIBlockFrameCount());
 	return asmIBlock(iblockOffset + i);
+	rip = 0;
 }
 
 
@@ -408,6 +552,10 @@ void asmInit (void) {
 
 	LabelsCount = 0; /* Clear lables vector count */
 
+	/* Reset object/intermediate register counter */
+   OregisterCount = OREGISTER_FIRST_VALID;
+   IregisterCount = IREGISTER_FIRST_VALID;
+
 	asmStart();
 
 	DBEND();
@@ -435,6 +583,8 @@ void asmGenerateIBlockWithPushedIcodes () {
 
 /* Generates icode objects and continually adds to a set which are
    eventually added to the next new iblock.
+
+   The macro asmAsm(...) is generally used.
 */
 void asmAsmInternal (Obj f, ...) {
  va_list ap;
@@ -446,7 +596,7 @@ void asmAsmInternal (Obj f, ...) {
 	assert(0 == OpcodesCount);
 	va_start(ap, f);
 	for (obj = f; (obj != END); obj = va_arg(ap, Obj)) {
-		DB ("["HEX"|"HEX"]", OpcodesCount, obj);
+		DB ("["HEX03  HEX"]", OpcodesCount, obj);
 		asmOpcodesPush(obj);
 	}
 	va_end(ap); /* stdarg */
@@ -507,11 +657,26 @@ void asmAsmInternal (Obj f, ...) {
 			o = asmOpcodesNext();
 			DB("lsli["HEX" "HEX"]", r, o);
 			asmICodePushNewLSRI(r, o);
+		} else if (ADD == obj) {
+			r = asmOpcodesNext();
+			rr = asmOpcodesNext();
+			DB("add["HEX" "HEX"]", r, rr);
+			asmICodePushNewADD(r, rr);
 		} else if (ADDI == obj) {
 			r = asmOpcodesNext();
 			o = asmOpcodesNext();
 			DB("addi["HEX" "HEX"]", r, o);
 			asmICodePushNewADDI(r, o);
+		} else if (MUL == obj) {
+			r = asmOpcodesNext();
+			rr = asmOpcodesNext();
+			DB("mul["HEX" "HEX"]", r, rr);
+			asmICodePushNewMUL(r, rr);
+		} else if (MULI == obj) {
+			r = asmOpcodesNext();
+			o = asmOpcodesNext();
+			DB("muli["HEX" "HEX"]", r, o);
+			asmICodePushNewMULI(r, o);
 		} else if (BLTI == obj) {
 			r = asmOpcodesNext();
 			i = asmOpcodesNext();
@@ -629,7 +794,7 @@ void asmEmitOpcode2 (Obj op1, Obj op2) {
 
 
 void asmEmitIblockOpcodes (void) {
- Num i;
+ Num i, error=0;
  Obj field0, field1, field2, field3, field4;
 	DBBEG("      iblock="NUM, asmIBlockID(riblock));
 
@@ -637,59 +802,80 @@ void asmEmitIblockOpcodes (void) {
 	assert(otrue == asmIBlockTag(riblock));
 	asmIBlockTagSet (riblock, (Obj)pccode);
 
-	for (i=0; i<asmIBlockICodeLength(riblock); ++i) {
-		r00 = asmIBlockICode(riblock, i); /* Consider icode object in r00 */
+	for (i=0; (!error && (i < asmIBlockICodeLength(riblock))); !error && ++i) {
+		// Consider next icode and its fields
+		r00 = asmIBlockICode(riblock, i);
 		field0 = asmICodeField(r00, 0);
-		DB("field0 = "HEX, field0);
+		field1 = asmICodeField(r00, 1);
+		field2 = asmICodeField(r00, 2);
+		field3 = asmICodeField(r00, 3);
+		field4 = asmICodeField(r00, 4);
+
+		DB("fields [" HEX SP HEX SP HEX SP HEX SP HEX "]", field0, field1, field2, field3, field4);
+
 		switch ((Num)field0) {
 		case (Num)MV:
-			field1 = asmICodeField(r00, 1);
-			field2 = asmICodeField(r00, 2);
-			DB("field1 = "HEX, field1);
-			DB("field2 = "HEX, field2);
 			switch ((Num)field1) {
 				case (Num)R00 : switch ((Num)field2) {
+				               case (Num)R00 : asmEmitOpcode(vmMV_R00_R00); break; // TODO temporary
 				               case (Num)R01 : asmEmitOpcode(vmMV_R00_R01); break;
+				               case (Num)R02 : asmEmitOpcode(vmMV_R00_R02); break;
 				               case (Num)R03 : asmEmitOpcode(vmMV_R00_R03); break;
 				               case (Num)R04 : asmEmitOpcode(vmMV_R00_R04); break;
 				               case (Num)R0D : asmEmitOpcode(vmMV_R00_R0D); break;
 				               case (Num)R0E : asmEmitOpcode(vmMV_R00_R0E); break;
-				               default : assert(!"Unsuported icode MV $0 ??"); } break;
+				               case (Num)R11 : asmEmitOpcode(vmMV_R00_R11); break;
+				               default : error=1; } break;
 				case (Num)R01 : switch ((Num)field2) {
 				               case (Num)R00 : asmEmitOpcode(vmMV_R01_R00); break;
 				               case (Num)R03 : asmEmitOpcode(vmMV_R01_R03); break;
-				               default : assert(!"Unsuported icode MV $1 ??"); } break;
+				               default : error=1; }break;
 				case (Num)R02 : switch ((Num)field2) {
 				               case (Num)R00 : asmEmitOpcode(vmMV_R02_R00); break;
-				               default : assert(!"Unsuported icode MV $2 ??"); } break;
+				               case (Num)R01 : asmEmitOpcode(vmMV_R02_R01); break;
+				               default : error=1; } break;
 				case (Num)R03 : switch ((Num)field2) {
 				               case (Num)R00 : asmEmitOpcode(vmMV_R03_R00); break;
-				               default : assert(!"Unsuported icode MV $3 ??"); } break;
+				               case (Num)R01 : asmEmitOpcode(vmMV_R03_R01); break;
+				               default : error=1; } break;
+				case (Num)R04 : switch ((Num)field2) {
+				               case (Num)R00 : asmEmitOpcode(vmMV_R04_R00); break;
+				               default : error=1; } break;
 				case (Num)R05 : switch ((Num)field2) {
 				               case (Num)R00 : asmEmitOpcode(vmMV_R05_R00); break;
 				               case (Num)R08 : asmEmitOpcode(vmMV_R05_R08); break;
 				               case (Num)R09 : asmEmitOpcode(vmMV_R05_R09); break;
 				               case (Num)R0B : asmEmitOpcode(vmMV_R05_R0B); break;
 				               case (Num)R0C : asmEmitOpcode(vmMV_R05_R0C); break;
-				               default : assert(!"Unsuported icode MV $5 ??"); } break;
+				               default : error=1; } break;
 				case (Num)R08: switch ((Num)field2) {
 				               case (Num)R00 : asmEmitOpcode(vmMV_R08_R00); break;
-				               default : assert(!"Unsuported icode MV $08 ??"); } break;
+				               default : error=1; } break;
 				case (Num)R0B: switch ((Num)field2) {
 				               case (Num)R00 : asmEmitOpcode(vmMV_R0B_R00); break;
 				               case (Num)R05 : asmEmitOpcode(vmMV_R0B_R05); break;
 				               case (Num)R09 : asmEmitOpcode(vmMV_R0B_R09); break;
-				               default : assert(!"Unsuported icode MV $B ??"); } break;
+				               default : error=1; } break;
 				case (Num)R0C: switch ((Num)field2) {
 				               case (Num)R00 : asmEmitOpcode(vmMV_R0C_R00); break;
 				               case (Num)R05 : asmEmitOpcode(vmMV_R0C_R05); break;
 				               case (Num)R08 : asmEmitOpcode(vmMV_R0C_R08); break;
-				               default : assert(!"Unsuported icode MV $C ??"); } break;
-				default : assert(!"Unsuported icode MV ?? reg"); }
+				               default : error=1; } break;
+				case (Num)R10: switch ((Num)field2) {
+				               case (Num)R11 : asmEmitOpcode(vmMV_R10_R11); break;
+				               case (Num)R12 : asmEmitOpcode(vmMV_R10_R12); break;
+				               case (Num)R13 : asmEmitOpcode(vmMV_R10_R13); break;
+				               default : error=1; } break;
+				case (Num)R11: switch ((Num)field2) {
+				               case (Num)R00 : asmEmitOpcode(vmMV_R11_R00); break;
+				               case (Num)R01 : asmEmitOpcode(vmMV_R11_R01); break;
+				               default : error=1; } break;
+				case (Num)R12: switch ((Num)field2) {
+				               case (Num)R02 : asmEmitOpcode(vmMV_R12_R02); break;
+				               default : error=1; } break;
+				default :error=1; }
 			break;
 		case (Num)MVI:
-			field1 = asmICodeField(r00, 1);
-			field4 = asmICodeField(r00, 4);
 			switch ((Num)field1) {
 				case (Num)R00 : asmEmitOpcode(vmMV_R00_I); break;
 				case (Num)R01 : asmEmitOpcode(vmMV_R01_I); break;
@@ -699,102 +885,87 @@ void asmEmitIblockOpcodes (void) {
 				case (Num)R05 : asmEmitOpcode(vmMV_R05_I); break;
 				case (Num)R06 : asmEmitOpcode(vmMV_R06_I); break;
 				case (Num)R07 : asmEmitOpcode(vmMV_R07_I); break;
-				default : assert(!"Unsuported field MVI ?reg? imm"); }
+				case (Num)R10 : asmEmitOpcode(vmMV_R10_I); break;
+				case (Num)R11 : asmEmitOpcode(vmMV_R11_I); break;
+				case (Num)R12 : asmEmitOpcode(vmMV_R12_I); break;
+				case (Num)R13 : asmEmitOpcode(vmMV_R13_I); break;
+				default :error=1; }
 			asmEmitOpcode(field4);
 			break;
 		case (Num)LDI:
-			field1 = asmICodeField(r00, 1);
-			field2 = asmICodeField(r00, 2);
-			field4 = asmICodeField(r00, 4);
-			DB("field1 = "HEX, field1);
-			DB("field2 = "HEX, field2);
-			DB("field4 = "HEX, field4);
 			switch ((Num)field1) {
 				case (Num)R00 : switch ((Num)field2) {
 				          case (Num)R00 : asmEmitOpcode(vmLD_R00_R00_I); break;
 				          case (Num)R02 : asmEmitOpcode(vmLD_R00_R02_I); break;
 				          case (Num)R0C : asmEmitOpcode(vmLD_R00_R0C_I); break;
 				          case (Num)R0B : asmEmitOpcode(vmLD_R00_R0B_I); break;
-				          default : assert(!"Unsuported field LDI $00 ?reg? imm"); } break;
+				          case (Num)R1F : asmEmitOpcode(vmLD_R00_R1F_I); break;
+				          default : error=1; } break;
 				case (Num)R01 : switch ((Num)field2) {
 				          case (Num)R00 : asmEmitOpcode(vmLD_R01_R00_I); break;
 				          case (Num)R01 : asmEmitOpcode(vmLD_R01_R01_I); break;
 				          case (Num)R0B: asmEmitOpcode(vmLD_R01_R0B_I); break;
 				          case (Num)R0C: asmEmitOpcode(vmLD_R01_R0C_I); break;
-				          default : assert(!"Unsuported field LDI $01 ?reg? imm"); } break;
+				          default : error=1; } break;
 				case (Num)R02 : switch ((Num)field2) {
 				          case (Num)R00 : asmEmitOpcode(vmLD_R02_R00_I); break;
+				          case (Num)R01 : asmEmitOpcode(vmLD_R02_R01_I); break;
 				          case (Num)R02 : asmEmitOpcode(vmLD_R02_R02_I); break;
-				          default : assert(!"Unsuported field LDI $02 ?reg? imm"); } break;
+				          default : error=1; } break;
 				case (Num)R05 : switch ((Num)field2) {
 				          case (Num)R00 : asmEmitOpcode(vmLD_R05_R00_I); break;
-				          default : assert(!"Unsuported field LDI $05 ?reg? imm"); } break;
+				          default : error=1; } break;
 				case (Num)R0B: switch ((Num)field2) {
 				          case (Num)R00 : asmEmitOpcode(vmLD_R0B_R00_I); break;
-				          default : assert(!"Unsuported field LDI $0b ?reg? imm"); } break;
+				          default : error=1; } break;
 				case (Num)R0C: switch ((Num)field2) {
 				          case (Num)R00 : asmEmitOpcode(vmLD_R0C_R00_I); break;
-				          default : assert(!"Unsuported field LDI $0c ?reg? imm"); } break;
+				          default : error=1; } break;
 				case (Num)R10: switch ((Num)field2) {
 				          case (Num)R00 : asmEmitOpcode(vmLD_R10_R00_I); break;
-				          default : assert(!"Unsuported field LDI $10 ?reg? imm"); } break;
-				default : assert(!"Unsuported field LDI ?reg? reg imm"); }
+				          default : error=1; } break;
+				default :error=1; }
 			asmEmitOpcode(field4);
 			break;
 		case (Num)LD:
-			field1 = asmICodeField(r00, 1);
-			field2 = asmICodeField(r00, 2);
-			field3 = asmICodeField(r00, 3);
 			switch ((Num)field1) {
 				case (Num)R00 : switch ((Num)field2) {
 				               case (Num)R01 : switch ((Num)field3) {
 				                              case (Num)R02 : asmEmitOpcode(vmLD_R00_R01_R02); break;
-				                              default : assert(!"Unsuported field LD $0 $1 ?reg?"); } break;
-				               default : assert(!"Unsuported field LD $0 ?reg? reg"); } break;
-				default : assert(!"Unsuported field LD ?reg? reg reg"); }
-			break;
+				                              default : error=1; } break;
+				               default : error=1; } break;
+				default :error=1; } break;
 		case (Num)STI:
-			field1 = asmICodeField(r00, 1);
-			field2 = asmICodeField(r00, 2);
-			field4 = asmICodeField(r00, 4);
-			DB("field1 = "HEX, field1);
-			DB("field2 = "HEX, field2);
-			DB("field4 = "HEX, field4);
 			switch ((Num)field1) {
 				case (Num)R00 : switch ((Num)field2) {
 				               case (Num)R01 : asmEmitOpcode(vmST_R00_R01_I); break;
 				               case (Num)R05: asmEmitOpcode(vmST_R00_R05_I); break;
 				               case (Num)R0B: asmEmitOpcode(vmST_R00_R0B_I); break;
 				               case (Num)R0C: asmEmitOpcode(vmST_R00_R0C_I); break;
-				               default : assert(!"Unsuported field STI $0 ?reg? imm"); } break;
+				               case (Num)R1F: asmEmitOpcode(vmST_R00_R1F_I); break;
+				               default : error=1; } break;
 				case (Num)R02 : switch ((Num)field2) {
 				               case (Num)R00 : asmEmitOpcode(vmST_R02_R00_I); break;
 				               case (Num)R01 : asmEmitOpcode(vmST_R02_R01_I); break;
-				               default : assert(!"Unsuported field STI $2 ?reg? imm"); } break;
+				               default : error=1; } break;
 				case (Num)R03 : switch ((Num)field2) {
 				               case (Num)R00 : asmEmitOpcode(vmST_R03_R00_I); break;
-				               default : assert(!"Unsuported field STI $3 ?reg? imm"); } break;
+				               default : error=1; } break;
 				case (Num)R05 : switch ((Num)field2) {
 				               case (Num)R00 : asmEmitOpcode(vmST_R05_R00_I); break;
-				               default : assert(!"Unsuported field STI $5 ?reg? imm"); } break;
-				default : assert(!"Unsuported field STI ?reg? reg imm"); }
+				               default : error=1; } break;
+				default :error=1; }
 			asmEmitOpcode(field4);
 			break;
 		case (Num)ST:
-			field1 = asmICodeField(r00, 1);
-			field2 = asmICodeField(r00, 2);
-			field3 = asmICodeField(r00, 3);
 			switch ((Num)field1) {
 				case (Num)R00 : switch ((Num)field2) {
 				               case (Num)R01 : switch ((Num)field3) {
 				                              case (Num)R02 :  asmEmitOpcode(vmST_R00_R01_R02); break;
-				                              default : assert(!"Unsuported field ST $0 $1 ?reg?"); } break;
-				               default : assert(!"Unsuported field ST $0 ?reg? reg"); } break;
-				default : assert(!"Unsuported field ST ?reg? reg reg"); }
-			break;
+				                              default : error=1; } break;
+				               default : error=1; } break;
+				default :error=1; } break;
 		case (Num)PUSH:
-			field1 = asmICodeField(r00, 1);
-			DB("field1 = "HEX, field1);
 			switch ((Num)field1) {
 				case (Num)R00 : asmEmitOpcode(vmPUSH_R00); break;
 				case (Num)R01 : asmEmitOpcode(vmPUSH_R01); break;
@@ -808,11 +979,8 @@ void asmEmitIblockOpcodes (void) {
 				case (Num)R0B: asmEmitOpcode(vmPUSH_R0B); break;
 				case (Num)R0C: asmEmitOpcode(vmPUSH_R0C); break;
 				case (Num)R1C: asmEmitOpcode(vmPUSH_R1C); break;
-				default : assert(!"Unsuported field PUSH ?reg?"); }
-			break;
+				default :error=1; } break;
 		case (Num)POP:
-			field1 = asmICodeField(r00, 1);
-			DB("field1 = "HEX, field1);
 			switch ((Num)field1) {
 				case (Num)R00 : asmEmitOpcode(vmPOP_R00); break;
 				case (Num)R01 : asmEmitOpcode(vmPOP_R01); break;
@@ -826,68 +994,108 @@ void asmEmitIblockOpcodes (void) {
 				case (Num)R0B: asmEmitOpcode(vmPOP_R0B); break;
 				case (Num)R0C: asmEmitOpcode(vmPOP_R0C); break;
 				case (Num)R1C: asmEmitOpcode(vmPOP_R1C); break;
-				default : assert(!"Unsuported field POP ?reg?"); }
-			break;
+				default :error=1; } break;
 		case (Num)LSLI:
-			field1 = asmICodeField(r00, 1);
-			field4 = asmICodeField(r00, 4);
 			switch ((Num)field1) {
 				case (Num)R02 : asmEmitOpcode(vmLSL_R02_I); break;
 				case (Num)R10 : asmEmitOpcode(vmLSL_R10_I); break;
-				default : assert(!"Unsuported field LSLI ?reg? imm"); }
+				default :error=1; }
 			asmEmitOpcode(field4);
 			break;
 		case (Num)LSRI:
-			field1 = asmICodeField(r00, 1);
-			field4 = asmICodeField(r00, 4);
 			switch ((Num)field1) {
 				case (Num)R10 : asmEmitOpcode(vmLSR_R10_I); break;
-				default : assert(!"Unsuported field LSRI ?reg? imm"); }
+				default :error=1; }
 			asmEmitOpcode(field4);
 			break;
+		case (Num)ADD:
+			switch ((Num)field1) {
+				case (Num)R00 : switch((Num)field2) {
+				                   case (Num)R01 : asmEmitOpcode(vmADD_R00_R01); break;
+				                   case (Num)R02 : asmEmitOpcode(vmADD_R00_R02); break;
+				                   default : error=1; } break;
+				case (Num)R01 : switch((Num)field2) {
+				                   case (Num)R00 : asmEmitOpcode(vmADD_R01_R00); break;
+				                   case (Num)R02 : asmEmitOpcode(vmADD_R01_R02); break;
+				                   default : error=1; } break;
+				case (Num)R02 : switch((Num)field2) {
+				                   case (Num)R00 : asmEmitOpcode(vmADD_R02_R00); break;
+				                   case (Num)R01 : asmEmitOpcode(vmADD_R02_R01); break;
+				                   case (Num)R03 : asmEmitOpcode(vmADD_R02_R03); break;
+				                   default : error=1; } break;
+				case (Num)R03 : switch((Num)field2) {
+				                   case (Num)R02 : asmEmitOpcode(vmADD_R03_R02); break;
+				                   default : error=1; } break;
+				case (Num)R10 : switch((Num)field2) {
+				                   case (Num)R00 : asmEmitOpcode(vmADD_R10_R00); break;
+				                   case (Num)R13 : asmEmitOpcode(vmADD_R10_R13); break;
+				                   default : error=1; } break;
+				case (Num)R11 : switch((Num)field2) {
+				                   case (Num)R00 : asmEmitOpcode(vmADD_R11_R00); break;
+				                   case (Num)R10 : asmEmitOpcode(vmADD_R11_R10); break;
+				                   default : error=1; } break;
+				case (Num)R12 : switch((Num)field2) {
+				                   case (Num)R00 : asmEmitOpcode(vmADD_R12_R00); break;
+				                   case (Num)R10 : asmEmitOpcode(vmADD_R12_R10); break;
+				                   default : error=1; } break;
+				case (Num)R13 : switch((Num)field2) {
+				                   case (Num)R00 : asmEmitOpcode(vmADD_R13_R00); break;
+				                   case (Num)R10 : asmEmitOpcode(vmADD_R13_R10); break;
+				                   default : error=1; } break;
+				default : error=1; } break;
 		case (Num)ADDI:
-			field1 = asmICodeField(r00, 1);
-			field4 = asmICodeField(r00, 4);
 			switch ((Num)field1) {
 				case (Num)R00 : asmEmitOpcode(vmADD_R00_I); break;
 				case (Num)R01 : asmEmitOpcode(vmADD_R01_I); break;
 				case (Num)R02 : asmEmitOpcode(vmADD_R02_I); break;
-				default : assert(!"Unsuported field ADDI ?reg? imm"); }
+				case (Num)R03 : asmEmitOpcode(vmADD_R03_I); break;
+				case (Num)R11 : asmEmitOpcode(vmADD_R11_I); break;
+				case (Num)R12 : asmEmitOpcode(vmADD_R12_I); break;
+				case (Num)R1F : asmEmitOpcode(vmADD_R1F_I); break;
+				default :error=1; }
 			asmEmitOpcode(field4);
 			break;
+		case (Num)MUL:
+			switch ((Num)field1) {
+				case (Num)R11 : switch((Num)field2) {
+				                   case (Num)R10 : asmEmitOpcode(vmMUL_R11_R10); break;
+				                   default : error=1; } break;
+				case (Num)R12 : switch((Num)field2) {
+				                   case (Num)R10 : asmEmitOpcode(vmMUL_R12_R10); break;
+				                   default : error=1; } break;
+				case (Num)R13 : switch((Num)field2) {
+				                   case (Num)R10 : asmEmitOpcode(vmMUL_R13_R10); break;
+				                   default : error=1; } break;
+				case (Num)R14 : switch((Num)field2) {
+				                   case (Num)R10 : asmEmitOpcode(vmMUL_R14_R10); break;
+				                   default : error=1; } break;
+				default : error=1; } break;
 		case (Num)BLTI:
-			field1 = asmICodeField(r00, 1);
-			field4 = asmICodeField(r00, 4);
-			/* field5 ignored */
 			switch ((Num)field1) {
 				case (Num)R01 : asmEmitOpcode(vmBLT_R01_I); break;
-				default : assert(!"Unsuported field BLTI ?reg? imm offset"); }
+				default :error=1; }
 			asmEmitOpcode(field4);
 			asmEmitOpcode((Obj)(-3*8)); /* Branch address left unresolved */
 			break;
 		case (Num)BEQI:
-			field1 = asmICodeField(r00, 1);
-			field4 = asmICodeField(r00, 4);
-			/* field5 ignored */
 			switch ((Num)field1) {
 				case (Num)R00 : asmEmitOpcode(vmBEQ_R00_I); break;
 				case (Num)R01 : asmEmitOpcode(vmBEQ_R01_I); break;
+				case (Num)R02 : asmEmitOpcode(vmBEQ_R02_I); break;
 				case (Num)R07 : asmEmitOpcode(vmBEQ_R07_I); break;
 				case (Num)R10 : asmEmitOpcode(vmBEQ_R10_I); break;
-				default : assert(!"Unsuported field BEQI ?reg? imm offset"); }
+				default :error=1; }
 			asmEmitOpcode(field4);
 			asmEmitOpcode((Obj)(-3*8)); /* Branch address left unresolved */
 			break;
 		case (Num)BNEI:
-			field1 = asmICodeField(r00, 1);
-			field4 = asmICodeField(r00, 4);
-			/* field5 ignored */
 			switch ((Num)field1) {
 				case (Num)R00 : asmEmitOpcode(vmBNE_R00_I); break;
 				case (Num)R01 : asmEmitOpcode(vmBNE_R01_I); break;
 				case (Num)R02 : asmEmitOpcode(vmBNE_R02_I); break;
+				case (Num)R03 : asmEmitOpcode(vmBNE_R03_I); break;
 				case (Num)R05 : asmEmitOpcode(vmBNE_R05_I); break;
-				default : assert(!"Unsuported field BNEI ?reg? imm offset"); }
+				default :error=1; }
 			asmEmitOpcode(field4);
 			asmEmitOpcode((Obj)(-3*8)); /* Branch address left unresolved */
 			break;
@@ -895,30 +1103,23 @@ void asmEmitIblockOpcodes (void) {
 			/* Emitted by parent logic */
 			break;
 		case (Num)JMP :
-			field1 = asmICodeField(r00, 1);
 			switch ((Num)field1) {
 				case (Num)R00 : asmEmitOpcode(vmJMP_R00); break;
 				case (Num)R02 : asmEmitOpcode(vmJMP_R02); break;
-				default : assert(!"Unsuported field JMP ?reg?"); }
-			break;
+				default :error=1; } break;
 		case (Num)JAL :
-			field1 = asmICodeField(r00, 1);
 			switch ((Num)field1) {
 				case (Num)R00 : asmEmitOpcode(vmJAL_R00); break;
 				case (Num)R02 : asmEmitOpcode(vmJAL_R02); break;
-				default : assert(!"Unsuported field JAL ?reg?"); }
-			break;
+				default :error=1; } break;
 		case (Num)RET :
 			asmEmitOpcode(vmRET);
 			break;
 		case (Num)SYS :
-			field1 = asmICodeField(r00, 1);
 			switch ((Num)field1) {
 				case (Num)R00 : asmEmitOpcode(vmSYS_R00); break;
-				default : assert(!"Unsuported field SYS ?imm?"); }
-			break;
+				default :error=1;  } break;
 		case (Num)SYSI:
-			field4 = asmICodeField(r00, 4);
 			asmEmitOpcode2(vmSYS_I, field4);
 			break;
 		case (Num)QUIT:
@@ -929,10 +1130,17 @@ void asmEmitIblockOpcodes (void) {
 			break;
 		default:
 			if (field0 == NA) break; /* The NA fake opcode is OK.  It's an opcode removed during optimization. */
-			fprintf(stderr, "\nCan't assemble opcode ");
-			objDisplay(r03, stderr);
-			assert(!"Unsuported opcode");
-		}
+			else {
+				fprintf(stderr, "\nCan't assemble opcode ");
+				error=1;
+			}
+		} // switch field0
+	} //for asmIBlockICodeLength
+
+	if (1==error) {
+		asmDumpIBlocks();
+		fprintf(stderr, "\nUnable to assemble icode "HEX, i);
+		asmPrintIblock(riblock);
 	}
 
 	DBEND();
@@ -1009,6 +1217,8 @@ void asmPlaceAllIBlocks (void) {
 			asmPrepareIBlockBranches();
 		}
 	}
+	DBE asmDumpIBlocks();
+	DBE objDisplay(rcodenew, stderr);
 	DBEND();
 }
 
@@ -1079,7 +1289,7 @@ void asmResolveBranchOpcodeAddresses (void) {
 			asmResolveConditional();
 		}
 	}
-//	asmDumpIBlock(riblock);
+//	asmPrintIblock(riblock);
 //	vmDebugDumpCode(rcodenew, stderr);
 	DBEND();
 }
@@ -1118,7 +1328,7 @@ void asmIBlockLinkConditional (Num IDparent, Num IDchild) {
 void asmInitIBlockBranchTagsToIBlocks (Obj ib) {
  Obj tag;
 	DBBEG();
-	DBE asmDumpIBlock(ib);
+	DBE asmPrintIblock(ib);
 
 	r04 = ib; /* Protect object reference from garbage collector */
 	tag = asmIBlockDefaultTag(r04);
@@ -1256,7 +1466,7 @@ Num asmOptimizePeepHolePushPop(void) {
 					if (idx) {
 						DB("Omitting "HEX" and "HEX, j, idx);
 						changed = 1;
-						DBE asmDumpIBlock(riblock);
+						DBE asmPrintIblock(riblock);
 						asmIBlockDeleteICode(riblock, j);
 						asmIBlockDeleteICode(riblock, idx);
 					}
@@ -1290,7 +1500,6 @@ Num asmOptimizePeepHolePopPush(void) {
 					if (idx) {
 						DB("Omitting "HEX" and "HEX, j, idx);
 						changed = 1;
-						DBE asmDumpIBlock(riblock);
 						asmIBlockDeleteICode(riblock, j);
 						asmIBlockDeleteICode(riblock, idx);
 					}
@@ -1330,9 +1539,9 @@ void asmOptimizeEmptyIBlock(void) {
 		lst = asmIBlockIncomingList(riblock);
 		assert(objIsPair(lst)); /* It's guaranteed to have an incoming list otherwise it wouldn't be tagged #t */
 		/* Register local C variables with GC */
-		memRootSetRegisterAnonymous(&mydef);
-		memRootSetRegisterAnonymous(&lst);
-		memRootSetRegisterAnonymous(&inib);
+		memRootSetAddressRegister(&mydef); //MEM_ADDRESS_REGISTER(&mydef);
+		memRootSetAddressRegister(&lst); //MEM_ADDRESS_REGISTER(&lst);
+		memRootSetAddressRegister(&inib); //MEM_ADDRESS_REGISTER(&inib);
 		while (onull != lst) {
 			inib = car(lst); /* Consider an incoming block */
 			if (riblock == asmIBlockDefaultTag(inib)) asmIBlockLinkDefault(asmIBlockID(inib), asmIBlockID(mydef));
@@ -1340,9 +1549,9 @@ void asmOptimizeEmptyIBlock(void) {
 			lst = cdr(lst);
 		}
 		/* Unregister local C variables */
-		memRootSetUnRegisterAnonymous(&inib);
-		memRootSetUnRegisterAnonymous(&lst);
-		memRootSetUnRegisterAnonymous(&mydef);
+		memRootSetAddressUnRegister(&inib);
+		memRootSetAddressUnRegister(&lst);
+		memRootSetAddressUnRegister(&mydef);
 		asmIBlockTagSet(riblock, ofalse); /* Now invalidate this now unused iblock */
 
 		DB("The result:");
@@ -1363,8 +1572,6 @@ void asmOptimizeEmptyIBlocks(void) {
 	DBEND();
 }
 
-/* riblock = temp
-*/
 void asmPeepHoleOptimization (void) {
  Num changed, optimizeLoop=0;
 	DBBEG();
@@ -1425,9 +1632,572 @@ Num asmCountIGraphFields (void) {
 }
 
 void asmOptimizeIGraph (void) {
+	//fprintf(stderr, "\nWARNING:  Disabled asmPeepHoleOptimization()");
 	asmPeepHoleOptimization();
 	asmOptimizeEmptyIBlocks();
 }
+
+
+
+/*******************************************************************************
+ Register_Allocation
+*******************************************************************************/
+// Forward declaration
+void asmPrintICodeFields (Obj ic);
+
+
+/* Collect all object and integer iregisters from the iblock into sets in r01 and r02.  
+   r00  --  {clobbers}
+   r01  =>  {new obj-iregister set}
+   r02  =>  {new int-iregister set}
+*/
+void asmGatherIblockIregisters (Obj riblock) {
+ Num i, f;
+ Obj reg;
+	memRootSetAddressRegister(&riblock);
+	r01 = r02 = onull; // Ordered sets initially empty
+	for (i=0; (i < asmIBlockICodeLength(riblock)); ++i) { // Over all icodes
+		for (f = 1; (f <= 3); ++f) { // Over the three reg fields
+			// Consider register field of icode #(-, REG1, REG2, REG3, -, -) of iblock
+			reg = asmICodeField(asmIBlockICode(riblock, i), f);
+			// Add reg to either the object or integer set
+			if      (asmIsOregister(reg)) { r01 = objOrderedSetAdd0(r01, reg); }
+			else if (asmIsIregister(reg)) { r02 = objOrderedSetAdd0(r02, reg); }
+		}
+		//(type == 0) ? asmIcodeObjRegSetIRegListSet(r02, r00) : asmIcodeIntRegSetIRegListSet(r02, r00); // Icode gets a copy of current ireg set.
+	}
+	memRootSetAddressUnRegister(&riblock);
+}
+
+
+/* Scan through all iblocks with a matching 'ib' iblock placeholder and union the outgoing sets with
+   the placeholder iblock's outgoing sets (setObjReg and setIntReg).
+*/
+void asmIregisterExtentsReplaceIblockPlaceholder (Obj ib, Obj setObjReg, Obj setIntReg) {
+ Obj iblock, regset;
+	memRootSetAddressRegister(&ib);
+	memRootSetAddressRegister(&setObjReg);
+	memRootSetAddressRegister(&setIntReg);
+	memRootSetAddressRegister(&iblock);
+	memRootSetAddressRegister(&regset);
+
+	for (iblock = asmIBlockFrame(0); // Over all iblocks.  TODO implement asmIBlockFirst() frame 0 might not be the 1st.
+	     (iblock != ofalse);
+	     iblock = asmIBlockNextValidIblock(iblock)) { // TODO when iblock hits ib, stop (since every pass is linear starting at 0)
+
+		// If this iblock has a matching iblock placeholder, remove it and union the two sets
+		regset = asmIBlockObjRegisters(iblock);
+		if (objOrderedSetIsMember(regset, ib)) {
+			regset = objOrderedSetSub0(regset, ib);
+			regset = objOrderedSetUnion0(regset, setObjReg);
+			asmIBlockObjRegistersSet(iblock, regset);
+		}
+
+		regset = asmIBlockIntRegisters(iblock);
+		if (objOrderedSetIsMember(regset, ib)) {
+			regset = objOrderedSetSub0(regset, ib);
+			regset = objOrderedSetUnion0(regset, setIntReg);
+			asmIBlockIntRegistersSet(iblock, regset);
+		}
+	}
+
+	memRootSetAddressUnRegister(&regset);
+	memRootSetAddressUnRegister(&iblock);
+	memRootSetAddressUnRegister(&setIntReg);
+	memRootSetAddressUnRegister(&setObjReg);
+	memRootSetAddressUnRegister(&ib);
+}
+
+void asmIregisterExtentsReplaceIblockPlaceholderReverse (Obj ib, Obj setObjReg, Obj setIntReg) {
+ Num b;
+ Obj iblock, regset;
+	memRootSetAddressRegister(&ib);
+	memRootSetAddressRegister(&setObjReg);
+	memRootSetAddressRegister(&setIntReg);
+	memRootSetAddressRegister(&iblock);
+	memRootSetAddressRegister(&regset);
+
+	for (b = 1; (b <= asmIBlockFrameCount()) ; ++b) { // Over all iblocks
+		iblock = asmIBlockFrame(asmIBlockFrameCount() - b); // TODO when iblock hits ib, stop (since every pass is linear starting at 0)
+
+		// If this iblock has a matching iblock placeholder, remove it and union the two sets
+		regset = asmIBlockObjRegisters(iblock);
+		if (objOrderedSetIsMember(regset, ib)) {
+			regset = objOrderedSetSub0(regset, ib);
+			regset = objOrderedSetUnion0(regset, setObjReg);
+			asmIBlockObjRegistersSet(iblock, regset);
+		}
+
+		regset = asmIBlockIntRegisters(iblock);
+		if (objOrderedSetIsMember(regset, ib)) {
+			regset = objOrderedSetSub0(regset, ib);
+			regset = objOrderedSetUnion0(regset, setIntReg);
+			asmIBlockIntRegistersSet(iblock, regset);
+		}
+	}
+
+	memRootSetAddressUnRegister(&regset);
+	memRootSetAddressUnRegister(&iblock);
+	memRootSetAddressUnRegister(&setIntReg);
+	memRootSetAddressUnRegister(&setObjReg);
+	memRootSetAddressUnRegister(&ib);
+}
+
+/* Set each icode's forward iregister extent set based on incoming iregister
+   extent sets and the iregistered used by the icode.
+*/
+void asmIregisterExtentsUpdateIcodes (void) {
+ Obj iblock, regset, inIblock, objset=onull, intset=onull, icode, reg;
+ Num i, f;
+	memRootSetAddressRegister(&iblock);
+	memRootSetAddressRegister(&regset);
+	memRootSetAddressRegister(&inIblock);
+	memRootSetAddressRegister(&objset);
+	memRootSetAddressRegister(&intset);
+	memRootSetAddressRegister(&icode);
+
+	for (iblock = asmIBlockFrame(0); // Over all iblocks.
+	     (iblock != ofalse);
+	     iblock = asmIBlockNextValidIblock(iblock)) {
+
+		// Start with union of all incoming iregister extent sets from the parent iblocks
+		for (r01 = asmIBlockIncomingList(iblock); // Over all incoming iblocks
+		     (r01 != onull);
+		     r01 = cdr(r01)) {
+			inIblock = car(r01);
+			objset = objOrderedSetUnion0(objset, asmIBlockObjRegisters(inIblock));
+			intset = objOrderedSetUnion0(intset, asmIBlockIntRegisters(inIblock));
+		}
+
+		// Add each icode's iregisters to the extent sets and assign the set to the icode
+		for (i=0; (i < asmIBlockICodeLength(iblock)); ++i) { // Over all icodes
+			icode = asmIBlockICode(iblock, i);
+			for (f = 1; (f <= 3); ++f) { // Over the three reg fields
+				// Consider register field of icode #(-, REG1, REG2, REG3, -, -) of iblock
+				reg = asmICodeField(icode, f);
+				// Add reg to either the object or integer set
+				if      (asmIsOregister(reg)) { objset = objOrderedSetAdd0(objset, reg); }
+				else if (asmIsIregister(reg)) { intset = objOrderedSetAdd0(intset, reg); }
+			}
+
+			// Set icode's two register exten sets
+			asmIcodeObjRegSetIRegListSet(icode, objset);
+			asmIcodeIntRegSetIRegListSet(icode, intset);
+		} // for icodes
+
+	} // for iblocks
+
+	memRootSetAddressUnRegister(&icode);
+	memRootSetAddressUnRegister(&intset);
+	memRootSetAddressUnRegister(&objset);
+	memRootSetAddressUnRegister(&inIblock);
+	memRootSetAddressUnRegister(&regset);
+	memRootSetAddressUnRegister(&iblock);
+}
+
+void asmIregisterExtentsUpdateIcodesReverse (void) {
+ Obj iblock, ib, objset, intset, icode, reg;
+ Num b, i, f;
+	memRootSetAddressRegister(&iblock);
+	memRootSetAddressRegister(&ib);
+	memRootSetAddressRegister(&objset);
+	memRootSetAddressRegister(&intset);
+	memRootSetAddressRegister(&icode);
+
+	for (b = 1; (b <= asmIBlockFrameCount()) ; ++b) { // Over all iblocks
+		iblock = asmIBlockFrame(asmIBlockFrameCount() - b);
+
+		if (asmIBlockTag(iblock) != ofalse) { // IBlock might be optimized out
+
+//fprintf(stderr, "\niblock %p", iblock);
+			// Start with union of all reverse incoming iregister extent sets from the child iblocks
+
+			objset = intset = onull; // Sets initially empty
+
+			ib = asmIBlockDefaultTag(iblock); // Gather default block's reverse outgoing set
+			if (ib != ofalse) {
+//fprintf(stderr, "\n  ib%p   union:", ib);
+//objDisplay(objset, stderr);
+//objDisplay(asmIBlockObjRegisters(ib), stderr);
+				objset = objOrderedSetUnion0(objset, asmIBlockObjRegisters(ib));
+				intset = objOrderedSetUnion0(intset, asmIBlockIntRegisters(ib));
+			}
+			ib = asmIBlockConditionalTag(iblock); // Gather conditional block's reverse outgoing set
+			if (ib != ofalse) {
+				objset = objOrderedSetUnion0(objset, asmIBlockObjRegisters(ib));
+				intset = objOrderedSetUnion0(intset, asmIBlockIntRegisters(ib));
+			}
+
+			// Add each icode's iregisters to the extent sets and assign the set to the icode
+			for (i=1; (i <= asmIBlockICodeLength(iblock)); ++i) {
+				icode = asmIBlockICode(iblock, asmIBlockICodeLength(iblock) - i); /* Consider icode #(ADDI, r, NA, NA, i, NA) in r02 */
+				for (f = 1; (f <= 3); ++f) { // Over the three reg fields
+					// Consider register field of icode #(-, REG1, REG2, REG3, -, -) of iblock
+					reg = asmICodeField(icode, f);
+					// Add reg to either the object or integer set
+					if      (asmIsOregister(reg)) { objset = objOrderedSetAdd0(objset, reg); }
+					else if (asmIsIregister(reg)) { intset = objOrderedSetAdd0(intset, reg); }
+				}
+
+				// Set icode's two register extent sets
+				asmIcodeObjRegSetTmpSet(icode, objset);
+				asmIcodeIntRegSetTmpSet(icode, intset);
+			} // for icodes
+		}
+
+	} // for iblocks
+
+	memRootSetAddressUnRegister(&icode);
+	memRootSetAddressUnRegister(&intset);
+	memRootSetAddressUnRegister(&objset);
+	memRootSetAddressUnRegister(&ib);
+	memRootSetAddressUnRegister(&iblock);
+}
+
+/* Determine range of each intermediate register for each icode
+     type <= 0 object register   1 integer registers
+   riblock = uses
+       r01 = uses
+       r02 = uses
+*/
+void asmTagIregisterExtents (void) {
+ Num b;
+ Num i;
+ Obj iblock, setObjReg=onull, setIntReg=onull, ib;
+
+	memRootSetAddressRegister(&iblock);
+	memRootSetAddressRegister(&setObjReg);
+	memRootSetAddressRegister(&setIntReg);
+	memRootSetAddressRegister(&ib);
+
+	// Determine each iblock's forward iregister extent (Stage 1)
+
+	for (iblock = asmIBlockFrame(0); // Over all iblocks.  TODO implement asmIBlockFirst() frame 0 might not be the 1st.
+	     (iblock != ofalse);
+	     iblock = asmIBlockNextValidIblock(iblock)) {
+		// Gather iregisters used in this block
+		asmGatherIblockIregisters(iblock);
+		setObjReg = r01;
+		setIntReg = r02;
+
+		// Add iregisters from incoming parent blocks to the sets.
+		// Incoming iblock's outgoing ireg lists will be either #f or a list of iregisters and/or iblocks
+		// If an incoming list is #f, then use the incoming iblock as a placeholder.
+		for (r01 = asmIBlockIncomingList(iblock); // Over all incoming iblocks
+		     (r01 != onull);
+		     r01 = cdr(r01)) {
+			ib = car(r01);
+			r00 = asmIBlockObjRegisters(ib); // Incoming iblock's outgoing iregister list
+			setObjReg = (ofalse == r00)
+			          ? objOrderedSetAdd0(setObjReg, ib) // Add iblock to set
+			          : objOrderedSetUnion0(setObjReg, r00);   // Union sets
+
+			r00 = asmIBlockIntRegisters(ib);
+			setIntReg = (ofalse == r00)
+			          ? objOrderedSetAdd0(setIntReg, ib) // Add iblock to set
+			          : objOrderedSetUnion0(setIntReg, r00);   // Union sets
+		}
+
+		// Set outgoing list of iregisters.
+		asmIBlockObjRegistersSet(iblock, setObjReg);
+		asmIBlockIntRegistersSet(iblock, setIntReg);
+
+		// If an incoming set includes this block as a place holder, then we can go back and add my outgoing sets to the iblocks with my placeholder (including myself).  (Recursive or linear sweep?)
+		if (objOrderedSetIsMember(setObjReg, iblock)) {
+			assert(objOrderedSetIsMember(setIntReg, iblock)); // Not really needed
+			asmIregisterExtentsReplaceIblockPlaceholder(iblock, objOrderedSetSub0(setObjReg, iblock), objOrderedSetSub0(setIntReg, iblock));
+		}
+
+	} // for iblocks
+
+	// TODO: sweep all iblocks for placeholders in outgoing iregister lists
+
+	asmIregisterExtentsUpdateIcodes(); // Set each icode's register extent set since we only determined extent between iblocks (Stage 1 complete)
+
+	//// Determine each iblock's reverse iregister extent (Stage 2)
+
+	// Reset each iblock's iregister set
+	for (iblock = asmIBlockFrame(0); // Over all iblocks.  TODO implement asmIBlockFirst() frame 0 might not be the 1st.
+	     (iblock != ofalse);
+	     iblock = asmIBlockNextValidIblock(iblock)) {
+		asmIBlockObjRegistersSet(iblock, onull);
+		asmIBlockIntRegistersSet(iblock, onull);
+	}
+
+	// Filter backwards the iregisters, thus creating the actual iregister extent sets for each icode.
+
+//BF:
+//if (1) {fprintf(stderr, "\n-- Pre Reverse ----"); asmDumpIBlocks(); }
+
+	// Over all iblocks in reverse
+	for (b = 1; (b <= asmIBlockFrameCount()) ; ++b) {
+		iblock = asmIBlockFrame(asmIBlockFrameCount() - b);
+
+		if (otrue == asmIBlockTag(iblock)) { // Block might be optimized out
+//fprintf(stderr, "\niblock %p", iblock);
+//asmPrintIblock(iblock);
+			// Gather iregisters used in this block
+			asmGatherIblockIregisters(iblock);
+			setObjReg = r01;
+			setIntReg = r02;
+
+			// Gather default block's reverse outgoing set
+			ib = asmIBlockDefaultTag(iblock);
+//fprintf(stderr, "\n  ib %p", ib);
+			if (ib != ofalse) {
+				r00 = asmIBlockObjRegisters(ib);
+				setObjReg = (ofalse == r00)
+				          ? objOrderedSetAdd0(setObjReg, ib) // Add iblock to set
+				          : objOrderedSetUnion0(setObjReg, r00);   // Union sets
+
+				r00 = asmIBlockIntRegisters(ib);
+				setIntReg = (ofalse == r00)
+				          ? objOrderedSetAdd0(setIntReg, ib) // Add iblock to set
+				          : objOrderedSetUnion0(setIntReg, r00);   // Union sets
+			}
+
+			// Gather conditional block's reverse outgoing set
+			ib = asmIBlockConditionalTag(iblock);
+			if (ib != ofalse) {
+				r00 = asmIBlockObjRegisters(ib);
+				setObjReg = (ofalse == r00)
+				          ? objOrderedSetAdd0(setObjReg, ib) // Add iblock to set
+				          : objOrderedSetUnion0(setObjReg, r00);   // Union sets
+	
+				r00 = asmIBlockIntRegisters(ib);
+				setIntReg = (ofalse == r00)
+				          ? objOrderedSetAdd0(setIntReg, ib) // Add iblock to set
+				          : objOrderedSetUnion0(setIntReg, r00);   // Union sets
+			}
+
+			// Set outgoing list of iregisters.
+			asmIBlockObjRegistersSet(iblock, setObjReg);
+			asmIBlockIntRegistersSet(iblock, setIntReg);
+
+			// If an incoming set includes this block as a place holder, then we can go back
+			// and add my outgoing sets to the iblocks with my placeholder (including myself).
+			// (Recursive or linear sweep?)
+			if (objOrderedSetIsMember(setObjReg, iblock)) {
+				assert(objOrderedSetIsMember(setIntReg, iblock)); // Not really needed
+				asmIregisterExtentsReplaceIblockPlaceholderReverse(iblock, objOrderedSetSub0(setObjReg, iblock), objOrderedSetSub0(setIntReg, iblock));
+			}
+		}
+	} // for iblocks in reverse
+
+	asmIregisterExtentsUpdateIcodesReverse(); // Set each icode's register extent set (Stage 2 complete)
+
+
+	for (iblock = asmIBlockFrame(0); // Over all iblocks.
+	     (iblock != ofalse);
+	     iblock = asmIBlockNextValidIblock(iblock)) {
+		for (i=0; (i < asmIBlockICodeLength(iblock)); ++i) { // Over all icodes
+			r02 = asmIBlockICode(iblock, i); // Consider icode
+
+			// Intersection of forward and reverse object iregister extent sets
+			r00 = asmIcodeObjRegSetIRegList(r02);
+			r01 = asmIcodeObjRegSetTmp(r02);
+			objOrderedSetIntersection001();
+			asmIcodeObjRegSetIRegListSet(r02, r00);
+
+			// Intersection of forward and reverse integer iregister extent sets
+			r00 = asmIcodeIntRegSetIRegList(r02);
+			r01 = asmIcodeIntRegSetTmp(r02);
+			objOrderedSetIntersection001();
+			asmIcodeIntRegSetIRegListSet(r02, r00);
+		}
+	}
+
+
+	for (b=0; b < asmIBlockFrameCount() ; ++b) { // Over every iblock
+		iblock = asmIBlockFrame(b);
+		// Clear the iblock regster sets
+		asmIBlockObjRegistersSet(iblock, onull);
+		asmIBlockIntRegistersSet(iblock, onull);
+		/* Clear out each icode's obj and int register set tmp set */
+		for (i=0; (i < asmIBlockICodeLength(iblock)); ++i) {
+			r02 = asmIBlockICode(iblock, i); // Consider icode
+			asmIcodeObjRegSetTmpSet(r02, onull);
+			asmIcodeIntRegSetTmpSet(r02, onull);
+		}
+	}
+
+//BF:
+//if (ofalse != odebug) { fprintf(stderr, "\n-- Tag Registers Final ----"); asmDumpIBlocks(); }
+
+	memRootSetAddressUnRegister(&ib);
+	memRootSetAddressUnRegister(&setIntReg);
+	memRootSetAddressUnRegister(&setObjReg);
+	memRootSetAddressUnRegister(&iblock);
+}
+
+
+void asmAssignRegisters (void) {
+ Num i, f;
+ Obj iregField;
+	// Over all iblocks
+	for (riblock = asmIBlockFrame(0); // TODO implement asmIBlockFirst()
+	     (riblock != ofalse);
+	     riblock = asmIBlockNextValidIblock(riblock)) {
+		if (otrue == asmIBlockTag(riblock)) {
+//fprintf(stderr, "\nAssigning registers for riblock %p  ", riblock);
+//fprintf(stderr, "\n-- riblock ----"); asmPrintIblock(riblock);
+		for (i=0; (i < asmIBlockICodeLength(riblock)); ++i) { // Over all icodes
+			r02 = asmIBlockICode(riblock, i); /* Consider icode #(ADDI, r, NA, NA, i, NA)  r02 */
+			for (f=1; f<=3; ++f) { // Over the three icode register fields  #(-, REG1, REG2, REG3, -, -)
+				iregField = asmICodeField(r02, f);
+				if (NA != (Obj)iregField) {
+					if (asmIsOregister(iregField)) {
+						r01 = objAssq(iregField, asmIcodeObjRegSetIRegList(r02));
+//fprintf(stderr, "\n icode #%x  field #%x  found oregister  objAssq=>", i, iregField);
+//objDisplay(r01, stderr);
+						//objDisplay(r01, stdout);
+						asmICodeSetField(r02, f, cdr(r01));
+					} else if (asmIsIregister(iregField)) {
+						r01 = objAssq(iregField, asmIcodeIntRegSetIRegList(r02));
+//fprintf(stderr, "\n icode #%x  field #%x  found iregister  objAssq=>", i, iregField);
+//objDisplay(r01, stderr);
+						//objDisplay(r01, stdout);
+						asmICodeSetField(r02, f, cdr(r01)); 
+					} else if (asmIsRegister(iregField)) {
+						//objDisplay(iregField, stdout);
+					}
+				}
+			}
+		}
+		}
+	}
+}
+
+
+/* Dedicated to Professor Mackey.
+
+	Allocate either type=0 object register or type=1 integer register
+*/
+void asmAllocateRegisters (Num type) {
+ Num i, count;
+ Obj lst;
+ Obj listOfAvailableRegisters=onull;
+ Obj listOfCurrentIregisterAssignments=onull;
+ Obj icode;
+
+	memRootSetAddressRegister(&listOfAvailableRegisters);
+	memRootSetAddressRegister(&listOfCurrentIregisterAssignments);
+	memRootSetAddressRegister(&icode);
+
+	// Over all iblocks
+	for (riblock = asmIBlockFrame(0); // TODO implement asmIBlockFirst()
+	     (riblock != ofalse);
+	     riblock = asmIBlockNextValidIblock(riblock)) {
+
+		/* Consider all available registers from each of the last icodes in the parent iblocks */
+		lst = asmIBlockIncomingList(riblock);
+		if (lst == onull) { // Default Set of available registers (objects 00-r08  integers r10-r1b) if there are no parent iblocks
+			if (0==type) {
+				r00 = onull;
+				r01 = (Obj)0x04; objCons010();
+				r01 = (Obj)0x03; objCons010();
+				r01 = (Obj)0x02; objCons010();
+				r01 = (Obj)0x01; objCons010();
+				listOfAvailableRegisters = r00;
+			} else {
+				r00 = onull;
+				r01 = (Obj)0x14; objCons010();
+				r01 = (Obj)0x13; objCons010();
+				r01 = (Obj)0x12; objCons010();
+				r01 = (Obj)0x11; objCons010();
+				listOfAvailableRegisters = r00;
+			}
+		} else { // Verify all parent register lists are the same.
+			// Use parent iblocks' last icode as current set of iregister extents.  Initialize with null.
+			r00 = onull;
+			for (r02 = asmIBlockIncomingList(riblock); // List of incoming blocks
+			     (r02 != onull);
+			     r02 = cdr(r02)) {// next incoming iblock
+				r01 = asmIBlockLastICode(car(r02)); // Consider last icode of each parent's iblock
+				if (ofalse != r01) {
+					r01 = (type == 0) ? asmIcodeObjRegSetRegList(r01)  // Consider set of intermediate registers (from either the object or integer sets)
+					                  : asmIcodeIntRegSetRegList(r01);
+					r00 = r01; //objOrderedSetUnion001(); // TODO don't untion the parent available register sets. instead just verify they're equivalent
+				}
+			}
+			listOfAvailableRegisters = r00;
+		}
+
+		for (i=0; (i < asmIBlockICodeLength(riblock)); ++i) { // Over all icodes
+			/* Considering: listOfCurrentIregisterAssignments
+			              : listOfAvailableRegisters
+			*/
+
+			icode = asmIBlockICode(riblock, i); /* Consider icode #(ADDI, r, NA, NA, i, NA)  */
+			r03 = (type == 0) ? asmIcodeObjRegSetIRegList(icode)  /* Consider iregister list               r03*/
+			                  : asmIcodeIntRegSetIRegList(icode);
+
+			/* Create new free rgister list based on previous register list while freeing those that are not in the current iregister list.
+			   Free register if out of iregister's range
+ 			*/
+			r00 = listOfAvailableRegisters;
+			count=0;
+			while (r00 != onull) {
+				r01 = car(r00); // Consider each register assignment (if not a pair, not assigned)
+				if (objIsPair(r01)) {
+					r01 = objMemq(car(r01), r03);
+					if (r01 == onull) { // Iregister not required anylonger so free register
+						vmPush(cdar(r00));
+					} else {
+						vmPush(car(r00));
+					}
+				} else {
+					vmPush(r01);
+				}
+				count++;
+				r00 = cdr(r00);
+			}
+			r00 = onull;
+			while(count--) { r01 = vmPop(); objCons010(); }
+			listOfAvailableRegisters = r00;
+
+			// For each unassigned iregister...assign an available register...if none then OH NOES!
+			count=0;
+			while (r03 != onull) {
+				r01 = car(r03); // Consider each assumed unassigned iregister
+				r02 = objAssq(r01, listOfAvailableRegisters);
+				if (r02 != onull) { // Found existing register assignment
+					vmPush(r02); //memVectorSet(r03, 0, r02);
+				} else {
+					r02 = listOfAvailableRegisters;
+					while (objIsPair(car(r02))) r02 = cdr(r02); // Look for first available register
+					r00 = car(r02);
+					objCons010(); // (ireg . reg)
+					memVectorSet(r02, 0, r00);
+					vmPush(r00); // memVectorSet(r03, 0, r00);
+				}
+				count++;
+				r03 = cdr(r03); // Next unassigned iregister
+			}
+
+			r00 = onull;
+			while(count--) {
+				r01 = vmPop();
+				objCons010();
+			}
+
+			// Look for placed register in available register list
+
+			if (type == 0) {
+				asmIcodeObjRegSetIRegListSet(icode, r00);
+				asmIcodeObjRegSetRegListSet(icode, listOfAvailableRegisters);
+			} else {
+				asmIcodeIntRegSetIRegListSet(icode, r00);
+				asmIcodeIntRegSetRegListSet(icode, listOfAvailableRegisters);
+			}
+		}
+	}
+
+	memRootSetAddressUnRegister(&icode);
+	memRootSetAddressUnRegister(&listOfCurrentIregisterAssignments);
+	memRootSetAddressUnRegister(&listOfAvailableRegisters);
+}
+
 
 /* The IGraph's iblocks are found in riblocks.  The icode found in each iblock
    and the links between icodes, are assembled into a VM code object object
@@ -1448,16 +2218,43 @@ void asmAssemble (void) {
 	asmPrepareIGraph(asmIBlock(iblockOffset));
 
 	if (ofalse != odebug) {
-		fprintf(stderr, "\nasmAssemble() Un-optimized IGraph:");
-		asmDumpIBlocks();
+//		fprintf(stderr, "\nasmAssemble() Un-optimized IGraph:");
+//		asmDumpIBlocks();
 	}
 
 	asmOptimizeIGraph();
 
-	if (ofalse != odebug) {
-		fprintf(stderr, "\nasmAssemble() Optimized IGraph:");
+	asmTagIregisterExtents(); // Create the object and integer intermediate register extent sets for each icode
+
+	asmAllocateRegisters(0);
+	asmAllocateRegisters(1);
+	asmAssignRegisters();
+	asmOptimizeIGraph();
+
+	if (odebug == otrue) {
+		fprintf(stderr, "\n-- Optimized Intermediate Graph  ----");
 		asmDumpIBlocks();
 	}
+
+/*
+	if (ofalse != odebug) {
+		fprintf(stderr, "\n\nroregisters:");
+		for (len=0; len<memObjectLength(roregisters); ++len) {
+			fprintf(stderr, " $"HEX03"=$"HEX02,
+			        len + OREGISTER_FIRST_VALID,
+			        memVectorObject(roregisters, len));
+		}
+		fprintf(stderr, "\n\nriregisters:");
+		for (len=0; len<memObjectLength(riregisters); ++len) {
+			fprintf(stderr, " $"HEX03"=$"HEX02,
+			        len + IREGISTER_FIRST_VALID,
+			        memVectorObject(riregisters, len));
+		}
+
+		fprintf(stderr, "\n\nasmAssemble() Optimized IGraph:");
+		asmDumpIBlocks();
+	}
+*/
 
 	len = asmCountIGraphFields();
 	if (len) {
@@ -1469,8 +2266,11 @@ void asmAssemble (void) {
 
 		r00 = rcodenew;
 
-		if (ofalse != odebug) objDisplay(rlabels, stdout);
-		if (ofalse != odebug) objDisplay(rcodenew, stderr);
+if (odebug == otrue) {
+	fprintf(stderr, "\n::%s", __FUNCTION__);
+	//objDisplay(rlabels, stdout);
+	objDisplay(rcodenew, stderr);
+}
 	} else {
 		r00 = ofalse;
 	}
@@ -1485,41 +2285,129 @@ void asmAssemble (void) {
 /*******************************************************************************
  Debugging
 *******************************************************************************/
-void asmDumpICodeFields (Obj ic) {
- Obj f;
-	if ((Obj)NA != (f = asmICodeField(ic, 1))) { fprintf(stderr, " $"HEX, f); assert(f<=R1F); }
-	if ((Obj)NA != (f = asmICodeField(ic, 2))) { assert(f<=R0F); fprintf(stderr, " $"HEX, f); }
-	if ((Obj)NA != (f = asmICodeField(ic, 3))) { assert(f<=R0F); fprintf(stderr, " $"HEX, f); }
-	if ((Obj)NA != (f = asmICodeField(ic, 4))) { fprintf(stderr, " "); objDisplay(f, stderr); fflush(stderr); }
-	if ((Obj)NA != (f = asmICodeField(ic, 5))) { fprintf(stderr, " "); objDisplay(f, stderr); fflush(stderr); }
+Num _asmPrintIregisterAssignments (Obj l, FILE *fp, char *sep) {
+ Obj o;
+	if (!objIsPair(l)) return 0;
+	o = car(l); // consider car
+	if (objIsPair(o)) {
+		fprintf(fp, STR HEX03 ":$%x", sep, car(o), cdr(o));
+	} else {
+		fprintf(fp, STR HEX03, sep, o);
+	}
+	return 1 + _asmPrintIregisterAssignments(cdr(l), fp, " "); // recurse on cdr
 }
-void asmDumpICode (Obj ic) {
+Num asmPrintIregisterAssignments (Obj l, FILE *fp) {
+	return (l!=onull) ? _asmPrintIregisterAssignments(l, fp, "") : 0;
+}
+
+Num _asmPrintRegisterAssignments (Obj l, FILE *fp, char *sep) {
+ Obj o;
+	if (!objIsPair(l)) return 0;
+	o = car(l); // consider car
+	if (objIsPair(o)) {
+		fprintf(fp, STR HEX03 ":$%x" , sep, car(o), cdr(o));
+	} else {
+		fprintf(fp, STR "$" HEX, sep, o);
+	}
+	return 1 + _asmPrintRegisterAssignments(cdr(l), fp, " "); // recurse on cdr
+}
+Num asmPrintRegisterAssignments (Obj l, FILE *fp) {
+	return (l!=onull) ? _asmPrintRegisterAssignments(l, fp, "") : 0;
+}
+
+/* Print fields of an icode (icode arguments) including assembler work structures
+*/
+void asmPrintICodeFields (Obj ic) {
+ Obj f;
+ char buff[80];
+ Num count;
+	// Field 1 reg
+	if ((Obj)NA != (f = asmICodeField(ic, 1))) {
+		sprintf(buff, "$"HEX02, f);
+		fprintf(stderr, " %5s", buff);
+	}
+
+	// Field 2 reg
+	if ((Obj)NA != (f = asmICodeField(ic, 2))) {
+		sprintf(buff, "$"HEX02, f);
+		fprintf(stderr, " %5s", buff);
+	}
+
+	// Field 3 reg
+	if ((Obj)NA != (f = asmICodeField(ic, 3))) {
+		sprintf(buff, "$"HEX02, f);
+		fprintf(stderr, " %5s", buff);
+	}
+
+	// Field 4 immediate
+	if ((Obj)NA != (f = asmICodeField(ic, 4))) { fprintf(stderr, " "); objDisplay(f, stderr); }
+
+	// Field 5 offset
+	if ((Obj)NA != (f = asmICodeField(ic, 5))) { fprintf(stderr, " #<"HEX03">", asmLabels((Num)f)); }
+
+	// Field 6 intermediate object-register extents
+	fprintf(stderr, "\t[[");
+	if ((Obj)NA != (f = asmICodeField(ic, ICODE_INDEX_OBJREGSET))) {
+		count = asmPrintIregisterAssignments(memVectorObject(f, 0), stderr); // Field 5 Forward object-integer extent set
+		if (count) { fprintf(stderr, " "); }
+	}
+	if ((Obj)NA != (f = asmICodeField(ic, ICODE_INDEX_INTREGSET))) {
+		asmPrintIregisterAssignments(memVectorObject(f, 0), stderr); // Field 6 Forward integer-register extent set
+	}
+	fprintf(stderr, "]] {{");
+
+	if ((Obj)NA != (f = asmICodeField(ic, ICODE_INDEX_OBJREGSET))) {
+		count = asmPrintRegisterAssignments(memVectorObject(f, 1), stderr); // Field 5 Reverse object-integer extent set
+		if (count) { fprintf(stderr, " "); }
+	}
+	if ((Obj)NA != (f = asmICodeField(ic, ICODE_INDEX_INTREGSET))) {
+		asmPrintRegisterAssignments(memVectorObject(f, 1), stderr); // Field 6 Reverse integer-register extent set
+	}
+	fprintf(stderr, "}}  (");
+
+	if ((Obj)NA != (f = asmICodeField(ic, ICODE_INDEX_OBJREGSET))) {
+		count = asmPrintIregisterAssignments(memVectorObject(f, 2), stderr); // Field 5 Temp object-integer set
+		if (count) { fprintf(stderr, " "); }
+	}
+	if ((Obj)NA != (f = asmICodeField(ic, ICODE_INDEX_INTREGSET))) {
+		asmPrintIregisterAssignments(memVectorObject(f, 2), stderr); // Field 6 Temp integer-register set
+	}
+	fprintf(stderr, ")");
+
+	fflush(stderr);
+}
+
+void asmPrintICode (Obj ic) {
  Obj field;
 	if (memIsObjectValid(ic)) {
+		assert(asmIsObjectTypeICode(ic));
 		field = asmICodeField(ic, 0);
 		switch ((Num)field) {
-			case (Num)MV  : fprintf(stderr, "mv  "); asmDumpICodeFields(ic); break;
-			case (Num)MVI : fprintf(stderr, "mvi "); asmDumpICodeFields(ic); break;
-			case (Num)LDI : fprintf(stderr, "ldi "); asmDumpICodeFields(ic); break;
-			case (Num)LD  : fprintf(stderr, "ld  "); asmDumpICodeFields(ic); break;
-			case (Num)STI : fprintf(stderr, "sti "); asmDumpICodeFields(ic); break;
-			case (Num)ST  : fprintf(stderr, "st  "); asmDumpICodeFields(ic); break;
-			case (Num)PUSH: fprintf(stderr, "push"); asmDumpICodeFields(ic); break;
-			case (Num)POP : fprintf(stderr, "pop "); asmDumpICodeFields(ic); break;
-			case (Num)LSLI: fprintf(stderr, "lsli"); asmDumpICodeFields(ic); break;
-			case (Num)LSRI: fprintf(stderr, "lsri"); asmDumpICodeFields(ic); break;
-			case (Num)ADDI: fprintf(stderr, "addi"); asmDumpICodeFields(ic); break;
-			case (Num)BLTI: fprintf(stderr, "blti"); asmDumpICodeFields(ic); break;
-			case (Num)BEQI: fprintf(stderr, "beqi"); asmDumpICodeFields(ic); break;
-			case (Num)BNEI: fprintf(stderr, "bnei"); asmDumpICodeFields(ic); break;
-			case (Num)BRA : fprintf(stderr, "bra "); asmDumpICodeFields(ic); break;
-			case (Num)JMP : fprintf(stderr, "jmp "); asmDumpICodeFields(ic); break;
-			case (Num)JAL : fprintf(stderr, "jal "); asmDumpICodeFields(ic); break;
-			case (Num)RET : fprintf(stderr, "ret");                          break;
-			case (Num)SYS : fprintf(stderr, "sys "); asmDumpICodeFields(ic); break;
-			case (Num)SYSI: fprintf(stderr, "sysi"); asmDumpICodeFields(ic); break;
-			case (Num)NOP : fprintf(stderr, "nop");                          break;
-			case (Num)QUIT: fprintf(stderr, "quit");                         break;
+			case (Num)MV  : fprintf(stderr, "mv  "); asmPrintICodeFields(ic); break;
+			case (Num)MVI : fprintf(stderr, "mvi "); asmPrintICodeFields(ic); break;
+			case (Num)LDI : fprintf(stderr, "ldi "); asmPrintICodeFields(ic); break;
+			case (Num)LD  : fprintf(stderr, "ld  "); asmPrintICodeFields(ic); break;
+			case (Num)STI : fprintf(stderr, "sti "); asmPrintICodeFields(ic); break;
+			case (Num)ST  : fprintf(stderr, "st  "); asmPrintICodeFields(ic); break;
+			case (Num)PUSH: fprintf(stderr, "push"); asmPrintICodeFields(ic); break;
+			case (Num)POP : fprintf(stderr, "pop "); asmPrintICodeFields(ic); break;
+			case (Num)LSLI: fprintf(stderr, "lsli"); asmPrintICodeFields(ic); break;
+			case (Num)LSRI: fprintf(stderr, "lsri"); asmPrintICodeFields(ic); break;
+			case (Num)ADD : fprintf(stderr, "add");  asmPrintICodeFields(ic); break;
+			case (Num)ADDI: fprintf(stderr, "addi"); asmPrintICodeFields(ic); break;
+			case (Num)MUL : fprintf(stderr, "mul");  asmPrintICodeFields(ic); break;
+			case (Num)MULI: fprintf(stderr, "muli"); asmPrintICodeFields(ic); break;
+			case (Num)BLTI: fprintf(stderr, "blti"); asmPrintICodeFields(ic); break;
+			case (Num)BEQI: fprintf(stderr, "beqi"); asmPrintICodeFields(ic); break;
+			case (Num)BNEI: fprintf(stderr, "bnei"); asmPrintICodeFields(ic); break;
+			case (Num)BRA : fprintf(stderr, "bra "); asmPrintICodeFields(ic); break;
+			case (Num)JMP : fprintf(stderr, "jmp "); asmPrintICodeFields(ic); break;
+			case (Num)JAL : fprintf(stderr, "jal "); asmPrintICodeFields(ic); break;
+			case (Num)RET : fprintf(stderr, "ret");  asmPrintICodeFields(ic); break;
+			case (Num)SYS : fprintf(stderr, "sys "); asmPrintICodeFields(ic); break;
+			case (Num)SYSI: fprintf(stderr, "sysi"); asmPrintICodeFields(ic); break;
+			case (Num)NOP : fprintf(stderr, "nop");  asmPrintICodeFields(ic); break;
+			case (Num)QUIT: fprintf(stderr, "quit"); asmPrintICodeFields(ic); break;
 			default:
 				if (field == NA) { fprintf(stderr, "---"); break; }
 				fprintf(stderr, "**UNKNOWN OPCODE**");
@@ -1528,26 +2416,51 @@ void asmDumpICode (Obj ic) {
 	}
 }
 
-void asmDumpIBlock (Obj ib) {
+void asmPrintIblock (Obj ib) {
  Num i;
  Obj o, block;
 	assert(asmIsObjectTypeIBlock(ib));
 	/* ID */
-	fprintf(stderr, "\n#<"HEX03"  ", asmIBlockID(ib));
+	fprintf(stderr, "\n\n#<"HEX03 " " OBJ " ", asmIBlockID(ib), ib);
+
+	objDisplay(asmIBlockTag(ib), stderr);
 
 	/* Tag */
+	/*
 	o = asmIBlockTag(ib);
 	if (ofalse == o)
 		fprintf(stderr, "---");
 	else
-		fprintf(stderr, HEX04, asmIBlockTag(ib));
+		objDisplay(asmIBlockTag(ib), stderr);
+	*/
+
+	/* Incoming block IDs */
+	fprintf(stderr, "  (");
+	if (onull == asmIBlockIncomingList(ib)) {
+		fprintf(stderr, "---");
+	} else {
+		for (o = asmIBlockIncomingList(ib); onull != o; ) {
+			fprintf(stderr, HEX03, asmIBlockID(car(o)));
+			o = cdr(o);
+			if (onull != o) fprintf(stderr, " ");
+		}
+	}
+	fprintf(stderr, ")");
+
+	/* Code */
+	for (i=0; i<asmIBlockICodeLength(ib); ++i) {
+		fprintf(stderr, "\n "HEX02"  ", i);
+		asmPrintICode(asmIBlockICode(ib, i));
+	}
+
+	fprintf(stderr, "\n   ");
 
 	/* Default block */
 	block = asmIBlockDefaultTag(ib);
 	if (ofalse==block)
-		fprintf(stderr, "  [---]");
+		fprintf(stderr, "[---]");
 	else {
-		fprintf (stderr, "  [");
+		fprintf (stderr, "[");
 		if (asmIsObjectTypeIBlock(block)) fprintf(stderr, HEX03, asmIBlockID(block));
 		else objDisplay(block, stderr);
 		fprintf (stderr, "]");
@@ -1563,21 +2476,20 @@ void asmDumpIBlock (Obj ib) {
 		else objDisplay(block, stderr);
 		fprintf (stderr, "]");
 	}
-	/* Incoming block IDs */
-	fprintf(stderr, "  (");
-	for (o = asmIBlockIncomingList(ib); onull != o; ) {
-		fprintf(stderr, HEX03, asmIBlockID(car(o)));
-		o = cdr(o);
-		if (onull != o) fprintf(stderr, " ");
-	}
-	fprintf(stderr, ")");
 
-	/* Code */
-	for (i=0; i<asmIBlockICodeLength(ib); ++i) {
-		fprintf(stderr, "\n  "HEX02"  ", i);
-		asmDumpICode(asmIBlockICode(ib, i));
-	}
-	fprintf (stderr, ">");
+	fprintf(stderr, "\n   ");
+
+	/* Outgoing object intermediate registers */
+	block = asmIBlockObjRegisters(ib);
+	objDisplay(block, stderr);
+
+	fprintf(stderr, "\n   ");
+
+	/* Outgoing integer intermediate registers */
+	block = asmIBlockIntRegisters(ib);
+	objDisplay(block, stderr);
+
+	fprintf (stderr, " >");
 }
 
 void asmDumpIBlocks (void) {
@@ -1589,8 +2501,12 @@ void asmDumpIBlocks (void) {
 
 	DBBEG();
 
-	for (i=iblockOffset; i<IBlockCount; ++i)
-		asmDumpIBlock(asmIBlock(i));
+	fprintf(stderr, "\n--ASM Dump IBlocks----");
+	for (i=iblockOffset; i<IBlockCount; ++i) {
+		asmPrintIblock(asmIBlock(i));
+	}
+
+	fprintf(stderr, "\n");
 
 	DBEND();
 
@@ -1603,15 +2519,15 @@ void asmDumpIBlockParentAndChildren (Obj ib) {
 	last = onull;
 	while (onull != lst) {
 		inib = car(lst); /* Consider an incoming block */
-		if (last != inib) asmDumpIBlock(inib);
+		if (last != inib) asmPrintIblock(inib);
 		last = inib;
 		lst = cdr(lst);
 	}
-	asmDumpIBlock(ib);
+	asmPrintIblock(ib);
 	dib = asmIBlockDefaultTag(ib);
 	cib = asmIBlockConditionalTag(ib);
-	if (asmIsObjectTypeIBlock(dib)) asmDumpIBlock(dib);
-	if (asmIsObjectTypeIBlock(cib)) asmDumpIBlock(cib);
+	if (asmIsObjectTypeIBlock(dib)) asmPrintIblock(dib);
+	if (asmIsObjectTypeIBlock(cib)) asmPrintIblock(cib);
 }
 
 
@@ -1622,6 +2538,10 @@ void asmDumpIBlockParentAndChildren (Obj ib) {
 void asmInitialize (void) {
  static Num shouldInitialize=1;
 	DBBEG();
+
+	// TODO set tabstop for icode debugging
+	printf("\e[3g                                   \eH                   \eH                 \eH                \eH           \eH          \eH        \eH        \eH        \eH      \eH\r");
+
 	if (shouldInitialize) {
 		DB("Activating module");
 		shouldInitialize=0;
@@ -1630,16 +2550,16 @@ void asmInitialize (void) {
 		objInitialize(); /* objInitialize -> vmInitialize -> memInitialize */
 
 		DB("Registering rootset objects");
-		memRootSetRegister(ropcodes);
-		memRootSetRegister(riblock);
-		memRootSetRegister(riblocks);
-		memRootSetRegister(ricodes);
-		memRootSetRegister(rlabels);
-		memRootSetRegister(rcodenew);
+		memRootSetAddressRegister(&ropcodes); MEM_ADDRESS_REGISTER(&ropcodes);
+		memRootSetAddressRegister(&riblock); MEM_ADDRESS_REGISTER(&riblock);
+		memRootSetAddressRegister(&riblocks); MEM_ADDRESS_REGISTER(&riblocks);
+		memRootSetAddressRegister(&ricodes); MEM_ADDRESS_REGISTER(&ricodes);
+		memRootSetAddressRegister(&rlabels); MEM_ADDRESS_REGISTER(&rlabels);
+		memRootSetAddressRegister(&rcodenew); MEM_ADDRESS_REGISTER(&rcodenew);
 
 		DB("Registering types");
-		memTypeRegisterString(TICODE, (Str)"icode");
-		memTypeRegisterString(TIBLOCK, (Str)"iblock");
+		memTypeStringRegister(TICODE, (Str)"icode");
+		memTypeStringRegister(TIBLOCK, (Str)"iblock");
 
 		DB("Initializing compiler related objects and symbols");
 		objNewSymbolStatic("sasmend"); sasmend = r00;
@@ -1656,6 +2576,7 @@ void asmInitialize (void) {
 		DB("Module already activated");
 	}
 	DBEND();
+
 }
 
 

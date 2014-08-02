@@ -31,11 +31,14 @@ DESIGN
 
 /* Compiler flags
 */
-static const Num CCTAILCALL  = (Num)0x00010000l;
-static const Num CCNODEFINES = (Num)0x00020000l;
+typedef Num CompState;
+
+static const Num IREGISTERMASK = (Num)0x0000ffffl;
+static const Num CCTAILCALL    = (Num)0x00010000l;
+static const Num CCNODEFINES   = (Num)0x00020000l;
 
 
-void compCompileExpr (Num flags);
+CompState  compCompileExpr (CompState state);
 void compCombination (Num flags);
 
 
@@ -124,8 +127,9 @@ void compSyscallTGELookup (void) {
 		DB("found in tge @ opcode "HEX, (Num)rip-4);
 		/* Specialization optimization.  Mutate code that originally called
 		   this function into a code that references the binding's value. */
-		memVectorSet(rcode, (Num)rip/ObjSize-4, vmMV_R00_I);  memVectorSet(rcode, (Num)rip/ObjSize-3, r00);
+		memVectorSet(rcode, (Num)rip/ObjSize-4, vmMV_R00_I);     memVectorSet(rcode, (Num)rip/ObjSize-3, r00);
 		memVectorSet(rcode, (Num)rip/ObjSize-2, vmLD_R00_R00_I); memVectorSet(rcode, (Num)rip/ObjSize-1, 0);
+		memVectorSet(rcode, (Num)rip/ObjSize, vmNOP);
 		/* Force virtual machine to run this code. */
 		rip -= 4*ObjSize;
 	}
@@ -202,30 +206,40 @@ void compSyscallVerifyVectorSetB (void) {
    Called during runtime via eval and macro statements.
 */
 void compSyscallCompile (void) {
+ CompState retFlags;
+ Num destinationReg;
 	DBBEG();
 	if (otrue == odebug) { sysDumpEnv(renv); }
 	compErrorReset();
 	asmInit();
+
 	rexpr = r00;
-	//compCompileExpr(0); /* Pass empty flags */
-	compCompileExpr(CCTAILCALL);
+	retFlags = compCompileExpr(CCTAILCALL);
+
 	if (compIsError()) {
 		asmReset();
 		compThrowCompilerError();
 	} else {
-		/* Finalize the assembled code with a 'ret' opcode */
-		asmAsm(RET);
+		/* Finalize the assembled code by emitting code that moves
+		   the value of the last compild expression into R00 and a
+		   with a 'ret' opcode */
+		destinationReg = retFlags & IREGISTERMASK;
+		asmAsm(
+			MV, R00, destinationReg,
+			RET);
 		asmAssemble();
 	}
    // Dump the compiled code object as machine language
-	//objDisplay(r00, stderr);
+	
+	if (ofalse != odebug) { objDisplay(r00, stderr); }
+
 	DBEND(STR, compIsError()?" *ERROR*":"");
 }
 
 void compDebug (void) {
 	objDisplay(rcode, stdout);
 	objDisplay(r02, stdout);
-	memDebugDumpHeapHeaders(stdout);
+	memPrintStructures(stdout);
 }
 
 /*******************************************************************************
@@ -319,10 +333,10 @@ void compTransformDefineFunction (void) {
 	r03 = car(rexpr); /* Function's name. */
 	r04 = cdr(rexpr); /* Function's formal parameters. */
 
-	r01=r04;      r02=r05;   objCons12(); /* (formals body) */
-	r01=slambda; r02=r00;   objCons12(); /* (lambda formals body) */
-	r01=r00;      r02=onull; objCons12(); /* ((lambda formals body)) */
-	r01=r03;      r02=r00;   objCons12(); /* (fn (lambda formals body)) */
+	r01=r04;      r02=r05;   objCons012(); /* (formals body) */
+	r01=slambda; r02=r00;   objCons012(); /* (lambda formals body) */
+	r01=r00;      r02=onull; objCons012(); /* ((lambda formals body)) */
+	r01=r03;      r02=r00;   objCons012(); /* (fn (lambda formals body)) */
 	
 	DBEND("  =>  ");
 	DBE objDisplay(rexpr, stderr);
@@ -404,26 +418,26 @@ Num compTransformInternalDefinitions (void) {
 		while (definitionsCount--) {
 			r03=vmPop();/* Considered saved transformed define expression. */
 			/* Prepend formal argument to list. */
-			r01=car(r03); r02=r04; objCons12(); r04=r00;
+			r01=car(r03); r02=r04; objCons012(); r04=r00;
 			/* Prepend set! expression to list. */
-			r01=ssetb;   r02=r03; objCons12();  /* Create (set! var ...) */
-			r01=r00;      r02=r05; objCons12(); r05=r00;
+			r01=ssetb;   r02=r03; objCons012();  /* Create (set! var ...) */
+			r01=r00;      r02=r05; objCons012(); r05=r00;
 			/* Prepend another onull to argument list. */
-			r01=onull;    r02=r06; objCons12(); r06=r00;
+			r01=onull;    r02=r06; objCons012(); r06=r00;
 		}
-		r01=r04;      r02=r05;  objCons12();
-		r01=slambda; r02=r00;  objCons12();
-		r01=r00;      r02=r06;  objCons12();
+		r01=r04;      r02=r05;  objCons012();
+		r01=slambda; r02=r00;  objCons012();
+		r01=r00;      r02=r06;  objCons012();
 		/* Create list consisting of this new expression. */
-		r01=r00;      r02=onull; objCons12();
+		r01=r00;      r02=onull; objCons012();
 		rexpr = r00;
 	}
 	
-	r01=vmPop(); r02=rexpr;   objCons12(); /* Re-attach arg list */
+	r01=vmPop(); r02=rexpr;   objCons012(); /* Re-attach arg list */
 
+ret:
 	DBEND("  =>  ");
 	DBE objDisplay(rexpr, stdout);
-ret:
 	return ret;
 }
 
@@ -443,7 +457,7 @@ void compTransformLet (void) {
 	r02=onull;
 	for (i=0; i<bindingLen; i++) {
 		r01=vmPop();
-		objCons12();
+		objCons012();
 		r02=r00;
 	}
 	vmPush(r02);
@@ -458,18 +472,18 @@ void compTransformLet (void) {
 	r02=onull;
 	for (i=0; i<bindingLen; i++) {
 		r01=vmPop();
-		objCons12();
+		objCons012();
 		r02=r00;
 	}
 
 	/* Create ((var...)body) */
-	r01=r02;  r02=r05;  objCons12();
+	r01=r02;  r02=r05;  objCons012();
 
 	/* Create (lambda (var...)body) */
-	r01=slambda;r02=r00;  objCons12();
+	r01=slambda;r02=r00;  objCons012();
 
 	/* Create ((lambda (var...) body) val...) */
-	r01=r00;  r02=vmPop();  objCons12();
+	r01=r00;  r02=vmPop();  objCons012();
 
 	/* Return transformed expression. */
 	rexpr=r00;
@@ -637,11 +651,11 @@ void compTransformNamedLet (void) {
 	r02=onull;
 	for (i=0; i<bindingLen; i++) {
 		r01=vmPop();
-		objCons12();
+		objCons012();
 		r02=r00;
 	}
-	r01=r03;  objCons12();
-	r01=r00;  r02=onull;  objCons12();
+	r01=r03;  objCons012();
+	r01=r00;  r02=onull;  objCons012();
 	vmPush(r00);
 
 	/* Create (set! name (lambda (var...) body)). */
@@ -654,26 +668,26 @@ void compTransformNamedLet (void) {
 	r02=onull;
 	for (i=0; i<bindingLen; i++) {
 		r01=vmPop();
-		objCons12();
+		objCons012();
 		r02=r00;
 	}
-	r01=r02;     r02=r05;  objCons12();
-	r01=slambda;r02=r00;  objCons12();
-	r01=r00;     r02=onull;objCons12();
-	r01=r03;     r02=r00;  objCons12();
-	r01=ssetb;  r02=r00;  objCons12();
+	r01=r02;     r02=r05;  objCons012();
+	r01=slambda;r02=r00;  objCons012();
+	r01=r00;     r02=onull;objCons012();
+	r01=r03;     r02=r00;  objCons012();
+	r01=ssetb;  r02=r00;  objCons012();
 
 	/* Merge them into new-body. */
-	r01=r00;  r02=vmPop();  objCons12();
+	r01=r00;  r02=vmPop();  objCons012();
 	vmPush(r00);
 
 	/* Create (lambda name new-body) */
-	r01=r03;  r02=vmPop();  objCons12();
-	r01=slambda; r02=r00;  objCons12();
+	r01=r03;  r02=vmPop();  objCons012();
+	r01=slambda; r02=r00;  objCons012();
 	vmPush(r00);
 
 	/* Create ((lambda name newbody)) and we're done. */
-	r01=vmPop();  r02=onull;  objCons12();
+	r01=vmPop();  r02=onull;  objCons012();
 
 	/* Return transformed expression. */
 	rexpr=r00;
@@ -700,13 +714,13 @@ void compTransformLetrec (void) {
 	for (r03=car(rexpr), len=0;  r03!=onull; r03=cdr(r03), len++) vmPush(car(r03));
 
 	/* Create (()) in r04. */
-	r01=onull;  r02=onull;  objCons12();
+	r01=onull;  r02=onull;  objCons012();
 	r04=r00;
 	/* Create ((x ())...) in r03 from bindings on stack so start it with null. */
 	r03=onull;
 	while(len--) {
-		r01=car(vmPop());  r02=r04;  objCons12(); /* Form (x ()). */
-		r01=r00;          r02=r03;  objCons12(); /* Form ((x ()) ...). */
+		r01=car(vmPop());  r02=r04;  objCons012(); /* Form (x ()). */
+		r01=r00;          r02=r03;  objCons012(); /* Form ((x ()) ...). */
 		r03=r00;
 	}
 	vmPush(r03); /* Save transformed bindings to stack. */
@@ -716,16 +730,16 @@ void compTransformLetrec (void) {
 	/* Create (((x ())...) (set! x rexpr) ... body). */
 	r03=cdr(rexpr); /* Consider (body). */
 	while(len--) {
-		r01=ssetb;   r02=vmPop();  objCons12();
-		r01=r00;      r02=r03;     objCons12();
+		r01=ssetb;   r02=vmPop();  objCons012();
+		r01=r00;      r02=r03;     objCons012();
 		r03=r00;
 	}
 
 	/* Create (bindings (set! ...) body). */
-	r01=vmPop();  r02=r03;  objCons12();
+	r01=vmPop();  r02=r03;  objCons012();
 
 	/* Create (let ...). */
-	r01=slet; r02=r00;  objCons12();
+	r01=slet; r02=r00;  objCons012();
 
 	DBEND("  =>  ");
 	DBE objDisplay(r00, stdout);
@@ -750,9 +764,9 @@ void compTransformQuasiquote (int depth) {
 			rexpr=cdr(rexpr);  /* Consider b */
 			compTransformQuasiquote(depth); /* => b' */
 			/* (append template b') */
-			r01=r00;     r02=onull;  objCons12(); /* => (b') */
-			r01=vmPop();  r02=r00;    objCons12(); /* => (template b') */
-			r01=sappend;  r02=r00;    objCons12(); /* => (append template b') */
+			r01=r00;     r02=onull;  objCons012(); /* => (b') */
+			r01=vmPop();  r02=r00;    objCons012(); /* => (template b') */
+			r01=sappend;  r02=r00;    objCons012(); /* => (append template b') */
 		} else { /* Transform (a . b) => (cons a' b') */
 			vmPush(cdr(rexpr)); /* Save b */
 			rexpr=car(rexpr);  /* Consider a */
@@ -760,14 +774,14 @@ void compTransformQuasiquote (int depth) {
 			rexpr=vmPop();      /* Restore b */
 			vmPush(r00);        /* Save a' */
 			compTransformQuasiquote(depth - isUnquote + isQuasiquote); /* => b' */
-			r01=r00;     r02=onull;  objCons12(); /* => (b') */
-			r01=vmPop();  r02=r00;    objCons12(); /* => (a' b') */
-			r01=scons;  r02=r00;    objCons12(); /* => (cons a' b') */
+			r01=r00;     r02=onull;  objCons012(); /* => (b') */
+			r01=vmPop();  r02=r00;    objCons012(); /* => (a' b') */
+			r01=scons;  r02=r00;    objCons012(); /* => (cons a' b') */
 		}
 	/* Transform atom into (quote atom) */
 	} else {
-		r01=rexpr;   r02=onull;  objCons12(); // atom   => (atom)
-		r01=squote; r02=r00;    objCons12(); // (atom) => (quote atom)
+		r01=rexpr;   r02=onull;  objCons012(); // atom   => (atom)
+		r01=squote; r02=r00;    objCons012(); // (atom) => (quote atom)
 	}
 	DBEND();
 }
@@ -786,10 +800,12 @@ void compTransformQuasiquote (int depth) {
    (3) A syscall that attempts to locate the named binding which will then
        code modify itslef into case (1).
 */
-void compSymbol (Num flags) {
+CompState compSymbol (CompState flags) {
  Num d, ret, depth, offset;
 	DBBEG();
 	DBE objDisplay(rexpr, stderr);
+
+	Num destIReg = asmNewOregister();
 
 	/* Scan local environments.  Returned is a 16 bit number, the high 8 bits
 	   is the environment chain depth, the low 8 bits the binding offset. The
@@ -804,15 +820,16 @@ void compSymbol (Num flags) {
 		DB("Found in a local environment depth:"NUM" offset:"NUM, depth, offset);
 		/* Emit code that traverses the environment chain and references the proper binding. */
 		if (depth == 0) {
-			asmAsm(LDI, R00, RENV, (Obj)(offset*ObjSize));
+			asmAsm(LDI, destIReg, RENV, (Obj)(offset*ObjSize));
 		} else {
-			asmAsm(LDI, R00, RENV, 0l); /* Parent env */
-			for (d=1; d < depth; d++) asmAsm(LDI, R00, R00, 0l); /* It's parent env */
-			asmAsm(LDI, R00, R00, (Obj)(offset*ObjSize)); /* Local symbol offset */
+			asmAsm(LDI, destIReg, RENV, 0l); /* Parent env */
+			for (d=1; d < depth; d++) asmAsm(LDI, destIReg, destIReg, 0l); /* It's parent env */
+			asmAsm(LDI, destIReg, destIReg, (Obj)(offset*ObjSize)); /* Local symbol offset */
 		}
+		asmAsm(MV, R00, destIReg);
 	} else {
 		/* Scan tge... */
-		sysTGEFind(); /* r00 gets the symbol/value pair */
+		sysTGEFind(); /* R00 gets the symbol/value pair */
 		if (onull == r00) {
 			DB("Can't find in TGE...maybe at runtime");
 			asmAsm(
@@ -821,11 +838,14 @@ void compSymbol (Num flags) {
 		} else {
 			DB("Found in TGE");
 			asmAsm(
-				MVI, R00, r00, /* the static symbol/value pair */
-				LDI, R00, R00, 0l);
+				MVI, destIReg, r00, /* the static symbol/value pair */
+				LDI, destIReg, destIReg, 0l);
 		}
+		asmAsm(MV, R00, destIReg);
 	}
+	flags = (flags & ~IREGISTERMASK) | destIReg; // Return the iregister containing the symbol value
 	DBEND();
+	return flags;
 }
 
 
@@ -962,6 +982,7 @@ void compCons (Num flags) {
 	}
 
 	vmPush(r02); /* Save B */
+
 	rexpr = r01; /* Consider and compile A */
 	compCompileExpr(flags & ~CCTAILCALL);
 	r02 = vmPop(); /* Restore B */
@@ -977,7 +998,7 @@ void compCons (Num flags) {
 
 	asmAsm(
 		POP, R01,
-		SYSI, objCons10
+		SYSI, objCons010
 	);
 ret:
 	DBEND(STR, compIsError()?" *ERROR*":"");
@@ -1007,19 +1028,17 @@ void compCxr (Num flags) {
 	Lok = asmNewLabel();
 	asmAsm(
 		/* Compare object type */
-// TODO TEMP
-MV, R08, R00,
-		LDI,  R10, R00, (Obj)(-1*ObjSize),
+		LDI,  R10, R00, -1*ObjSize,
 		LSRI, R10, (Obj)DescLengthBitCount,
 		BEQI, R10, TPAIR, Lok,
-		PUSH, R00, /* Add value of PAIR to stack */
-		MVI, R00, rsubexpr, /* Error situation.  Add sub s-expressions to stack Was MVI, R01, rsubexpr, PUSH, R01 */
-		SYSI, sysListToStack,
-		MVI, R01, 1l + objListLength(rsubexpr), /* Number of items on stack to dump */
-		MVI, R00, carorcdr?"cdr expects pair for target":"car expects pair for target",
-		SYSI,  compSyscallError, /* Error correction */
-		RET, /* TODO Required for unit test since no exception handler exists in that simple environment so control returns from the SYSI instruction above.  Will get rid of eventually */
-	 LABEL, Lok,
+			PUSH, R00, /* Add value of PAIR to stack */
+			MVI, R00, rsubexpr, /* Error situation. Consider expression. */
+			SYSI, sysListToStack,
+			MVI, R01, 1 + objListLength(rsubexpr), /* Number of items on stack to dump */
+			MVI, R00, carorcdr?"cdr expects pair for target":"car expects pair for target",
+			SYSI,  compSyscallError, /* Error correction */
+			RET, /* TODO Required for unit test since no exception handler exists in that simple environment so control returns from the SYSI instruction above.  Will get rid of eventually */
+	LABEL, Lok,
 		LDI, R00, R00, carorcdr*ObjSize /* Perform car */
 	);
 ret:
@@ -1055,8 +1074,6 @@ void compSetCxrB (Num flags) {
 
 	Lispair = asmNewLabel();
 	asmAsm(
-// TODO TEMP
-MV, R08, R00,
 		LDI, R10, R00, (Obj)(-1*ObjSize),
 		LSRI, R10, (Obj)DescLengthBitCount,
 		BEQI, R10, TPAIR, Lispair,
@@ -1064,7 +1081,6 @@ MV, R08, R00,
 		MVI, R00, rsubexpr, /* Error situation.  Add sub s-expressions to stack. */
 		SYSI, sysListToStack,
 		MVI, R01, 1l + objListLength(rsubexpr), /* Number of items on stack to dump */
-		//MVI, R01, 2l, /* Number of items on stack to dump */
 		MVI, R00, carorcdr?"set-cdr! expects pair for target":"set-car! expects pair for target",
 		SYSI,  compSyscallError, /* Error correction */
 		RET, /* TODO Required for unit test since no exception handler exists in that simple environment so control returns from the SYSI instruction above.  Will get rid of eventually */
@@ -1265,7 +1281,7 @@ void compLambdaBody (Num flags) {
 		LABEL, LbuildRestList,
 			MV, R03, R00,
 			POP, R02,
-			SYSI, objCons23,
+			SYSI, objCons023,
 			ADDI, R01, -1l,
 			BNEI, R01, nonDottedArgCount, LbuildRestList,
 			BRA, LnormalFormals,
@@ -1497,7 +1513,7 @@ void compLambdaInline (Num flags) {
 			while (dottedLength--)
 				asmAsm(
 					POP, R01,
-					SYSI, objCons10
+					SYSI, objCons010
 				);
 			asmAsm(
 				POP, R05,
@@ -1546,6 +1562,7 @@ void compLambdaInline (Num flags) {
 
 ret:
 	renv = vmPop(); /* Restore environment */
+	DBEND();
 	return;
 }
 
@@ -1719,8 +1736,6 @@ void compAsmCombination (Num flags) {
 
 	asmAsm (
 		/* Compare operator's object type */
-// TODO TEMP
-MV, R08, R00,
 		LDI,  R10, R00, (Obj)(-1*ObjSize),
 		LSRI, R10, (Obj)DescLengthBitCount,
 		BEQI, R10, TSYSCALL, Lsyscall,
@@ -1898,27 +1913,27 @@ void compCond (Num flags) {
 		r03 = cdr(r05) ; /* Rest expr */
 		if (selse == r04) {
 			assert(onull == r00); /* This better be the first clause popped or not at all */
-			r01=sbegin; r02=r03; objCons12();          /* (begin <expr> ...) */
+			r01=sbegin; r02=r03; objCons012();          /* (begin <expr> ...) */
 		} else if (!objIsPair(r03)) {
-			r01=r00;  r02=onull; objCons12();           /* (translated) */
-			r01=r04;  r02=r00; objCons12();             /* (<test> (translated)) */
-			r01=sor; r02=r00; objCons12();             /* (or <test> (translated)) */
+			r01=r00;  r02=onull; objCons012();           /* (translated) */
+			r01=r04;  r02=r00; objCons012();             /* (<test> (translated)) */
+			r01=sor; r02=r00; objCons012();             /* (or <test> (translated)) */
 		} else if (saif == car(r03)) {
 			r03 = cdr(r03); /* Consider (r04 => . r03 */
-			r01=r00;  r02=onull; objCons12();           /* (translated) */
+			r01=r00;  r02=onull; objCons012();           /* (translated) */
 			if (objIsPair(cdr(r03))) { /* Give warning if => clause followed by more clauses */
 				fprintf (stderr, "\nWARNING: compCond: cond's => expr not a single expression ");
 				objDisplay(r05, stderr);
 			}
-			r01=car(r03); r02=r00; objCons12();         /* (<expr> translated) */
-			r01=r04;  r02=r00; objCons12();             /* (<test> <expr> translated) */
-			r01=saif; r02=r00; objCons12();            /* (if <test> <expr> translated) */
+			r01=car(r03); r02=r00; objCons012();         /* (<expr> translated) */
+			r01=r04;  r02=r00; objCons012();             /* (<test> <expr> translated) */
+			r01=saif; r02=r00; objCons012();            /* (if <test> <expr> translated) */
 		} else {
-			r01=r00;  r02=onull; objCons12(); vmPush(r00); /* (translated) */
-			r01=sbegin; r02=r03; objCons12();          /* (begin <expr> ...) */
-			r01=r00; r02=vmPop(); objCons12();           /* ((begin <expr> ...) translated) */
-			r01=r04;  r02=r00; objCons12();             /* (<test> (begin <expr> ...) translated) */
-			r01=sif; r02=r00; objCons12();             /* (if <test> (begin <expr> ...) translated) */
+			r01=r00;  r02=onull; objCons012(); vmPush(r00); /* (translated) */
+			r01=sbegin; r02=r03; objCons012();          /* (begin <expr> ...) */
+			r01=r00; r02=vmPop(); objCons012();           /* ((begin <expr> ...) translated) */
+			r01=r04;  r02=r00; objCons012();             /* (<test> (begin <expr> ...) translated) */
+			r01=sif; r02=r00; objCons012();             /* (if <test> (begin <expr> ...) translated) */
 		}
 	}
 	DB ("compCond translated ");
@@ -1993,35 +2008,35 @@ void compCase (Num flags) {
 		r03 = cdr(r05) ; /* Rest expr */
 		if (selse == r04) {
 			assert(onull == r00); /* This better be the first clause popped or not at all */
-			r01=r05; r02=onull; objCons12();
+			r01=r05; r02=onull; objCons012();
 		} else {
-			//if (r00 != onull) { r01=r00;  r02=onull; objCons12(); vmPush(r00); }
+			//if (r00 != onull) { r01=r00;  r02=onull; objCons012(); vmPush(r00); }
 			vmPush(r00);                                /* Push (translated) or () if first clause */
 			vmPush(r03);                                /* Push expressions */
-			r01=r04; r02=onull; objCons12();             /* (datum) */
-			r01=squote; r02=r00; objCons12();             /* '(datum) */
-			r01=r00; r02=onull; objCons12();             /* ('(datum)) */
-			r01=scase;  r02=r00; objCons12();             /* (case '(datum)) */
-			r01=smemv;  r02=r00; objCons12();             /* (memv case '(datum)) */
-			r01=r00;  r02=onull; objCons12();             /* ((memv case '(datum))) */
-			r01=spairp;  r02=r00; objCons12();             /* (pair? (memv case '(datum))) */
-			r01=r00;  r02=vmPop(); objCons12();           /* ((memv case '(datum)) expressions) */
-			r01=r00; r02=vmPop(); objCons12();            /* (((memv case '(datum)) expressions) translated) */
+			r01=r04; r02=onull; objCons012();             /* (datum) */
+			r01=squote; r02=r00; objCons012();             /* '(datum) */
+			r01=r00; r02=onull; objCons012();             /* ('(datum)) */
+			r01=scase;  r02=r00; objCons012();             /* (case '(datum)) */
+			r01=smemv;  r02=r00; objCons012();             /* (memv case '(datum)) */
+			r01=r00;  r02=onull; objCons012();             /* ((memv case '(datum))) */
+			r01=spairp;  r02=r00; objCons012();             /* (pair? (memv case '(datum))) */
+			r01=r00;  r02=vmPop(); objCons012();           /* ((memv case '(datum)) expressions) */
+			r01=r00; r02=vmPop(); objCons012();            /* (((memv case '(datum)) expressions) translated) */
 		}
 	}
 
-	r01=scond; r02=r00; objCons12();    /* (cond ...) */
+	r01=scond; r02=r00; objCons012();    /* (cond ...) */
 
-	r01=r00; r02=onull; objCons12();    /* ((cond ...)) */
+	r01=r00; r02=onull; objCons012();    /* ((cond ...)) */
 
 	r01=vmPop();                   /* Consider key */
 	vmPush(r00);                   /* Save ((cond ..)) */
 
-	r02=onull; objCons12();       /* (key) */
-	r01=scase; r02=r00; objCons12();  /* (case key) */
-	r01=r00; r02=onull; objCons12();     /* ((case key)) */
-	r01=r00; r02=vmPop(); objCons12();     /* (((case key)) (cond ...)) */
-	r01=slet; r02=r00; objCons12();     /* (let ((case key)) (cond ...)) */
+	r02=onull; objCons012();       /* (key) */
+	r01=scase; r02=r00; objCons012();  /* (case key) */
+	r01=r00; r02=onull; objCons012();     /* ((case key)) */
+	r01=r00; r02=vmPop(); objCons012();     /* (((case key)) (cond ...)) */
+	r01=slet; r02=r00; objCons012();     /* (let ((case key)) (cond ...)) */
 
 	DB ("compCase translated ");
 	DBE objDisplay(r00, stdout);
@@ -2050,8 +2065,6 @@ void compProcedureP (Num flags) {
 
 	asmAsm(
 		/* Compare object type */
-// TODO TEMP
-MV, R08, R00,
 		LDI,  R10, R00, (Obj)(-1*ObjSize),
 		LSRI, R10, (Obj)DescLengthBitCount,
 		BEQI, R10, TCLOSURE, Ltrue,
@@ -2108,8 +2121,6 @@ void compPairP (Num flags) {
 
 	asmAsm(
 		/* Compare object type */
-// TODO TEMP
-MV, R08, R00,
 		LDI,  R10, R00, (Obj)(-1*ObjSize),
 		LSRI, R10, (Obj)DescLengthBitCount,
 		BEQI, R10, TPAIR, Ltrue,
@@ -2139,8 +2150,6 @@ void compVectorP (Num flags) {
 
 	asmAsm(
 		/* Compare object type */
-// TODO TEMP
-MV, R08, R00,
 		LDI,  R10, R00, (Obj)(-1*ObjSize),
 		LSRI, R10, (Obj)DescLengthBitCount,
 		BEQI, R10, TVECTOR, Ltrue,
@@ -2170,8 +2179,6 @@ void compCharP (Num flags) {
 
 	asmAsm(
 		/* Compare object type */
-// TODO TEMP
-MV, R08, R00,
 		LDI,  R10, R00, (Obj)(-1*ObjSize),
 		LSRI, R10, (Obj)DescLengthBitCount,
 		BEQI, R10, TCHAR, Ltrue,
@@ -2201,8 +2208,6 @@ void compStringP (Num flags) {
 
 	asmAsm(
 		/* Compare object type */
-// TODO TEMP
-MV, R08, R00,
 		LDI,  R10, R00, (Obj)(-1*ObjSize),
 		LSRI, R10, (Obj)DescLengthBitCount,
 		BEQI, R10, TSTRING, Ltrue,
@@ -2232,8 +2237,6 @@ void compIntegerP (Num flags) {
 
 	asmAsm(
 		/* Compare object type */
-// TODO TEMP
-MV, R08, R00,
 		LDI,  R10, R00, (Obj)(-1*ObjSize),
 		LSRI, R10, (Obj)DescLengthBitCount,
 		BEQI, R10, TINTEGER, Ltrue,
@@ -2263,8 +2266,6 @@ void compSymbolP (Num flags) {
 
 	asmAsm(
 		/* Compare object type */
-// TODO TEMP
-MV, R08, R00,
 		LDI,  R10, R00, (Obj)(-1*ObjSize),
 		LSRI, R10, (Obj)DescLengthBitCount,
 		BEQI, R10, TSYMBOL, Ltrue,
@@ -2294,8 +2295,6 @@ void compPortP (Num flags) {
 
 	asmAsm(
 		/* Compare object type */
-// TODO TEMP
-MV, R08, R00,
 		LDI,  R10, R00, (Obj)(-1*ObjSize),
 		LSRI, R10, (Obj)DescLengthBitCount,
 		BEQI, R10, TPORT, Ltrue,
@@ -2502,7 +2501,7 @@ void compMacro (Num flags) {
 	/* Transform (macro ... ...) => (lambda . transformed-macro-body) assigned to r00 */
 
 	rexpr = vmPop(); /* Restore original macro expression...ignore all the parsing just done (for now) TODO */
-	r01=slambda;  r02 = rexpr;  objCons12();
+	r01=slambda;  r02 = rexpr;  objCons012();
 
 	asmStart();
 	asmAsm(
@@ -2741,9 +2740,123 @@ void compIntrinsic (Num flags) {
 	DBEND();
 }
 
+
+/* Emit icode that evaluates and adds the values.
+*/
+
+void compSyscallNewInt (void) {
+	objNewInt((Int)r10);
+}
+/* Syscall to create a new integer object in r00
+    r00 <=  Immediate value to initialize integer object with
+    r00  => new integer object
+*/
 void compPrimitiveAdd (Num flags) {
-   DBBEG();
-	asmAsm(MVI, R00, otrue);
+ Int constantSum = 0; // Initial constant sum
+ Num acc, emittedAcc=0;
+	DBBEG();
+	rexpr = cdr(rexpr); // consider list of arguments
+
+	// Gather constants into one constant
+	vmPush(rexpr);
+	while (objIsPair(rexpr)) {
+		if (memIsObjectType(car(rexpr), TINTEGER)) {
+			constantSum += *(Int*)car(rexpr);
+		}
+		rexpr = cdr(rexpr);
+	}
+	rexpr = vmPop();
+
+	while (objIsPair(rexpr)) {
+		if (!memIsObjectType(car(rexpr), TINTEGER)) { // Skip over already optimized integer constants
+			vmPush(rexpr); // Save rest of arguments
+			rexpr = car(rexpr); // Consider next argument and compiole
+			compCompileExpr(flags & ~CCTAILCALL);
+			rexpr = vmPop(); // restore rest of arguments
+			// Emit code that initializes the accumulating sum register
+			if (!emittedAcc) {
+				acc = asmNewIregister();
+				asmAsm(
+					MVI, acc, (Obj)constantSum
+				);
+				emittedAcc = 1;
+			}
+			// Emit code which accumulates the next argument expression
+			asmAsm(
+				LDI, R10, R00, 0, // Consider value of evaluated argument
+				ADD, acc, R10
+			);
+		}
+		rexpr = cdr(rexpr);
+	}
+
+	// Emit code that initializes the accumulating sum register
+	if (!emittedAcc) {
+		acc = asmNewIregister();
+		asmAsm(
+			MVI, acc, (Obj)constantSum
+		);
+		emittedAcc = 1;
+	}
+
+	asmAsm(
+		MV, R10, acc,
+		SYSI, compSyscallNewInt
+	);
+	DBEND();
+}
+void compPrimitiveMul (Num flags) {
+ Int constantSum = 1; // Initial constant sum
+ Num acc, emittedAcc=0;
+	DBBEG();
+	rexpr = cdr(rexpr); // consider list of arguments
+
+	// Gather constants into one constant
+	vmPush(rexpr);
+	while (objIsPair(rexpr)) {
+		if (memIsObjectType(car(rexpr), TINTEGER)) {
+			constantSum *= *(Int*)car(rexpr);
+		}
+		rexpr = cdr(rexpr);
+	}
+	rexpr = vmPop();
+
+	while (objIsPair(rexpr)) {
+		if (!memIsObjectType(car(rexpr), TINTEGER)) { // Skip over already optimized integer constants
+			vmPush(rexpr); // Save rest of arguments
+			rexpr = car(rexpr); // Consider next argument and compiole
+			compCompileExpr(flags & ~CCTAILCALL);
+			rexpr = vmPop(); // restore rest of arguments
+			// Emit code that initializes the accumulating sum register
+			if (!emittedAcc) {
+				acc = asmNewIregister();
+				asmAsm(
+					MVI, acc, (Obj)constantSum
+				);
+				emittedAcc = 1;
+			}
+			// Emit code which accumulates the next argument expression
+			asmAsm(
+				LDI, R10, R00, 0, // Consider value of evaluated argument
+				MUL, acc, R10
+			);
+		}
+		rexpr = cdr(rexpr);
+	}
+
+	// Emit code that initializes the accumulating sum register
+	if (!emittedAcc) {
+		acc = asmNewIregister();
+		asmAsm(
+			MVI, acc, (Obj)constantSum
+		);
+		emittedAcc = 1;
+	}
+
+	asmAsm(
+		MV, R10, acc,
+		SYSI, compSyscallNewInt
+	);
 	DBEND();
 }
 
@@ -2753,8 +2866,9 @@ void compPrimitiveAdd (Num flags) {
     rexpr <= S-expression to compile
     return => flags
 */
-void compCompileExpr (Num flags) {
+CompState compCompileExpr (CompState flags) {
  Obj op;
+ CompState retFlags=(CompState)R00;
 	DBBEG(" <= ");
 	DBE objDisplay(rexpr, stderr);
 
@@ -2762,7 +2876,7 @@ void compCompileExpr (Num flags) {
 	compPushSubExpr(rexpr);
 
 	switch (memObjectType(rexpr)) {
-		case TSYMBOL: compSymbol(flags); break;
+		case TSYMBOL: retFlags = compSymbol(flags); break;
 		case TPAIR  : op = car(rexpr);
 			           if      (ssetb      == op) compSetB(flags);
 			           else if (sif        == op) compIf(flags);
@@ -2804,9 +2918,7 @@ void compCompileExpr (Num flags) {
 			           else if (sthread    == op) compThread(flags);
 			           else if (sthread    == op) compThread(flags);
 			           else if (srem       == op); /* The comment operator */
-                    else if (objIsSymbol(op) && (r01=op, sysTGEFind(), r00 != onull) && memIsObjectType(car(r00), TPRIMITIVE)) {
-                       objWrite(car(r00), stderr);
-                       objWrite(cdr(r00), stderr);
+                    else if (objIsSymbol(op) && (r01=op, sysTGEFind(), r00 != onull) && memIsObjectType(car(r00), TPRIMITIVE)) { /* Syntactic form */
                        (*(void(**)(Num))car(r00))(flags); 
                     }
 			           else compCombination(flags);
@@ -2817,6 +2929,8 @@ void compCompileExpr (Num flags) {
 	compPopSubExpr();
 
 	DBEND(STR, compIsError()?" *ERROR*":"");
+
+	return retFlags;
 }
 
 
@@ -2827,20 +2941,28 @@ void compCompileExpr (Num flags) {
        r00 => VM code block or #f if an exception/error occured while compiling
 */
 void compCompile (void) {
+ CompState retFlags;
+ Num destinationReg;
 	DBBEG();
 	if (otrue == odebug) { sysDumpEnv(renv); }
 	compErrorReset();
 	asmInit();
+
 	rexpr = r00;
-	compCompileExpr(CCTAILCALL);
+	retFlags = compCompileExpr(CCTAILCALL);
 
 	if (compIsError()) {
 		asmReset();
 		compThrowCompilerError();
 		r00 = ofalse;
 	} else {
-		/* Finalize the assembled code with a 'ret' opcode */
-		asmAsm(RET);
+		/* Finalize the assembled code by emitting code that moves
+		   the value of the last compild expression into R00 and a
+		   with a 'ret' opcode */
+		destinationReg = retFlags & IREGISTERMASK;
+		asmAsm(
+			MV, R00, destinationReg,
+			RET);
 		asmAssemble();
 	}
 
@@ -2864,33 +2986,36 @@ void compInitialize (void) {
 		osInitialize(0);  /* sys obj vm mem */
 
 		DB("Registering rootset objects");
-		memRootSetRegister(rexpr);
-		memRootSetRegister(rcomperror);
-		memRootSetRegister(rcomperrormessage);
-		memRootSetRegister(rcomperrortrace);
-		memRootSetRegister(rsubexpr);
+		memRootSetAddressRegister(&rexpr);            MEM_ADDRESS_REGISTER(&rexpr);
+		memRootSetAddressRegister(&rcomperror);       MEM_ADDRESS_REGISTER(&rcomperror);
+		memRootSetAddressRegister(&rcomperrormessage);MEM_ADDRESS_REGISTER(&rcomperrormessage);
+		memRootSetAddressRegister(&rcomperrortrace);  MEM_ADDRESS_REGISTER(&rcomperrortrace);
+		memRootSetAddressRegister(&rsubexpr);         MEM_ADDRESS_REGISTER(&rsubexpr);
 
 		rsubexpr = onull;
 
 		DB("Registering primitive operators");
-      sysDefinePrimitive((Func)compPrimitiveAdd, ":+:");
+      sysDefinePrimitive((Func)compPrimitiveAdd, "+");
+      //sysDefinePrimitive((Func)compPrimitiveSub, "-");
+      sysDefinePrimitive((Func)compPrimitiveMul, "*");
 
 		DB("Registering static pointer description strings");
-		memPointerRegister(compSyscallCompile); 
-		memPointerRegister(compSysReinstateContinuation); 
-		memPointerRegister(compSyscallCreateContinuation); 
-		memPointerRegister(compSyscallTGELookup);
-		memPointerRegister("Too many arguments to closure"); 
-		memPointerRegister("Illegal operator type");
-		memPointerRegister(compSyscallError);
-		memPointerRegister("runtime error");
-		memPointerRegister("Compiler error");
-		memPointerRegister("Too many arguments to function");
-		memPointerRegister("Not enough arguments to closure");
-		memPointerRegister(compSyscallVerifyVectorSetB);
-		memPointerRegister(compSyscallVerifyVectorRef);
-		memPointerRegister(compDebug);
-		memPointerRegister(compSyscallTGEMutate);
+		MEM_ADDRESS_REGISTER(compSyscallCompile); 
+		MEM_ADDRESS_REGISTER(compSysReinstateContinuation); 
+		MEM_ADDRESS_REGISTER(compSyscallCreateContinuation); 
+		MEM_ADDRESS_REGISTER(compSyscallTGELookup);
+		MEM_ADDRESS_REGISTER("Too many arguments to closure"); 
+		MEM_ADDRESS_REGISTER("Illegal operator type");
+		MEM_ADDRESS_REGISTER(compSyscallError);
+		MEM_ADDRESS_REGISTER("runtime error");
+		MEM_ADDRESS_REGISTER("Compiler error");
+		MEM_ADDRESS_REGISTER("Too many arguments to function");
+		MEM_ADDRESS_REGISTER("Not enough arguments to closure");
+		MEM_ADDRESS_REGISTER(compSyscallVerifyVectorSetB);
+		MEM_ADDRESS_REGISTER(compSyscallVerifyVectorRef);
+		MEM_ADDRESS_REGISTER(compDebug);
+		MEM_ADDRESS_REGISTER(compSyscallTGEMutate);
+		MEM_ADDRESS_REGISTER(compSyscallNewInt);
 	} else {
 		DB("Module already activated");
 	}

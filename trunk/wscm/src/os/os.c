@@ -56,7 +56,7 @@ void osException (Obj str) {
 	sysStackToList();
 	r02 = r00;
 	r01 = r03;
-	objCons12();
+	objCons012();
 	r03 = r00;
 
 	/* Lookup ERRORS binding in TGE.
@@ -672,7 +672,7 @@ void osRecvBlock (void) {
 		}
 
 	DBEND("  =>  r00:");
-	DBE memDebugDumpObject(r00, stderr);
+	DBE memPrintObject(r00, stderr);
 }
 
 
@@ -690,16 +690,16 @@ void osInitialize (Func exceptionHandler) {
 		sysInitialize(0); /* obj vm mem */
 
 		DB("Registering rootset objects");
-		memRootSetRegister(rblocked);
-		memRootSetRegister(rthreads);
-		memRootSetRegister(rsleeping);
-		memRootSetRegister(rrunning);
-		memRootSetRegister(rready);
+		memRootSetAddressRegister(&rblocked); MEM_ADDRESS_REGISTER(&rblocked);
+		memRootSetAddressRegister(&rthreads); MEM_ADDRESS_REGISTER(&rthreads);
+		memRootSetAddressRegister(&rsleeping); MEM_ADDRESS_REGISTER(&rsleeping);
+		memRootSetAddressRegister(&rrunning); MEM_ADDRESS_REGISTER(&rrunning);
+		memRootSetAddressRegister(&rready); MEM_ADDRESS_REGISTER(&rready);
 
 		DB("Registering static pointer description strings");
-		memPointerRegister(osNewThread);
+		MEM_ADDRESS_REGISTER(osNewThread);
 		//memPointerRegister(osUnthread);
-		memPointerRegister(osRecvBlock);
+		MEM_ADDRESS_REGISTER(osRecvBlock);
 
 		/* Create empty thread vector.  All active threads are assigned a number
 		   1-1024 and stored here for easy constant time lookup.  The first entry

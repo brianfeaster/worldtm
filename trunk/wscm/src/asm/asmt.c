@@ -9,6 +9,7 @@
 #include "asm.h"
 #include "test.h"
 
+#define RSTK R1F
 
 extern void asmIBlockDefaultTagSet (Obj ib, Obj tag);
 extern void asmIBlockConditionalTagSet (Obj ib, Obj tag);
@@ -30,20 +31,45 @@ extern void asmICodePushNewQUIT (void);
 
 void asmGenerateIBlockWithPushedIcodes ();
 
+/* Debugging - Uncomment this and make the two calls below to enable VM stepping.
+static void vmtStepHandler (void) {
+	memPrintStructures(stdout);
+	memPrintRootSet(stdout);
+	vmDisplayTypeCode(rcode, stdout);
+	getchar();
+	vmInterrupt = 1; // Force interrupt after next instruction to this stepHandler
+}
+vmInitialize(vmtStepHandler, NULL);
+vmInterrupt = 1;
+*/
+
+
 
 /*******************************************************************************
  TESTS
 *******************************************************************************/
-void cctDumpSpace (void) { fprintf(FB, " "); }
-void cctDumpNewline (void) { fprintf(FB, "\n"); }
-void cctDumpIntegerR00 (void) { fprintf(FB, INT, r00); }
-void cctDumpIntegerR00stderr (void) { fprintf(stderr, INT, r00); }
-void cctDumpObjR00 (void) { objDisplay(r00, FB); }
+void cctDumpSpace      (void) { fprintf(FB, " "); }
+void cctDumpNewline    (void) { fprintf(FB, "\n"); }
+void cctPrintIntr00    (void) { fprintf(FB, INT, r00); }
+void cctDumpHexR00     (void) { fprintf(FB, HEX, r00); }
+void cctDumpObjR00     (void) { objDisplay(r00, FB); }
 
-/* Create simple icode program of one iblock then compile the
+void cctDumpSpacestderr     (void) { fprintf(stderr, " "); }
+void cctDumpReturnstderr     (void) { fprintf(stderr, "\r"); }
+void cctDumpNewlienstderr     (void) { fprintf(stderr, "\n"); }
+void cctDumpIntegerR00stderr (void) { fprintf(stderr, INT, r00); }
+void cctDumpHEX016R00stderr  (void) { fprintf(stderr, HEX016, r00); }
+
+
+void cctDebugDumpAll (void) {
+	memPrintStructures(stdout);
+	memPrintObject(rstack, stdout);
+}
+
+/* Create a NOP iblock followed by a simple icode program of one iblock then compile the
    iblock and run the code block in the VM
 */
-void test1 (void) {
+void TestmviRegister (void) {
 	asmInit();
 	FBInit();
 
@@ -58,9 +84,10 @@ void test1 (void) {
 	   Need to know beforehand how many instructions will be emitted.  Pass in
 	   parent iblock ID (initially 0) and number of icode objects to emit.
 	 */
+
 	/* Emit icode objects by combining instruction's fields */
 	asmICodePushNewMVI(R00, (Obj)69);
-	asmICodePushNewSYSI(cctDumpIntegerR00);
+	asmICodePushNewSYSI(cctPrintIntr00);
 	asmICodePushNewQUIT();
 	asmGenerateIBlockWithPushedIcodes();
 
@@ -69,7 +96,7 @@ void test1 (void) {
 	rip = 0;
 	vmRun();
 
-//memDebugDumpAll(stdout);
+//memPrintAll(stdout);
 	/* Verify output */
 	FBFinalize("69");
 }
@@ -91,7 +118,7 @@ void test2 (void) {
 	asmGenerateIBlockWithPushedIcodes();
 	asmIBlockDefaultTagSet(riblock, otrue); /* signal this block's default is the next one */
 
-	asmICodePushNewSYSI((Obj)cctDumpIntegerR00);
+	asmICodePushNewSYSI((Obj)cctPrintIntr00);
 	asmICodePushNewSYSI((Obj)cctDumpSpace);
 	asmICodePushNewADDI(R00, (Obj)-1);
 	asmICodePushNewBNEI(R00, 0, ofalse);
@@ -134,7 +161,7 @@ void test3 (void) {
 	r03 = riblock; /* Keep track of this iblock so we can link to it from an iblock below */
 	asmIBlockDefaultTagSet(riblock, otrue);
 
-	asmICodePushNewSYSI((Obj)cctDumpIntegerR00);
+	asmICodePushNewSYSI((Obj)cctPrintIntr00);
 	asmICodePushNewSYSI((Obj)cctDumpSpace);
 	asmICodePushNewADDI(R00, (Obj)-1);
 	asmICodePushNewBNEI(R00, 0, ofalse);
@@ -186,7 +213,7 @@ void test4 (void) {
 	r05 = riblock;
 	asmIBlockDefaultTagSet(riblock, otrue);
 
-	asmICodePushNewSYSI((Obj)cctDumpIntegerR00);
+	asmICodePushNewSYSI((Obj)cctPrintIntr00);
 	asmICodePushNewSYSI((Obj)cctDumpSpace);
 	asmICodePushNewADDI(R00, (Obj)-1);
 	asmICodePushNewBNEI(R00, 0, ofalse); /* Loop to self */
@@ -245,7 +272,7 @@ void test5 (void) {
 	asmIBlockDefaultTagSet(riblock, otrue);
 
 	// id5
-	asmICodePushNewSYSI((Obj)cctDumpIntegerR00);
+	asmICodePushNewSYSI((Obj)cctPrintIntr00);
 	asmICodePushNewADDI(R00, (Obj)-1);
 	asmICodePushNewBNEI(R00, 0, ofalse); /* Branch back to id2 */
 	asmGenerateIBlockWithPushedIcodes();
@@ -262,7 +289,7 @@ void test5 (void) {
 	asmGenerateIBlockWithPushedIcodes();
 
 	// id4
-	asmICodePushNewSYSI((Obj)cctDumpIntegerR00);
+	asmICodePushNewSYSI((Obj)cctPrintIntr00);
 	asmGenerateIBlockWithPushedIcodes();
 	asmIBlockConditionalTagSet(r04, riblock);
 	asmIBlockConditionalTagSet(r05, riblock);
@@ -298,7 +325,7 @@ void cctAsm() {
 	LABEL, L1,
 		MVI, R00, (Obj)8,
 	LABEL, L2,
-		SYSI, cctDumpIntegerR00,
+		SYSI, cctPrintIntr00,
 		ADDI, R00, -1l,
 		BEQI, R00, 0l, L3,
 		BRA, L2,
@@ -353,7 +380,7 @@ void cctAsmNested() {
 	asmAsm (
 		MVI, R00, (Obj)9,
 	LABEL, L0,
-		SYSI, cctDumpIntegerR00,
+		SYSI, cctPrintIntr00,
 		ADDI, R00, -1l,
 		BNEI, R00, 0l, L0,
 		SYSI, cctDumpNewline,
@@ -366,7 +393,7 @@ void cctAsmNested() {
 		asmAsm (
 			MVI, R00, (Obj)10,
 		LABEL, L1,
-			SYSI, cctDumpIntegerR00,
+			SYSI, cctPrintIntr00,
 			ADDI, R00, -2l,
 			BNEI, R00, 0l, L1,
 			SYSI, cctDumpNewline,
@@ -394,7 +421,7 @@ void cctAsmNested() {
 void debugDumpAll (void) {
 	//memDebugDumpHeapHeaders(stdout);
 	fprintf(stdout, "\n");
-	memDebugDumpObject (rstack, stdout);
+	memPrintObject (rstack, stdout);
 }
 
 void syscallAdd (void) {
@@ -447,7 +474,7 @@ void cctJumpAndLink (void) {
 	asmInit();
 
 	asmAsm (
-		SYSI, cctDumpIntegerR00,
+		SYSI, cctPrintIntr00,
 		RET
 	);
 	asmAssemble();
@@ -621,7 +648,7 @@ static void asmtDisplayString (void) { fprintf (FB, "%s", r01); }
 static void asmtDisplayNewline (void) { fprintf (FB, "\n"); }
 static void asmtVmDebugDumpCode (void) {
 	if (0) {
-		memDebugDumpAll(stdout);
+		memPrintAll(stdout);
 		objDisplay(rcode, stdout);
 	}
 }
@@ -632,11 +659,11 @@ int myTest (void) {
 
 	FBInit();
 
-	memPointerRegister (asmtDisplayString);
-	memPointerRegister (asmtDisplayInteger);
-	memPointerRegister (asmtDisplayNewline);
-	memPointerRegister (asmtVmDebugDumpCode);
-	memPointerRegister (welcomemsg);
+	MEM_ADDRESS_REGISTER(asmtDisplayString);
+	MEM_ADDRESS_REGISTER(asmtDisplayInteger);
+	MEM_ADDRESS_REGISTER(asmtDisplayNewline);
+	MEM_ADDRESS_REGISTER(asmtVmDebugDumpCode);
+	MEM_ADDRESS_REGISTER(welcomemsg);
 
 	asmInit();
 	Lmain = asmNewLabel();
@@ -769,20 +796,109 @@ void optimizeEmptyIBlock (void) {
 }
 
 
+/* Create a simple iblock with an opcode using an intermediate register (ireg)
+*/
+void TestMVIiReg (void) {
+	asmInit();
+	FBInit();
+
+	/* Create a new iblock as the default block to the iblock specified by
+	   the first parameter.
+	 */
+
+	/* Emit icode objects by combining instruction's fields */
+	asmICodePushNewMVI(R00, (Obj)69);
+	asmICodePushNewSYSI(cctPrintIntr00);
+	asmICodePushNewQUIT();
+
+	asmAssemble();
+	rcode = r00;
+	rip = 0;
+	vmRun();
+
+//memPrintAll(stdout);
+	/* Verify output */
+	FBFinalize("69");
+}
+
+void TestSpillover (void) {
+	asmInit();
+	FBInit();
+
+	asmAsm(
+		ADDI, RSTK, 2*ObjSize,                // Create two local vars
+		MVI,  R00,  (Obj)0x69,                      // Save 69 to local var
+		STI,  R00,  RSTK, (Obj)(-1*ObjSize),
+		MVI,  R00,  (Obj)0x42,                      // Load 42
+		STI,  R00,  RSTK, (Obj)(-2*ObjSize),    // Save 42 to local var
+		SYSI, cctDumpHexR00,                 // Display 42
+		LDI,  R00,  RSTK, (Obj)(-1*ObjSize),    // Load 69 from local var and display
+		SYSI, cctDumpHexR00,
+		ADDI, RSTK, (Obj)(-2*ObjSize),        // Unallocate two local vars (free stack space)
+		QUIT
+	);
+
+	asmAssemble();
+	rcode = r00;
+	rip = 0;
+	vmRun();
+
+	FBFinalize("4269");
+}
+
+/* Compute and print sum of 0 to n from 10 down to 1 
+*/
+void TestIRegistersSumtorial (void) {
+ Num A, B, C; // Intermediate registers
+ Obj L, M;    // Labels
+	FBInit();
+	asmInit();
+	A = asmNewOregister();
+	B = asmNewOregister();
+	C = asmNewOregister();
+	L = asmNewLabel();
+	M = asmNewLabel();
+	asmAsm(
+		MVI,  A, (Obj)10,     // A = 10
+	LABEL, M,
+		MV,   B, A,             // B = A
+		MVI,  C, (Obj)0,        // C = 0
+	LABEL, L,
+		ADD, C, B,                // C += B
+		ADDI, B, (Obj)-1,         // --B
+		BNEI, B, (Obj)0, L,
+		MV, R00, C,
+		SYSI, cctPrintIntr00,
+		SYSI, cctDumpSpace,
+		ADDI, A, (Obj)-1,     // --A
+		BNEI, A, (Obj)0, M,
+		QUIT
+	);
+
+	asmAssemble();
+
+	rcode = r00;
+	rip = 0;
+	vmRun();
+
+	//objDisplay(rcode, stdout);
+	FBFinalize("55 45 36 28 21 15 10 6 3 1 ");
+}
 
 int main (void) {
 	asmInitialize();
 	vmInitialize(NULL, objDisplay); /* Register display with the VM code dumper */
 	testInitialize();
 
-	memPointerRegister(syscallAdd);
-	memPointerRegister(syscallMul);
-	memPointerRegister(cctDumpSpace);
-	memPointerRegister(cctDumpNewline);
-	memPointerRegister(cctDumpIntegerR00);
-	memPointerRegister(cctDumpObjR00);
-	memPointerRegister(syscallNewIntImm);
-	TEST(test1);
+	MEM_ADDRESS_REGISTER(syscallAdd);
+	MEM_ADDRESS_REGISTER(syscallMul);
+	MEM_ADDRESS_REGISTER(cctDumpSpace);
+	MEM_ADDRESS_REGISTER(cctDumpNewline);
+	MEM_ADDRESS_REGISTER(cctPrintIntr00);
+	MEM_ADDRESS_REGISTER(cctDumpObjR00);
+	MEM_ADDRESS_REGISTER(syscallNewIntImm);
+	MEM_ADDRESS_REGISTER(cctDumpHexR00);
+	TEST(TestmviRegister);
 	TEST(test2);
 	TEST(test3);
 	TEST(test4);
@@ -795,6 +911,8 @@ int main (void) {
 	TEST(myTest);
 	TEST(optimizePopPush);
 	TEST(optimizeEmptyIBlock);
-
+	TEST(TestMVIiReg);
+	TEST(TestSpillover);
+	TEST(TestIRegistersSumtorial);
 	return 0;
 }

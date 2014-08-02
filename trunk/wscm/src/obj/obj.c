@@ -14,6 +14,7 @@
 /*
  Objects
  Algorithms
+ Ordered_Sets
  Serializers
  Init
 
@@ -22,6 +23,7 @@
 
 
 const Num HashTableSize=8191; /* Best if prime */
+
 
 
 /*******************************************************************************
@@ -218,6 +220,17 @@ Obj objCons (Obj a, Obj b) {
 	return o;
 }
 
+/* return => (cons (pop)  r00)
+*/
+Obj objConsSTK0 (void) {
+ Obj o = memNewVector(TPAIR, 2);
+	memVectorSet(o, 0, vmPop());
+	memVectorSet(o, 1, r00);
+	return o;
+}
+
+/* r00 => (cons r01  r00)
+*/
 void objCons010(void) {
  Obj o;
 	o = memNewVector(TPAIR, 2);
@@ -226,6 +239,8 @@ void objCons010(void) {
 	r00 = o;
 }
 
+/* r01 => (cons r00  r01)
+*/
 void objCons101 (void) {
  Obj o;
 	o = memNewVector(TPAIR, 2);
@@ -234,14 +249,17 @@ void objCons101 (void) {
 	r01 = o;
 }
 
+/* r03 => (cons r00  r03)
+*/
 void objCons303 (void) {
  Obj o;
-   o = memNewVector(TPAIR, 2);
+	o = memNewVector(TPAIR, 2);
 	memVectorSet(o, 0, r00);
 	memVectorSet(o, 1, r03);
 	r03 = o;
 }
 
+/* r00 = (cons pop() r00)
 void objConsStack0 (void) {
  Obj o;
    o = memNewVector(TPAIR, 2);
@@ -249,30 +267,15 @@ void objConsStack0 (void) {
 	memVectorSet(o, 1, r00);
 	r00 = o;
 }
+*/
 
-void objCons01 (void) {
- Obj o;
-   o = memNewVector(TPAIR, 2);
-	memVectorSet(o, 0, r00);
-	memVectorSet(o, 1, r01);
-	r00 = o;
-}
-
-void objCons10 (void) {
- Obj o;
-   o = memNewVector(TPAIR, 2);
-	memVectorSet(o, 0, r01);
-	memVectorSet(o, 1, r00);
-	r00 = o;
-}
-
-void objCons12 (void) {
+void objCons012 (void) {
    r00 = memNewVector(TPAIR, 2);
 	memVectorSet(r00, 0, r01);
 	memVectorSet(r00, 1, r02);
 }
 
-void objCons23 (void) {
+void objCons023 (void) {
    r00 = memNewVector(TPAIR, 2);
 	memVectorSet(r00, 0, r02);
 	memVectorSet(r00, 1, r03);
@@ -336,7 +339,8 @@ Obj objIntegerToChar (Num i) {
 	return memVectorObject(ocharacters, i);
 }
 
-Num objIsPair (Obj o)   { return memIsObjectType(o, TPAIR); }
+Num objIsPair   (Obj o) { return memIsObjectType(o, TPAIR); }
+Num objIsVector (Obj o) { return memIsObjectType(o, TVECTOR); }
 Num objIsSymbol (Obj o) { return memIsObjectType(o, TSYMBOL); }
 
 
@@ -344,9 +348,9 @@ Obj  car  (Obj o) { return memVectorObject(o, 0);}
 Obj  cdr  (Obj o) { return memVectorObject(o, 1);}
 
 Obj  caar (Obj o) { return car(car(o));}
-Obj  cdar (Obj o) { return cdr(car(o));}
-
 Obj  cadr (Obj o) { return car(cdr(o));}
+
+Obj  cdar (Obj o) { return cdr(car(o));}
 Obj  cddr (Obj o) { return cdr(cdr(o));}
 
 
@@ -406,6 +410,54 @@ void objDoublyLinkedListAdd (Obj lst, Obj node) {
 /*******************************************************************************
  Algorithms
 *******************************************************************************/
+
+/* Performs recursive eq? on object (can be list as well)
+   WARNING: NOT TESTED
+*/
+Num objEqualP (Obj a, Obj b) {
+ Num i;
+	if (a != b) return 0;
+
+	if (objIsPair(a) && objIsPair(b)) return (objEqualP(car(a), car(b)) && objEqualP(cdr(a), cdr(b)));
+
+	if (objIsVector(a) &&
+	    objIsVector(b) &&
+	    (i=memObjectLength(a)) == memObjectLength(b)) {
+		while (i--) if (!objEqualP(memVectorObject(a,i), memVectorObject(b,i))) return 0;
+	}
+
+	return 1;
+}
+
+
+/* Implementation of library function memq
+    e  <=  e
+   lst <=  (a e f)
+   r00  => (e f) or ()
+*/
+Obj objMemq (Obj e, Obj lst) {
+	for (; (onull != lst); lst = cdr(lst)) {
+		if (e == car(lst)) {
+			return lst;
+		}
+	}
+	return onull;
+}
+
+/* Implementation of library function assq
+    e  <=  e
+   lst <=  ((d ...) (e ...) ...)
+   r00  => (e ...) or ()
+*/
+Obj objAssq (Obj e, Obj lst) {
+	for (; (onull != lst); lst = cdr(lst)) {
+		if (objIsPair(car(lst)) && e == caar(lst)) {
+			return car(lst);
+		}
+	}
+	return onull;
+}
+
 /* Copies list to a new vector
   r00 <= List
   r01  = Clobbered
@@ -426,6 +478,170 @@ void objListToVector (void) {
 	}
 }
 
+/* Count and push all list elements in r00 to current stack
+   r00 <= {the list}
+    r00 => ()
+    ret => {list length}
+*/
+Num objCountListToStack (Obj o) {
+ Num count=0;
+	while (objIsPair(r00)) {
+		++count;
+		vmPush(car(r00));
+		r00 = cdr(r00);
+	}
+	return count;
+}
+
+/* Pop c elements into a new list in r00.
+   c       <=  {number of elements to pop into new list}
+   RET r00  => {the new list}
+*/
+Obj objCountStackToList0 (Num c) {
+	r00 = onull;
+	while (c--) { r00 = objConsSTK0(); }
+	return r00;
+}
+
+
+
+/*******************************************************************************
+ Ordered_Sets
+*******************************************************************************/
+
+/* Copies ordered set seta adding element o if not in list,
+   keeping decending order.  Returns new ordered set list in r00.
+
+  seta <=  list
+  o    <=  item
+  r00   => new liset (... item ...)
+*/
+Obj objOrderedSetAdd0 (Obj seta, Obj o) {
+ Num count=0;
+ Num found=0;
+	// Count and push list elements in r00 to stack.
+	while (objIsPair(seta)) {
+		r00 = car(seta);
+		if (!found) {
+			if (r00 < o) {++count; found=1; vmPush(o); }
+			else if (r00 == o) { found=1; }
+		}
+		++count;
+		vmPush(r00);
+		seta = cdr(seta);
+	}
+	if (!found) {++count; vmPush(o); } // Must be smaller than all elements so push as new last element in ordered set
+
+	return objCountStackToList0(count);
+}
+
+/* Copies list r00 removing element r01 if in list.  Keep decending order.
+  r00  <=   (... item ...)
+  r01  <=   item
+  r00   =>  (... ...)
+*/
+Obj objOrderedSetSub0 (Obj set, Obj e) {
+ Num count=0;
+ Num found=0;
+	// Count and push list elements in r00 to stack.
+	while (objIsPair(set)) {
+		r00 = car(set);
+		if (!found && e == r00) {
+			found=1;
+		} else {
+			++count;
+			vmPush(r00);
+		}
+		set = cdr(set);
+	}
+	return objCountStackToList0(count);
+}
+
+/* Unions r00 and r01 into a new list.  Keep decending order.
+  seta setb  <=   {the sets to union}
+  ret r00     =>  {new set}
+*/
+Obj objOrderedSetUnion0 (Obj seta, Obj setb) {
+ Num count=0;
+ Obj a, b;
+
+	// Push elements from each list in order
+	while (seta != onull && setb != onull) {
+		a = car(seta);
+		b = car(setb);
+		if (a == b)     { vmPush(a);  seta = cdr(seta);  setb = cdr(setb); }
+		else if (a > b) { vmPush(a);  seta = cdr(seta); }
+		else            { vmPush(b);  setb = cdr(setb); }
+		++count;
+	}
+
+	// Might have ended up with an empty list, so push the rest of the other
+	while (seta != onull) { vmPush(car(seta));  seta = cdr(seta);  ++count; }
+	while (setb != onull) { vmPush(car(setb));  setb = cdr(setb);  ++count; }
+
+	return objCountStackToList0(count);
+}
+
+/* Intersection r00 and r01 into a new list.  Keep decending order.
+  r00  <=   {set}
+  r01   =>  element to add
+  r00   =>  {new set}
+*/
+void objOrderedSetIntersection001 (void) {
+ Num count=0;
+ Obj a, b;
+
+	// Push elements from each list in order
+	while (r00 != onull && r01 != onull) {
+		a = car(r00);
+		b = car(r01);
+		if (a==b) { vmPush(a); r00 = cdr(r00); r01 = cdr(r01); ++count;}
+		else if (a > b) { r00 = cdr(r00); }
+		else  { r01 = cdr(r01); }
+	}
+
+	r00 = onull;
+
+	while (count--) {
+		r01 = vmPop();
+		objCons010();
+	}
+}
+
+/* Subtracts r01 from r00 into a new list.  Keep decending order.
+  r00 <=  {set}
+  r01  => {element to subtract}
+  r00  => {new set}
+*/
+void objOrderedSetSubtract001 (void) {
+ Num count=0;
+ Obj a, b;
+
+	// Push elements from each list in order
+	while (r00 != onull && r01 != onull) {
+		a = car(r00);
+		b = car(r01);
+		if (a==b) { r00 = cdr(r00); r01 = cdr(r01); }
+		else if (a > b) { vmPush(a); r00 = cdr(r00); ++count;}
+		else  { r01 = cdr(r01); }
+	}
+
+	while (r00 != onull) { vmPush(car(r00)); r00 = cdr(r00); ++count; }
+
+	// Build new list.  r00 already null.
+	while (count--) {
+		r01 = vmPop();
+		objCons010();
+	}
+}
+
+Num objOrderedSetIsMember (Obj s, Obj e) {
+	while (objIsPair(s)) {
+		if (e == car(s)) return 1;
+		s = cdr(s);
+	}
+	return 0;
+}
 
 
 /*******************************************************************************
@@ -481,7 +697,7 @@ void objWriteTypeString (Obj o, FILE *stream) {
 	fwrite ("\"", 1, 1, stream);
 	len = memObjectLength(o);
 	for (i = 0; i < len; ++i) {
-		c = ((Chr*)r00)[i];
+		c = ((Chr*)o)[i];
 		switch (c) {
 		case '\0'  : fwrite("\\0", 1, 2, stream); break; /* 0 */
 		case '\a'  : fwrite("\\a", 1, 2, stream); break; /* 7 */
@@ -501,6 +717,7 @@ void objWriteTypeString (Obj o, FILE *stream) {
 			else fprintf (stream, "\\x"HEX02, (Num)c);
 		}
 	}
+	fwrite ("\"", 1, 1, stream);
 }
 
 
@@ -624,7 +841,7 @@ void objDisplay (Obj o, FILE *stream) {
 		else fprintf(stream, HEX, (Int)o);
 
 		/* The C pointer's registered string */
-		if ((s = memPointerString(o))) fprintf (stream, ":%s", s);
+		if ((s = memAddressString(o))) fprintf (stream, ":%s", s);
 
 		fwrite(">", 1, 1, stream);
 	}
@@ -646,7 +863,7 @@ void objWrite (Obj o, FILE *stream) {
 		if ((Int)o < 0l) fprintf(stream, "-"HEX, labs((Int)o));
 		else fprintf(stream, HEX, (Int)o);
 		/* Dump the object description. */
-		if ((s = memPointerString(o))) fprintf (stream, ":%s", s);
+		if ((s = memAddressString(o))) fprintf (stream, ":%s", s);
 		fwrite(">", 1, 1, stream);
 	}
 	/* Restore I/O state */
@@ -732,30 +949,30 @@ void objInitialize (void) {
 		objSerializerInitialize();
 
 		DB("Register the internal object types");
-		memTypeRegisterString(TINTRINSIC, (Str)"intrinsic");
-		memTypeRegisterString(TCHAR, (Str)"chr");
-		memTypeRegisterString(TSTRING, (Str)"str");
-		memTypeRegisterString(TSYMBOL, (Str)"symb");
-		memTypeRegisterString(TINTEGER, (Str)"int");
-		memTypeRegisterString(TREAL, (Str)"real");
-		memTypeRegisterString(TPRIMITIVE, (Str)"primitive");
-		memTypeRegisterString(TPAIR, (Str)"pair");
-		memTypeRegisterString(TVECTOR, (Str)"vector");
-		memTypeRegisterString(TCLOSURE, (Str)"closure");
-		//memTypeRegisterString(TCONTINUATION, (Str)"contin");
-		memTypeRegisterString(TPORT, (Str)"port");
-		//memTypeRegisterString(TSOCKET, (Str)"socket");
-		memTypeRegisterString(TSYSCALL, (Str)"syscall");
+		memTypeStringRegister(TINTRINSIC, (Str)"intrinsic");
+		memTypeStringRegister(TCHAR, (Str)"chr");
+		memTypeStringRegister(TSTRING, (Str)"str");
+		memTypeStringRegister(TSYMBOL, (Str)"symb");
+		memTypeStringRegister(TINTEGER, (Str)"int");
+		memTypeStringRegister(TREAL, (Str)"real");
+		memTypeStringRegister(TPRIMITIVE, (Str)"primitive");
+		memTypeStringRegister(TPAIR, (Str)"pair");
+		memTypeStringRegister(TVECTOR, (Str)"vector");
+		memTypeStringRegister(TCLOSURE, (Str)"closure");
+		//memTypeStringRegister(TCONTINUATION, (Str)"contin");
+		memTypeStringRegister(TPORT, (Str)"port");
+		//memTypeStringRegister(TSOCKET, (Str)"socket");
+		memTypeStringRegister(TSYSCALL, (Str)"syscall");
 
 		/* Intrinsic objects are defined by their static object pointer address.
 		   Their display/write strings are also stored, even though their official
 		   length is zero, using format string "%.2s".  */
-		ofalse = memNewStatic(TINTRINSIC, 0); memPointerRegisterString(ofalse, (Str)"#f");
-		otrue  = memNewStatic(TINTRINSIC, 0); memPointerRegisterString(otrue, (Str)"#t");
-		onull  = memNewStatic(TINTRINSIC, 0); memPointerRegisterString(onull, (Str)"()");
-		oeof   = memNewStatic(TINTRINSIC, 0); memPointerRegisterString(oeof, (Str)"#eof");
-		onullvec = memNewStatic(TVECTOR, 0);  memPointerRegisterString(onullvec, (Str)"#()");
-		onullstr = memNewStatic(TSTRING, 0);  memPointerRegisterString(onullstr, (Str)"\"\"");
+		ofalse = memNewStatic(TINTRINSIC, 0); memAddressStringRegister(ofalse, (Str)"#f");
+		otrue  = memNewStatic(TINTRINSIC, 0); memAddressStringRegister(otrue, (Str)"#t");
+		onull  = memNewStatic(TINTRINSIC, 0); memAddressStringRegister(onull, (Str)"()");
+		oeof   = memNewStatic(TINTRINSIC, 0); memAddressStringRegister(oeof, (Str)"#eof");
+		onullvec = memNewStatic(TVECTOR, 0);  memAddressStringRegister(onullvec, (Str)"#()");
+		onullstr = memNewStatic(TSTRING, 0);  memAddressStringRegister(onullstr, (Str)"\"\"");
 
 		/* Table of character objects */
 		DB("Creating vector of character constants");
@@ -767,7 +984,8 @@ void objInitialize (void) {
 		}
 
 		DB("Creating global symbol table and initial symbols");
-		memRootSetRegister(osymbols);
+		memRootSetAddressRegister(&osymbols); MEM_ADDRESS_REGISTER(&osymbols);
+
 		osymbols = memNewVector(TVECTOR, HashTableSize);
 		for (n=0; n<HashTableSize; n++) memVectorSet (osymbols, n, onull);
 
@@ -853,13 +1071,15 @@ void objInitialize (void) {
 		}
 
 		DB("Registering static pointer description strings");
-		memPointerRegister(objCopyInteger);
-		memPointerRegister(objCopyString);
-		memPointerRegister(objCons12);
-		memPointerRegister(objCons23);
-		memPointerRegister(objCons10);
-		memPointerRegister(objNewVector01);
-		memPointerRegister(objListToVector);
+		MEM_ADDRESS_REGISTER(objCopyInteger);
+		MEM_ADDRESS_REGISTER(objCopyReal);
+		MEM_ADDRESS_REGISTER(objCons010);
+		MEM_ADDRESS_REGISTER(objCons101);
+		MEM_ADDRESS_REGISTER(objCons303);
+		MEM_ADDRESS_REGISTER(objCons012);
+		MEM_ADDRESS_REGISTER(objCons023);
+		MEM_ADDRESS_REGISTER(objNewVector01);
+		MEM_ADDRESS_REGISTER(objListToVector);
 
 		odebug = ofalse;
 

@@ -68,7 +68,7 @@ typedef void (*Func2ObjFile) (Obj o, FILE *f);
 #define HEX       "%lx"
 #define HEX2     "%2lx"
 #define HEX4     "%4lx"
-#define HEX02   "%02lX"
+#define HEX02   "%02lx"
 #define HEX03   "%03lx"
 #define HEX04   "%04lx"
 #define HEX08   "%08lx"
@@ -78,12 +78,14 @@ typedef void (*Func2ObjFile) (Obj o, FILE *f);
 
 /* Memory pointers seem to be in the 12 hex-digit
    range so this is the usual format string length.  */
-#define OBJ  "%012lX"
-#define OBJ0 "%016lx"
+#define OBJ   "%012lx"
+#define OBJ0  "%016lx"
+#define OBJ16  "%16lx"
 
 
 #define NL "\n"
 #define SP " "
+#define TAB "\t"
 
 
 #endif
