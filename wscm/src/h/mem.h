@@ -130,6 +130,11 @@ Obj  memAryStackObject (Obj stack, Num topOffset);
 /***************************************
  Root_Set
 ***************************************/
+#define DEFOBJ(x) Obj x; memRootSetPush(&x);
+#define UNDEFOBJ(x) memRootSetPop(&x);
+
+#define memRootSetPush memRootSetAddressRegister 
+#define memRootSetPop  memRootSetAddressUnRegister 
 void memRootSetAddressRegister (Obj *objp);
 void memRootSetAddressUnRegister (Obj *objp);
 

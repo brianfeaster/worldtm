@@ -464,8 +464,9 @@ void parsepushoperands (void) {
 void addonevar (void) {
 	FBInit();
 	yy_scan_string ((Str)"(+ x -69 x)");  yyparse();  rexpr = r00;
-
+odebug=otrue;
 	compCompile();
+odebug=ofalse;
 	//objDisplay(r00, stderr);
 	assert(!compIsError());
 

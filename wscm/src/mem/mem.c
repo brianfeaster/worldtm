@@ -157,8 +157,8 @@ Num memIsObjectBaseVectorOrArray (Obj o) { return memObjectType(o) <= TMAXVECTOR
 Num memIsObjectSemaphore (Obj o)   { return memIsObjectValid(o) && memObjectType(o) == TSEMAPHORE; }
 Num memIsObjectFinalizer (Obj o)   { return memIsObjectValid(o) && memObjectType(o) == TFINALIZER; }
 Num memIsObjectPointer (Obj o)     { return                        memObjectType(o) == TPOINTER; } /* During a garbage collection, memIsObjectValid would fail because the object is in the temporary 'new' heap */
-Num memIsObjectVecStack (Obj o)       { return memIsObjectValid(o) && memObjectType(o) == TVECSTACK; }
-Num memIsObjectAryStack (Obj o)       { return memIsObjectValid(o) && memObjectType(o) == TARYSTACK; }
+Num memIsObjectVecStack (Obj o)    { return memIsObjectValid(o) && memObjectType(o) == TVECSTACK; }
+Num memIsObjectAryStack (Obj o)    { return memIsObjectValid(o) && memObjectType(o) == TARYSTACK; }
 Num memIsObjectShadow (Obj o)      { return memIsObjectValid(o) && memObjectType(o) == TSHADOW; }
 Num memIsObjectType (Obj o, Type t){ return memIsObjectValid(o) && memObjectType(o) == t; }
 

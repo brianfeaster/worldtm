@@ -43,7 +43,9 @@ typedef void (*Func2ObjFile) (Obj o, FILE *f);
 */
 #define CHR  "%c"
 #define STR  "%s"
+#define STR3 "%3s"
 #define STR4 "%-4s"
+#define STR5 "%5s"
 
 #define X8  "%x"
 #define X16 "%x"

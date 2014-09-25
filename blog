@@ -4294,4 +4294,120 @@ object pointers becomes a pointer into the stack object facilitating fast stack
 operations.  When the VM quits or is interrupted, the stack object is updated
 with the byte offset of the stack count.  I'm choosing the byte count so that
 a simple add with no cast is required to convert the stack object pointer back
-into a pointer (stackObject + *(Num)stackObject[0])
+into a pointer (stackObject + (Num)stackObject[0])
+
+
+
+Fri Feb 28 08:26:54 UTC 2014
+
+Implemented a crude register allocator.  The allocator needs to inject callee-
+save register icode to protect registers by the caller.  Since there are two
+register types, object and integer, I will either go with having two stacks
+or one stack that uses one end for object values and the other for immediate/
+integer values.
+
+
+
+Tue Aug 12 07:25:43 UTC 2014
+
+Compiler emits code that could leave the results in an object or immediate
+register.  The compilation process needs to keep track of this, unfortunately,
+so it knows precisely which ireg or oreg will hold the return value.
+
+
+
+Fri Aug 22 08:39:52 UTC 2014
+
+Having implemented most of a register allocator, I'm now in a position to give
+the compiler more flexibility when working with intermediate register.  The
+following expression (+ x y) was compiled into:
+
+   7F635B918D00 0000 MV   $00     #<00007f635b5c8ce8>      (69 . x)
+   7F635B918D00 0010 LD   $00 $00 #<0000000000000000>      #<0>
+   7F635B918D00 0020 PUSH $00
+   7F635B918D00 0028 MV   $00     #<00007f635b5c8ca8>      (42 . y)
+   7F635B918D00 0038 LD   $00 $00 #<0000000000000000>      #<0>
+   7F635B918D00 0048 PUSH $00
+   7F635B918D00 0050 MV   $00     #<00007f635b5c1ac8>      (#syscall<00404410:syscallAdd> . +)
+   7F635B918D00 0060 LD   $00 $00 #<0000000000000000>      #<0>
+   7F635B918D00 0070 MV   $01     #<0000000000000002>      #<2>
+   7F635B918D00 0080 MV   $08 $00
+   7F635B918D00 0088 LD   $10 $00 #<fffffffffffffff8>      #<-8>
+   7F635B918D00 0098 LSR  $10     #<0000000000000038>      #<38>
+   7F635B918D00 00a8 BEQ  $10     #<0000000000000084> 0170 #<84>
+   7F635B918D00 00c0 BEQ  $10     #<0000000000000082> 0190 #<82>
+   7F635B918D00 00d8 BEQ  $01     #<0000000000000000> 0118 #<0>
+   7F635B918D00 00f0 POP  $02
+   7F635B918D00 00f8 ADD  $01     #<ffffffffffffffff>      #<-1>
+   7F635B918D00 0108 BRA          00d8
+   7F635B918D00 0118 PUSH $00
+   7F635B918D00 0120 MV   $00     #<00007f635b918290>      ((+ x y))
+   7F635B918D00 0130 SYS          #<000000000041c470>      #<41c470:sysListToStack>
+   7F635B918D00 0140 MV   $01     #<0000000000000002>      #<2>
+   7F635B918D00 0150 MV   $00     #<0000000000428911>      #<428911:"Illegal operator type">
+   7F635B918D00 0160 SYS          #<00000000004150b0>      #<4150b0:compSyscallError>
+   7F635B918D00 0170 LD   $00 $00 #<0000000000000000>      #<0>
+   7F635B918D00 0180 SYS  $00
+   7F635B918D00 0188 RET
+   7F635B918D00 0190 LD   $02 $00 #<0000000000000000>      #<0>
+   7F635B918D00 01a0 JMP  $02
+   
+And now compiles into:
+   
+   7f71862d10f0 0000 MV   $01     #<00007f71862ad8c0>      (69 . x)
+   7f71862d10f0 0010 LD   $01 $01 #<0000000000000000>      #<0>
+   7f71862d10f0 0020 LD   $11 $01 #<0000000000000000>      #<0>
+   7f71862d10f0 0030 MV   $01     #<00007f71862ad880>      (42 . y)
+   7f71862d10f0 0040 LD   $01 $01 #<0000000000000000>      #<0>
+   7f71862d10f0 0050 LD   $10 $01 #<0000000000000000>      #<0>
+   7f71862d10f0 0060 ADD  $11 $10
+   7f71862d10f0 0068 MV   $10 $11
+   7f71862d10f0 0070 SYS          #<0000000000420660>      #<420660:compSyscallNewInt>
+   7f71862d10f0 0080 MV   $00 $00
+   7f71862d10f0 0088 RET
+
+This is accomplished by enhancing the compiler flow so each comp module function
+returns the last emitted intermediate (or actual) register which should containe
+the value of the expression/code at run time.
+
+
+
+Sat Aug 30 05:09:32 UTC 2014
+
+I need to refactor closures and applications so they play nice with parameters.
+Do I keep the parameters passed on the stack or try and include registers?
+Values might be either in object or immediate valued registers so I will have to
+normalize values when passing them.
+
+
+
+Mon Sep  1 05:29:57 UTC 2014
+
+If a lambda expression itself has no lambda expression, it can be compiled so
+that no actual environment is extended.  All state can exist on the stack.
+
+
+
+Sun Sep  7 03:39:35 UTC 2014
+
+MV  $1 $2
+MV  %0 $1
+ADD %f %0
+
+
+
+Wed Sep 24 07:42:08 UTC 2014
+
+Refactoring register extent caching on icodes.  I'm now keeping track of a
+register's creation, extent, and death at each icode.  The coarse extent
+tracking between iblocks (first and second register allocation stage) doesn't
+need this detail.  Once each icode can be queried for a hard or pseudo
+register's state at that point, it should be easier to perform allocation.  I
+was getting stuck before since it was not obvious when a hard register was
+available for placement as a destination (if it was a final pseudo source
+register).
+ mv  B, 1    mv  $0, 1
+ mv  A, B => add $0, $0 ; Can immediately use $0 again for source since B is a last-use pseudo register
+
+
+

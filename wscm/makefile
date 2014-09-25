@@ -11,7 +11,7 @@ SRC_DIRS   = $(wildcard $(SRC_PATH)/*)
 # The individual modules proper that make up World Scheme (ignoring h and test dir): mem vm obj sys os asm comp wscm
 MODULES = $(filter-out $(H_DIR) $(TEST_DIR), $(patsubst src/%,%,$(SRC_DIRS)))
 
-CFLAGS = -I$(H_PATH) -Wall -march=native -Wconversion -Wno-trigraphs -Wno-format -Werror -g -O3
+CFLAGS = -I$(H_PATH) -Wall -march=native -Wconversion -Wno-trigraphs -Wno-format -Werror -g -O0
 # -I                Include this directory for h file searches
 # -Wall             Many warnings.
 # -ggdb             Debugging
@@ -22,6 +22,7 @@ CFLAGS = -I$(H_PATH) -Wall -march=native -Wconversion -Wno-trigraphs -Wno-format
 # -pg               Profiling.
 # -O3               -malign-loops=2 -malign-jumps=2 -malign-functions=2 -malign-double -mwide-multiply
 # -Werror           Warnings prevent compilation.
+# -falign-labels=8  Align emitted machine code on 8 byte boundaries.
 
 LDFLAGS = -lm
 # -lm       Math library (probably trig functions).
