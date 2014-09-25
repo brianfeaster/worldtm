@@ -514,7 +514,7 @@ Obj objCountStackToList0 (Num c) {
 
   seta <=  list
   o    <=  item
-  r00   => new liset (... item ...)
+  r00   => new "liset" (... item ...)
 */
 Obj objOrderedSetAdd0 (Obj seta, Obj o) {
  Num count=0;
@@ -578,6 +578,26 @@ Obj objOrderedSetUnion0 (Obj seta, Obj setb) {
 	// Might have ended up with an empty list, so push the rest of the other
 	while (seta != onull) { vmPush(car(seta));  seta = cdr(seta);  ++count; }
 	while (setb != onull) { vmPush(car(setb));  setb = cdr(setb);  ++count; }
+
+	return objCountStackToList0(count);
+}
+
+/* Intersection r00 and r01 into a new list.  Keep decending order.
+  seta setb  <=   {the sets to union}
+  ret r00     =>  {new set}
+*/
+Obj objOrderedSetIntersection0 (Obj seta, Obj setb) {
+ Num count=0;
+ Obj a, b;
+
+	// Push elements from each list in order
+	while (seta != onull && setb != onull) {
+		a = car(seta);
+		b = car(setb);
+		if (a == b)     { vmPush(a);  seta = cdr(seta);  setb = cdr(setb); ++count; }
+		else if (a > b) {             seta = cdr(seta); }
+		else            {             setb = cdr(setb); }
+	}
 
 	return objCountStackToList0(count);
 }

@@ -28,9 +28,9 @@ void vmAryPush (Obj o) {        memAryStackPush(rdstack, o); }
 Obj  vmAryPop (void)   { return memAryStackPop(rdstack); }
 
 
-void vmVecPushInternal (Obj o) { *(Obj*)rstackp=o; rstackp+=8; }
+void vmVecPushInternal (Obj o) { *(Obj*)rstackp=o; rstackp+=ObjSize; }
 Obj  vmVecPopInternal  (void)  { rstackp-=8; return *(Obj*)rstackp; }
-void vmAryPushInternal (Obj o) { *(Obj*)rdstackp=o; rdstackp+=8; }
+void vmAryPushInternal (Obj o) { *(Obj*)rdstackp=o; rdstackp+=ObjSize; }
 Obj  vmAryPopInternal  (void)  { rdstackp-=8; return *(Obj*)rdstackp; }
 
 int vmRunCount=0;
@@ -200,7 +200,14 @@ void vmVm (void) {
 	#define imm
 	#define immR02 + (Num)r02
 	#define immR10 + (Num)r10
+	#define immR11 + (Num)r11
 	#define immI   + *(Num*)(rip+1*ObjSize)
+
+	/* Expression for incrementing the instruction pointer via the offset
+	   field whos location depends on the existence of an immediate field.
+	*/
+	#define IPINCO       rip+=*(Num*)(rip+1*ObjSize)
+	#define IPINCOI      rip+=*(Num*)(rip+2*ObjSize)
 
 	/* Expression for incrementing the instruction pointer based on the
       last opcode argument.
@@ -223,8 +230,9 @@ void vmVm (void) {
 	#define IPINCR11 IPINC
 	#define IPINCR12 IPINC
 	#define IPINCR13 IPINC
+	#define IPINCR00R11 IPINC
 	#define IPINCR01R02 IPINC
-	#define IPINCR01R02 IPINC
+	#define IPINCR01R11 IPINC
 	#define IPINCR00I IPINC2
 	#define IPINCR01I IPINC2
 	#define IPINCR02I IPINC2
@@ -308,6 +316,13 @@ void vmVm (void) {
 	   IPINC##argn##argi; \
 	   if (vmInterrupt) vmProcessInterrupt()
 
+	/* AND Rd I
+	*/
+	#define VMOP_AND(argd,argn,argi) \
+	   arg##argd = (Obj)((Num)arg##argd & (Num)arg##argn imm##argi); \
+	   IPINC##argi; \
+	   if (vmInterrupt) vmProcessInterrupt()
+
 	/* LSL Rd I
 	*/
 	#define VMOP_LSL(argd,argn,argi) \
@@ -349,6 +364,16 @@ void vmVm (void) {
 	      rip += *(Num*)(rip + 2*ObjSize); \
 	   } else { \
 	      rip += 3*ObjSize;\
+	   } \
+	   if (vmInterrupt) vmProcessInterrupt()
+
+	/* BGT [Rd | I]
+	*/
+	#define VMOP_BGT(argd,argn,argi) \
+	   if (arg##argd > arg##argn arg##argi) { \
+	      IPINCO##argi; \
+	   } else { \
+	      IPINC; IPINC##argi; \
 	   } \
 	   if (vmInterrupt) vmProcessInterrupt()
 
@@ -543,9 +568,10 @@ void vmDisplayTypeCode (Obj c, FILE *stream) {
 		#define PRINT
 		// This is expanded for the opcode with three registers so the immediate field is not rendered.  [LD $00 $01 $02] is the only opcode for now
 		#define PRINTR02
+		#define PRINTR11
 		#define PRINTIO ++idx; fprintf(stream, " #<"OBJ0"> ", *(Obj*)(c+idx*ObjSize)); ++idx; fprintf(stream,    HEX04" ", vmOffsetToPosition(c, lineNumber*ObjSize, c+idx*ObjSize));  vmObjectDumper(*(Obj*)(c+(idx-1)*ObjSize), stream); 
 		#define PRINTI  ++idx; fprintf(stream, " #<"OBJ0"> ", *(Obj*)(c+idx*ObjSize));        fprintf(stream, "     ");                                                               vmObjectDumper(*(Obj*)(c+(idx)*ObjSize), stream); 
-		#define PRINTO                                                       ++idx; fprintf(stream, " "HEX04,    vmOffsetToPosition(c, lineNumber*ObjSize, c+idx*ObjSize));
+		#define PRINTO  ++idx; fprintf(stream, ""HEX04,    vmOffsetToPosition(c, lineNumber*ObjSize, c+idx*ObjSize));
 
 		#define _
 		#define VMOP(op,d,n,i,o) VMOP_(op, _##d, _##n, _##i, d, n, i, o)

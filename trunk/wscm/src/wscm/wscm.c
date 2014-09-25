@@ -183,7 +183,7 @@ void wscmError (Num regArgs, char const *msg) {
 /* Verify function stack argument count in immediate:r01
 */
 Int wscmAssertArgCount0 (char const *funcName) {
-	if (0 == (Num)r01) return 0;
+	if (0 == (Num)r10) return 0;
 	fprintf(stderr, "\r\nWSCM-ASSERT::Expect 0 argument");
 	/* Create ("error message" arguments...) object */
 	osException((Obj)funcName);
@@ -191,7 +191,7 @@ Int wscmAssertArgCount0 (char const *funcName) {
 }
 
 Int wscmAssertArgCount1 (char const *funcName) {
-	if (1 == (Num)r01) return 0;
+	if (1 == (Num)r10) return 0;
 	fprintf(stderr, "\r\nWSCM-ASSERT::Expect 1 argument");
 	/* Create ("error message" arguments...) object */
 	osException((Obj)funcName);
@@ -199,7 +199,7 @@ Int wscmAssertArgCount1 (char const *funcName) {
 }
 
 Int wscmAssertArgCount2 (char const *funcName) {
-	if (2 == (Num)r01) return 0;
+	if (2 == (Num)r10) return 0;
 	fprintf(stderr, "\r\nWSCM-ASSERT::Expect 2 arguments");
 	/* Create ("error message" arguments...) object */
 	osException((Obj)funcName);
@@ -207,7 +207,7 @@ Int wscmAssertArgCount2 (char const *funcName) {
 }
 
 Int wscmAssertArgCount3 (char const *funcName) {
-	if (3 == (Num)r01) return 0;
+	if (3 == (Num)r10) return 0;
 	fprintf(stderr, "\r\nWSCM-ASSERT::Expect 3 arguments");
 	/* Create ("error message" arguments...) object */
 	osException((Obj)funcName);
@@ -215,7 +215,7 @@ Int wscmAssertArgCount3 (char const *funcName) {
 }
 
 Int wscmAssertArgCountRange0To1 (char const *funcName) {
-	if ((0 == (Num)r01) || (1 == (Num)r01)) return 0;
+	if ((0 == (Num)r10) || (1 == (Num)r10)) return 0;
 	fprintf(stderr, "\r\nWSCM-ASSERT::Expect 0 or 1 arguments");
 	/* Create ("error message" arguments...) object */
 	osException((Obj)funcName);
@@ -223,7 +223,7 @@ Int wscmAssertArgCountRange0To1 (char const *funcName) {
 }
 
 Int wscmAssertArgCountRange1To2 (char const *funcName) {
-	if ((1 == (Num)r01) || (2 == (Num)r01)) return 0;
+	if ((1 == (Num)r10) || (2 == (Num)r10)) return 0;
 	fprintf(stderr, "\r\nWSCM-ASSERT::Expect 1 or 2 arguments");
 	/* Create ("error message" arguments...) object */
 	osException((Obj)funcName);
@@ -231,7 +231,7 @@ Int wscmAssertArgCountRange1To2 (char const *funcName) {
 }
 
 Int wscmAssertArgCount1OrMore (char const *funcName) {
-	if (1 <= (Num)r01) return 0;
+	if (1 <= (Num)r10) return 0;
 	fprintf(stderr, "\r\nWSCM-ASSERT::Expect 1 or more arguments");
 	/* Create ("error message" arguments...) object */
 	osException((Obj)funcName);
@@ -617,7 +617,7 @@ void syscallNumber2String (void) {
  Num base;
 	DBBEG();
 	if (wscmAssertArgCountRange1To2(__func__)) goto ret;
-	base = (Num)r01==2 ? *(Num*)vmPop() : 10; /* Default base is 10. */
+	base = (Num)r10==2 ? *(Num*)vmPop() : 10; /* Default base is 10. */
 	num = *(Int*)vmPop();
 	sysSerializeInteger (num, base);
 ret:
@@ -631,7 +631,7 @@ void syscallWrite (void) {
  FILE *stream=NULL;
 	DBBEG();
 	if (wscmAssertArgCountRange1To2(__func__)) goto ret;
-	if ((Int)r01==2) fd=*(Int*)vmPop(); /* File descriptor. */
+	if ((Int)r10==2) fd=*(Int*)vmPop(); /* File descriptor. */
 	if (fd==1) stream = stdout;
 	if (fd==2) stream = stderr;
 	assert(NULL != stream);
@@ -659,7 +659,7 @@ ret:
 }
 
 void syscallVector (void) {
- Num l=(Num)r01;
+ Num l=(Num)r10;
 	DBBEG();
 	if (l==0) r00=onullvec;
 	else {
@@ -673,7 +673,7 @@ void syscallMakeVector (void) {
  Num len;
 	DBBEG();
 	if (wscmAssertArgCountRange1To2(__func__)) goto ret;
-	if (1 == (Num)r01) {
+	if (1 == (Num)r10) {
 		r01 = vmPop(); /* length */
 		if (wscmAssertArgType(TINTEGER, r01, 1, 1, __func__)) goto ret;
 		len = *(Num*)r01;
@@ -912,7 +912,7 @@ ret:
 }
 
 void syscallSub (void) {
- Int sum=0, count=(Int)r01;
+ Int sum=0, count=(Int)r10;
 	DBBEG();
 	if (wscmAssertArgCount1OrMore(__func__)) goto ret;
 	if (1 == count)
@@ -2140,12 +2140,17 @@ void wscmInitialize (void) {
 	//r00=osymbols; sysDefine("symbols");
 	wscmCreateRead();  sysDefine("read");
 	wscmCreateRepl();  sysDefine("repl2");
+	objNewInt(0);  sysDefine ("a"); /* It's always nice to have x and y defined with useful values */
+	objNewInt(1);  sysDefine ("b");
 	objNewInt(42);  sysDefine ("y"); /* It's always nice to have x and y defined with useful values */
 	objNewInt(69);  sysDefine ("x");
 	objNewSymbol((Str)"a", 1);  r01=r00; /* It's also nice to have a pair ready to go */
 	objNewSymbol((Str)"b", 1);  r02=r00;
 	objCons012();  sysDefine("c");
-
+	objNewVector(3); memVectorSet(r00, 0, (Obj)1);
+	                 memVectorSet(r00, 1, (Obj)2);
+	                 memVectorSet(r00, 2, (Obj)3);
+	                 sysDefine("v");
 	DBEND();
 }
 
@@ -2293,7 +2298,6 @@ void wscmBindArgs (Num argc, char *argv[]) {
 	DBEND();
 }
 
-
 int main (int argc, char *argv[]) {
 	//setbuf(stdout, NULL);
 	signal(SIGPIPE, SIG_IGN);
@@ -2320,13 +2324,13 @@ int main (int argc, char *argv[]) {
 	//wscmSigAlarmReset(); /* Enable scheduler's interrupt timer. */
 
 	/* REPL in a blocking C loop */
-	//wscmCReadEvalPrintLoop();  return 0;
+	wscmCReadEvalPrintLoop();  return 0;
 
 	/* REPL in a blocking assembled code block */
 	//wscmASMReadEvalPrintLoop(argc, argv);  return 0;
 
 	/* REPL as compiled inlined scheme with asynchronous threads */
-	wscmStringReadEvalPrintLoop();
+	//wscmStringReadEvalPrintLoop();
 	return 0;
 }
 

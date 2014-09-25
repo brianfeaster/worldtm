@@ -51,6 +51,7 @@ Num yylex (void);
 void yyparse (void);
 
 /* Environment */
+void sysTGEFindNew (void);
 void sysTGEFind (void);
 void sysTGEBind (void);
 Num sysEnvFind (void);

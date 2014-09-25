@@ -846,32 +846,125 @@ void TestSpillover (void) {
 	FBFinalize("4269");
 }
 
+
+/* Simple pseudo register
+*/
+void TestPseudoRegisters(void) {
+ Num A, B, C;
+	FBInit();
+	asmInit();
+	A = asmNewOregister();
+	B = asmNewOregister();
+	C = asmNewIregister();
+	asmAsm(
+		MVI, A, (Obj)0,
+		MVI, B, (Obj)0,
+		MV, B, A,
+		MV, R02, A,
+		MV, R03, A,
+		MV, B, R01,
+		ADD, C, B,
+		ADD, R10, C,
+		MV, R01, R01,
+		QUIT
+	);
+	asmAssemble();
+
+	rcode = r00;
+	rip = 0;
+	vmRun();
+
+	FBFinalize("");
+}
+
+
 /* Compute and print sum of 0 to n from 10 down to 1 
 */
 void TestIRegistersSumtorial (void) {
- Num A, B, C; // Intermediate registers
- Obj L, M;    // Labels
+ Num A, B, C, D, Z; // Intermediate registers
+ Obj L, M, BOT, TOP;    // Labels
 	FBInit();
 	asmInit();
 	A = asmNewOregister();
 	B = asmNewOregister();
 	C = asmNewOregister();
+	D = asmNewIregister();
+	Z = asmNewIregister();
 	L = asmNewLabel();
 	M = asmNewLabel();
+	BOT = asmNewLabel();
+	TOP = asmNewLabel();
 	asmAsm(
-		MVI,  A, (Obj)10,     // A = 10
+		BRA, BOT,
+	LABEL, TOP,
 	LABEL, M,
 		MV,   B, A,             // B = A
 		MVI,  C, (Obj)0,        // C = 0
 	LABEL, L,
+		NOP,
 		ADD, C, B,                // C += B
 		ADDI, B, (Obj)-1,         // --B
 		BNEI, B, (Obj)0, L,
-		MV, R00, C,
+		MV, R10, C,
+		ADD, R10, D,
+		ADD, R02, R02,
+		MV, R00, R10,
 		SYSI, cctPrintIntr00,
 		SYSI, cctDumpSpace,
+		MV, R00, R00,
 		ADDI, A, (Obj)-1,     // --A
 		BNEI, A, (Obj)0, M,
+		MV, R02, R02,
+		RET,
+	LABEL, BOT,
+		MVI,  D, (Obj)0,
+		MVI,  A, (Obj)10,     // A = 10
+		ADD, Z, R10,
+		BNEI, R00, (Obj)0, TOP,
+		ADD, R10, R11,
+		BRA, TOP,
+		QUIT
+	);
+
+	asmAssemble();
+
+	rcode = r00;
+	rip = 0;
+	//vmRun();
+
+	//objDisplay(rcode, stdout);
+	FBFinalize("55 45 36 28 21 15 10 6 3 1 ");
+}
+
+void TestCrazyRegisterAllocation (void) {
+ Num A, B; // Intermediate registers
+ Obj T, L, Y, Z;    // Labels
+	FBInit();
+	asmInit();
+	A = asmNewOregister();
+	B = asmNewOregister();
+	T = asmNewLabel();
+	L = asmNewLabel();
+	Y = asmNewLabel();
+	Z = asmNewLabel();
+	asmAsm(
+		BRA, Y,
+
+	LABEL, T,
+		ADD,  A, A,
+		BNEI, A, (Obj)0, Z,
+
+	LABEL, L,
+		ADD,  B, A,
+		BNEI, B, (Obj)0, Z,
+		BRA, T,
+
+	LABEL, Y,
+		MVI, A, (Obj)0,
+		MVI, B, (Obj)0,
+		BRA, T, 
+
+	LABEL, Z,
 		QUIT
 	);
 
@@ -898,21 +991,26 @@ int main (void) {
 	MEM_ADDRESS_REGISTER(cctDumpObjR00);
 	MEM_ADDRESS_REGISTER(syscallNewIntImm);
 	MEM_ADDRESS_REGISTER(cctDumpHexR00);
-	TEST(TestmviRegister);
-	TEST(test2);
-	TEST(test3);
-	TEST(test4);
-	TEST(test5);
-	TEST(cctAsm);
-	TEST(cctAsmNested);
-	TEST(cctSysCall);
-	TEST(cctJumpAndLink);
-	TEST(opcodes);
-	TEST(myTest);
-	TEST(optimizePopPush);
-	TEST(optimizeEmptyIBlock);
-	TEST(TestMVIiReg);
-	TEST(TestSpillover);
+	odebug = otrue;
+	//TEST(TestmviRegister);
+	//TEST(test2);
+	//TEST(test3);
+	//TEST(test4);
+	//TEST(test5);
+	//TEST(cctAsm);
+	//TEST(cctAsmNested);
+	//TEST(cctSysCall);
+	//TEST(cctJumpAndLink);
+	//TEST(opcodes);
+	//TEST(myTest);
+	//TEST(optimizePopPush);
+	//TEST(optimizeEmptyIBlock);
+	//TEST(TestMVIiReg);
+	//TEST(TestSpillover);
+	//EST(TestPseudoRegisters);
 	TEST(TestIRegistersSumtorial);
+	//TEST(TestCrazyRegisterAllocation);
+
+	odebug = ofalse;
 	return 0;
 }

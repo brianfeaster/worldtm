@@ -54,7 +54,7 @@
   (for-each (lambda (o) (for-each WinChatPuts (display->strings o))) l))
 (define (WinChatWrite o)
   (for-each (WinChat 'puts) (write->strings o)))
-(WinChat '(set! ScrollbackHack #t))
+(WinChat '(set! ScrollbackHack #f))
 
 ; Input Window
 (define WinInput ((Terminal 'WindowNew)

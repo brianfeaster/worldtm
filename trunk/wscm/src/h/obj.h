@@ -144,6 +144,7 @@ Obj objCountStackToList0 (Num c);
 Obj objOrderedSetAdd0 (Obj set, Obj o);
 Obj objOrderedSetSub0 (Obj set, Obj e);
 Obj objOrderedSetUnion0 (Obj seta, Obj setb);
+Obj objOrderedSetIntersection0 (Obj seta, Obj setb);
 void objOrderedSetIntersection001 (void);
 void objOrderedSetSubtract001 (void);
 Num objOrderedSetIsMember (Obj s, Obj e);
