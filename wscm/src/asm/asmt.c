@@ -592,9 +592,9 @@ void opcodes (void) {
 	asmInit(); asmAsm(LSRI, R10, 16);  asmAssemble(); assert(vmLSR_R10_I == memVectorObject(r00, 0)); assert(16 == (Num)memVectorObject(r00, 1));
 
 	/* ADDI */
-	asmInit(); asmAsm(ADDI, R00, 99);  asmAssemble(); assert(vmADD_R00_I == memVectorObject(r00, 0)); assert(99 == (Num)memVectorObject(r00, 1));
-	asmInit(); asmAsm(ADDI, R01, 98);  asmAssemble(); assert(vmADD_R01_I == memVectorObject(r00, 0)); assert(98 == (Num)memVectorObject(r00, 1));
-	asmInit(); asmAsm(ADDI, R02, 97);  asmAssemble(); assert(vmADD_R02_I == memVectorObject(r00, 0)); assert(97 == (Num)memVectorObject(r00, 1));
+	asmInit(); asmAsm(ADDI, R00, R00, 99);  asmAssemble(); assert(vmADD_R00_R00_I == memVectorObject(r00, 0)); assert(99 == (Num)memVectorObject(r00, 1));
+	asmInit(); asmAsm(ADDI, R01, R01, 98);  asmAssemble(); assert(vmADD_R01_R01_I == memVectorObject(r00, 0)); assert(98 == (Num)memVectorObject(r00, 1));
+	asmInit(); asmAsm(ADDI, R02, R02, 97);  asmAssemble(); assert(vmADD_R02_R02_I == memVectorObject(r00, 0)); assert(97 == (Num)memVectorObject(r00, 1));
 
 	/* BLTI */
 	asmInit(); L=asmNewLabel(); asmAsm(BLTI, R01, 98, L, LABEL, L, NOP); asmAssemble(); assert(vmBLT_R01_I == memVectorObject(r00, 0)); assert(98 == (Num)memVectorObject(r00, 1)); assert(3*ObjSize == (Int)memVectorObject(r00, 2));
@@ -857,15 +857,17 @@ void TestPseudoRegisters(void) {
 	B = asmNewOregister();
 	C = asmNewIregister();
 	asmAsm(
+		MVI, R01, (Obj)0,
 		MVI, A, (Obj)0,
 		MVI, B, (Obj)0,
 		MV, B, A,
 		MV, R02, A,
 		MV, R03, A,
 		MV, B, R01,
-		ADD, C, B,
-		ADD, R10, C,
-		MV, R01, R01,
+		ADD, C, C, B,
+		ADD, R10, R10, C,
+		MV, R01, C,
+		ADD, R01, R01, R03,
 		QUIT
 	);
 	asmAssemble();
@@ -902,26 +904,26 @@ void TestIRegistersSumtorial (void) {
 		MVI,  C, (Obj)0,        // C = 0
 	LABEL, L,
 		NOP,
-		ADD, C, B,                // C += B
-		ADDI, B, (Obj)-1,         // --B
+		ADD, C, C, B,                // C += B
+		ADDI, B,B, (Obj)-1,         // --B
 		BNEI, B, (Obj)0, L,
 		MV, R10, C,
-		ADD, R10, D,
-		ADD, R02, R02,
+		ADD, R10, R10, D,
+		ADD, R02, R02, R02,
 		MV, R00, R10,
 		SYSI, cctPrintIntr00,
 		SYSI, cctDumpSpace,
 		MV, R00, R00,
-		ADDI, A, (Obj)-1,     // --A
+		ADDI, A, A, (Obj)-1,     // --A
 		BNEI, A, (Obj)0, M,
 		MV, R02, R02,
 		RET,
 	LABEL, BOT,
 		MVI,  D, (Obj)0,
 		MVI,  A, (Obj)10,     // A = 10
-		ADD, Z, R10,
+		ADD, Z, Z, R10,
 		BNEI, R00, (Obj)0, TOP,
-		ADD, R10, R11,
+		ADD, R10, R10, R11,
 		BRA, TOP,
 		QUIT
 	);
@@ -978,6 +980,42 @@ void TestCrazyRegisterAllocation (void) {
 	FBFinalize("55 45 36 28 21 15 10 6 3 1 ");
 }
 
+
+void TestManyPseudo (void) {
+ Num A, B, C, D, E, F; // Intermediate registers
+	FBInit();
+	asmInit();
+	A = asmNewOregister();
+	B = asmNewOregister();
+	C = asmNewOregister();
+	D = asmNewOregister();
+	E = asmNewOregister();
+	F = asmNewOregister();
+	asmAsm(
+		MVI, A, (Obj)1,
+		MVI, B, (Obj)2,
+		MVI, C, (Obj)3,
+		MVI, D, (Obj)4,
+		MVI, E, (Obj)5,
+		MVI, F, (Obj)6,
+		ADD, E, E, F,
+		ADD, D, D, E,
+		ADD, C, C, D,
+		ADD, B, B, C,
+		ADD, R00, A, B,
+		QUIT
+	);
+
+	asmAssemble();
+
+	rcode = r00;
+	rip = 0;
+	vmRun();
+
+	//objDisplay(rcode, stdout);
+	FBFinalize("55 45 36 28 21 15 10 6 3 1 ");
+}
+
 int main (void) {
 	asmInitialize();
 	vmInitialize(NULL, objDisplay); /* Register display with the VM code dumper */
@@ -1007,9 +1045,10 @@ int main (void) {
 	//TEST(optimizeEmptyIBlock);
 	//TEST(TestMVIiReg);
 	//TEST(TestSpillover);
-	//EST(TestPseudoRegisters);
-	TEST(TestIRegistersSumtorial);
+	//TEST(TestPseudoRegisters);
+	//TEST(TestIRegistersSumtorial);
 	//TEST(TestCrazyRegisterAllocation);
+	TEST(TestManyPseudo);
 
 	odebug = ofalse;
 	return 0;
