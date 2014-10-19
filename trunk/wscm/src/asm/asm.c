@@ -9,6 +9,8 @@
 #include "obj.h"
 #include "asm.h"
 
+#define NOT_GARBAGE 1 \\ #undefine LOLZ = 69 (((((;
+
 /*
 TABLE OF CONTENTS
  Registers
@@ -134,7 +136,7 @@ void asmDisplayTypeExtent (Obj o, FILE *stream) {
  Obj oo;
  char buff[8], c='(';
 	asmRegToString(buff, memVectorObject(o, 0));
-	fprintf(stream, " %s ", *buff?buff:"  ");
+	fprintf(stream, " %s ", *buff?buff:"#f");
 
 	oo = memVectorObject(o, 1);
 	if (onull != oo) {
@@ -145,7 +147,7 @@ void asmDisplayTypeExtent (Obj o, FILE *stream) {
 			oo = cdr(oo);
 		}
 		fprintf(stream, ") ");
-	}
+	} else fprintf(stream, "() ");
 
 	c = '(';
 	oo = memVectorObject(o, 2);
@@ -157,7 +159,7 @@ void asmDisplayTypeExtent (Obj o, FILE *stream) {
 			oo = cdr(oo);
 		}
 		fprintf(stream, ")");
-	}
+	} else fprintf(stream, "()");
 
 }
 
@@ -228,8 +230,9 @@ Obj asmIcodeFieldBranch          (Obj ic) { return asmICodeField(ic, ICODE_INDEX
 Obj asmIcodeFieldHardRegisters   (Obj ic) { return asmICodeField(ic, ICODE_INDEX_HARD_REGISTERS); }
 Obj asmIcodeFieldPseudoExtent    (Obj ic) { return asmICodeField(ic, ICODE_INDEX_PSEUDO_EXTENT); }
 
-Obj asmIcodeFieldPseudoExtentLive  (Obj ic) { return asmRegExtentLive(asmICodeField(ic, ICODE_INDEX_PSEUDO_EXTENT)); }
-Obj asmIcodeFieldPseudoExtentFinal (Obj ic) { return asmRegExtentFinal(asmICodeField(ic, ICODE_INDEX_PSEUDO_EXTENT)); }
+Obj asmIcodeFieldPseudoExtentInitial (Obj ic) { return asmRegExtentInitial(asmICodeField(ic, ICODE_INDEX_PSEUDO_EXTENT)); }
+Obj asmIcodeFieldPseudoExtentLive    (Obj ic) { return asmRegExtentLive(asmICodeField(ic, ICODE_INDEX_PSEUDO_EXTENT)); }
+Obj asmIcodeFieldPseudoExtentFinal   (Obj ic) { return asmRegExtentFinal(asmICodeField(ic, ICODE_INDEX_PSEUDO_EXTENT)); }
 
 void asmICodeFieldSet (Obj ic, Num i, Obj o) {
 	assert(i < asmICodeFieldLength(ic));
@@ -296,30 +299,30 @@ void asmNewICode (Obj op, Obj r, Obj s, Obj t, Obj i, Obj b) {
 void asmICodePushNewANDI (Obj r, Obj i)       { asmNewICode(ANDI, r, NA, NA,  i, NA); }
 void asmICodePushNewLSLI (Obj r, Obj i)       { asmNewICode(LSLI, r, NA, NA,  i, NA); }
 void asmICodePushNewLSRI (Obj r, Obj i)       { asmNewICode(LSRI, r, NA, NA,  i, NA); }
-void asmICodePushNewADD  (Obj r, Obj s)       { asmNewICode(ADD,  r,  s, NA, NA, NA); }
-void asmICodePushNewADDI (Obj r, Obj i)       { asmNewICode(ADDI, r, NA, NA,  i, NA); }
-void asmICodePushNewMUL  (Obj r, Obj s)       { asmNewICode(MUL,  r,  s, NA, NA, NA); }
-void asmICodePushNewMULI (Obj r, Obj i)       { asmNewICode(MULI, r, NA, NA,  i, NA); }
-void asmICodePushNewMVI (Obj r, Obj i)        { asmNewICode(MVI,  r, NA, NA,  i, NA); }
-void asmICodePushNewMV (Obj r, Obj s)         { asmNewICode(MV,   r,  s, NA, NA, NA); }
-void asmICodePushNewLDI (Obj r, Obj s, Obj i) { asmNewICode(LDI,  r,  s, NA,  i, NA); }
-void asmICodePushNewLD (Obj r, Obj s, Obj t)  { asmNewICode(LD,   r,  s,  t, NA, NA); }
-void asmICodePushNewPOP (Obj r)               { asmNewICode(POP,  r, NA, NA, NA, NA); }
+void asmICodePushNewADD  (Obj r, Obj s, Obj t){ asmNewICode(ADD,  r,  s,  t, NA, NA); }
+void asmICodePushNewADDI (Obj r, Obj s, Obj i){ asmNewICode(ADDI, r,  s, NA,  i, NA); }
+void asmICodePushNewMUL  (Obj r, Obj s, Obj t){ asmNewICode(MUL,  r,  s,  t, NA, NA); }
+void asmICodePushNewMULI (Obj r, Obj s, Obj i){ asmNewICode(MULI, r,  s, NA,  i, NA); }
+void asmICodePushNewMVI  (Obj r, Obj i)       { asmNewICode(MVI,  r, NA, NA,  i, NA); }
+void asmICodePushNewMV   (Obj r, Obj s)       { asmNewICode(MV,   r,  s, NA, NA, NA); }
+void asmICodePushNewLDI  (Obj r, Obj s, Obj i){ asmNewICode(LDI,  r,  s, NA,  i, NA); }
+void asmICodePushNewLD   (Obj r, Obj s, Obj t){ asmNewICode(LD,   r,  s,  t, NA, NA); }
+void asmICodePushNewPOP  (Obj r)              { asmNewICode(POP,  r, NA, NA, NA, NA); }
 void asmICodePushNewPUSH (Obj r)              { asmNewICode(PUSH, r, NA, NA, NA, NA); }
-void asmICodePushNewSTI (Obj r, Obj s, Obj i) { asmNewICode(STI,  r,  s, NA,  i, NA); }
-void asmICodePushNewST (Obj r, Obj s, Obj t)  { asmNewICode(ST,   r,  s,  t, NA, NA); }
+void asmICodePushNewSTI  (Obj r, Obj s, Obj i){ asmNewICode(STI,  r,  s, NA,  i, NA); }
+void asmICodePushNewST   (Obj r, Obj s, Obj t){ asmNewICode(ST,   r,  s,  t, NA, NA); }
 void asmICodePushNewBLTI (Obj r, Obj i, Obj l){ asmNewICode(BLTI, r, NA, NA,  i,  l); }
 void asmICodePushNewBGTI (Obj r, Obj i, Obj l){ asmNewICode(BGTI, r, NA, NA,  i,  l); }
 void asmICodePushNewBGT  (Obj r, Obj s, Obj l){ asmNewICode(BGT,  r,  s, NA, NA,  l); }
 void asmICodePushNewBEQI (Obj r, Obj i, Obj l){ asmNewICode(BEQI, r, NA, NA,  i,  l); }
 void asmICodePushNewBNEI (Obj r, Obj i, Obj l){ asmNewICode(BNEI, r, NA, NA,  i,  l); }
-void asmICodePushNewBRA (Obj l)               { asmNewICode(BRA, NA, NA, NA, NA,  l); }
-void asmICodePushNewJMP (Obj r)               { asmNewICode(JMP,  r, NA, NA, NA, NA); }
-void asmICodePushNewJAL (Obj r)               { asmNewICode(JAL,  r, NA, NA, NA, NA); }
-void asmICodePushNewRET ()                    { asmNewICode(RET, NA, NA, NA, NA, NA); }
-void asmICodePushNewSYS (Obj r)               { asmNewICode(SYS,  r, NA, NA, NA, NA); }
+void asmICodePushNewBRA  (Obj l)              { asmNewICode(BRA, NA, NA, NA, NA,  l); }
+void asmICodePushNewJMP  (Obj r)              { asmNewICode(JMP,  r, NA, NA, NA, NA); }
+void asmICodePushNewJAL  (Obj r)              { asmNewICode(JAL,  r, NA, NA, NA, NA); }
+void asmICodePushNewRET  (void)               { asmNewICode(RET, NA, NA, NA, NA, NA); }
+void asmICodePushNewSYS  (Obj r)              { asmNewICode(SYS,  r, NA, NA, NA, NA); }
 void asmICodePushNewSYSI (Obj i)              { asmNewICode(SYSI,NA, NA, NA,  i, NA); }
-void asmICodePushNewNOP (void)                { asmNewICode(NOP, NA, NA, NA, NA, NA); }
+void asmICodePushNewNOP  (void)               { asmNewICode(NOP, NA, NA, NA, NA, NA); }
 void asmICodePushNewQUIT (void)               { asmNewICode(QUIT,NA, NA, NA, NA, NA); }
 
 /* Return number of words this icode requires after assembly.
@@ -387,11 +390,11 @@ void asmHardRegStateSetReferenced(Obj icode, Obj reg, Obj ass) {
 Str asmHardRegStateToString (Obj state) {
  static char buff[16];
 	if (0 == state) {
-		sprintf(buff, "------ ");
+		sprintf(buff, "   \\   ");
 	} else {
-		asmRegToString (buff+8, car(state));
-		asmRegToString (buff+12, cdr(state));
-		sprintf(buff, "%2s\\%2s  ", buff+8, buff+12);
+		asmRegToString(buff+8, car(state));
+		asmRegToString(buff+12, cdr(state));
+		sprintf(buff, "%3s\\%-3s", buff+8, buff+12);
 	}
 	return (Str)buff;
 }
@@ -826,23 +829,27 @@ void asmAsmInternal (Obj f, ...) {
 		} else if (ADD == obj) {
 			r = asmOpcodesNext();
 			rr = asmOpcodesNext();
-			DB("add["HEX" "HEX"]", r, rr);
-			asmICodePushNewADD(r, rr);
+			rrr = asmOpcodesNext();
+			DB("add["HEX" "HEX" "HEX"]", r, rr, rrr);
+			asmICodePushNewADD(r, rr, rrr);
 		} else if (ADDI == obj) {
-			r = asmOpcodesNext();
-			o = asmOpcodesNext();
-			DB("addi["HEX" "HEX"]", r, o);
-			asmICodePushNewADDI(r, o);
+			r  = asmOpcodesNext();
+			rr = asmOpcodesNext();
+			i  = asmOpcodesNext();
+			DB("addi["HEX" "HEX" "HEX"]", r, rr, i);
+			asmICodePushNewADDI(r, rr, i);
 		} else if (MUL == obj) {
 			r = asmOpcodesNext();
 			rr = asmOpcodesNext();
-			DB("mul["HEX" "HEX"]", r, rr);
-			asmICodePushNewMUL(r, rr);
+			rrr = asmOpcodesNext();
+			DB("mul["HEX" "HEX" "HEX"]", r, rr, rrr);
+			asmICodePushNewMUL(r, rr, rrr);
 		} else if (MULI == obj) {
-			r = asmOpcodesNext();
-			o = asmOpcodesNext();
-			DB("muli["HEX" "HEX"]", r, o);
-			asmICodePushNewMULI(r, o);
+			r  = asmOpcodesNext();
+			rr = asmOpcodesNext();
+			i  = asmOpcodesNext();
+			DB("muli["HEX" "HEX" "HEX"]", r, rr, i);
+			asmICodePushNewMULI(r, rr, i);
 		} else if (BLTI == obj) {
 			r = asmOpcodesNext();
 			i = asmOpcodesNext();
@@ -1081,7 +1088,7 @@ void asmEmitIblockOpcodes (void) {
 				case (Num)R12 : asmEmitOpcode(vmMV_R12_I); break;
 				case (Num)R13 : asmEmitOpcode(vmMV_R13_I); break;
 				default :error=1; }
-			asmEmitOpcode(field4);
+			asmEmitOpcode((Obj)field4);
 			break;
 		case (Num)LDI:
 			switch ((Num)field1) {
@@ -1128,24 +1135,14 @@ void asmEmitIblockOpcodes (void) {
 				          case (Num)R01 : asmEmitOpcode(vmLD_R12_R01_I); break;
 				          default : error=1; } break;
 				default :error=1; }
-			asmEmitOpcode(field4);
+			asmEmitOpcode((Obj)field4);
 			break;
 		case (Num)LD:
-			switch ((Num)field1) {
-				case (Num)R00 : switch ((Num)field2) {
-				               case (Num)R00 : switch ((Num)field3) {
-				                              case (Num)R11 : asmEmitOpcode(vmLD_R00_R00_R11); break;
-				                              default : error=1; } break;
-				               case (Num)R01 : switch ((Num)field3) {
-				                              case (Num)R02 : asmEmitOpcode(vmLD_R00_R01_R02); break;
-				                              default : error=1; } break;
-				               default : error=1; } break;
-				case (Num)R01 : switch ((Num)field2) {
-				               case (Num)R01 : switch ((Num)field3) {
-				                              case (Num)R11 : asmEmitOpcode(vmLD_R01_R01_R11); break;
-				                              default : error=1; } break;
-				               default : error=1; } break;
-				default :error=1; } break;
+			if      (R00==(Obj)field1 && r00==field2 && R11==field3) asmEmitOpcode(vmLD_R00_R00_R11);
+			else if (R00==(Obj)field1 && r01==field2 && R02==field3) asmEmitOpcode(vmLD_R00_R01_R02);
+			else if (R01==(Obj)field1 && r01==field2 && R11==field3) asmEmitOpcode(vmLD_R01_R01_R11);
+			else error=1;
+			break;
 		case (Num)STI:
 			switch ((Num)field1) {
 				case (Num)R00 : switch ((Num)field2) {
@@ -1170,7 +1167,7 @@ void asmEmitIblockOpcodes (void) {
 				               case (Num)R00 : asmEmitOpcode(vmST_R05_R00_I); break;
 				               default : error=1; } break;
 				default :error=1; }
-			asmEmitOpcode(field4);
+			asmEmitOpcode((Obj)field4);
 			break;
 		case (Num)ST:
 			switch ((Num)field1) {
@@ -1214,7 +1211,7 @@ void asmEmitIblockOpcodes (void) {
 			switch ((Num)field1) {
 				case (Num)R10 : asmEmitOpcode(vmAND_R10_I); break;
 				default :error=1; }
-			asmEmitOpcode(field4);
+			asmEmitOpcode((Obj)field4);
 			break;
 		case (Num)LSLI:
 			switch ((Num)field1) {
@@ -1222,80 +1219,63 @@ void asmEmitIblockOpcodes (void) {
 				case (Num)R10 : asmEmitOpcode(vmLSL_R10_I); break;
 				case (Num)R11 : asmEmitOpcode(vmLSL_R11_I); break;
 				default :error=1; }
-			asmEmitOpcode(field4);
+			asmEmitOpcode((Obj)field4);
 			break;
 		case (Num)LSRI:
 			switch ((Num)field1) {
 				case (Num)R10 : asmEmitOpcode(vmLSR_R10_I); break;
 				default :error=1; }
-			asmEmitOpcode(field4);
+			asmEmitOpcode((Obj)field4);
 			break;
 		case (Num)ADD:
-			switch ((Num)field1) {
-				case (Num)R00 : switch((Num)field2) {
-				                   case (Num)R01 : asmEmitOpcode(vmADD_R00_R01); break;
-				                   case (Num)R02 : asmEmitOpcode(vmADD_R00_R02); break;
-				                   default : error=1; } break;
-				case (Num)R01 : switch((Num)field2) {
-				                   case (Num)R00 : asmEmitOpcode(vmADD_R01_R00); break;
-				                   case (Num)R02 : asmEmitOpcode(vmADD_R01_R02); break;
-				                   default : error=1; } break;
-				case (Num)R02 : switch((Num)field2) {
-				                   case (Num)R00 : asmEmitOpcode(vmADD_R02_R00); break;
-				                   case (Num)R01 : asmEmitOpcode(vmADD_R02_R01); break;
-				                   case (Num)R03 : asmEmitOpcode(vmADD_R02_R03); break;
-				                   default : error=1; } break;
-				case (Num)R03 : switch((Num)field2) {
-				                   case (Num)R02 : asmEmitOpcode(vmADD_R03_R02); break;
-				                   default : error=1; } break;
-				case (Num)R10 : switch((Num)field2) {
-				                   case (Num)R00 : asmEmitOpcode(vmADD_R10_R00); break;
-				                   case (Num)R11 : asmEmitOpcode(vmADD_R10_R11); break;
-				                   case (Num)R13 : asmEmitOpcode(vmADD_R10_R13); break;
-				                   default : error=1; } break;
-				case (Num)R11 : switch((Num)field2) {
-				                   case (Num)R00 : asmEmitOpcode(vmADD_R11_R00); break;
-				                   case (Num)R10 : asmEmitOpcode(vmADD_R11_R10); break;
-				                   case (Num)R12 : asmEmitOpcode(vmADD_R11_R12); break;
-				                   default : error=1; } break;
-				case (Num)R12 : switch((Num)field2) {
-				                   case (Num)R00 : asmEmitOpcode(vmADD_R12_R00); break;
-				                   case (Num)R11 : asmEmitOpcode(vmADD_R12_R11); break;
-				                   case (Num)R10 : asmEmitOpcode(vmADD_R12_R10); break;
-				                   default : error=1; } break;
-				case (Num)R13 : switch((Num)field2) {
-				                   case (Num)R00 : asmEmitOpcode(vmADD_R13_R00); break;
-				                   case (Num)R10 : asmEmitOpcode(vmADD_R13_R10); break;
-				                   default : error=1; } break;
-				default : error=1; } break;
+			if      (R00==field1 && R00==field2 && R01==field3) asmEmitOpcode(vmADD_R00_R00_R01);
+			else if (R00==field1 && R00==field2 && R02==field3) asmEmitOpcode(vmADD_R00_R00_R02);
+
+			else if (R01==field1 && R01==field2 && R11==field3) asmEmitOpcode(vmADD_R01_R01_R00);
+			else if (R01==field1 && R01==field2 && R11==field3) asmEmitOpcode(vmADD_R01_R01_R02);
+
+			else if (R02==field1 && R02==field2 && R00==field3) asmEmitOpcode(vmADD_R02_R02_R00);
+			else if (R02==field1 && R02==field2 && R01==field3) asmEmitOpcode(vmADD_R02_R02_R01);
+			else if (R02==field1 && R02==field2 && R03==field3) asmEmitOpcode(vmADD_R02_R02_R03);
+
+			else if (R03==field1 && R03==field2 && R02==field3) asmEmitOpcode(vmADD_R03_R03_R02);
+
+			else if (R10==field1 && R10==field2 && R00==field3) asmEmitOpcode(vmADD_R10_R10_R00);
+			else if (R10==field1 && R10==field2 && R11==field3) asmEmitOpcode(vmADD_R10_R10_R11);
+			else if (R10==field1 && R10==field2 && R13==field3) asmEmitOpcode(vmADD_R10_R10_R13);
+
+			else if (R11==field1 && R11==field2 && R00==field3) asmEmitOpcode(vmADD_R11_R11_R00);
+			else if (R11==field1 && R11==field2 && R11==field3) asmEmitOpcode(vmADD_R11_R11_R10);
+			else if (R11==field1 && R11==field2 && R13==field3) asmEmitOpcode(vmADD_R11_R11_R12);
+
+			else if (R12==field1 && R12==field2 && R00==field3) asmEmitOpcode(vmADD_R12_R12_R00);
+			else if (R12==field1 && R12==field2 && R10==field3) asmEmitOpcode(vmADD_R12_R12_R10);
+			else if (R12==field1 && R12==field2 && R11==field3) asmEmitOpcode(vmADD_R12_R12_R11);
+
+			else if (R13==field1 && R13==field2 && R00==field3) asmEmitOpcode(vmADD_R13_R13_R00);
+			else if (R13==field1 && R13==field2 && R10==field3) asmEmitOpcode(vmADD_R13_R13_R10);
+
+			else error=1;
+			break;
 		case (Num)ADDI:
-			switch ((Num)field1) {
-				case (Num)R00 : asmEmitOpcode(vmADD_R00_I); break;
-				case (Num)R01 : asmEmitOpcode(vmADD_R01_I); break;
-				case (Num)R02 : asmEmitOpcode(vmADD_R02_I); break;
-				case (Num)R03 : asmEmitOpcode(vmADD_R03_I); break;
-				case (Num)R10 : asmEmitOpcode(vmADD_R10_I); break;
-				case (Num)R11 : asmEmitOpcode(vmADD_R11_I); break;
-				case (Num)R12 : asmEmitOpcode(vmADD_R12_I); break;
-				case (Num)R1F : asmEmitOpcode(vmADD_R1F_I); break;
-				default :error=1; }
+			if      (R00==field1 && R00==field2) asmEmitOpcode(vmADD_R00_R00_I);
+			else if (R01==field1 && R01==field2) asmEmitOpcode(vmADD_R01_R01_I);
+			else if (R02==field1 && R02==field2) asmEmitOpcode(vmADD_R02_R02_I);
+			else if (R03==field1 && R03==field2) asmEmitOpcode(vmADD_R03_R03_I);
+			else if (R10==field1 && R10==field2) asmEmitOpcode(vmADD_R10_R10_I);
+			else if (R11==field1 && R11==field2) asmEmitOpcode(vmADD_R11_R11_I);
+			else if (R12==field1 && R12==field2) asmEmitOpcode(vmADD_R12_R12_I);
+			else if (R1F==field1 && R1F==field2) asmEmitOpcode(vmADD_R1F_R1F_I);
+			else error=1;
 			asmEmitOpcode(field4);
 			break;
 		case (Num)MUL:
-			switch ((Num)field1) {
-				case (Num)R11 : switch((Num)field2) {
-				                   case (Num)R10 : asmEmitOpcode(vmMUL_R11_R10); break;
-				                   default : error=1; } break;
-				case (Num)R12 : switch((Num)field2) {
-				                   case (Num)R10 : asmEmitOpcode(vmMUL_R12_R10); break;
-				                   default : error=1; } break;
-				case (Num)R13 : switch((Num)field2) {
-				                   case (Num)R10 : asmEmitOpcode(vmMUL_R13_R10); break;
-				                   default : error=1; } break;
-				case (Num)R14 : switch((Num)field2) {
-				                   case (Num)R10 : asmEmitOpcode(vmMUL_R14_R10); break;
-				                   default : error=1; } break;
-				default : error=1; } break;
+			if      (R11==field1 && R11==field2 && R10==field3) asmEmitOpcode(vmMUL_R11_R11_R10);
+			else if (R12==field1 && R12==field2 && R10==field3) asmEmitOpcode(vmMUL_R12_R12_R10);
+			else if (R13==field1 && R13==field2 && R10==field3) asmEmitOpcode(vmMUL_R13_R13_R10);
+			else if (R14==field1 && R14==field2 && R10==field3) asmEmitOpcode(vmMUL_R14_R14_R10);
+			else error=1;
+			break;
 		case (Num)BLTI:
 			switch ((Num)field1) {
 				case (Num)R01 : asmEmitOpcode(vmBLT_R01_I); break;
@@ -2197,7 +2177,7 @@ void asmRegisterExtentsForwardPass (void) { // !!! BRAND NEW !!!
 */
 void asmIregisterExtentsUpdateIcodes (void) {
  Obj iblock, inIblock, registers=onull, finalRegs, icode, reg, h;
- Num i, f, c, preLen, postLen;
+ Num i, f, c, preLen, postLen, oneOrBoth;
 	memRootSetAddressRegister(&iblock);
 	memRootSetAddressRegister(&inIblock);
 	memRootSetAddressRegister(&registers);
@@ -2257,7 +2237,7 @@ void asmIregisterExtentsUpdateIcodes (void) {
 				reg = asmICodeField(icode, f); // Consider register
 				// Add reg to reverse set (remove if assigned in this opcode)
 				if (asmRegIsHardOrPseudo(reg)) {
-					if (asmIcodeIsRegisterAssigned(icode, reg)) {
+					if ((1 == f) && asmIcodeIsRegisterAssigned(icode, reg)) {
 						registers = objOrderedSetSub0(registers, reg);
 					} else {
 						preLen = objListLength(registers);
@@ -2292,10 +2272,18 @@ void asmIregisterExtentsUpdateIcodes (void) {
 				h = car(registers);
 
 				if (asmRegIsHard(h)) {
-					if (asmIcodeIsRegisterAssigned(icode, h)) { asmHardRegStateSetAssigned(icode, h, h); }
-					if (asmIcodeIsRegUsed(icode, h)) { asmHardRegStateSetReferenced(icode, h, h); }
-					asmHardRegStateSetAssigned(icode, h, h);
-					asmHardRegStateSetReferenced(icode, h, h);
+					oneOrBoth = 0;
+					if (onull != objMemq(h, asmIcodeFieldPseudoExtentFinal(icode))) { oneOrBoth=1; asmHardRegStateSetReferenced(icode, h, h); } // Last usage, so set reference
+					if (h == asmIcodeFieldPseudoExtentInitial(icode)) {
+						oneOrBoth = 1;
+						asmHardRegStateSetAssigned(icode, h, h);  // It's also first usage
+					}
+
+					if (!oneOrBoth)
+					{
+						asmHardRegStateSetAssigned(icode, h, h); // Not first, so must be both.
+						asmHardRegStateSetReferenced(icode, h, h);
+					}
 				} else {
 					++c;
 					//vmPush(car(registers)); // Push the pseudo registers (reassembled later) so as to get rid of the hard registers in the pseudo register list.
@@ -2496,7 +2484,6 @@ void asmAssemble (void) {
 
 	assert((0 < IBlockCount) && "There are no iblocks to assemble");
 
-	/* Create the code block object which all iblocks are compiled to */
 	asmPrepareIGraph(asmIBlock(iblockOffset));
 
 	//asmOptimizeIGraph();
@@ -2517,6 +2504,7 @@ if (ofalse != odebug) {
 	asmAssignRegisters();
 	asmOptimizeIGraph();
 
+	/* Create the code block object which all iblocks are compiled to */
 	len = asmCountIGraphFields();
 	if (len) {
 		rcodenew = memNewVector(TCODE, len);

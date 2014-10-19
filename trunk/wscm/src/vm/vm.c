@@ -198,9 +198,14 @@ void vmVm (void) {
 	#define argI   *(Obj*)(rip+1*ObjSize)
 
 	#define imm
+	#define immR00 + (Num)r00
+	#define immR01 + (Num)r01
 	#define immR02 + (Num)r02
+	#define immR03 + (Num)r03
 	#define immR10 + (Num)r10
 	#define immR11 + (Num)r11
+	#define immR12 + (Num)r12
+	#define immR13 + (Num)r13
 	#define immI   + *(Num*)(rip+1*ObjSize)
 
 	/* Expression for incrementing the instruction pointer via the offset
@@ -230,15 +235,37 @@ void vmVm (void) {
 	#define IPINCR11 IPINC
 	#define IPINCR12 IPINC
 	#define IPINCR13 IPINC
+	#define IPINCR00R01 IPINC
+	#define IPINCR00R02 IPINC
 	#define IPINCR00R11 IPINC
+	#define IPINCR01R00 IPINC
 	#define IPINCR01R02 IPINC
 	#define IPINCR01R11 IPINC
+	#define IPINCR02R00 IPINC
+	#define IPINCR02R01 IPINC
+	#define IPINCR02R03 IPINC
+	#define IPINCR03R02 IPINC
+	#define IPINCR10R00 IPINC
+	#define IPINCR10R11 IPINC
+	#define IPINCR10R13 IPINC
+	#define IPINCR11R00 IPINC
+	#define IPINCR11R10 IPINC
+	#define IPINCR11R12 IPINC
+	#define IPINCR12R00 IPINC
+	#define IPINCR12R10 IPINC
+	#define IPINCR12R11 IPINC
+	#define IPINCR13R00 IPINC
+	#define IPINCR13R10 IPINC
+	#define IPINCR14R10 IPINC
 	#define IPINCR00I IPINC2
 	#define IPINCR01I IPINC2
 	#define IPINCR02I IPINC2
 	#define IPINCR03I IPINC2
 	#define IPINCR05I IPINC2
 	#define IPINCR07I IPINC2
+	#define IPINCR10I IPINC2
+	#define IPINCR11I IPINC2
+	#define IPINCR12I IPINC2
 	#define IPINCR0BI IPINC2
 	#define IPINCR0CI IPINC2
 	#define IPINCR1FI IPINC2
@@ -303,7 +330,7 @@ void vmVm (void) {
 	   ADD_R00_R01: OPDB("ADD_R00_R01");  r00 += (Num)R01;        goto **(void**)(rip+=ObjSize);
 	*/
 	#define VMOP_ADD(argd,argn,argi) \
-	   arg##argd = (Obj)((Int)arg##argd + (Int)(arg##argn imm##argi)); \
+	   arg##argd = (Obj)((Int)arg##argn + (Int)(imm##argi)); \
 	   IPINC##argn##argi; \
 	   if (vmInterrupt) vmProcessInterrupt()
 
@@ -312,7 +339,7 @@ void vmVm (void) {
 	   MUL_R00_R01: OPDB("MUL_R00_R01");  r00 *= (Num)R01;        goto **(void**)(rip+=ObjSize);
 	*/
 	#define VMOP_MUL(argd,argn,argi) \
-	   arg##argd = (Obj)((Int)arg##argd * (Int)(arg##argn imm##argi)); \
+	   arg##argd = (Obj)((Int)arg##argn * (Int)(imm##argi)); \
 	   IPINC##argn##argi; \
 	   if (vmInterrupt) vmProcessInterrupt()
 
@@ -567,7 +594,13 @@ void vmDisplayTypeCode (Obj c, FILE *stream) {
 
 		#define PRINT
 		// This is expanded for the opcode with three registers so the immediate field is not rendered.  [LD $00 $01 $02] is the only opcode for now
+		#define PRINTR00
+		#define PRINTR01
 		#define PRINTR02
+		#define PRINTR03
+		#define PRINTR10
+		#define PRINTR12
+		#define PRINTR13
 		#define PRINTR11
 		#define PRINTIO ++idx; fprintf(stream, " #<"OBJ0"> ", *(Obj*)(c+idx*ObjSize)); ++idx; fprintf(stream,    HEX04" ", vmOffsetToPosition(c, lineNumber*ObjSize, c+idx*ObjSize));  vmObjectDumper(*(Obj*)(c+(idx-1)*ObjSize), stream); 
 		#define PRINTI  ++idx; fprintf(stream, " #<"OBJ0"> ", *(Obj*)(c+idx*ObjSize));        fprintf(stream, "     ");                                                               vmObjectDumper(*(Obj*)(c+(idx)*ObjSize), stream); 
